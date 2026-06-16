@@ -30,6 +30,11 @@ model Cliente {
   visitado    Boolean   @default(false)
   fotoUrl     String?
   observacoes String?
+  dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
+  maquinaComprada String?
+  indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
+  indicadoPorId String?
+  indicados     Cliente[] @relation("Indicacoes")
   criadoEm    DateTime  @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -63,12 +68,20 @@ model Negociacao {
 
 model Maquina {
   id          String  @id @default(cuid())
-  modelo      String  @unique
-  categoria   String  // trator | colheitadeira | retroescavadeira | pa-carregadeira | plantadeira
+  marca       String  @default("New Holland") // New Holland | Dynapac | Caterpillar | Komatsu | ...
+  modelo      String
+  categoria   String  // miniescavadeira | escavadeira | retroescavadeira | pacarregadeira | motoniveladora | tratoresteira | rolo_solo | rolo_tandem | rolo_pneumatico | paver | leve
+  proprio     Boolean @default(false) // true = minha linha (New Holland / Dynapac)
+  pesoOperacional Float? // kg (para casar faixa de peso no comparativo)
+  potencia    Int?       // cv
   descricao   String?
+  pontosFortes String?   // argumentos prontos de venda (das minhas máquinas)
+  diferenciais String?   // diferenciais recorrentes (o que o mercado mais elogia)
   curiosidades String?
   imagemUrl   String?
   midiaPosts  MidiaPost[]
+
+  @@unique([marca, modelo])
 }
 
 model Conversa {

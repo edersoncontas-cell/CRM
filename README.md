@@ -1,11 +1,12 @@
-# 🚜 CRM New Holland — Vendas Inteligentes com IA
+# 🚜 CRM New Holland Construction + Dynapac — Vendas Inteligentes com IA
 
-CRM pessoal para vendedor de máquinas pesadas New Holland no **sul do Espírito
-Santo**. Tem um **cérebro de IA** que lê conversas, identifica o perfil do
-cliente, extrai o que foi negociado (máquina, valor, forma de pagamento,
-concorrente, data de visita), organiza o funil em **Kanban**, mostra **metas**
-no dashboard, avisa quando um cliente fica **sem resposta** e registra **vendas
-perdidas**.
+CRM pessoal para vendedor da linha **New Holland Construction** (mini
+escavadeira E35D até motoniveladoras) e **Dynapac** (rolos de solo e asfalto) no
+**sul do Espírito Santo**. Tem um **cérebro de IA** que lê conversas, identifica
+o perfil do cliente, extrai o que foi negociado (máquina, valor, forma de
+pagamento, concorrente, data de visita), organiza o funil em **Kanban**, mostra
+**metas/forecast** no dashboard, gera **comparativos com a concorrência**, avisa
+quando um cliente fica **sem resposta** e registra **vendas perdidas**.
 
 > Esta é a **fundação** do projeto. Funciona 100% em modo manual/exemplo e tem
 > as integrações (WhatsApp, Google Agenda, transcrição) já "plugáveis" — basta
@@ -13,18 +14,32 @@ perdidas**.
 
 ## ✨ O que já está pronto
 
-- **Dashboard** com metas (diária/semanal/mensal/prospecção/negócios em banco),
-  funil por estágio, alertas de clientes parados e fila "aguardando resposta".
-- **Clientes**: cadastro completo (telefone, município, já comprou, visitado),
-  filtro por município e **mapa de calor** dos municípios do sul do ES.
+- **Dashboard** com metas, **forecast ponderado**, **comissão estimada**,
+  funil por estágio, **leads esfriando**, alertas de clientes parados, fila
+  "aguardando resposta" e resumo "Bom dia".
+- **Comparativo de máquinas**: sua máquina New Holland/Dynapac vs concorrentes
+  da **mesma categoria e faixa de peso**, com **argumentos prontos (battlecards)**
+  e os diferenciais que o mercado mais elogia.
+- **Clientes**: cadastro completo, **Lead Score A/B/C**, pós-venda e indicações,
+  filtro e **mapa de calor** por município do sul do ES.
 - **Pipeline (Kanban)** estilo Trello — arraste os cards entre as colunas.
-- **Conversas + IA**: cole texto/transcrição e a IA extrai máquina, valor,
-  pagamento, concorrente, **data de visita** e escreve um **rascunho no seu tom**.
-- **Agenda** de visitas detectadas pela IA.
-- **Vendas perdidas** com motivos e relatório.
-- **Sugestões** estilo Google Fotos (vincular contato desconhecido com 1 clique).
-- **Mídia**: gera posts chamativos das máquinas a cada 15 dias.
+- **Conversas + IA**: cole texto/transcrição **ou dite por voz**; a IA extrai
+  máquina, valor, pagamento, concorrente, **data de visita** e escreve um
+  **rascunho no seu tom**.
+- **Roteiro de visitas** agrupado por município (menos estrada).
+- **Campanhas segmentadas** por município ou máquina de interesse.
+- **Simulador** de financiamento (Moderfrota/Finame/Pronaf/CDC) e consórcio.
+- **Proposta comercial em PDF** por negociação.
+- **Agenda** de visitas, **Vendas perdidas**, **Sugestões** (estilo Google
+  Fotos), **Mídia**, importação de clientes (CSV) e **PWA** instalável.
 - **Configurações**: status de cada integração e como ativá-las.
+
+### Catálogo de máquinas (banco)
+New Holland Construction (E35D · E175C/E215C/E245C · B95C/B110C · W12D/W130B/
+W170B/W190B · RG140/170/200.B · D140B) + Dynapac (solo CA · tandem CC ·
+pneumático CP) e os principais **concorrentes** do ramo no Brasil (Caterpillar,
+Komatsu, Volvo, JCB, Case, XCMG, Sany, SDLG, Hyundai, John Deere, Bomag, Hamm,
+Ammann, Müller etc.).
 
 ## 🧠 O cérebro de IA
 

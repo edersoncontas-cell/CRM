@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Tractor, Menu, X, Calculator,
+  Swords, Route, Send,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -13,9 +14,12 @@ const LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/pipeline", label: "Pipeline (Kanban)", icon: KanbanSquare },
+  { href: "/comparativo", label: "Comparativo", icon: Swords },
   { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
   { href: "/agenda", label: "Agenda", icon: Calendar },
+  { href: "/roteiro", label: "Roteiro de visitas", icon: Route },
   { href: "/simulador", label: "Simulador", icon: Calculator },
+  { href: "/campanhas", label: "Campanhas", icon: Send },
   { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
   { href: "/sugestoes", label: "Sugestões", icon: Sparkles },
   { href: "/midia", label: "Mídia", icon: Megaphone },

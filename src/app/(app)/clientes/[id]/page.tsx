@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
 import { Card, Badge, Termometro } from "@/components/ui";
-import { formatCurrency, formatDateTime, iniciais, diasDesde } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime, iniciais, diasDesde } from "@/lib/utils";
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, MapPin, Bot, FileText } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Bot, FileText, Swords } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
     where: { id: params.id },
     include: {
       municipio: true,
+      indicadoPor: true,
+      indicados: true,
       negociacoes: { orderBy: { criadoEm: "desc" } },
       conversas: {
         orderBy: { criadoEm: "desc" },
@@ -51,6 +53,28 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
           </div>
         </div>
       </div>
+
+      {(cliente.jaComprou || cliente.indicadoPor || cliente.indicados.length > 0) && (
+        <Card className="mb-6 border-green-200 bg-green-50">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            {cliente.jaComprou && (
+              <span className="text-slate-700">
+                🛠️ <b>Pós-venda:</b> comprou {cliente.maquinaComprada ?? "uma máquina"}
+                {cliente.dataCompra ? ` em ${formatDate(cliente.dataCompra)}` : ""}
+                {cliente.dataCompra && diasDesde(cliente.dataCompra) >= 180 && (
+                  <span className="ml-1 font-medium text-amber-700">— revisão/contato recomendado</span>
+                )}
+              </span>
+            )}
+            {cliente.indicadoPor && (
+              <span className="text-slate-700">🤝 Indicado por <b>{cliente.indicadoPor.nome}</b></span>
+            )}
+            {cliente.indicados.length > 0 && (
+              <span className="text-slate-700">⭐ Já indicou <b>{cliente.indicados.length}</b> cliente(s)</span>
+            )}
+          </div>
+        </Card>
+      )}
 
       {cliente.perfilIA && (
         <Card className="mb-6 border-brand-200 bg-brand-50">
@@ -99,13 +123,23 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
                     <div className="mb-1 text-xs text-slate-400">Termômetro do negócio</div>
                     <Termometro valor={n.termometro} />
                   </div>
-                  <Link
-                    href={`/proposta/${n.id}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
-                  >
-                    <FileText size={13} /> Gerar proposta
-                  </Link>
+                  <div className="flex gap-2">
+                    {n.maquinaModelo && (
+                      <Link
+                        href={`/comparativo?modelo=${encodeURIComponent(n.maquinaModelo)}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+                      >
+                        <Swords size={13} /> Comparar
+                      </Link>
+                    )}
+                    <Link
+                      href={`/proposta/${n.id}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                    >
+                      <FileText size={13} /> Gerar proposta
+                    </Link>
+                  </div>
                 </div>
               </Card>
             ))}

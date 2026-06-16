@@ -3,9 +3,10 @@ import { Card, PageHeader, Badge } from "@/components/ui";
 import { formatCurrency, diasDesde } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
+import { forecastValor, comissaoEstimada, classificarLead, COR_CLASSE } from "@/lib/insights";
 import Link from "next/link";
 import {
-  Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users, Bell,
+  Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users, Bell, Snowflake, Percent,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,11 @@ export default async function DashboardPage() {
   const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
 
   const valorPipeline = negociacoes.reduce((s, n) => s + (n.valor ?? 0), 0);
+  const forecast = forecastValor(negociacoes);
+  const comissao = comissaoEstimada(forecast);
+  const leadsEsfriando = negociacoes
+    .filter((n) => classificarLead(n).esfriando)
+    .slice(0, 6);
   const porEstagio = ["novo", "contato", "proposta", "negociacao", "fechamento"].map((e) => ({
     estagio: e,
     total: negociacoes.filter((n) => n.estagio === e).length,
@@ -71,11 +77,15 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi icon={<DollarSign />} rotulo="Pipeline aberto" valor={formatCurrency(valorPipeline)} tom="text-green-600" />
         <Kpi icon={<TrendingUp />} rotulo="Negociações ativas" valor={String(negociacoes.length)} tom="text-brand-600" />
         <Kpi icon={<Users />} rotulo="Clientes" valor={String(clientesCount)} tom="text-amber-600" />
         <Kpi icon={<AlertTriangle />} rotulo="Alertas abertos" valor={String(alertas.length)} tom="text-red-600" />
+      </div>
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Kpi icon={<TrendingUp />} rotulo="Previsão ponderada (forecast)" valor={formatCurrency(forecast)} tom="text-brand-600" />
+        <Kpi icon={<Percent />} rotulo="Comissão estimada (2%)" valor={formatCurrency(comissao)} tom="text-green-600" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -170,6 +180,37 @@ export default async function DashboardPage() {
                 </li>
               ))}
             </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* Leads esfriando */}
+      <div className="mt-6">
+        <Card>
+          <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
+            <Snowflake size={18} className="text-sky-500" /> Leads esfriando (estavam quentes e pararam)
+          </div>
+          {leadsEsfriando.length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhum lead esfriando. Ótimo trabalho! 🔥</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {leadsEsfriando.map((n) => {
+                const { classe } = classificarLead(n);
+                return (
+                  <Link
+                    key={n.id}
+                    href={`/clientes/${n.clienteId}`}
+                    className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 hover:border-brand-300"
+                  >
+                    <div>
+                      <span className="text-sm font-medium text-slate-700">{n.cliente.nome}</span>
+                      <p className="text-xs text-slate-500">{n.maquinaModelo ?? "—"} · {diasDesde(n.ultimoContato)}d sem contato</p>
+                    </div>
+                    <Badge tom={COR_CLASSE[classe]}>Lead {classe}</Badge>
+                  </Link>
+                );
+              })}
+            </div>
           )}
         </Card>
       </div>
