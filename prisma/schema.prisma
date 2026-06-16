@@ -1,13 +1,15 @@
 // CRM Inteligente — Vendas de Máquinas Pesadas (New Holland)
-// Dev local: SQLite. Produção: trocar provider para "postgresql" e o DATABASE_URL.
+// Produção: PostgreSQL (Neon / Vercel Postgres).
+// Dev local: defina DATABASE_URL com a string do Neon ou use um Postgres local.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED") // necessário para migrations no Neon
 }
 
 model Municipio {
