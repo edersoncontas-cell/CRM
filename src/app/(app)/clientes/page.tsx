@@ -62,11 +62,12 @@ export default async function ClientesPage({
                   href={`/clientes?municipio=${m.id}`}
                   className={`flex items-center justify-between rounded px-2 py-1 text-sm ${filtro === m.id ? "ring-2 ring-brand-300" : ""}`}
                   style={{
-                    backgroundColor: `rgba(47, 130, 255, ${0.08 + intensidade * 0.5})`,
+                    backgroundColor: `rgba(26, 99, 245, ${0.06 + intensidade * 0.65})`,
+                    color: intensidade > 0.5 ? "white" : undefined,
                   }}
                 >
-                  <span className="truncate text-slate-700">{m.nome}</span>
-                  <span className="ml-2 font-medium text-slate-600">{m._count.clientes}</span>
+                  <span className="truncate text-sm">{m.nome}</span>
+                  <span className="ml-2 text-xs font-bold">{m._count.clientes}</span>
                 </Link>
               );
             })}
@@ -88,27 +89,29 @@ export default async function ClientesPage({
                 const dias = neg ? diasDesde(neg.ultimoContato) : null;
                 return (
                   <Link key={c.id} href={`/clientes/${c.id}`}>
-                    <Card className="transition hover:border-brand-300 hover:shadow-md">
+                    <Card className="cursor-pointer transition-all hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5">
                       <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-700">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-sm font-bold text-brand-700">
                           {iniciais(c.nome)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate font-semibold text-slate-800">{c.nome}</span>
-                            {c.jaComprou && <Badge tom="green">cliente</Badge>}
+                            <span className="truncate text-base font-bold text-slate-900">{c.nome}</span>
+                            {c.jaComprou && <Badge tom="green">✓ cliente</Badge>}
                           </div>
-                          <p className="text-xs text-slate-500">
+                          <p className="mt-0.5 text-xs text-slate-400">
                             {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
                           </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
                             {neg?.maquinaModelo && <Badge tom="blue">{neg.maquinaModelo}</Badge>}
                             {c.visitado ? (
-                              <Badge tom="green">visitado</Badge>
+                              <Badge tom="emerald">visitado</Badge>
                             ) : (
                               <Badge tom="slate">não visitado</Badge>
                             )}
-                            {dias != null && dias >= 7 && <Badge tom="red">{dias}d sem contato</Badge>}
+                            {dias != null && dias >= 7 && (
+                              <Badge tom="red">{dias}d sem contato</Badge>
+                            )}
                           </div>
                         </div>
                       </div>

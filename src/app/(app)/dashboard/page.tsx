@@ -1,14 +1,15 @@
 import { db } from "@/lib/db";
-import { Card, PageHeader, Badge } from "@/components/ui";
+import { Card, PageHeader, Badge, StatCard } from "@/components/ui";
 import { formatCurrency, diasDesde } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
 import { forecastValor, comissaoEstimada, classificarLead, COR_CLASSE } from "@/lib/insights";
+import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import Link from "next/link";
 import {
-  Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users, Bell, Snowflake, Percent,
+  Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
+  Bell, Snowflake, Percent, CheckCircle2, ArrowRight,
 } from "lucide-react";
-import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -29,86 +30,107 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  // Resumo do dia ("Bom dia")
   const hoje = new Date();
   const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
   const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
   const visitasHoje = await db.negociacao.count({
     where: { dataVisita: { gte: inicioDia, lte: fimDia }, status: { not: "perdida" } },
   });
-  const saudacao = hoje.getHours() < 12 ? "Bom dia" : hoje.getHours() < 18 ? "Boa tarde" : "Boa noite";
+
+  const hora = hoje.getHours();
+  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
 
   const valorPipeline = negociacoes.reduce((s, n) => s + (n.valor ?? 0), 0);
   const forecast = forecastValor(negociacoes);
   const comissao = comissaoEstimada(forecast);
-  const leadsEsfriando = negociacoes
-    .filter((n) => classificarLead(n).esfriando)
-    .slice(0, 6);
+  const leadsEsfriando = negociacoes.filter((n) => classificarLead(n).esfriando).slice(0, 6);
   const porEstagio = ["novo", "contato", "proposta", "negociacao", "fechamento"].map((e) => ({
     estagio: e,
     total: negociacoes.filter((n) => n.estagio === e).length,
   }));
-
-  // "Aguardando resposta" = sem contato há 3+ dias
   const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
-  const aguardandoTotal = aguardandoFiltrado.length;
   const filaAguardando = aguardandoFiltrado.slice(0, 6);
 
   return (
     <div>
-      <PageHeader
-        titulo="Dashboard"
-        subtitulo="Visão geral das suas metas e negociações"
-      />
+      <PageHeader titulo="Dashboard" subtitulo="Visão geral das suas metas e negociações" />
 
-      {/* Resumo do dia */}
-      <div className="mb-6 rounded-xl bg-gradient-to-r from-brand-700 to-brand-900 p-5 text-white">
-        <div className="flex items-center gap-2 text-lg font-semibold">
-          ☀️ {saudacao}! Aqui está o seu dia
+      {/* Hero do dia */}
+      <div className="mb-7 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 via-brand-800 to-brand-950 p-6 text-white shadow-lg">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-lg font-semibold">
+              ☀️ {saudacao}, Ederson!
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-brand-200">
+              Você tem{" "}
+              <span className="rounded-md bg-green-500/20 px-1.5 py-0.5 font-bold text-green-300">
+                {visitasHoje} visita{visitasHoje !== 1 ? "s" : ""}
+              </span>{" "}
+              hoje,{" "}
+              <span className="rounded-md bg-amber-500/20 px-1.5 py-0.5 font-bold text-amber-300">
+                {aguardandoFiltrado.length} cliente{aguardandoFiltrado.length !== 1 ? "s" : ""}
+              </span>{" "}
+              esperando resposta e{" "}
+              <span className={`rounded-md px-1.5 py-0.5 font-bold ${alertas.length > 0 ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-300"}`}>
+                {alertas.length} alerta{alertas.length !== 1 ? "s" : ""}
+              </span>
+              {" "}{alertas.length === 0 ? "✅ Tudo em dia!" : "para resolver."}
+            </p>
+            <p className="mt-1 text-xs text-brand-400">
+              {metasAbertas > 0
+                ? `Faltam ${metasAbertas} meta(s) para bater este período.`
+                : "🎉 Todas as metas batidas!"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:flex-col">
+            <MiniStat label="Forecast" valor={formatCurrency(forecast)} cor="text-agro-400" />
+            <MiniStat label="Comissão est." valor={formatCurrency(comissao)} cor="text-green-400" />
+          </div>
         </div>
-        <p className="mt-1 text-sm text-brand-100">
-          Você tem <b className="text-white">{visitasHoje}</b> visita(s) hoje,{" "}
-          <b className="text-white">{aguardandoTotal}</b> cliente(s) esperando resposta e{" "}
-          <b className="text-white">{alertas.length}</b> alerta(s) para resolver.{" "}
-          {metasAbertas > 0
-            ? `Faltam ${metasAbertas} meta(s) para bater.`
-            : "Todas as metas batidas! 🎉"}
-        </p>
       </div>
 
       {/* KPIs */}
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi icon={<DollarSign />} rotulo="Pipeline aberto" valor={formatCurrency(valorPipeline)} tom="text-green-600" />
-        <Kpi icon={<TrendingUp />} rotulo="Negociações ativas" valor={String(negociacoes.length)} tom="text-brand-600" />
-        <Kpi icon={<Users />} rotulo="Clientes" valor={String(clientesCount)} tom="text-amber-600" />
-        <Kpi icon={<AlertTriangle />} rotulo="Alertas abertos" valor={String(alertas.length)} tom="text-red-600" />
+      <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard icone={<DollarSign size={18} />} rotulo="Pipeline aberto" valor={formatCurrency(valorPipeline)} cor="green" />
+        <StatCard icone={<TrendingUp size={18} />} rotulo="Negociações ativas" valor={String(negociacoes.length)} cor="blue" />
+        <StatCard icone={<Users size={18} />} rotulo="Clientes cadastrados" valor={String(clientesCount)} cor="amber" />
+        <StatCard icone={<AlertTriangle size={18} />} rotulo="Alertas abertos" valor={String(alertas.length)} cor={alertas.length > 0 ? "red" : "green"} />
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Kpi icon={<TrendingUp />} rotulo="Previsão ponderada (forecast)" valor={formatCurrency(forecast)} tom="text-brand-600" />
-        <Kpi icon={<Percent />} rotulo="Comissão estimada (2%)" valor={formatCurrency(comissao)} tom="text-green-600" />
+
+      {/* Motivação + Dica */}
+      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <MotivacaoWidget />
+        <DicaVendas />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Metas */}
         <Card className="lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
-            <Target size={18} className="text-brand-600" /> Metas
+          <div className="mb-5 flex items-center gap-2 font-semibold text-slate-700">
+            <Target size={17} className="text-brand-500" /> Metas do período
           </div>
           <div className="space-y-4">
-            {metas.map((m) => {
+            {metas.length === 0 ? (
+              <p className="text-sm text-slate-400">Nenhuma meta configurada. Acesse Configurações para definir.</p>
+            ) : metas.map((m) => {
               const pct = Math.min(100, Math.round((m.progresso / m.alvo) * 100));
+              const cor = pct >= 100 ? "from-green-400 to-emerald-500" : pct >= 60 ? "from-brand-400 to-brand-500" : "from-amber-400 to-yellow-500";
               return (
                 <div key={m.id}>
-                  <div className="mb-1 flex justify-between text-sm">
-                    <span className="text-slate-600">{m.rotulo}</span>
-                    <span className="font-medium text-slate-700">
-                      {m.progresso}/{m.alvo}
-                    </span>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="font-medium text-slate-700">{m.rotulo}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">{m.progresso}/{m.alvo}</span>
+                      <span className={`text-xs font-bold ${pct >= 100 ? "text-emerald-600" : "text-slate-400"}`}>
+                        {pct}%{pct >= 100 && " ✓"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className={`h-full rounded-full ${pct >= 100 ? "bg-green-500" : pct >= 50 ? "bg-brand-500" : "bg-amber-500"}`}
+                      className={`h-full rounded-full bg-gradient-to-r transition-all duration-700 ${cor}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -126,30 +148,34 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Alertas anti-procrastinação */}
+        {/* Alertas */}
         <Card>
           <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
-            <Bell size={18} className="text-red-500" /> Alertas — clientes sem resposta
+            <Bell size={17} className="text-red-500" /> Clientes sem resposta
           </div>
           {alertas.length === 0 ? (
-            <p className="text-sm text-slate-400">Tudo em dia! Nenhum cliente esquecido. 🎉</p>
+            <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span className="text-sm text-green-700">Tudo em dia! Nenhum cliente esquecido.</span>
+            </div>
           ) : (
             <ul className="space-y-2">
               {alertas.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-                >
-                  <div>
-                    <Link href={`/clientes/${a.clienteId}`} className="text-sm font-medium text-slate-700 hover:text-brand-600">
+                <li key={a.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <Link href={`/clientes/${a.clienteId}`} className="block truncate text-sm font-semibold text-slate-800 hover:text-brand-600">
                       {a.cliente.nome}
                     </Link>
-                    <p className="text-xs text-slate-500">{a.mensagem}</p>
+                    <p className="truncate text-xs text-slate-500">{a.mensagem}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge tom={a.severidade === "alta" ? "red" : "yellow"}>{a.diasDesde}d</Badge>
+                  <div className="ml-3 flex shrink-0 items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${a.severidade === "alta" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                      {a.diasDesde}d
+                    </span>
                     <form action={resolverAlerta.bind(null, a.id)}>
-                      <button className="text-xs text-brand-600 hover:underline">resolver</button>
+                      <button className="rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">
+                        Resolver
+                      </button>
                     </form>
                   </div>
                 </li>
@@ -161,23 +187,28 @@ export default async function DashboardPage() {
         {/* Aguardando resposta */}
         <Card>
           <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
-            <Clock size={18} className="text-amber-500" /> Aguardando sua resposta
+            <Clock size={17} className="text-amber-500" /> Aguardando sua resposta
           </div>
           {filaAguardando.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhuma negociação parada. 👍</p>
+            <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span className="text-sm text-green-700">Nenhuma negociação parada. Ótimo ritmo!</span>
+            </div>
           ) : (
             <ul className="space-y-2">
               {filaAguardando.map((n) => (
-                <li key={n.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <div>
-                    <Link href={`/clientes/${n.clienteId}`} className="text-sm font-medium text-slate-700 hover:text-brand-600">
+                <li key={n.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <Link href={`/clientes/${n.clienteId}`} className="block truncate text-sm font-semibold text-slate-800 hover:text-brand-600">
                       {n.cliente.nome}
                     </Link>
-                    <p className="text-xs text-slate-500">
+                    <p className="truncate text-xs text-slate-500">
                       {n.maquinaModelo ?? "Sem máquina"} · {n.proximaAcao ?? "Retomar contato"}
                     </p>
                   </div>
-                  <Badge tom="yellow">{diasDesde(n.ultimoContato)}d parado</Badge>
+                  <span className="ml-3 shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                    {diasDesde(n.ultimoContato)}d
+                  </span>
                 </li>
               ))}
             </ul>
@@ -185,21 +216,14 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Motivação + Dica de vendas */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <MotivacaoWidget />
-        <DicaVendas />
-      </div>
-
       {/* Leads esfriando */}
-      <div className="mt-6">
-        <Card>
-          <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
-            <Snowflake size={18} className="text-sky-500" /> Leads esfriando (estavam quentes e pararam)
-          </div>
-          {leadsEsfriando.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum lead esfriando. Ótimo trabalho! 🔥</p>
-          ) : (
+      {leadsEsfriando.length > 0 && (
+        <div className="mt-6">
+          <Card>
+            <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
+              <Snowflake size={17} className="text-sky-500" /> Leads esfriando
+              <span className="ml-auto text-xs text-slate-400">Estavam quentes e pararam</span>
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {leadsEsfriando.map((n) => {
                 const { classe } = classificarLead(n);
@@ -207,36 +231,36 @@ export default async function DashboardPage() {
                   <Link
                     key={n.id}
                     href={`/clientes/${n.clienteId}`}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 hover:border-brand-300"
+                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 hover:border-brand-200 hover:bg-brand-50"
                   >
-                    <div>
-                      <span className="text-sm font-medium text-slate-700">{n.cliente.nome}</span>
-                      <p className="text-xs text-slate-500">{n.maquinaModelo ?? "—"} · {diasDesde(n.ultimoContato)}d sem contato</p>
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-800">
+                        {n.cliente.nome}
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        {n.maquinaModelo ?? "—"} · {diasDesde(n.ultimoContato)}d sem contato
+                      </p>
                     </div>
-                    <Badge tom={COR_CLASSE[classe]}>Lead {classe}</Badge>
+                    <div className="ml-2 flex shrink-0 items-center gap-1">
+                      <Badge tom={COR_CLASSE[classe]}>Lead {classe}</Badge>
+                      <ArrowRight size={12} className="text-slate-300" />
+                    </div>
                   </Link>
                 );
               })}
             </div>
-          )}
-        </Card>
-      </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
 
-function Kpi({
-  icon, rotulo, valor, tom,
-}: {
-  icon: React.ReactNode; rotulo: string; valor: string; tom: string;
-}) {
+function MiniStat({ label, valor, cor }: { label: string; valor: string; cor: string }) {
   return (
-    <Card className="flex items-center gap-3">
-      <div className={`rounded-lg bg-slate-100 p-2 ${tom}`}>{icon}</div>
-      <div>
-        <div className="text-xs text-slate-500">{rotulo}</div>
-        <div className="text-xl font-bold text-slate-800">{valor}</div>
-      </div>
-    </Card>
+    <div className="rounded-xl bg-white/10 px-3 py-2 text-right">
+      <div className="text-xs text-brand-300">{label}</div>
+      <div className={`text-base font-bold ${cor}`}>{valor}</div>
+    </div>
   );
 }

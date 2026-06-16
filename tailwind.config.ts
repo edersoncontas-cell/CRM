@@ -24,12 +24,16 @@ const config: Config = {
           950: "#152357",
         },
         agro: {
+          400: "#f9c84e",
           500: "#f5b417",
           600: "#d99708",
         },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+      },
+      backgroundOpacity: {
+        8: "0.08",
       },
     },
   },

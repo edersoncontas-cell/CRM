@@ -109,12 +109,12 @@ export default async function ComparativoPage({
                   <td className="py-2">{minha.potencia ? `${minha.potencia} cv` : "—"}</td>
                   <td className="py-2 text-slate-400">—</td>
                 </tr>
-                {concorrentes.map((c) => (
-                  <tr key={c.id} className="border-b">
-                    <td className="py-2">{c.marca} {c.modelo}</td>
-                    <td className="py-2">{peso(c.pesoOperacional)}</td>
-                    <td className="py-2">{c.potencia ? `${c.potencia} cv` : "—"}</td>
-                    <td className="py-2 text-slate-500">{delta(minha.pesoOperacional, c.pesoOperacional)} kg</td>
+                {concorrentes.map((c, idx) => (
+                  <tr key={c.id} className={`border-b transition-colors hover:bg-brand-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                    <td className="py-2.5 font-medium text-slate-700">{c.marca} {c.modelo}</td>
+                    <td className="py-2.5">{peso(c.pesoOperacional)}</td>
+                    <td className="py-2.5">{c.potencia ? `${c.potencia} cv` : "—"}</td>
+                    <td className="py-2.5 font-mono text-slate-500">{delta(minha.pesoOperacional, c.pesoOperacional)} kg</td>
                   </tr>
                 ))}
               </tbody>
