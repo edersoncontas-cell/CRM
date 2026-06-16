@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
 import { formatDateTime, formatCurrency } from "@/lib/utils";
-import { iaHabilitada } from "@/lib/ai";
+import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import { Bot, Calendar } from "lucide-react";
 import Link from "next/link";
 
@@ -25,7 +25,7 @@ export default async function ConversasPage() {
         subtitulo="Cole conversas (texto ou transcrição) e deixe o cérebro de IA extrair os dados"
         acao={
           <Badge tom={iaHabilitada() ? "green" : "yellow"}>
-            {iaHabilitada() ? "IA Anthropic ativa" : "Modo heurístico (sem chave)"}
+            {iaHabilitada() ? `IA ${provedorIANome()} ativa` : "Modo heurístico (sem chave)"}
           </Badge>
         }
       />

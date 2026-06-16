@@ -2,13 +2,83 @@ import Anthropic from "@anthropic-ai/sdk";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+// Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+// Provedor de IA disponível, em ordem de preferência: Anthropic > Groq.
+function provedorIA(): "anthropic" | "groq" | null {
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.GROQ_API_KEY) return "groq";
+  return null;
+}
 
 export function iaHabilitada() {
-  return !!process.env.ANTHROPIC_API_KEY;
+  return provedorIA() !== null;
+}
+
+// Nome amigável do provedor de IA ativo (para exibir na interface).
+export function provedorIANome(): string | null {
+  const p = provedorIA();
+  if (p === "anthropic") return "Anthropic";
+  if (p === "groq") return "Groq (grátis)";
+  return null;
 }
 
 function client() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+
+// Chamada unificada de LLM: usa Anthropic se houver chave, senão Groq (grátis).
+// Retorna o texto bruto da resposta. Lança erro se nenhum provedor existir.
+async function llmTexto(
+  system: string,
+  user: string,
+  opts?: { maxTokens?: number; json?: boolean }
+): Promise<string> {
+  const prov = provedorIA();
+  const maxTokens = opts?.maxTokens ?? 1024;
+
+  if (prov === "anthropic") {
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    return resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+  }
+
+  if (prov === "groq") {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        max_tokens: maxTokens,
+        ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      throw new Error(`Falha no Groq (${res.status}): ${detalhe.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    return data.choices?.[0]?.message?.content ?? "";
+  }
+
+  throw new Error("Nenhum provedor de IA configurado.");
 }
 
 const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas New Holland
@@ -39,16 +109,10 @@ export async function analisarConversaIA(
     const tom = opts?.estiloDeFala
       ? `\n\nEstilo de fala do vendedor (imite no rascunhoResposta):\n${opts.estiloDeFala}`
       : "";
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: SCHEMA_INSTRUCAO + tom,
-      messages: [{ role: "user", content: `Conversa:\n${texto}` }],
+    const raw = await llmTexto(SCHEMA_INSTRUCAO + tom, `Conversa:\n${texto}`, {
+      maxTokens: 1024,
+      json: true,
     });
-    const raw = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
     return {
@@ -77,17 +141,11 @@ export async function aprenderTomIA(mensagensVendedor: string[]): Promise<string
     return "Tom cordial, direto e regional (sul do ES). Usa saudações calorosas, trata o cliente por 'você/senhor', foca em benefícios práticos da máquina e em fechar a visita.";
   }
   try {
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: 512,
-      system:
-        "Analise as mensagens de um vendedor e descreva em 3-5 linhas o tom/estilo dele (saudações, gírias, formalidade, emojis) para que outra IA imite. Responda só com a descrição.",
-      messages: [{ role: "user", content: amostra }],
-    });
-    return resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    return await llmTexto(
+      "Analise as mensagens de um vendedor e descreva em 3-5 linhas o tom/estilo dele (saudações, gírias, formalidade, emojis) para que outra IA imite. Responda só com a descrição.",
+      amostra,
+      { maxTokens: 512 }
+    );
   } catch {
     return "Tom cordial, direto e regional. Foca em benefícios da máquina e em marcar a visita.";
   }
@@ -109,22 +167,11 @@ export async function gerarMidiaIA(maquina: {
     };
   }
   try {
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: 600,
-      system:
-        "Você é social media de um vendedor New Holland. Crie um post curto, chamativo e com emojis para WhatsApp/Instagram sobre a máquina. Devolva JSON: {\"titulo\": string, \"conteudo\": string}.",
-      messages: [
-        {
-          role: "user",
-          content: `Máquina: ${maquina.modelo} (${maquina.categoria}). ${maquina.descricao ?? ""} Curiosidades: ${maquina.curiosidades ?? ""}`,
-        },
-      ],
-    });
-    const raw = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    const raw = await llmTexto(
+      "Você é social media de um vendedor New Holland. Crie um post curto, chamativo e com emojis para WhatsApp/Instagram sobre a máquina. Devolva JSON: {\"titulo\": string, \"conteudo\": string}.",
+      `Máquina: ${maquina.modelo} (${maquina.categoria}). ${maquina.descricao ?? ""} Curiosidades: ${maquina.curiosidades ?? ""}`,
+      { maxTokens: 600, json: true }
+    );
     const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
     return { titulo: parsed.titulo, conteudo: parsed.conteudo };
   } catch {
@@ -190,10 +237,8 @@ export async function gerarPostMarketingIA(
       : "";
 
   try {
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: 800,
-      system: `Você é o social media de Ederson, vendedor de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo (Brasil).
+    const raw = await llmTexto(
+      `Você é o social media de Ederson, vendedor de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo (Brasil).
 Crie posts CRIATIVOS, com emojis estratégicos, linguagem profissional mas próxima.
 Tema do post: ${tema}.
 REGRA IMPORTANTE: NUNCA misture New Holland com Dynapac no mesmo post.
@@ -202,12 +247,9 @@ Devolva SOMENTE um JSON válido (sem texto fora do JSON):
 {"titulo": string, "corpo": string, "hashtags": string}
 "corpo": texto completo do post com emojis, máx 450 caracteres para WhatsApp.
 "hashtags": string com hashtags separadas por espaço.`,
-      messages: [{ role: "user", content: `${infoMaquina}${feedbackPart}` }],
-    });
-    const raw = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+      `${infoMaquina}${feedbackPart}`,
+      { maxTokens: 800, json: true }
+    );
     const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
     return {
       titulo: parsed.titulo ?? "Post de marketing",

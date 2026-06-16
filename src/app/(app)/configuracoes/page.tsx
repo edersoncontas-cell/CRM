@@ -1,6 +1,6 @@
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { db } from "@/lib/db";
-import { iaHabilitada } from "@/lib/ai";
+import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as whatsapp from "@/lib/integrations/whatsapp";
 import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
@@ -14,11 +14,11 @@ export default async function ConfiguracoesPage() {
 
   const integracoes = [
     {
-      nome: "Cérebro de IA (Anthropic)",
+      nome: iaHabilitada() ? `Cérebro de IA (${provedorIANome()})` : "Cérebro de IA",
       icon: Bot,
       ativo: iaHabilitada(),
       desc: "Analisa conversas, identifica perfil, extrai dados e escreve no seu tom.",
-      comoAtivar: "Defina ANTHROPIC_API_KEY no ambiente.",
+      comoAtivar: "Defina GROQ_API_KEY (grátis) ou ANTHROPIC_API_KEY no ambiente.",
     },
     {
       nome: "WhatsApp Business",
@@ -46,7 +46,7 @@ export default async function ConfiguracoesPage() {
       icon: Mic,
       ativo: transcription.isEnabled(),
       desc: "Transforma áudios do WhatsApp em texto para a IA analisar.",
-      comoAtivar: "Conectar um provedor de transcrição (ex.: Whisper) — em breve.",
+      comoAtivar: "Defina GROQ_API_KEY (Whisper grátis) ou OPENAI_API_KEY.",
     },
   ];
 
