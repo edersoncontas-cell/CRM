@@ -27,6 +27,32 @@ export async function enviarMensagem(para: string, texto: string) {
   return { ok: res.ok, modo: "live" as const, status: res.status };
 }
 
+// Baixa uma mídia recebida (áudio, imagem) via Graph API.
+// Passo 1: GET /{media-id} retorna a URL temporária. Passo 2: baixar com o token.
+export async function baixarMidia(
+  mediaId: string,
+): Promise<{ buffer: ArrayBuffer; mimeType: string } | null> {
+  if (!isEnabled()) return null;
+  const token = process.env.WHATSAPP_TOKEN;
+
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!metaRes.ok) return null;
+  const meta = (await metaRes.json()) as { url?: string; mime_type?: string };
+  if (!meta.url) return null;
+
+  const fileRes = await fetch(meta.url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!fileRes.ok) return null;
+
+  return {
+    buffer: await fileRes.arrayBuffer(),
+    mimeType: meta.mime_type ?? "audio/ogg",
+  };
+}
+
 export function verificarWebhook(mode: string | null, token: string | null, challenge: string | null) {
   if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
     return challenge ?? "";
