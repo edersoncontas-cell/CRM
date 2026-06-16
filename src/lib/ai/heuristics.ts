@@ -19,8 +19,8 @@ export interface ExtracaoConversa {
 // Modelos da minha linha (New Holland Construction + Dynapac).
 const MODELOS_NEW_HOLLAND = [
   // New Holland Construction
-  "E35D", "E175C", "E215C", "E245C", "B95C", "B110C", "B95", "B110",
-  "W12D", "W130B", "W170B", "W190B", "W130", "W170", "W190",
+  "E35D", "E145C", "E175C", "E215C", "E245C", "B95C", "B110C", "B95", "B110",
+  "L325", "W12D", "W130B", "W170B", "W190B", "W130", "W170", "W190",
   "RG140.B", "RG170.B", "RG200.B", "RG140", "RG170", "RG200", "D140B",
   // Dynapac
   "CA1500", "CA2500", "CA3500", "CA4000", "CA5000", "CA6500",

@@ -14,6 +14,8 @@ model Municipio {
   id       String    @id @default(cuid())
   nome     String    @unique
   regiao   String    @default("Sul do Espírito Santo")
+  lat      Float?
+  lng      Float?
   clientes Cliente[]
 }
 

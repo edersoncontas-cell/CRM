@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { gerarMidiaAction } from "@/lib/midia-actions";
-import { Megaphone, Sparkles } from "lucide-react";
+import { Megaphone, Sparkles, ImageIcon } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +48,15 @@ export default async function MidiaPage() {
               </div>
               <h3 className="font-semibold text-slate-800">{p.titulo}</h3>
               <p className="mt-2 flex-1 whitespace-pre-wrap text-sm text-slate-600">{p.conteudo}</p>
+              {p.maquinaId && (
+                <a
+                  href={`/api/arte/${p.maquinaId}`}
+                  target="_blank"
+                  className="mt-3 inline-flex items-center gap-1 rounded-lg bg-agro-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                >
+                  <ImageIcon size={13} /> Ver/baixar arte
+                </a>
+              )}
               <div className="mt-3 text-xs text-slate-400">
                 {p.agendadoPara ? `Agendado: ${formatDate(p.agendadoPara)}` : `Criado: ${formatDate(p.criadoEm)}`}
               </div>

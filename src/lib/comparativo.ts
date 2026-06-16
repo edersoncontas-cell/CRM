@@ -19,6 +19,7 @@ export const CATEGORIAS: Record<string, string> = {
   miniescavadeira: "Mini escavadeira",
   escavadeira: "Escavadeira hidráulica",
   retroescavadeira: "Retroescavadeira",
+  minicarregadeira: "Minicarregadeira",
   pacarregadeira: "Pá carregadeira",
   motoniveladora: "Motoniveladora",
   tratoresteira: "Trator de esteira",

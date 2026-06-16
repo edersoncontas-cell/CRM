@@ -2,13 +2,32 @@ import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
 
-const MUNICIPIOS = [
-  "Cachoeiro de Itapemirim", "Itapemirim", "Marataízes", "Presidente Kennedy",
-  "Piúma", "Anchieta", "Iconha", "Rio Novo do Sul", "Vargem Alta", "Castelo",
-  "Alegre", "Guaçuí", "Mimoso do Sul", "Muqui", "Atílio Vivácqua", "Apiacá",
-  "Bom Jesus do Norte", "São José do Calçado", "Jerônimo Monteiro",
-  "Muniz Freire", "Ibitirama", "Divino de São Lourenço", "Dores do Rio Preto",
-  "Conceição do Castelo", "Brejetuba",
+const MUNICIPIOS: { nome: string; lat: number; lng: number }[] = [
+  { nome: "Cachoeiro de Itapemirim", lat: -20.8489, lng: -41.1128 },
+  { nome: "Itapemirim", lat: -21.0094, lng: -40.8333 },
+  { nome: "Marataízes", lat: -21.0433, lng: -40.8244 },
+  { nome: "Presidente Kennedy", lat: -21.0967, lng: -41.0461 },
+  { nome: "Piúma", lat: -20.8344, lng: -40.7256 },
+  { nome: "Anchieta", lat: -20.8056, lng: -40.6447 },
+  { nome: "Iconha", lat: -20.7917, lng: -40.8125 },
+  { nome: "Rio Novo do Sul", lat: -20.8636, lng: -40.9367 },
+  { nome: "Vargem Alta", lat: -20.6711, lng: -41.0050 },
+  { nome: "Castelo", lat: -20.6039, lng: -41.1858 },
+  { nome: "Alegre", lat: -20.7639, lng: -41.5322 },
+  { nome: "Guaçuí", lat: -20.7758, lng: -41.6794 },
+  { nome: "Mimoso do Sul", lat: -21.0644, lng: -41.3661 },
+  { nome: "Muqui", lat: -20.9497, lng: -41.3458 },
+  { nome: "Atílio Vivácqua", lat: -20.9133, lng: -41.1947 },
+  { nome: "Apiacá", lat: -21.1672, lng: -41.5667 },
+  { nome: "Bom Jesus do Norte", lat: -21.1300, lng: -41.6750 },
+  { nome: "São José do Calçado", lat: -21.0286, lng: -41.6597 },
+  { nome: "Jerônimo Monteiro", lat: -20.7900, lng: -41.3936 },
+  { nome: "Muniz Freire", lat: -20.4636, lng: -41.4119 },
+  { nome: "Ibitirama", lat: -20.5436, lng: -41.6650 },
+  { nome: "Divino de São Lourenço", lat: -20.6172, lng: -41.6925 },
+  { nome: "Dores do Rio Preto", lat: -20.6939, lng: -41.8447 },
+  { nome: "Conceição do Castelo", lat: -20.3650, lng: -41.2417 },
+  { nome: "Brejetuba", lat: -20.1419, lng: -41.2914 },
 ];
 
 interface MaquinaSeed {
@@ -31,6 +50,10 @@ const MINHAS: MaquinaSeed[] = [
     pontosFortes: "Compacta e versátil; raio traseiro reduzido; fácil transporte em prancha; baixo custo operacional.",
     diferenciais: "Robustez New Holland em tamanho compacto e rede nacional de peças." },
   // New Holland — escavadeiras hidráulicas
+  { marca: "New Holland", modelo: "E145C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 14500, potencia: 110,
+    descricao: "Escavadeira de 14,5 t para obras urbanas e médias.",
+    pontosFortes: "Ágil e econômica; ótima para saneamento e infraestrutura urbana.",
+    diferenciais: "Maior caçamba da categoria e motor FPT econômico." },
   { marca: "New Holland", modelo: "E175C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 17500, potencia: 128,
     descricao: "Escavadeira de porte médio para terraplenagem e infraestrutura.",
     pontosFortes: "Equilíbrio entre força e consumo; cabine confortável; ideal para obras médias.",
@@ -52,6 +75,11 @@ const MINHAS: MaquinaSeed[] = [
     descricao: "Retroescavadeira de maior porte e alcance para obras exigentes.",
     pontosFortes: "Maior profundidade de escavação; potência de levante; robustez.",
     diferenciais: "Motor FPT e a melhor rede de assistência do segmento." },
+  // New Holland — minicarregadeira (skid steer)
+  { marca: "New Holland", modelo: "L325", categoria: "minicarregadeira", proprio: true, pesoOperacional: 3700, potencia: 74,
+    descricao: "Minicarregadeira Série 300, robusta e versátil para obras compactas.",
+    pontosFortes: "Capacidade de carga e altura de elevação líderes; troca rápida de implementos.",
+    diferenciais: "Robustez New Holland com baixo custo operacional." },
   // New Holland — pás carregadeiras
   { marca: "New Holland", modelo: "W12D", categoria: "pacarregadeira", proprio: true, pesoOperacional: 4800, potencia: 75,
     descricao: "Mini pá carregadeira para espaços compactos e agro.",
@@ -152,8 +180,16 @@ const CONCORRENTES: MaquinaSeed[] = [
   { marca: "Sany", modelo: "SY35U", categoria: "miniescavadeira", pesoOperacional: 3800 },
   { marca: "Hyundai", modelo: "R35Z", categoria: "miniescavadeira", pesoOperacional: 3700 },
   { marca: "XCMG", modelo: "XE35U", categoria: "miniescavadeira", pesoOperacional: 3700 },
+  // Minicarregadeiras (skid steer)
+  { marca: "Bobcat", modelo: "S650", categoria: "minicarregadeira", pesoOperacional: 3900 },
+  { marca: "Caterpillar", modelo: "236", categoria: "minicarregadeira", pesoOperacional: 3700 },
+  { marca: "Case", modelo: "SR210", categoria: "minicarregadeira", pesoOperacional: 3500 },
+  { marca: "JCB", modelo: "155", categoria: "minicarregadeira", pesoOperacional: 3600 },
+  { marca: "XCMG", modelo: "XC760K", categoria: "minicarregadeira", pesoOperacional: 3800 },
   // Escavadeiras
   { marca: "Caterpillar", modelo: "320", categoria: "escavadeira", pesoOperacional: 22000, potencia: 162 },
+  { marca: "Caterpillar", modelo: "315", categoria: "escavadeira", pesoOperacional: 15000, potencia: 109 },
+  { marca: "Komatsu", modelo: "PC130", categoria: "escavadeira", pesoOperacional: 13500 },
   { marca: "Caterpillar", modelo: "318", categoria: "escavadeira", pesoOperacional: 18000, potencia: 122 },
   { marca: "Komatsu", modelo: "PC200", categoria: "escavadeira", pesoOperacional: 20000, potencia: 155 },
   { marca: "Komatsu", modelo: "PC170", categoria: "escavadeira", pesoOperacional: 17500 },
@@ -242,8 +278,12 @@ const NOMES = [
 async function main() {
   console.log("🌱 Semeando banco (construção)...");
 
-  for (const nome of MUNICIPIOS) {
-    await db.municipio.upsert({ where: { nome }, update: {}, create: { nome } });
+  for (const m of MUNICIPIOS) {
+    await db.municipio.upsert({
+      where: { nome: m.nome },
+      update: { lat: m.lat, lng: m.lng },
+      create: { nome: m.nome, lat: m.lat, lng: m.lng },
+    });
   }
   const municipios = await db.municipio.findMany();
 
