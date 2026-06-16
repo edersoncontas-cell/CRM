@@ -1,0 +1,215 @@
+// Extração heurística (fallback sem ANTHROPIC_API_KEY).
+// Cobre o essencial: modelo de máquina, valor, condição de pagamento,
+// concorrente, data/hora de visita e sentimento — usando regex em PT-BR.
+
+export interface ExtracaoConversa {
+  resumo: string;
+  perfil: string | null;
+  maquina: string | null;
+  valor: number | null;
+  condicaoPagamento: string | null;
+  concorrente: string | null;
+  dataVisita: Date | null;
+  sentimento: "positivo" | "neutro" | "negativo";
+  ehProspectReal: boolean;
+  rascunhoResposta: string;
+  fonte: "ia" | "heuristica";
+}
+
+const MODELOS_NEW_HOLLAND = [
+  "T9", "T8", "T7", "T6", "T5", "T4", "TT4", "TT3.5", "TL5", "TS6", "TD",
+  "TK4", "CR", "TC", "W170", "W190", "W130", "B95", "B110", "B90",
+];
+
+const CONCORRENTES = [
+  "John Deere", "Massey Ferguson", "Valtra", "Case", "Case IH", "JCB",
+  "Caterpillar", "CAT", "Komatsu", "Agrale", "LS Tractor", "Yanmar",
+];
+
+const DIAS_SEMANA: Record<string, number> = {
+  domingo: 0, segunda: 1, "segunda-feira": 1, terca: 2, terça: 2,
+  "terça-feira": 2, quarta: 3, "quarta-feira": 3, quinta: 4,
+  "quinta-feira": 4, sexta: 5, "sexta-feira": 5, sabado: 6, sábado: 6,
+};
+
+export function extrairValor(texto: string): number | null {
+  const t = texto.toLowerCase();
+  // "1,2 milhão" / "1.2 milhoes"
+  const milhao = t.match(/(\d+[.,]?\d*)\s*milh[õo]/);
+  if (milhao) {
+    return parseFloat(milhao[1].replace(".", "").replace(",", ".")) * 1_000_000;
+  }
+  // "450 mil" / "450mil"
+  const mil = t.match(/(\d+[.,]?\d*)\s*mil\b/);
+  if (mil) {
+    return parseFloat(mil[1].replace(".", "").replace(",", ".")) * 1_000;
+  }
+  // "R$ 450.000" / "450000"
+  const reais = t.match(/r\$\s*([\d.]+)(?:,\d{2})?/);
+  if (reais) {
+    const n = parseFloat(reais[1].replace(/\./g, ""));
+    if (!Number.isNaN(n) && n > 1000) return n;
+  }
+  return null;
+}
+
+export function extrairMaquina(texto: string): string | null {
+  const upper = texto.toUpperCase();
+  for (const modelo of MODELOS_NEW_HOLLAND) {
+    // procura o modelo como token (ex.: "T7", "T7.245")
+    const re = new RegExp(`\\b${modelo.replace(".", "\\.")}(\\.\\d+)?\\b`);
+    const m = upper.match(re);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function extrairCondicaoPagamento(texto: string): string | null {
+  const t = texto.toLowerCase();
+  if (/(à vista|a vista|avista|dinheiro|pix)/.test(t)) return "avista";
+  if (/cons[óo]rcio/.test(t)) return "consorcio";
+  if (/financ|banco|bndes|finame|parcel/.test(t)) return "financiamento";
+  return null;
+}
+
+export function extrairConcorrente(texto: string): string | null {
+  for (const c of CONCORRENTES) {
+    if (new RegExp(`\\b${c}\\b`, "i").test(texto)) return c;
+  }
+  return null;
+}
+
+// Extrai hora apenas de marcadores explícitos: "14h", "14:30", "às 14", "14 horas".
+function extrairHora(t: string): { hora: number; minuto: number } {
+  let hora = 9;
+  let minuto = 0;
+  // "14:30" ou "14h30"
+  const hm = t.match(/\b(\d{1,2})[:h](\d{2})\b/);
+  // "14h", "14 horas", "às 14"
+  const hSimples = t.match(/(?:às|as)\s*(\d{1,2})|\b(\d{1,2})\s*(?:h|hs|horas)\b/);
+  if (hm) {
+    hora = parseInt(hm[1]);
+    minuto = parseInt(hm[2]);
+  } else if (hSimples) {
+    hora = parseInt(hSimples[1] ?? hSimples[2]);
+    if (hora < 7) hora += 12; // "às 2" provavelmente é 14h
+  }
+  return { hora, minuto };
+}
+
+export function extrairDataVisita(texto: string, base = new Date()): Date | null {
+  const t = texto.toLowerCase();
+  const { hora, minuto } = extrairHora(t);
+
+  // data explícita dd/mm
+  const dataExplicita = t.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (dataExplicita) {
+    const dia = parseInt(dataExplicita[1]);
+    const mes = parseInt(dataExplicita[2]) - 1;
+    const ano = dataExplicita[3]
+      ? parseInt(dataExplicita[3].length === 2 ? `20${dataExplicita[3]}` : dataExplicita[3])
+      : base.getFullYear();
+    return new Date(ano, mes, dia, hora, minuto);
+  }
+
+  // "amanhã"
+  if (/\bamanh[ãa]\b/.test(t)) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + 1);
+    d.setHours(hora, minuto, 0, 0);
+    return d;
+  }
+  // "hoje"
+  if (/\bhoje\b/.test(t)) {
+    const d = new Date(base);
+    d.setHours(hora, minuto, 0, 0);
+    return d;
+  }
+  // dia da semana
+  for (const [nome, idx] of Object.entries(DIAS_SEMANA)) {
+    if (new RegExp(`\\b${nome}\\b`).test(t)) {
+      const d = new Date(base);
+      const diff = (idx - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + diff);
+      d.setHours(hora, minuto, 0, 0);
+      return d;
+    }
+  }
+  return null;
+}
+
+export function detectarSentimento(texto: string): "positivo" | "neutro" | "negativo" {
+  const t = texto.toLowerCase();
+  const pos = /(fechad|fechei|fechou|gostei|ótimo|otimo|excelente|perfeito|quero|vamos fechar|combinado|interessad|pode vir|aceito)/.test(t);
+  const neg = /(caro|desisti|não quero|nao quero|deixa pra|outro fornecedor|comprei (?:da|na|o)|muito alto|sem interesse|talvez depois)/.test(t);
+  if (neg && !pos) return "negativo";
+  if (pos && !neg) return "positivo";
+  return "neutro";
+}
+
+export function extrairHeuristica(texto: string, base = new Date()): ExtracaoConversa {
+  const maquina = extrairMaquina(texto);
+  const valor = extrairValor(texto);
+  const condicao = extrairCondicaoPagamento(texto);
+  const concorrente = extrairConcorrente(texto);
+  const dataVisita = extrairDataVisita(texto, base);
+  const sentimento = detectarSentimento(texto);
+
+  const ehProspectReal =
+    !!maquina ||
+    !!valor ||
+    /(pre[çc]o|or[çc]amento|proposta|cota[çc][ãa]o|financ|cons[óo]rcio|comprar|interessad|m[áa]quina|trator|colheitadeira|retro)/i.test(texto);
+
+  const partes: string[] = [];
+  if (maquina) partes.push(`Interesse na ${maquina}`);
+  if (valor) partes.push(`valor ~ R$ ${valor.toLocaleString("pt-BR")}`);
+  if (condicao) partes.push(`pagamento: ${condicao}`);
+  if (concorrente) partes.push(`citou concorrente: ${concorrente}`);
+  if (dataVisita) partes.push(`visita sugerida`);
+  const resumo = partes.length
+    ? partes.join("; ") + "."
+    : "Conversa registrada (sem dados estruturados detectados).";
+
+  const rascunho = montarRascunho({ maquina, dataVisita, condicao, sentimento });
+
+  return {
+    resumo,
+    perfil: maquina ? `Potencial comprador de ${maquina}` : null,
+    maquina,
+    valor,
+    condicaoPagamento: condicao,
+    concorrente,
+    dataVisita,
+    sentimento,
+    ehProspectReal,
+    rascunhoResposta: rascunho,
+    fonte: "heuristica",
+  };
+}
+
+function montarRascunho(d: {
+  maquina: string | null;
+  dataVisita: Date | null;
+  condicao: string | null;
+  sentimento: string;
+}): string {
+  const linhas: string[] = ["Olá! Tudo bem?"];
+  if (d.maquina) {
+    linhas.push(
+      `Que bom o seu interesse na ${d.maquina}! É uma excelente escolha para o seu trabalho.`
+    );
+  } else {
+    linhas.push("Obrigado pelo contato! Posso te ajudar com as melhores condições.");
+  }
+  if (d.condicao === "financiamento") {
+    linhas.push("Consigo simular o financiamento (BNDES/Finame) com as melhores taxas pra você.");
+  } else if (d.condicao === "consorcio") {
+    linhas.push("Temos ótimas cartas de consórcio disponíveis, posso te passar os valores.");
+  }
+  if (d.dataVisita) {
+    linhas.push("Confirmo a nossa visita conforme combinamos. Qualquer coisa, me avise!");
+  } else {
+    linhas.push("Quando puder, marcamos uma visita para eu te mostrar a máquina de perto. 👍");
+  }
+  return linhas.join(" ");
+}

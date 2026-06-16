@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ ! -d node_modules ]; then npm install; fi; npx prisma generate >/dev/null 2>&1; if [ ! -f prisma/dev.db ]; then npx prisma db push --skip-generate && npm run seed; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

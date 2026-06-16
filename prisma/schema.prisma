@@ -1,0 +1,171 @@
+// CRM Inteligente — Vendas de Máquinas Pesadas (New Holland)
+// Dev local: SQLite. Produção: trocar provider para "postgresql" e o DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Municipio {
+  id       String    @id @default(cuid())
+  nome     String    @unique
+  regiao   String    @default("Sul do Espírito Santo")
+  clientes Cliente[]
+}
+
+model Cliente {
+  id          String    @id @default(cuid())
+  nome        String
+  telefone    String?
+  email       String?
+  municipio   Municipio? @relation(fields: [municipioId], references: [id])
+  municipioId String?
+  perfilIA    String?   // resumo de perfil gerado pela IA
+  origem      String?   // ex: whatsapp, indicacao, feira, manual
+  jaComprou   Boolean   @default(false)
+  visitado    Boolean   @default(false)
+  fotoUrl     String?
+  observacoes String?
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  negociacoes Negociacao[]
+  conversas   Conversa[]
+  alertas     Alerta[]
+  sugestoes   SugestaoVinculo[]
+  tarefas     TarefaKanban[]
+}
+
+model Negociacao {
+  id                   String    @id @default(cuid())
+  cliente              Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId            String
+  maquinaModelo        String?
+  valor                Float?
+  condicaoPagamento    String?   // avista | consorcio | financiamento | outro
+  concorrenteMencionado String?
+  estagio              String    @default("novo") // colunas do Kanban
+  termometro           Int       @default(50)     // 0-100, "quentura" calculada pela IA
+  proximaAcao          String?
+  ultimoContato        DateTime?
+  dataVisita           DateTime?
+  status               String    @default("aberta") // aberta | ganha | perdida
+  motivoPerda          String?
+  criadoEm             DateTime  @default(now())
+  atualizadoEm         DateTime  @updatedAt
+
+  analises             AnaliseIA[]
+}
+
+model Maquina {
+  id          String  @id @default(cuid())
+  modelo      String  @unique
+  categoria   String  // trator | colheitadeira | retroescavadeira | pa-carregadeira | plantadeira
+  descricao   String?
+  curiosidades String?
+  imagemUrl   String?
+  midiaPosts  MidiaPost[]
+}
+
+model Conversa {
+  id          String    @id @default(cuid())
+  cliente     Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId   String?
+  canal       String    @default("manual") // whatsapp | manual
+  tipo        String    @default("texto")  // texto | audio
+  conteudo    String
+  transcricao String?
+  remetente   String    @default("cliente") // cliente | vendedor
+  analisadaEm DateTime?
+  criadoEm    DateTime  @default(now())
+
+  analise     AnaliseIA?
+}
+
+model AnaliseIA {
+  id              String      @id @default(cuid())
+  conversa        Conversa?   @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId      String?     @unique
+  negociacao      Negociacao? @relation(fields: [negociacaoId], references: [id], onDelete: SetNull)
+  negociacaoId    String?
+  resumo          String?
+  perfil          String?
+  maquina         String?
+  valor           Float?
+  condicaoPagamento String?
+  concorrente     String?
+  dataVisita      DateTime?
+  sentimento      String?     // positivo | neutro | negativo
+  ehProspectReal  Boolean     @default(false)
+  rascunhoResposta String?
+  fonte           String      @default("ia") // ia | heuristica
+  criadoEm        DateTime    @default(now())
+}
+
+model TarefaKanban {
+  id        String   @id @default(cuid())
+  titulo    String
+  descricao String?
+  coluna    String   @default("a_fazer")
+  ordem     Int      @default(0)
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId String?
+  dueDate   DateTime?
+  criadoEm  DateTime @default(now())
+}
+
+model Meta {
+  id        String   @id @default(cuid())
+  tipo      String   // prospeccao | conversas | negocios_banco | diaria | semanal | mensal
+  rotulo    String
+  alvo      Float
+  progresso Float    @default(0)
+  periodo   String   @default("mensal")
+  criadoEm  DateTime @default(now())
+}
+
+model SugestaoVinculo {
+  id            String   @id @default(cuid())
+  telefone      String
+  nomeDetectado String?
+  textoContexto String?
+  clienteSugerido Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId     String?
+  confianca     Int      @default(50) // 0-100
+  status        String   @default("pendente") // pendente | confirmado | rejeitado
+  criadoEm      DateTime @default(now())
+}
+
+model Alerta {
+  id        String   @id @default(cuid())
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId String
+  tipo      String   // sem_resposta | sem_contato | visita_proxima
+  mensagem  String
+  diasDesde Int      @default(0)
+  severidade String  @default("media") // baixa | media | alta
+  resolvido Boolean  @default(false)
+  criadoEm  DateTime @default(now())
+}
+
+model MidiaPost {
+  id          String    @id @default(cuid())
+  maquina     Maquina?  @relation(fields: [maquinaId], references: [id], onDelete: SetNull)
+  maquinaId   String?
+  titulo      String
+  conteudo    String
+  status      String    @default("rascunho") // rascunho | agendado | publicado
+  agendadoPara DateTime?
+  criadoEm    DateTime  @default(now())
+}
+
+model EstiloDeFala {
+  id         String   @id @default(cuid())
+  guia       String   // descrição do tom/estilo aprendido
+  exemplos   String?
+  atualizadoEm DateTime @updatedAt @default(now())
+}

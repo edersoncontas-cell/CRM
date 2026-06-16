@@ -1,0 +1,119 @@
+import { db } from "@/lib/db";
+import { Card, PageHeader, Badge } from "@/components/ui";
+import { iniciais, diasDesde } from "@/lib/utils";
+import { NovoClienteForm } from "@/components/NovoClienteForm";
+import { MapPin } from "lucide-react";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+
+export default async function ClientesPage({
+  searchParams,
+}: {
+  searchParams: { municipio?: string };
+}) {
+  const filtro = searchParams.municipio;
+  const [clientes, municipios] = await Promise.all([
+    db.cliente.findMany({
+      where: filtro ? { municipioId: filtro } : {},
+      include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
+      orderBy: { atualizadoEm: "desc" },
+    }),
+    db.municipio.findMany({
+      include: { _count: { select: { clientes: true } } },
+      orderBy: { nome: "asc" },
+    }),
+  ]);
+
+  const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
+
+  return (
+    <div>
+      <PageHeader
+        titulo="Clientes"
+        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}`}
+        acao={<NovoClienteForm municipios={municipios} />}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        {/* Mapa de calor por município */}
+        <Card className="lg:col-span-1">
+          <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
+            <MapPin size={18} className="text-brand-600" /> Mapa de calor
+          </div>
+          <Link
+            href="/clientes"
+            className={`mb-2 block rounded px-2 py-1 text-sm ${!filtro ? "bg-brand-50 font-medium text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
+          >
+            Todos os municípios
+          </Link>
+          <div className="max-h-[60vh] space-y-1 overflow-y-auto pr-1">
+            {municipios.map((m) => {
+              const intensidade = m._count.clientes / maxClientes;
+              return (
+                <Link
+                  key={m.id}
+                  href={`/clientes?municipio=${m.id}`}
+                  className={`flex items-center justify-between rounded px-2 py-1 text-sm ${filtro === m.id ? "ring-2 ring-brand-300" : ""}`}
+                  style={{
+                    backgroundColor: `rgba(47, 130, 255, ${0.08 + intensidade * 0.5})`,
+                  }}
+                >
+                  <span className="truncate text-slate-700">{m.nome}</span>
+                  <span className="ml-2 font-medium text-slate-600">{m._count.clientes}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* Lista de clientes */}
+        <div className="lg:col-span-3">
+          {clientes.length === 0 ? (
+            <Card>
+              <p className="text-center text-sm text-slate-400">
+                Nenhum cliente ainda. Cadastre o primeiro! 🚜
+              </p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {clientes.map((c) => {
+                const neg = c.negociacoes[0];
+                const dias = neg ? diasDesde(neg.ultimoContato) : null;
+                return (
+                  <Link key={c.id} href={`/clientes/${c.id}`}>
+                    <Card className="transition hover:border-brand-300 hover:shadow-md">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-700">
+                          {iniciais(c.nome)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-semibold text-slate-800">{c.nome}</span>
+                            {c.jaComprou && <Badge tom="green">cliente</Badge>}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {neg?.maquinaModelo && <Badge tom="blue">{neg.maquinaModelo}</Badge>}
+                            {c.visitado ? (
+                              <Badge tom="green">visitado</Badge>
+                            ) : (
+                              <Badge tom="slate">não visitado</Badge>
+                            )}
+                            {dias != null && dias >= 7 && <Badge tom="red">{dias}d sem contato</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
