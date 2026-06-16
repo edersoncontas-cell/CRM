@@ -3,6 +3,7 @@ import { Card, PageHeader, Badge } from "@/components/ui";
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
 import { formatDateTime, formatCurrency } from "@/lib/utils";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { Bot, Calendar } from "lucide-react";
 import Link from "next/link";
 
@@ -24,9 +25,12 @@ export default async function ConversasPage() {
         titulo="Conversas + IA"
         subtitulo="Cole conversas (texto ou transcrição) e deixe o cérebro de IA extrair os dados"
         acao={
-          <Badge tom={iaHabilitada() ? "green" : "yellow"}>
-            {iaHabilitada() ? `IA ${provedorIANome()} ativa` : "Modo heurístico (sem chave)"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <BotaoAtualizar />
+            <Badge tom={iaHabilitada() ? "green" : "yellow"}>
+              {iaHabilitada() ? `IA ${provedorIANome()} ativa` : "Modo heurístico (sem chave)"}
+            </Badge>
+          </div>
         }
       />
 

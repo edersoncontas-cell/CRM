@@ -3,7 +3,8 @@ import { Card, PageHeader, Badge } from "@/components/ui";
 import { iniciais, diasDesde } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
-import { MapPin } from "lucide-react";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +12,23 @@ export const dynamic = "force-dynamic";
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string };
+  searchParams: { municipio?: string; q?: string };
 }) {
   const filtro = searchParams.municipio;
+  const busca = (searchParams.q ?? "").trim();
   const [clientes, municipios] = await Promise.all([
     db.cliente.findMany({
-      where: filtro ? { municipioId: filtro } : {},
+      where: {
+        ...(filtro ? { municipioId: filtro } : {}),
+        ...(busca
+          ? {
+              OR: [
+                { nome: { contains: busca, mode: "insensitive" } },
+                { telefone: { contains: busca.replace(/\D/g, "") || busca } },
+              ],
+            }
+          : {}),
+      },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { atualizadoEm: "desc" },
     }),
@@ -32,14 +44,41 @@ export default async function ClientesPage({
     <div>
       <PageHeader
         titulo="Clientes"
-        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}`}
+        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}${busca ? ` para “${busca}”` : ""}`}
         acao={
           <div className="flex gap-2">
+            <BotaoAtualizar />
             <ImportarClientes />
             <NovoClienteForm municipios={municipios} />
           </div>
         }
       />
+
+      {/* Busca por nome ou telefone */}
+      <form method="GET" className="mb-5 flex gap-2">
+        {filtro && <input type="hidden" name="municipio" value={filtro} />}
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            name="q"
+            defaultValue={busca}
+            placeholder="Buscar cliente por nome ou telefone..."
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+          />
+        </div>
+        <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
+          Buscar
+        </button>
+        {busca && (
+          <Link
+            href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
+            className="flex items-center rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50"
+          >
+            Limpar
+          </Link>
+        )}
+      </form>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Mapa de calor por município */}

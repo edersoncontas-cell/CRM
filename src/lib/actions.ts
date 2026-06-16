@@ -118,14 +118,55 @@ export async function marcarGanha(id: string) {
   revalidatePath("/pipeline");
 }
 
+// Acha um cliente por telefone/nome ou cria um novo. Usado na análise de
+// conversas para alimentar automaticamente o cadastro de clientes.
+async function acharOuCriarCliente(
+  nome: string | null,
+  telefone: string | null,
+  origem: string
+): Promise<string | null> {
+  const tel = telefone ? telefone.replace(/\D/g, "") : null;
+  if (!nome && !tel) return null;
+
+  const existente = await db.cliente.findFirst({
+    where: {
+      OR: [
+        tel ? { telefone: tel } : undefined,
+        nome ? { nome: { equals: nome, mode: "insensitive" } } : undefined,
+      ].filter(Boolean) as object[],
+    },
+  });
+  if (existente) {
+    // completa telefone se faltava
+    if (tel && !existente.telefone) {
+      await db.cliente.update({ where: { id: existente.id }, data: { telefone: tel } });
+    }
+    return existente.id;
+  }
+
+  const novo = await db.cliente.create({
+    data: { nome: nome ?? "Novo contato", telefone: tel, origem },
+  });
+  return novo.id;
+}
+
 // ---------- Conversas + IA ----------
 export async function analisarConversaAction(formData: FormData) {
   const conteudo = String(formData.get("conteudo") ?? "").trim();
   if (!conteudo) return;
-  const clienteId = String(formData.get("clienteId") ?? "") || null;
+  let clienteId = String(formData.get("clienteId") ?? "") || null;
 
   const estilo = await db.estiloDeFala.findFirst();
   const extracao = await analisarConversaIA(conteudo, { estiloDeFala: estilo?.guia });
+
+  // Sem cliente vinculado: cria/encontra a partir do que a IA identificou.
+  if (!clienteId && (extracao.nomeCliente || extracao.telefoneCliente)) {
+    clienteId = await acharOuCriarCliente(
+      extracao.nomeCliente,
+      extracao.telefoneCliente,
+      "conversa"
+    );
+  }
 
   const conversa = await db.conversa.create({
     data: {
@@ -194,7 +235,17 @@ export async function analisarConversaAction(formData: FormData) {
     },
   });
 
+  // Guarda o perfil no cliente quando ainda não houver.
+  if (clienteId && extracao.perfil) {
+    const c = await db.cliente.findUnique({ where: { id: clienteId } });
+    if (c && !c.perfilIA) {
+      await db.cliente.update({ where: { id: clienteId }, data: { perfilIA: extracao.perfil } });
+    }
+  }
+
   revalidatePath("/conversas");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
 

@@ -87,6 +87,8 @@ sem texto antes ou depois, com as chaves:
 {
   "resumo": string,                       // 1-2 frases do que aconteceu
   "perfil": string,                       // perfil do cliente (produtor, construtora, etc.)
+  "nomeCliente": string|null,             // nome do cliente, se identificável na conversa
+  "telefoneCliente": string|null,         // telefone do cliente (só dígitos), se aparecer
   "maquina": string|null,                 // modelo negociado (ex: "T7", "TL5")
   "valor": number|null,                   // valor em reais (número puro)
   "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"outro"|null,
@@ -118,6 +120,8 @@ export async function analisarConversaIA(
     return {
       resumo: parsed.resumo ?? "",
       perfil: parsed.perfil ?? null,
+      nomeCliente: parsed.nomeCliente ?? null,
+      telefoneCliente: parsed.telefoneCliente ? String(parsed.telefoneCliente).replace(/\D/g, "") || null : null,
       maquina: parsed.maquina ?? null,
       valor: typeof parsed.valor === "number" ? parsed.valor : null,
       condicaoPagamento: parsed.condicaoPagamento ?? null,

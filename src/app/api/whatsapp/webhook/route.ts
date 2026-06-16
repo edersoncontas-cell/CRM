@@ -97,13 +97,12 @@ export async function POST(req: NextRequest) {
     const nomeContato = body?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name;
 
     if (!cliente) {
-      // contato desconhecido -> gera sugestão de vínculo (estilo Google Fotos)
-      await db.sugestaoVinculo.create({
+      // Contato novo -> já cadastra o cliente automaticamente (nome + telefone).
+      cliente = await db.cliente.create({
         data: {
+          nome: nomeContato ?? `Contato ${telefone}`,
           telefone,
-          nomeDetectado: nomeContato ?? null,
-          textoContexto: texto.slice(0, 160),
-          confianca: 50,
+          origem: "whatsapp",
         },
       });
     }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
@@ -141,22 +142,38 @@ export function StatCard({
   rotulo,
   valor,
   cor = "blue",
+  href,
 }: {
   icone: React.ReactNode;
   rotulo: string;
   valor: string;
   cor?: CorStat;
+  href?: string;
 }) {
   const c = COR_STAT[cor];
-  return (
-    <div className={cn("flex items-center gap-4 rounded-2xl p-4", c.bg)}>
+  const conteudo = (
+    <>
       <div className={cn("rounded-xl p-2.5 text-lg", c.icon)}>{icone}</div>
       <div className="min-w-0">
         <div className="truncate text-xs font-medium text-slate-500">{rotulo}</div>
         <div className="text-xl font-bold text-slate-800">{valor}</div>
       </div>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={cn(
+          "flex items-center gap-4 rounded-2xl p-4 transition hover:shadow-md hover:-translate-y-0.5",
+          c.bg
+        )}
+      >
+        {conteudo}
+      </Link>
+    );
+  }
+  return <div className={cn("flex items-center gap-4 rounded-2xl p-4", c.bg)}>{conteudo}</div>;
 }
 
 // ─────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
 import { forecastValor, comissaoEstimada, classificarLead, COR_CLASSE } from "@/lib/insights";
 import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
 import {
   Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
@@ -54,7 +55,11 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <PageHeader titulo="Dashboard" subtitulo="Visão geral das suas metas e negociações" />
+      <PageHeader
+        titulo="Dashboard"
+        subtitulo="Visão geral das suas metas e negociações"
+        acao={<BotaoAtualizar />}
+      />
 
       {/* Hero do dia */}
       <div className="mb-7 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 via-brand-800 to-brand-950 p-6 text-white shadow-lg">
@@ -93,9 +98,9 @@ export default async function DashboardPage() {
 
       {/* KPIs */}
       <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icone={<DollarSign size={18} />} rotulo="Pipeline aberto" valor={formatCurrency(valorPipeline)} cor="green" />
-        <StatCard icone={<TrendingUp size={18} />} rotulo="Negociações ativas" valor={String(negociacoes.length)} cor="blue" />
-        <StatCard icone={<Users size={18} />} rotulo="Clientes cadastrados" valor={String(clientesCount)} cor="amber" />
+        <StatCard href="/pipeline" icone={<DollarSign size={18} />} rotulo="Pipeline aberto" valor={formatCurrency(valorPipeline)} cor="green" />
+        <StatCard href="/pipeline" icone={<TrendingUp size={18} />} rotulo="Negociações ativas" valor={String(negociacoes.length)} cor="blue" />
+        <StatCard href="/clientes" icone={<Users size={18} />} rotulo="Clientes cadastrados" valor={String(clientesCount)} cor="amber" />
         <StatCard icone={<AlertTriangle size={18} />} rotulo="Alertas abertos" valor={String(alertas.length)} cor={alertas.length > 0 ? "red" : "green"} />
       </div>
 

@@ -5,6 +5,8 @@
 export interface ExtracaoConversa {
   resumo: string;
   perfil: string | null;
+  nomeCliente: string | null;
+  telefoneCliente: string | null;
   maquina: string | null;
   valor: number | null;
   condicaoPagamento: string | null;
@@ -146,6 +148,34 @@ export function extrairDataVisita(texto: string, base = new Date()): Date | null
   return null;
 }
 
+// Extrai um telefone (BR) do texto, retornando só os dígitos.
+export function extrairTelefone(texto: string): string | null {
+  const m = texto.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?9?\d{4}[-\s.]?\d{4}/);
+  if (!m) return null;
+  const dig = m[0].replace(/\D/g, "");
+  return dig.length >= 10 ? dig : null;
+}
+
+// Tenta achar o nome do cliente: frases explícitas ou o remetente da conversa
+// exportada do WhatsApp ("12/06/2026 14:30 - Fulano: ...").
+export function extrairNome(texto: string): string | null {
+  const frase = texto.match(
+    /(?:meu nome (?:é|e)|me chamo|aqui (?:é|e) o|aqui (?:é|e) a|sou o|sou a|quem fala (?:é|e))\s+([A-ZÀ-Ÿ][\p{L}]+(?:\s+[A-ZÀ-Ÿ][\p{L}]+)?)/iu
+  );
+  if (frase) return frase[1].trim();
+
+  // Formato de exportação do WhatsApp: pega o primeiro remetente que não seja o dono.
+  const re = /(?:^|\n).*?[-–]\s*([^:\n]{2,40}?):/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = re.exec(texto)) !== null) {
+    const nome = mm[1].trim();
+    if (/\d/.test(nome)) continue;
+    if (/^(você|voce|you|eu|me|sistema)$/i.test(nome)) continue;
+    return nome;
+  }
+  return null;
+}
+
 export function detectarSentimento(texto: string): "positivo" | "neutro" | "negativo" {
   const t = texto.toLowerCase();
   const pos = /(fechad|fechei|fechou|gostei|ótimo|otimo|excelente|perfeito|quero|vamos fechar|combinado|interessad|pode vir|aceito)/.test(t);
@@ -183,6 +213,8 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
   return {
     resumo,
     perfil: maquina ? `Potencial comprador de ${maquina}` : null,
+    nomeCliente: extrairNome(texto),
+    telefoneCliente: extrairTelefone(texto),
     maquina,
     valor,
     condicaoPagamento: condicao,
