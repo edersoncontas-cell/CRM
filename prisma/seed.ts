@@ -438,6 +438,46 @@ async function main() {
     });
   }
 
+  // Campanhas de marketing de demonstração
+  if ((await db.campanhaMarketing.count()) === 0) {
+    await db.campanhaMarketing.createMany({
+      data: [
+        {
+          tipo: "diario",
+          titulo: "💡 Sabia disso sobre a New Holland E245C EVO?",
+          conteudo: "🔧 Dica do dia!\n\nA New Holland E245C EVO tem capacidade de escavação de até 7,2 metros de profundidade — ideal para fundações profundas e obras de saneamento!\n\nIsso significa MAIS OBRA com MENOS reposicionamento. 💪\n\nQuer um comparativo técnico? Me chama! 👇",
+          hashtags: "#NewHolland #E245C #Escavadeira #Construção #SulES",
+          canalAlvo: "ambos",
+          status: "rascunho",
+          marca: "New Holland",
+          categoria: "escavadeira",
+        },
+        {
+          tipo: "segunda",
+          titulo: "🚀 Segunda-feira de oportunidades!",
+          conteudo: "Bom dia! 🌅 Semana nova, oportunidade nova!\n\nA Dynapac CA3500 está disponível com condições especiais Finame/BNDES. Rolo liso de 8 toneladas com tração 4x4 — perfeito para asfalto e solo.\n\n✅ Taxa reduzida\n✅ Demonstração gratuita\n✅ Proposta em 24h\n\nMe chama! 👇",
+          hashtags: "#Dynapac #CA3500 #RoloCompactador #Finame #Construção",
+          canalAlvo: "whatsapp",
+          status: "aprovado",
+          marca: "Dynapac",
+          categoria: "rolo_solo",
+        },
+        {
+          tipo: "mensal_fim",
+          titulo: "⏰ Últimos dias — condições especiais vencem!",
+          conteudo: "⚠️ ATENÇÃO!\n\nEstamos nos ÚLTIMOS DIAS do mês!\n\nA New Holland B110C (retroescavadeira) com condições que só existem AGORA:\n🔥 Finame com entrada reduzida\n🔥 Demonstração na sua obra\n🔥 Garantia estendida incluída\n\nMe chama AGORA e garanta sua proposta! ⬇️",
+          hashtags: "#NewHolland #B110C #Retroescavadeira #ÚltimosDias #Oportunidade",
+          canalAlvo: "ambos",
+          status: "enviado",
+          marca: "New Holland",
+          categoria: "retroescavadeira",
+          totalEnviado: 12,
+          enviadoEm: new Date(Date.now() - 1000 * 60 * 60 * 48),
+        },
+      ],
+    });
+  }
+
   console.log("✅ Seed concluído.");
 }
 

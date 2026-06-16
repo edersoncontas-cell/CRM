@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Tractor, Menu, X, Calculator,
-  Swords, Route, Send, Map, CalendarRange,
+  Swords, Route, Send, Map, CalendarRange, BrainCircuit,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ const LINKS = [
   { href: "/agenda", label: "Agenda", icon: Calendar },
   { href: "/roteiro", label: "Roteiro de visitas", icon: Route },
   { href: "/simulador", label: "Simulador", icon: Calculator },
+  { href: "/marketing", label: "Marketing IA", icon: BrainCircuit },
   { href: "/campanhas", label: "Campanhas", icon: Send },
   { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
   { href: "/sugestoes", label: "Sugestões", icon: Sparkles },

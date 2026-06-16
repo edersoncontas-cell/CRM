@@ -180,7 +180,34 @@ model MidiaPost {
 
 model EstiloDeFala {
   id         String   @id @default(cuid())
-  guia       String   // descrição do tom/estilo aprendido
+  guia       String
   exemplos   String?
   atualizadoEm DateTime @updatedAt @default(now())
+}
+
+model CampanhaMarketing {
+  id              String   @id @default(cuid())
+  tipo            String   // diario | segunda | sexta | mensal_inicio | mensal_fim | avulso
+  titulo          String
+  conteudo        String
+  hashtags        String?
+  canalAlvo       String   @default("ambos") // whatsapp | instagram | ambos
+  status          String   @default("rascunho") // rascunho | aprovado | rejeitado | enviado
+  marca           String?  // "New Holland" | "Dynapac" | null = qualquer
+  categoria       String?
+  municipioFiltro String?
+  feedbackEderson String?
+  totalEnviado    Int      @default(0)
+  enviadoEm       DateTime?
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+}
+
+model Motivacao {
+  id        String   @id @default(cuid())
+  texto     String
+  autor     String?
+  categoria String   @default("vendas") // vendas | foco | persistencia | mindset | tdah
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
 }

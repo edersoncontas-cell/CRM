@@ -8,6 +8,7 @@ import Link from "next/link";
 import {
   Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users, Bell, Snowflake, Percent,
 } from "lucide-react";
+import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +183,12 @@ export default async function DashboardPage() {
             </ul>
           )}
         </Card>
+      </div>
+
+      {/* Motivação + Dica de vendas */}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <MotivacaoWidget />
+        <DicaVendas />
       </div>
 
       {/* Leads esfriando */}
