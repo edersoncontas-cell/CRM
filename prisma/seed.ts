@@ -28,6 +28,14 @@ const MUNICIPIOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Dores do Rio Preto", lat: -20.6939, lng: -41.8447 },
   { nome: "Conceição do Castelo", lat: -20.3650, lng: -41.2417 },
   { nome: "Brejetuba", lat: -20.1419, lng: -41.2914 },
+  // Adicionados a pedido (sul/Caparaó/serra)
+  { nome: "Iúna", lat: -20.3447, lng: -41.5358 },
+  { nome: "Ibatiba", lat: -20.2367, lng: -41.5097 },
+  { nome: "Irupi", lat: -20.3506, lng: -41.6403 },
+  { nome: "Afonso Cláudio", lat: -20.0739, lng: -41.1239 },
+  { nome: "Venda Nova do Imigrante", lat: -20.3289, lng: -41.1364 },
+  { nome: "Marechal Floriano", lat: -20.4117, lng: -40.6814 },
+  { nome: "Domingos Martins", lat: -20.3622, lng: -40.6589 },
 ];
 
 interface MaquinaSeed {
