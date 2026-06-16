@@ -5,12 +5,13 @@ export async function middleware(req: NextRequest) {
   if (!authAtivo()) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  // Rotas públicas: login, auth e webhook do WhatsApp (a Meta não tem cookie;
-  // o webhook se protege pelo verify token / payload da própria Meta).
+  // Rotas públicas: login, auth e webhooks de WhatsApp (Meta e Z-API).
+  // A Meta/Z-API não têm cookie; os webhooks se protegem pelo payload da origem.
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/whatsapp")
+    pathname.startsWith("/api/whatsapp") ||
+    pathname.startsWith("/api/zapi")
   ) {
     return NextResponse.next();
   }

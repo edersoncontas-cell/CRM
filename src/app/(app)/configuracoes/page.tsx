@@ -2,6 +2,7 @@ import { Card, PageHeader, Badge } from "@/components/ui";
 import { db } from "@/lib/db";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as whatsapp from "@/lib/integrations/whatsapp";
+import * as zapi from "@/lib/integrations/zapi";
 import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
@@ -21,10 +22,17 @@ export default async function ConfiguracoesPage() {
       comoAtivar: "Defina GROQ_API_KEY (grátis) ou ANTHROPIC_API_KEY no ambiente.",
     },
     {
-      nome: "WhatsApp Business",
+      nome: "WhatsApp via Z-API (número fica no celular)",
+      icon: MessageCircle,
+      ativo: zapi.isEnabled(),
+      desc: "Conecta por QR Code (estilo WhatsApp Web). O número continua no celular, sem migrar.",
+      comoAtivar: "Defina ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN e ZAPI_CLIENT_TOKEN.",
+    },
+    {
+      nome: "WhatsApp Business (Meta Cloud API)",
       icon: MessageCircle,
       ativo: whatsapp.isEnabled(),
-      desc: "Recebe e envia mensagens automaticamente (inclui atendimento de fim de semana).",
+      desc: "Oficial da Meta. Exige migrar o número para a API (sai do app do celular).",
       comoAtivar: "Defina WHATSAPP_TOKEN e WHATSAPP_PHONE_NUMBER_ID (Meta Cloud API).",
     },
     {
