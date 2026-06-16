@@ -39,6 +39,43 @@ export async function atualizarCliente(id: string, formData: FormData) {
   revalidatePath("/clientes");
 }
 
+// Importa clientes de um CSV colado (nome,telefone,municipio). Dedup por telefone/nome.
+export async function importarClientesCsv(formData: FormData): Promise<void> {
+  const csv = String(formData.get("csv") ?? "");
+  const linhas = csv.split(/\r?\n/).filter((l) => l.trim());
+  const municipios = await db.municipio.findMany();
+  const norm = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+  for (const linha of linhas) {
+    const [nomeRaw, telRaw, muniRaw] = linha.split(/[,;]/).map((c) => c?.trim());
+    if (!nomeRaw) continue;
+    if (/^nome$/i.test(nomeRaw)) continue; // cabeçalho
+    const telefone = telRaw ? telRaw.replace(/\D/g, "") : null;
+
+    // dedup
+    const existe = await db.cliente.findFirst({
+      where: {
+        OR: [
+          telefone ? { telefone } : undefined,
+          { nome: nomeRaw },
+        ].filter(Boolean) as object[],
+      },
+    });
+    if (existe) continue;
+
+    const muni = muniRaw
+      ? municipios.find((m) => norm(m.nome) === norm(muniRaw))
+      : undefined;
+
+    await db.cliente.create({
+      data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem: "importacao" },
+    });
+  }
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+}
+
 // ---------- Negociações ----------
 export async function criarNegociacao(formData: FormData) {
   const clienteId = String(formData.get("clienteId") ?? "");

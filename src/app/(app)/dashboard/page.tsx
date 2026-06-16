@@ -27,6 +27,16 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  // Resumo do dia ("Bom dia")
+  const hoje = new Date();
+  const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
+  const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
+  const visitasHoje = await db.negociacao.count({
+    where: { dataVisita: { gte: inicioDia, lte: fimDia }, status: { not: "perdida" } },
+  });
+  const saudacao = hoje.getHours() < 12 ? "Bom dia" : hoje.getHours() < 18 ? "Boa tarde" : "Boa noite";
+  const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
+
   const valorPipeline = negociacoes.reduce((s, n) => s + (n.valor ?? 0), 0);
   const porEstagio = ["novo", "contato", "proposta", "negociacao", "fechamento"].map((e) => ({
     estagio: e,
@@ -34,9 +44,9 @@ export default async function DashboardPage() {
   }));
 
   // "Aguardando resposta" = sem contato há 3+ dias
-  const filaAguardando = aguardando
-    .filter((n) => diasDesde(n.ultimoContato) >= 3)
-    .slice(0, 6);
+  const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
+  const aguardandoTotal = aguardandoFiltrado.length;
+  const filaAguardando = aguardandoFiltrado.slice(0, 6);
 
   return (
     <div>
@@ -44,6 +54,21 @@ export default async function DashboardPage() {
         titulo="Dashboard"
         subtitulo="Visão geral das suas metas e negociações"
       />
+
+      {/* Resumo do dia */}
+      <div className="mb-6 rounded-xl bg-gradient-to-r from-brand-700 to-brand-900 p-5 text-white">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          ☀️ {saudacao}! Aqui está o seu dia
+        </div>
+        <p className="mt-1 text-sm text-brand-100">
+          Você tem <b className="text-white">{visitasHoje}</b> visita(s) hoje,{" "}
+          <b className="text-white">{aguardandoTotal}</b> cliente(s) esperando resposta e{" "}
+          <b className="text-white">{alertas.length}</b> alerta(s) para resolver.{" "}
+          {metasAbertas > 0
+            ? `Faltam ${metasAbertas} meta(s) para bater.`
+            : "Todas as metas batidas! 🎉"}
+        </p>
+      </div>
 
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">

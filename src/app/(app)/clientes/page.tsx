@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { iniciais, diasDesde } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
+import { ImportarClientes } from "@/components/ImportarClientes";
 import { MapPin } from "lucide-react";
 import Link from "next/link";
 
@@ -32,7 +33,12 @@ export default async function ClientesPage({
       <PageHeader
         titulo="Clientes"
         subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}`}
-        acao={<NovoClienteForm municipios={municipios} />}
+        acao={
+          <div className="flex gap-2">
+            <ImportarClientes />
+            <NovoClienteForm municipios={municipios} />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">

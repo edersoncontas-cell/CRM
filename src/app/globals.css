@@ -21,3 +21,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-400;
 }
+
+/* Impressão de propostas */
+@media print {
+  body {
+    @apply bg-white;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

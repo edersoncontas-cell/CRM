@@ -4,7 +4,7 @@ import { formatCurrency, formatDateTime, iniciais, diasDesde } from "@/lib/utils
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, MapPin, Bot } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Bot, FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -94,9 +94,18 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
                   {n.dataVisita && <div className="col-span-2">Visita: {formatDateTime(n.dataVisita)}</div>}
                   {n.motivoPerda && <div className="col-span-2 text-red-600">Motivo da perda: {n.motivoPerda}</div>}
                 </div>
-                <div className="mt-3">
-                  <div className="mb-1 text-xs text-slate-400">Termômetro do negócio</div>
-                  <Termometro valor={n.termometro} />
+                <div className="mt-3 flex items-end justify-between gap-2">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-400">Termômetro do negócio</div>
+                    <Termometro valor={n.termometro} />
+                  </div>
+                  <Link
+                    href={`/proposta/${n.id}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                  >
+                    <FileText size={13} /> Gerar proposta
+                  </Link>
                 </div>
               </Card>
             ))}
