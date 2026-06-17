@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
-import { formatCurrency, diasDesde } from "@/lib/utils";
+import { formatCurrency, diasDesde, saudacaoBrasilia } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
 import { comissaoConfirmada, classificarLead, COR_CLASSE, ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
@@ -65,8 +65,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const hora = hoje.getHours();
-  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  const saudacao = saudacaoBrasilia(hoje);
   const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
 
   const META_ANUAL = 40;

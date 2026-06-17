@@ -29,6 +29,39 @@ export type Contato = {
   rascunho: string | null;
 };
 
+// Resumo leve de uma conversa, devolvido por /api/inbox/resumo.
+type ResumoContato = {
+  id: string;
+  nome: string;
+  telefone: string | null;
+  municipio: string | null;
+  aguardando: boolean;
+  ultimoContato: string;
+  previa: string;
+  ultimaMsgId: string | null;
+  ultimaMsgRemetente: string | null;
+  totalMensagens: number;
+};
+
+// Toca um bipe curto quando chega mensagem nova (Web Audio — sem arquivo externo).
+function tocarAlerta() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.32);
+    osc.onended = () => ctx.close();
+  } catch {}
+}
+
 function horaMsg(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", {
     timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
@@ -82,7 +115,19 @@ export function InboxClient({
     () => Object.fromEntries(contatosInit.map((c) => [c.id, naoLidasIniciais(c)]))
   );
   const [altura, setAltura] = useState<number | null>(null);
+  const [aoVivo, setAoVivo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Refs para o polling global acessar o estado atual sem re-assinar o intervalo.
+  const selIdRef = useRef(selId);
+  selIdRef.current = selId;
+  // Última mensagem conhecida de cada contato (para detectar novidades e tocar alerta).
+  const ultimaMsgRef = useRef<Record<string, string>>(
+    Object.fromEntries(
+      contatosInit.map((c) => [c.id, c.mensagens[c.mensagens.length - 1]?.id ?? ""])
+    )
+  );
+  const primeiroSyncRef = useRef(true);
 
   // Restaura a altura preferida (redimensionável).
   useEffect(() => {
@@ -124,13 +169,101 @@ export function InboxClient({
     );
   }, []);
 
-  // Polling: busca novas mensagens da conversa aberta a cada 4s.
+  // Mescla o resumo global (todas as conversas) no estado: atualiza prévia,
+  // "aguardando", reordena, adiciona contatos novos e incrementa não lidas.
+  const mergeResumo = useCallback((resumo: ResumoContato[]) => {
+    setContatos((prev) => {
+      const mapPrev = new Map(prev.map((c) => [c.id, c]));
+      const next: Contato[] = resumo.map((r) => {
+        const ex = mapPrev.get(r.id);
+        if (ex) {
+          return {
+            ...ex, // mantém mensagens já carregadas
+            nome: r.nome,
+            telefone: r.telefone,
+            municipio: r.municipio,
+            aguardando: r.aguardando,
+            ultimoContato: r.ultimoContato,
+            previa: r.previa || ex.previa,
+          };
+        }
+        // Contato totalmente novo (primeira mensagem chegou agora).
+        return {
+          id: r.id,
+          nome: r.nome,
+          telefone: r.telefone,
+          municipio: r.municipio,
+          aguardando: r.aguardando,
+          ultimoContato: r.ultimoContato,
+          previa: r.previa,
+          mensagens: [],
+          rascunho: null,
+        } satisfies Contato;
+      });
+      next.sort((a, b) => +new Date(b.ultimoContato) - +new Date(a.ultimoContato));
+      return next;
+    });
+
+    // Detecta mensagens novas para badge de não lidas e alerta sonoro/aba.
+    let chegouNova = false;
+    setNaoLidos((prev) => {
+      const next = { ...prev };
+      for (const r of resumo) {
+        const conhecida = ultimaMsgRef.current[r.id];
+        if (r.ultimaMsgId && r.ultimaMsgId !== conhecida) {
+          ultimaMsgRef.current[r.id] = r.ultimaMsgId;
+          if (selIdRef.current === r.id) {
+            next[r.id] = 0; // conversa aberta = já lida
+          } else if (r.ultimaMsgRemetente === "cliente" && !primeiroSyncRef.current) {
+            next[r.id] = (next[r.id] ?? 0) + 1;
+            chegouNova = true;
+          }
+        }
+      }
+      return next;
+    });
+
+    if (chegouNova) tocarAlerta();
+    primeiroSyncRef.current = false;
+  }, []);
+
+  // Polling GLOBAL: a cada 3s busca o resumo de TODAS as conversas.
+  // Pausa quando a aba está oculta e retoma ao voltar o foco.
+  useEffect(() => {
+    let cancelado = false;
+    async function pollGlobal() {
+      if (cancelado || document.hidden) return;
+      try {
+        const res = await fetch("/api/inbox/resumo", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelado) return;
+        mergeResumo(data.resumo as ResumoContato[]);
+        setAoVivo(true);
+      } catch {
+        setAoVivo(false);
+      }
+    }
+    const iv = setInterval(pollGlobal, 3000);
+    pollGlobal();
+    const aoFocar = () => { if (!document.hidden) pollGlobal(); };
+    document.addEventListener("visibilitychange", aoFocar);
+    window.addEventListener("focus", aoFocar);
+    return () => {
+      cancelado = true;
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", aoFocar);
+      window.removeEventListener("focus", aoFocar);
+    };
+  }, [mergeResumo]);
+
+  // Polling da CONVERSA ABERTA: busca o conteúdo completo das mensagens novas.
   useEffect(() => {
     if (!selId) return;
     const clienteId = selId;
     let cancelado = false;
     async function poll() {
-      if (cancelado) return;
+      if (cancelado || document.hidden) return;
       const contato = contatos.find((c) => c.id === clienteId);
       if (!contato) return;
       const ultima = contato.mensagens[contato.mensagens.length - 1];
@@ -141,12 +274,11 @@ export function InboxClient({
         const data = await res.json();
         if (!cancelado && (data.mensagens.length > 0 || data.aguardando !== contato.aguardando)) {
           updateMensagens(clienteId, data.mensagens, data.aguardando);
-          // Conversa está aberta → mantém lida.
           setNaoLidos((prev) => ({ ...prev, [clienteId]: 0 }));
         }
       } catch {}
     }
-    const iv = setInterval(poll, 4000);
+    const iv = setInterval(poll, 2500);
     poll();
     return () => { cancelado = true; clearInterval(iv); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,7 +330,22 @@ export function InboxClient({
           style={{ background: "#111b21" }}
         >
           <div className="flex items-center justify-between px-4 py-3" style={{ background: "#202c33" }}>
-            <span className="text-base font-semibold text-[#e9edef]">WhatsApp</span>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-[#e9edef]">WhatsApp</span>
+              <span
+                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={aoVivo
+                  ? { background: "rgba(37,211,102,0.15)", color: "#25D366" }
+                  : { background: "rgba(148,163,184,0.15)", color: "#8696a0" }}
+                title={aoVivo ? "Atualizando em tempo real" : "Conectando..."}
+              >
+                <span
+                  className={cn("h-1.5 w-1.5 rounded-full", aoVivo && "animate-pulse")}
+                  style={{ background: aoVivo ? "#25D366" : "#8696a0" }}
+                />
+                {aoVivo ? "tempo real" : "conectando"}
+              </span>
+            </div>
             <div className="flex items-center gap-3 text-[#8696a0]">
               {!zapiAtiva && (
                 <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-medium text-yellow-400">não conectado</span>

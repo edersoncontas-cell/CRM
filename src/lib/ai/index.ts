@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
+import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
@@ -118,7 +119,14 @@ export async function analisarConversaIA(
     const tom = opts?.estiloDeFala
       ? `\n\nEstilo de fala do vendedor (imite no rascunhoResposta):\n${opts.estiloDeFala}`
       : "";
-    const raw = await llmTexto(SCHEMA_INSTRUCAO + tom, `Conversa:\n${texto}`, {
+    // Contexto temporal real (Brasília) para a IA datar visitas e SAUDAR corretamente.
+    const agora = opts?.base ?? new Date();
+    const contextoData =
+      `\n\nDATA E HORA ATUAL (fuso de Brasília, use como base): ${agoraBrasiliaExtenso(agora)}.` +
+      `\nAo cumprimentar no rascunhoResposta, use OBRIGATORIAMENTE "${saudacaoBrasilia(agora)}" conforme o período atual do dia` +
+      ` — nunca copie a saudação de mensagens antigas do cliente.` +
+      `\nAo interpretar datas relativas ("amanhã", "quinta", "semana que vem"), calcule a partir desta data atual.`;
+    const raw = await llmTexto(SCHEMA_INSTRUCAO + contextoData + tom, `Conversa:\n${texto}`, {
       maxTokens: 1024,
       json: true,
     });

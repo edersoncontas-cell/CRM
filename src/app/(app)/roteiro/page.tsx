@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { diasDesde } from "@/lib/utils";
+import { diasDesde, diaSemanaBrasilia } from "@/lib/utils";
 import { RoteiroClient } from "@/components/RoteiroClient";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import {
@@ -103,7 +103,7 @@ export default async function RoteiroPage() {
 
   const visitasAgendadas: VisitaAgendada[] = [
     ...visitasRaw
-      .filter((v) => DIAS_SEMANA_VALIDOS.includes(v.data.getDay()))
+      .filter((v) => DIAS_SEMANA_VALIDOS.includes(diaSemanaBrasilia(v.data)))
       .map((v): VisitaAgendada => ({
         id: v.id,
         clienteId: v.clienteId,
@@ -116,7 +116,7 @@ export default async function RoteiroPage() {
         origem: "visita",
       })),
     ...negsComVisita
-      .filter((n) => DIAS_SEMANA_VALIDOS.includes(n.dataVisita!.getDay()))
+      .filter((n) => DIAS_SEMANA_VALIDOS.includes(diaSemanaBrasilia(n.dataVisita!)))
       .map((n): VisitaAgendada => ({
         id: n.id,
         clienteId: n.clienteId,
@@ -149,7 +149,7 @@ export default async function RoteiroPage() {
     const data = visitas[0].data;
     const municipiosUnicos = [...new Set(visitas.map((v) => v.municipioNome).filter(Boolean) as string[])];
     return {
-      diaSemana: NOME_DIA[data.getDay()] ?? "terça",
+      diaSemana: NOME_DIA[diaSemanaBrasilia(data)] ?? "terça",
       data,
       municipios: municipiosUnicos,
       visitas,
