@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
-import Image from "next/image";
 
 export default function LoginPage({
   searchParams,
@@ -28,21 +27,20 @@ export default function LoginPage({
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4">
-      {/* Painéis laterais com fotos reais */}
-      <div className="absolute inset-0 hidden sm:grid sm:grid-cols-2">
 
-        {/* Esquerdo — New Holland: fila de escavadeiras */}
-        <div className="relative overflow-hidden">
-          <Image
+      {/* ── Painéis de fundo (visíveis só em sm+) ── */}
+      <div className="absolute inset-0 hidden sm:flex">
+
+        {/* Esquerdo — New Holland */}
+        <div className="relative flex-1 overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/nh-escavadeiras.jpg"
-            alt="Escavadeiras New Holland"
-            fill
-            priority
-            className="object-cover object-[center_55%]"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: "center 55%" }}
           />
-          {/* Overlay escuro à esquerda, abre à direita para não cobrir o card */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-black/30" />
-          {/* Branding embaixo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
             <ExcavatorIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
@@ -52,17 +50,16 @@ export default function LoginPage({
           </div>
         </div>
 
-        {/* Direito — Dynapac: fila de rolos compactadores */}
-        <div className="relative overflow-hidden">
-          <Image
+        {/* Direito — Dynapac */}
+        <div className="relative flex-1 overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/dynapac-rolos.jpg"
-            alt="Rolos compactadores Dynapac"
-            fill
-            priority
-            className="object-cover object-[center_65%]"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: "center 65%" }}
           />
-          {/* Overlay escuro na base para legibilidade; deixa os rolos aparecerem */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
             <RollerIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
@@ -73,19 +70,19 @@ export default function LoginPage({
         </div>
       </div>
 
-      {/* Mobile: NH no fundo */}
+      {/* ── Fundo mobile (NH) ── */}
       <div className="absolute inset-0 sm:hidden">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/nh-escavadeiras.jpg"
           alt=""
-          fill
-          priority
-          className="object-cover object-center"
+          className="h-full w-full object-cover"
+          style={{ objectPosition: "center 55%" }}
         />
         <div className="absolute inset-0 bg-black/70" />
       </div>
 
-      {/* Card de login flutuante */}
+      {/* ── Card de login ── */}
       <form
         action={entrar}
         className="relative z-10 w-full max-w-sm rounded-2xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-md"
