@@ -45,3 +45,75 @@ export async function baixarAudio(
     return null;
   }
 }
+
+// ---------- Conexão (QR Code estilo WhatsApp Web) ----------
+
+export type StatusConexao = {
+  configurado: boolean;       // env vars presentes?
+  conectado: boolean;         // celular pareado e online?
+  precisaQrCode: boolean;     // aguardando leitura do QR?
+  telefone?: string | null;   // número conectado
+  erro?: string | null;
+};
+
+// Consulta o status da instância na Z-API.
+export async function statusConexao(): Promise<StatusConexao> {
+  if (!isEnabled()) {
+    return { configurado: false, conectado: false, precisaQrCode: false };
+  }
+  try {
+    const res = await fetch(`${baseUrl()}/status`, { headers: headers(), cache: "no-store" });
+    const data = (await res.json().catch(() => ({}))) as {
+      connected?: boolean;
+      smartphoneConnected?: boolean;
+      error?: string | null;
+    };
+    const conectado = !!(data.connected && data.smartphoneConnected !== false);
+    return {
+      configurado: true,
+      conectado,
+      precisaQrCode: !conectado,
+      erro: data.error ?? null,
+    };
+  } catch (e) {
+    return { configurado: true, conectado: false, precisaQrCode: true, erro: String(e) };
+  }
+}
+
+// Retorna o QR Code como data URL (base64) para exibir e escanear.
+export async function obterQrCode(): Promise<{ imagem: string | null; erro?: string }> {
+  if (!isEnabled()) return { imagem: null, erro: "Z-API não configurada." };
+  try {
+    const res = await fetch(`${baseUrl()}/qr-code/image`, { headers: headers(), cache: "no-store" });
+    if (!res.ok) return { imagem: null, erro: `status ${res.status}` };
+    const data = (await res.json().catch(() => ({}))) as { value?: string };
+    if (!data.value) return { imagem: null, erro: "QR indisponível (talvez já conectado)." };
+    // A Z-API já devolve com prefixo data:image; normaliza caso venha cru.
+    const imagem = data.value.startsWith("data:") ? data.value : `data:image/png;base64,${data.value}`;
+    return { imagem };
+  } catch (e) {
+    return { imagem: null, erro: String(e) };
+  }
+}
+
+// Reinicia a instância (gera novo QR).
+export async function reiniciar(): Promise<boolean> {
+  if (!isEnabled()) return false;
+  try {
+    const res = await fetch(`${baseUrl()}/restart`, { headers: headers(), cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Desconecta o número (logout do WhatsApp Web).
+export async function desconectar(): Promise<boolean> {
+  if (!isEnabled()) return false;
+  try {
+    const res = await fetch(`${baseUrl()}/disconnect`, { headers: headers(), cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

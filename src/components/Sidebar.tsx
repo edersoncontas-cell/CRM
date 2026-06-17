@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList,
+  Banknote, ClipboardList, Smartphone,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -53,6 +53,7 @@ const GRUPOS = [
   {
     label: "Sistema",
     links: [
+      { href: "/conexao", label: "Conexão WhatsApp", icon: Smartphone },
       { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
     ],

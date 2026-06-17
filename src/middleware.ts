@@ -5,13 +5,15 @@ export async function middleware(req: NextRequest) {
   if (!authAtivo()) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  // Rotas públicas: login, auth e webhooks de WhatsApp (Meta e Z-API).
-  // A Meta/Z-API não têm cookie; os webhooks se protegem pelo payload da origem.
+  // Rotas públicas: login, auth e SOMENTE os webhooks de WhatsApp (Meta e Z-API).
+  // A Meta/Z-API não enviam cookie; os webhooks se protegem pelo payload da origem.
+  // As demais rotas /api/zapi/* (status, qr) exigem login — o navegador do
+  // Ederson manda o cookie, então funcionam normalmente para ele.
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/whatsapp") ||
-    pathname.startsWith("/api/zapi")
+    pathname.startsWith("/api/whatsapp/webhook") ||
+    pathname.startsWith("/api/zapi/webhook")
   ) {
     return NextResponse.next();
   }

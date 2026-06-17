@@ -503,6 +503,19 @@ export async function resolverAlerta(id: string) {
   revalidatePath("/dashboard");
 }
 
+// ---------- Conexão WhatsApp (Z-API) ----------
+export async function reiniciarZapi(): Promise<{ ok: boolean }> {
+  const ok = await zapi.reiniciar();
+  revalidatePath("/conexao");
+  return { ok };
+}
+
+export async function desconectarZapi(): Promise<{ ok: boolean }> {
+  const ok = await zapi.desconectar();
+  revalidatePath("/conexao");
+  return { ok };
+}
+
 // ---------- Kanban de tarefas ----------
 export async function moverTarefa(id: string, coluna: string) {
   await db.tarefaKanban.update({ where: { id }, data: { coluna } });

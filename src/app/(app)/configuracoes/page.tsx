@@ -6,7 +6,8 @@ import * as zapi from "@/lib/integrations/zapi";
 import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
-import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle } from "lucide-react";
+import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,24 @@ export default async function ConfiguracoesPage() {
         titulo="Configurações"
         subtitulo="Ative as integrações conforme você obtiver as credenciais"
       />
+
+      <Link
+        href="/conexao"
+        className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 hover:bg-emerald-100"
+      >
+        <div className="rounded-lg bg-emerald-500 p-2 text-white">
+          <Smartphone size={20} />
+        </div>
+        <div className="flex-1">
+          <div className="font-semibold text-emerald-800">Conectar WhatsApp por QR Code</div>
+          <p className="text-sm text-emerald-700">
+            {zapi.isEnabled()
+              ? "Z-API configurada. Abra para escanear o QR e parear seu número."
+              : "Veja como ativar e escanear o QR para receber/responder no CRM."}
+          </p>
+        </div>
+        <ArrowRight size={18} className="text-emerald-600" />
+      </Link>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {integracoes.map((i) => (
