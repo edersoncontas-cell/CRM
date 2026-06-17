@@ -28,11 +28,6 @@ const QUOTES = [
   { texto: "O cliente compra sentimento de segurança, não produto. Transmita confiança.", autor: "Zig Ziglar" },
 ];
 
-function getQuoteOfDay(quotes: typeof QUOTES): typeof QUOTES[0] {
-  const dia = new Date().getDate() + new Date().getMonth() * 31;
-  return quotes[dia % quotes.length];
-}
-
 export function MotivacaoWidget() {
   const [idx, setIdx] = useState(() => {
     const dia = new Date().getDate() + new Date().getMonth() * 31;
@@ -41,29 +36,37 @@ export function MotivacaoWidget() {
 
   const quote = QUOTES[idx];
 
-  const proximo = () => {
-    setIdx((i) => (i + 1) % QUOTES.length);
-  };
-
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-fuchsia-700 to-brand-700 p-5 text-white shadow-lg">
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: "#000000",
+        border: "1px solid #27272a",
+        boxShadow: "0 0 30px 0 rgba(168,85,247,0.08)",
+      }}
+    >
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-fuchsia-200">
-          <Heart size={16} className="fill-fuchsia-300 text-fuchsia-300" />
+        <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#c084fc" }}>
+          <Heart size={15} style={{ fill: "#c084fc", color: "#c084fc" }} />
           Motivação do dia
         </div>
         <button
-          onClick={proximo}
+          onClick={() => setIdx((i) => (i + 1) % QUOTES.length)}
           title="Próxima frase"
-          className="rounded-lg p-1.5 text-fuchsia-300 hover:bg-white/10"
+          className="rounded-lg p-1.5 transition hover:bg-white/5"
+          style={{ color: "#71717a" }}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={13} />
         </button>
       </div>
-      <blockquote className="text-base font-medium leading-relaxed text-white">
+
+      {/* Linha decorativa */}
+      <div className="mb-4 h-px w-12" style={{ background: "linear-gradient(90deg, #a855f7, transparent)" }} />
+
+      <blockquote className="text-sm font-medium leading-relaxed text-white">
         &ldquo;{quote.texto}&rdquo;
       </blockquote>
-      <p className="mt-3 text-xs text-fuchsia-300">— {quote.autor}</p>
+      <p className="mt-3 text-xs" style={{ color: "#71717a" }}>— {quote.autor}</p>
     </div>
   );
 }
@@ -83,11 +86,19 @@ export function DicaVendas() {
   const dica = dicas[idx];
 
   return (
-    <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-500">
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: "#000000",
+        border: "1px solid #27272a",
+        boxShadow: "0 0 30px 0 rgba(191,222,77,0.06)",
+      }}
+    >
+      <p className="mb-3 text-xs font-bold uppercase tracking-widest" style={{ color: "#BFDE4D" }}>
         Técnica de vendas — hoje
       </p>
-      <p className="text-sm font-medium text-slate-700">
+      <div className="mb-3 h-px w-12" style={{ background: "linear-gradient(90deg, #BFDE4D, transparent)" }} />
+      <p className="text-sm font-medium text-white">
         {dica.emoji} {dica.dica}
       </p>
     </div>
