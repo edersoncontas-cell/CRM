@@ -3,11 +3,8 @@ import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
 
-// Fotos de fundo (licença livre — Pexels). Hotlink direto pelo CDN.
-const FOTO_ESCAVADEIRA =
-  "https://images.pexels.com/photos/2449603/pexels-photo-2449603.jpeg?auto=compress&cs=tinysrgb&w=1600";
-const FOTO_ROLO =
-  "https://images.pexels.com/photos/8809466/pexels-photo-8809466.jpeg?auto=compress&cs=tinysrgb&w=1600";
+// Fotos reais: NH = foto do Ederson; Dynapac = aguardando foto (fundo escuro por ora).
+const FOTO_ESCAVADEIRA = "/nh-escavadeiras.jpg";
 
 export default function LoginPage({
   searchParams,
@@ -51,19 +48,19 @@ export default function LoginPage({
           </div>
         </div>
 
-        {/* Dynapac — rolo compactador */}
-        <div className="relative hidden overflow-hidden sm:block">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${FOTO_ROLO})` }}
+        {/* Dynapac — fundo escuro profissional (foto do rolo será adicionada em breve) */}
+        <div className="relative hidden overflow-hidden sm:block bg-gradient-to-br from-slate-900 via-brand-950 to-black">
+          {/* Padrão geométrico de fundo */}
+          <div className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage: "repeating-linear-gradient(45deg, #ffb81c 0px, #ffb81c 1px, transparent 1px, transparent 50px), repeating-linear-gradient(-45deg, #ffb81c 0px, #ffb81c 1px, transparent 1px, transparent 50px)"
+            }}
           />
-          <div className="absolute inset-0 bg-gradient-to-bl from-agro-400/85 via-agro-500/75 to-black/70 mix-blend-multiply" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
-            <RollerIcon size={64} className="text-black drop-shadow-lg" />
+            <RollerIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
-              <div className="text-2xl font-black tracking-tight text-black drop-shadow">DYNAPAC</div>
-              <div className="text-xs font-semibold tracking-[0.4em] text-brand-900">COMPACTION</div>
+              <div className="text-2xl font-black tracking-tight text-white">DYNAPAC</div>
+              <div className="text-xs font-semibold tracking-[0.4em] text-agro-400">COMPACTION</div>
             </div>
           </div>
         </div>
