@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
@@ -619,4 +619,61 @@ export async function excluirEstrategia(id: string) {
   "use server";
   await db.estrategiaVenda.delete({ where: { id } });
   revalidatePath("/academia");
+}
+
+// ---------- Prospecção IA ----------
+const CATEGORIAS_PROSPECT = [
+  "locacao",
+  "terraplanagem",
+  "engenharia",
+  "asfalto",
+  "mineracao",
+  "construcao",
+];
+
+export async function buscarProspectosIAAction(
+  municipioId: string
+): Promise<{ ok: boolean; inseridos: number; erro?: string }> {
+  "use server";
+  try {
+    const municipio = await db.municipio.findUnique({ where: { id: municipioId } });
+    if (!municipio) return { ok: false, inseridos: 0, erro: "Município não encontrado" };
+
+    const prospectos = await buscarProspectosIA(municipio.nome, CATEGORIAS_PROSPECT);
+    if (prospectos.length === 0) return { ok: true, inseridos: 0 };
+
+    let inseridos = 0;
+    for (const p of prospectos) {
+      // Não duplica se já existe pelo nome no mesmo município
+      const existe = await db.cliente.findFirst({
+        where: { nome: { equals: p.nome, mode: "insensitive" }, municipioId },
+      });
+      if (existe) continue;
+
+      await db.cliente.create({
+        data: {
+          nome: p.nome,
+          municipioId,
+          origem: "prospect_ia",
+          observacoes: `${p.tipo.toUpperCase()} — ${p.descricao}`,
+        },
+      });
+      inseridos++;
+    }
+
+    revalidatePath("/roteiro");
+    revalidatePath("/clientes");
+    return { ok: true, inseridos };
+  } catch (e) {
+    console.error("Erro ao buscar prospectos:", e);
+    return { ok: false, inseridos: 0, erro: "Erro ao buscar prospectos" };
+  }
+}
+
+export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean }> {
+  "use server";
+  await db.cliente.delete({ where: { id: clienteId, origem: "prospect_ia" } });
+  revalidatePath("/roteiro");
+  revalidatePath("/clientes");
+  return { ok: true };
 }

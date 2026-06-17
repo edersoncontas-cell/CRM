@@ -404,4 +404,60 @@ e uma frase de fechamento ideal para o perfil.`,
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// Prospecção: busca de empresas potenciais em um município
+// ────────────────────────────────────────────────────────────
+
+export type ProspectoIA = {
+  nome: string;
+  tipo: string; // locacao | terraplanagem | engenharia | asfalto | mineracao | construcao
+  descricao: string;
+  prioridade: "alta" | "media" | "baixa";
+};
+
+export async function buscarProspectosIA(
+  municipio: string,
+  categorias: string[]
+): Promise<ProspectoIA[]> {
+  const catLista = categorias.join(", ");
+
+  if (!iaHabilitada()) {
+    // Fallback: lista genérica por tipo
+    return categorias.flatMap((c) => [
+      { nome: `Construtora ${municipio} ${c}`, tipo: c, descricao: `Empresa de ${c} em ${municipio}`, prioridade: "media" as const },
+    ]);
+  }
+
+  try {
+    const raw = await llmTexto(
+      `Você é um especialista em prospecção de vendas de máquinas pesadas (escavadeiras, retroescavadeiras, pás-carregadeiras, motoniveladoras, rolos compactadores) no sul do Espírito Santo, Brasil.
+Seu objetivo: listar empresas REAIS ou PROVÁVEIS que possam comprar ou locar máquinas pesadas em um município específico.
+Foque nas categorias solicitadas. Se não souber nomes exatos, gere nomes plausíveis e realistas (ex: "Terraplan Cachoeiro", "Construtora Vale do Rio").
+IMPORTANTE: retorne SOMENTE um JSON válido, array com até 8 objetos:
+[{"nome": string, "tipo": string, "descricao": string, "prioridade": "alta"|"media"|"baixa"}]
+"tipo" deve ser um de: locacao, terraplanagem, engenharia, asfalto, mineracao, construcao
+"descricao": 1 frase sobre o potencial desta empresa para compra de máquinas
+"prioridade": alta=grande frota/obra provável, media=possível, baixa=só prospect`,
+      `Município: ${municipio}, ES\nCategorias a prospectar: ${catLista}`,
+      { maxTokens: 1200, json: true }
+    );
+
+    // Extrai o array JSON da resposta
+    const inicio = raw.indexOf("[");
+    const fim = raw.lastIndexOf("]");
+    if (inicio === -1 || fim === -1) return [];
+    const arr = JSON.parse(raw.slice(inicio, fim + 1));
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((x: any) => x?.nome).map((x: any) => ({
+      nome: String(x.nome),
+      tipo: String(x.tipo ?? "construcao"),
+      descricao: String(x.descricao ?? ""),
+      prioridade: (["alta", "media", "baixa"].includes(x.prioridade) ? x.prioridade : "media") as "alta" | "media" | "baixa",
+    }));
+  } catch (e) {
+    console.error("Falha ao buscar prospectos IA:", e);
+    return [];
+  }
+}
+
 export type { ExtracaoConversa };
