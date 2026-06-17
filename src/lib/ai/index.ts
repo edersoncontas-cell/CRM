@@ -292,6 +292,42 @@ Ficha: ${conc.especificacoes ?? "—"}`,
   }
 }
 
+// Análise completa de uma CATEGORIA no estilo "Super Trunfo": compara minhas
+// máquinas (New Holland/Dynapac) com os concorrentes da categoria e devolve um
+// resumo com argumentos de venda prontos. Usa as fichas técnicas para precisão.
+export async function gerarAnaliseCategoriaIA(
+  categoriaLabel: string,
+  minhas: { marca: string; modelo: string; especificacoes?: string | null }[],
+  concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[]
+): Promise<string> {
+  if (!iaHabilitada()) return "";
+  const ficha = (m: { marca: string; modelo: string; especificacoes?: string | null }) =>
+    `${m.marca} ${m.modelo}:\n${m.especificacoes ?? "(ficha não preenchida)"}`;
+  try {
+    return await llmTexto(
+      `Você é consultor sênior de vendas de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo.
+Escreva uma análise comercial PROFISSIONAL e COMPLETA da categoria "${categoriaLabel}", comparando as MINHAS máquinas com os CONCORRENTES.
+Estruture assim (use estes títulos com markdown):
+**Panorama da categoria** — 2-3 frases situando onde minhas máquinas se posicionam (peso, potência, faixa de aplicação).
+**Onde eu ganho** — bullets objetivos com vantagens reais (números das fichas quando houver: peso, potência, força, capacidade) + pós-venda, rede de peças, Finame, revenda.
+**Pontos de atenção** — seja honesto: onde o concorrente leva vantagem e como contornar no discurso.
+**Argumentos prontos de venda** — 3 a 5 frases de impacto que o vendedor pode usar direto com o cliente.
+Use linguagem do dia a dia da obra, direta e confiante. Não invente números que não estejam nas fichas.`,
+      `CATEGORIA: ${categoriaLabel}
+
+MINHAS MÁQUINAS:
+${minhas.map(ficha).join("\n\n")}
+
+CONCORRENTES:
+${concorrentes.map(ficha).join("\n\n")}`,
+      { maxTokens: 1100 }
+    );
+  } catch (err) {
+    console.error("Falha na análise de categoria:", err);
+    return "";
+  }
+}
+
 // ────────────────────────────────────────────────────────────
 // Marketing post generation
 // ────────────────────────────────────────────────────────────

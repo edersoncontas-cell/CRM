@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
@@ -445,6 +445,60 @@ export async function preencherFichaTecnicaIA(id: string): Promise<{
     return { ok: false, erro: "IA não habilitada ou sem dados. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
   }
   return { ok: true, ...ficha };
+}
+
+// Análise de categoria (Super Trunfo): minhas máquinas vs concorrentes.
+export async function gerarAnaliseCategoriaIAAction(
+  categoria: string
+): Promise<{ ok: boolean; texto?: string; erro?: string }> {
+  "use server";
+  const maquinas = await db.maquina.findMany({
+    where: { categoria },
+    select: { marca: true, modelo: true, proprio: true, especificacoes: true },
+  });
+  const minhas = maquinas.filter((m) => m.proprio);
+  const concorrentes = maquinas.filter((m) => !m.proprio);
+  if (minhas.length === 0) return { ok: false, erro: "Sem máquinas próprias nesta categoria." };
+
+  const { CATEGORIAS } = await import("./comparativo");
+  const texto = await gerarAnaliseCategoriaIA(CATEGORIAS[categoria] ?? categoria, minhas, concorrentes);
+  if (!texto.trim()) {
+    return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+  }
+  return { ok: true, texto };
+}
+
+// Preenche em lote as fichas técnicas ainda vazias com a IA. Retorna quantas
+// foram preenchidas. Roda só nas máquinas sem `especificacoes`.
+export async function preencherFichasVaziasIA(
+  apenasProprias: boolean
+): Promise<{ ok: boolean; preenchidas: number; erro?: string }> {
+  "use server";
+  const vazias = await db.maquina.findMany({
+    where: { especificacoes: null, ...(apenasProprias ? { proprio: true } : {}) },
+    select: { id: true, marca: true, modelo: true, categoria: true, proprio: true },
+  });
+  if (vazias.length === 0) return { ok: true, preenchidas: 0 };
+
+  let preenchidas = 0;
+  for (const m of vazias) {
+    const ficha = await gerarFichaTecnicaIA(m);
+    if (ficha.especificacoes) {
+      await db.maquina.update({
+        where: { id: m.id },
+        data: {
+          especificacoes: ficha.especificacoes,
+          ...(ficha.descricao ? { descricao: ficha.descricao } : {}),
+          ...(m.proprio && ficha.pontosFortes ? { pontosFortes: ficha.pontosFortes } : {}),
+          ...(m.proprio && ficha.diferenciais ? { diferenciais: ficha.diferenciais } : {}),
+        },
+      });
+      preenchidas++;
+    }
+  }
+  revalidatePath("/super-trunfo");
+  revalidatePath("/maquinas/fichas");
+  return { ok: true, preenchidas };
 }
 
 // Gera os argumentos de venda (battlecards) comparando minha máquina com os
