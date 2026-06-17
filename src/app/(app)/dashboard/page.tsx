@@ -10,13 +10,13 @@ import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
 import {
   Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
-  Bell, Snowflake, Percent, CheckCircle2, ArrowRight,
+  Bell, Snowflake, Percent, CheckCircle2, ArrowRight, MessageCircle,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [metas, alertas, negociacoes, clientesCount, aguardando] = await Promise.all([
+  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardando] = await Promise.all([
     db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
     db.alerta.findMany({
       where: { resolvido: false },
@@ -29,6 +29,12 @@ export default async function DashboardPage() {
       where: { status: "aberta" },
       include: { cliente: true },
       orderBy: { ultimoContato: "asc" },
+    }),
+    // Clientes que me mandaram mensagem e ainda aguardam meu retorno.
+    db.cliente.findMany({
+      where: { aguardandoResposta: true },
+      orderBy: { ultimoContato: "asc" },
+      take: 8,
     }),
   ]);
 
@@ -218,6 +224,47 @@ export default async function DashboardPage() {
                 </li>
               ))}
             </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* Clientes aguardando meu retorno (WhatsApp) */}
+      <div className="mt-6">
+        <Card>
+          <div className="mb-4 flex items-center gap-2 font-semibold text-slate-700">
+            <MessageCircle size={17} className="text-emerald-500" /> Aguardando seu retorno no WhatsApp
+            {clientesAguardando.length > 0 && (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                {clientesAguardando.length}
+              </span>
+            )}
+            <Link href="/inbox" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">
+              Abrir WhatsApp →
+            </Link>
+          </div>
+          {clientesAguardando.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3">
+              <CheckCircle2 size={18} className="text-green-500" />
+              <span className="text-sm text-green-700">Nenhum cliente esperando resposta. Tudo respondido! 🎉</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {clientesAguardando.map((c) => {
+                const dias = c.ultimoContato ? diasDesde(c.ultimoContato) : 0;
+                return (
+                  <Link
+                    key={c.id}
+                    href="/inbox"
+                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 hover:border-emerald-200 hover:bg-emerald-50"
+                  >
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{c.nome}</span>
+                    <span className={`ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${dias >= 2 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                      {dias === 0 ? "hoje" : `${dias}d`}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
           )}
         </Card>
       </div>

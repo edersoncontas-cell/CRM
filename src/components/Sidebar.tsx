@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
-  Swords, Route, Send, Map, CalendarRange, BrainCircuit,
+  Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -16,6 +16,7 @@ const GRUPOS = [
     label: "Principal",
     links: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/inbox", label: "WhatsApp", icon: MessageCircle },
       { href: "/clientes", label: "Clientes", icon: Users },
       { href: "/mapa", label: "Mapa", icon: Map },
       { href: "/radar", label: "Radar de safra", icon: CalendarRange },

@@ -4,6 +4,7 @@ import { iniciais, diasDesde } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { garantirRegioes } from "@/lib/regioes";
 import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -16,6 +17,7 @@ export default async function ClientesPage({
 }) {
   const filtro = searchParams.municipio;
   const busca = (searchParams.q ?? "").trim();
+  await garantirRegioes();
   const [clientes, municipios] = await Promise.all([
     db.cliente.findMany({
       where: {

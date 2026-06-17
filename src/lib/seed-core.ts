@@ -327,6 +327,14 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
       create: { nome: m.nome, lat: m.lat, lng: m.lng },
     });
   }
+  // Regiões fora da minha área (outros vendedores) — não recebem campanhas.
+  for (const nome of ["Região Vix", "Região Norte"]) {
+    await db.municipio.upsert({
+      where: { nome },
+      update: { foraDeArea: true, regiao: "Fora da área" },
+      create: { nome, foraDeArea: true, regiao: "Fora da área" },
+    });
+  }
   const municipios = await db.municipio.findMany();
 
   // Máquinas (minhas + concorrentes)

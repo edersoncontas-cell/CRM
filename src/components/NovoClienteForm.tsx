@@ -7,9 +7,11 @@ import { Plus, X } from "lucide-react";
 export function NovoClienteForm({
   municipios,
 }: {
-  municipios: { id: string; nome: string }[];
+  municipios: { id: string; nome: string; foraDeArea?: boolean }[];
 }) {
   const [aberto, setAberto] = useState(false);
+  const cidades = municipios.filter((m) => !m.foraDeArea);
+  const regioes = municipios.filter((m) => m.foraDeArea);
 
   return (
     <>
@@ -39,16 +41,33 @@ export function NovoClienteForm({
               <Campo label="Nome *">
                 <input name="nome" required className="campo" />
               </Campo>
-              <Campo label="Telefone">
-                <input name="telefone" placeholder="28 99999-9999" className="campo" />
-              </Campo>
-              <Campo label="Município">
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Telefone">
+                  <input name="telefone" placeholder="28 99999-9999" className="campo" />
+                </Campo>
+                <Campo label="E-mail">
+                  <input name="email" type="email" placeholder="cliente@email.com" className="campo" />
+                </Campo>
+              </div>
+              <Campo label="Cidade / região">
                 <select name="municipioId" className="campo">
                   <option value="">—</option>
-                  {municipios.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nome}</option>
-                  ))}
+                  <optgroup label="Cidades que atendo">
+                    {cidades.map((m) => (
+                      <option key={m.id} value={m.id}>{m.nome}</option>
+                    ))}
+                  </optgroup>
+                  {regioes.length > 0 && (
+                    <optgroup label="Fora da minha área (não recebe campanhas)">
+                      {regioes.map((m) => (
+                        <option key={m.id} value={m.id}>{m.nome}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
+              </Campo>
+              <Campo label="Endereço">
+                <input name="endereco" placeholder="Rua, nº, bairro" className="campo" />
               </Campo>
               <Campo label="Origem">
                 <select name="origem" className="campo">

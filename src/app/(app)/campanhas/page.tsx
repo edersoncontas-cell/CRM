@@ -18,7 +18,8 @@ export default async function CampanhasPage({
   const { municipio, modelo } = searchParams;
 
   // Segmentação: clientes do município E/OU com interesse no modelo (negociação).
-  const where: any = {};
+  // Clientes de regiões fora da minha área nunca entram em campanhas.
+  const where: any = { NOT: { municipio: { foraDeArea: true } } };
   if (municipio) where.municipioId = municipio;
   if (modelo) where.negociacoes = { some: { maquinaModelo: { contains: modelo } } };
 

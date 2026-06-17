@@ -100,7 +100,12 @@ export async function enviarCampanha(
     telefone: { not: null };
     municipioId?: string;
     negociacoes?: object;
-  } = { telefone: { not: null } };
+    // Exclui clientes de regiões fora da minha área (outros vendedores).
+    NOT?: object;
+  } = {
+    telefone: { not: null },
+    NOT: { municipio: { foraDeArea: true } },
+  };
 
   if (filtro.municipioFiltro) {
     const mun = await db.municipio.findFirst({

@@ -225,7 +225,7 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
   const ehProspectReal =
     !!maquina ||
     !!valor ||
-    /(pre[çc]o|or[çc]amento|proposta|cota[çc][ãa]o|financ|cons[óo]rcio|comprar|interessad|m[áa]quina|trator|colheitadeira|retro)/i.test(texto);
+    /(pre[çc]o|or[çc]amento|proposta|cota[çc][ãa]o|financ|cons[óo]rcio|comprar|interessad|m[áa]quina|escavadeira|retroescavadeira|retro|p[áa]\s?carregadeira|motoniveladora|rolo|compactador)/i.test(texto);
 
   const partes: string[] = [];
   if (maquina) partes.push(`Interesse na ${maquina}`);
@@ -266,7 +266,7 @@ function montarRascunho(d: {
   const linhas: string[] = ["Olá! Tudo bem?"];
   if (d.maquina) {
     linhas.push(
-      `Que bom o seu interesse na ${d.maquina}! É uma excelente escolha para o seu trabalho.`
+      `Que bom o seu interesse na ${d.maquina}! É uma excelente escolha para a sua obra.`
     );
   } else {
     linhas.push("Obrigado pelo contato! Posso te ajudar com as melhores condições.");

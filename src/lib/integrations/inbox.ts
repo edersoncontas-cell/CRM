@@ -125,9 +125,15 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
     },
   });
 
-  if (extracao.perfil && !cliente.perfilIA) {
-    await db.cliente.update({ where: { id: cliente.id }, data: { perfilIA: extracao.perfil } });
-  }
+  // Atualiza o cliente: perfil, último contato e marca que aguarda meu retorno.
+  await db.cliente.update({
+    where: { id: cliente.id },
+    data: {
+      ...(extracao.perfil && !cliente.perfilIA ? { perfilIA: extracao.perfil } : {}),
+      ultimoContato: new Date(),
+      aguardandoResposta: true,
+    },
+  });
   await vincularMunicipio(cliente.id, extracao.municipio);
   await alimentarNegociacao(cliente.id, extracao);
 }

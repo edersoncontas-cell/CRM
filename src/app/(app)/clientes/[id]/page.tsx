@@ -2,9 +2,12 @@ import { db } from "@/lib/db";
 import { Card, Badge, Termometro } from "@/components/ui";
 import { formatCurrency, formatDate, formatDateTime, iniciais, diasDesde } from "@/lib/utils";
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
+import { EditarClienteForm } from "@/components/EditarClienteForm";
+import { VisitasCliente } from "@/components/VisitasCliente";
+import { garantirRegioes } from "@/lib/regioes";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, MapPin, Bot, FileText, Swords } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Home, Bot, FileText, Swords, Clock, MessageCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -13,21 +16,28 @@ const COND_LABEL: Record<string, string> = {
 };
 
 export default async function ClienteDetalhe({ params }: { params: { id: string } }) {
-  const cliente = await db.cliente.findUnique({
-    where: { id: params.id },
-    include: {
-      municipio: true,
-      indicadoPor: true,
-      indicados: true,
-      negociacoes: { orderBy: { criadoEm: "desc" } },
-      conversas: {
-        orderBy: { criadoEm: "desc" },
-        include: { analise: true },
-        take: 10,
+  await garantirRegioes();
+  const [cliente, municipios] = await Promise.all([
+    db.cliente.findUnique({
+      where: { id: params.id },
+      include: {
+        municipio: true,
+        indicadoPor: true,
+        indicados: true,
+        visitas: { orderBy: { data: "desc" } },
+        negociacoes: { orderBy: { criadoEm: "desc" } },
+        conversas: {
+          orderBy: { criadoEm: "desc" },
+          include: { analise: true },
+          take: 10,
+        },
       },
-    },
-  });
+    }),
+    db.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, foraDeArea: true } }),
+  ]);
   if (!cliente) notFound();
+
+  const diasSemContato = cliente.ultimoContato ? diasDesde(cliente.ultimoContato) : null;
 
   return (
     <div>
@@ -35,22 +45,59 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
         <ArrowLeft size={16} /> Voltar
       </Link>
 
-      <div className="mb-6 flex items-start gap-4">
+      <div className="mb-6 flex flex-wrap items-start gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-xl font-bold text-brand-700">
           {iniciais(cliente.nome)}
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-slate-800">{cliente.nome}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             {cliente.telefone && (
               <span className="flex items-center gap-1"><Phone size={14} /> {cliente.telefone}</span>
+            )}
+            {cliente.email && (
+              <span className="flex items-center gap-1"><Mail size={14} /> {cliente.email}</span>
             )}
             {cliente.municipio && (
               <span className="flex items-center gap-1"><MapPin size={14} /> {cliente.municipio.nome}</span>
             )}
+            {cliente.endereco && (
+              <span className="flex items-center gap-1"><Home size={14} /> {cliente.endereco}</span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             {cliente.jaComprou ? <Badge tom="green">já comprou</Badge> : <Badge tom="slate">prospect</Badge>}
             {cliente.visitado ? <Badge tom="blue">visitado</Badge> : <Badge tom="yellow">não visitado</Badge>}
+            <span className="flex items-center gap-1 text-xs text-slate-400">
+              <Clock size={12} />
+              {cliente.ultimoContato
+                ? `último contato há ${diasSemContato}d`
+                : "sem contato registrado"}
+            </span>
+            {cliente.aguardandoResposta && <Badge tom="red">aguardando seu retorno</Badge>}
           </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/inbox"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-sm font-semibold text-agro-400 hover:bg-brand-800"
+          >
+            <MessageCircle size={14} /> WhatsApp
+          </Link>
+          <EditarClienteForm
+            cliente={{
+              id: cliente.id,
+              nome: cliente.nome,
+              telefone: cliente.telefone,
+              email: cliente.email,
+              endereco: cliente.endereco,
+              municipioId: cliente.municipioId,
+              observacoes: cliente.observacoes,
+              jaComprou: cliente.jaComprou,
+              visitado: cliente.visitado,
+            }}
+            municipios={municipios}
+          />
         </div>
       </div>
 
@@ -87,6 +134,17 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
           </div>
         </Card>
       )}
+
+      <div className="mb-6">
+        <VisitasCliente
+          clienteId={cliente.id}
+          visitas={cliente.visitas.map((v) => ({
+            id: v.id,
+            data: v.data.toISOString(),
+            observacao: v.observacao,
+          }))}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Negociações */}

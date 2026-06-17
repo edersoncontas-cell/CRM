@@ -6,6 +6,7 @@ import { analisarConversaIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
+import * as zapi from "./integrations/zapi";
 
 // ---------- Clientes ----------
 export async function criarCliente(formData: FormData) {
@@ -15,6 +16,8 @@ export async function criarCliente(formData: FormData) {
     data: {
       nome,
       telefone: String(formData.get("telefone") ?? "") || null,
+      email: String(formData.get("email") ?? "") || null,
+      endereco: String(formData.get("endereco") ?? "") || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
       origem: String(formData.get("origem") ?? "manual") || null,
       jaComprou: formData.get("jaComprou") === "on",
@@ -31,6 +34,8 @@ export async function atualizarCliente(id: string, formData: FormData) {
     data: {
       nome: String(formData.get("nome") ?? "").trim(),
       telefone: String(formData.get("telefone") ?? "") || null,
+      email: String(formData.get("email") ?? "") || null,
+      endereco: String(formData.get("endereco") ?? "") || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
       jaComprou: formData.get("jaComprou") === "on",
       visitado: formData.get("visitado") === "on",
@@ -39,6 +44,81 @@ export async function atualizarCliente(id: string, formData: FormData) {
   });
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
+}
+
+// ---------- Visitas ----------
+// Registra uma visita ao cliente (data + observação) e marca como visitado.
+export async function adicionarVisita(clienteId: string, formData: FormData) {
+  const dataRaw = String(formData.get("data") ?? "");
+  if (!dataRaw) return;
+  // datetime-local sem fuso: interpretamos como horário de Brasília (-03:00).
+  const data = new Date(`${dataRaw}:00-03:00`);
+  await db.visita.create({
+    data: {
+      clienteId,
+      data,
+      observacao: String(formData.get("observacao") ?? "") || null,
+    },
+  });
+  await db.cliente.update({ where: { id: clienteId }, data: { visitado: true } });
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/clientes");
+}
+
+export async function removerVisita(id: string, clienteId: string) {
+  await db.visita.delete({ where: { id } });
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+// Marca que respondi ao cliente sem enviar nada pelo WhatsApp (apenas baixa o alerta).
+export async function marcarRespondido(clienteId: string) {
+  await db.cliente.update({
+    where: { id: clienteId },
+    data: { aguardandoResposta: false, ultimoContato: new Date() },
+  });
+  revalidatePath("/dashboard");
+  revalidatePath("/inbox");
+  revalidatePath("/clientes");
+}
+
+// ---------- WhatsApp: responder direto do CRM ----------
+// Envia a resposta pela Z-API e registra a conversa como minha (vendedor).
+export async function enviarResposta(
+  clienteId: string,
+  texto: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const conteudo = texto.trim();
+  if (!conteudo) return { ok: false, erro: "Mensagem vazia." };
+
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
+  if (!cliente?.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
+
+  const envio = await zapi.enviarMensagem(cliente.telefone, conteudo);
+  if (!envio.ok) {
+    return {
+      ok: false,
+      erro: envio.modo === "stub" ? "WhatsApp (Z-API) não está conectado." : "Falha ao enviar pela Z-API.",
+    };
+  }
+
+  await db.conversa.create({
+    data: {
+      conteudo,
+      clienteId,
+      canal: "whatsapp",
+      tipo: "texto",
+      remetente: "vendedor",
+    },
+  });
+  await db.cliente.update({
+    where: { id: clienteId },
+    data: { aguardandoResposta: false, ultimoContato: new Date() },
+  });
+
+  revalidatePath("/inbox");
+  revalidatePath("/dashboard");
+  revalidatePath(`/clientes/${clienteId}`);
+  return { ok: true };
 }
 
 // Importa clientes de um CSV colado (nome,telefone,municipio). Dedup por telefone/nome.
@@ -160,6 +240,14 @@ export async function moverNegociacao(id: string, estagio: string) {
     });
   }
   revalidatePath("/pipeline");
+  revalidatePath("/vendas-perdidas");
+}
+
+// Exclui definitivamente uma negociação (card do pipeline).
+export async function excluirNegociacao(id: string) {
+  await db.negociacao.delete({ where: { id } });
+  revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
   revalidatePath("/vendas-perdidas");
 }
 
@@ -308,14 +396,19 @@ export async function analisarConversaAction(formData: FormData) {
     },
   });
 
-  // Guarda o perfil e o município no cliente quando ainda não houver.
-  if (clienteId && extracao.perfil) {
+  // Guarda o perfil, o último contato e marca que aguarda meu retorno.
+  if (clienteId) {
     const c = await db.cliente.findUnique({ where: { id: clienteId } });
-    if (c && !c.perfilIA) {
-      await db.cliente.update({ where: { id: clienteId }, data: { perfilIA: extracao.perfil } });
-    }
+    await db.cliente.update({
+      where: { id: clienteId },
+      data: {
+        ...(extracao.perfil && !c?.perfilIA ? { perfilIA: extracao.perfil } : {}),
+        ultimoContato: new Date(),
+        aguardandoResposta: true,
+      },
+    });
+    await vincularMunicipio(clienteId, extracao.municipio);
   }
-  if (clienteId) await vincularMunicipio(clienteId, extracao.municipio);
 
   revalidatePath("/conversas");
   revalidatePath("/clientes");

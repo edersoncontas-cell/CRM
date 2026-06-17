@@ -18,6 +18,9 @@ model Municipio {
   regiao   String    @default("Sul do Espírito Santo")
   lat      Float?
   lng      Float?
+  // true = fora da minha área (região de outro vendedor). Clientes marcados
+  // assim NÃO recebem campanhas/disparos automáticos — só conversa se eles iniciarem.
+  foraDeArea Boolean @default(false)
   clientes Cliente[]
 }
 
@@ -26,6 +29,7 @@ model Cliente {
   nome        String
   telefone    String?
   email       String?
+  endereco    String?   // endereço/logradouro completo
   municipio   Municipio? @relation(fields: [municipioId], references: [id])
   municipioId String?
   perfilIA    String?   // resumo de perfil gerado pela IA
@@ -34,6 +38,8 @@ model Cliente {
   visitado    Boolean   @default(false)
   fotoUrl     String?
   observacoes String?
+  ultimoContato     DateTime? // último contato (recebido ou enviado)
+  aguardandoResposta Boolean  @default(false) // cliente mandou mensagem e ainda não respondi
   dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
   maquinaComprada String?
   indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
@@ -47,6 +53,16 @@ model Cliente {
   alertas     Alerta[]
   sugestoes   SugestaoVinculo[]
   tarefas     TarefaKanban[]
+  visitas     Visita[]
+}
+
+model Visita {
+  id         String   @id @default(cuid())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String
+  data       DateTime
+  observacao String?
+  criadoEm   DateTime @default(now())
 }
 
 model Negociacao {

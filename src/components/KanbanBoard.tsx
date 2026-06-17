@@ -7,12 +7,12 @@ import {
 } from "@dnd-kit/core";
 import {
   moverNegociacao, marcarPerdida, marcarGanha,
-  criarNegociacaoCard, editarNegociacao,
+  criarNegociacaoCard, editarNegociacao, excluirNegociacao,
 } from "@/lib/actions";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
 import { ESTAGIOS, COL_PERDIDO } from "@/lib/pipeline";
-import { Plus, X, Pencil, Trophy, Calendar } from "lucide-react";
+import { Plus, X, Pencil, Trophy, Calendar, Trash2 } from "lucide-react";
 
 interface CardData {
   id: string;
@@ -366,6 +366,27 @@ function ModalEditar({ card, onClose }: { card: CardData; onClose: () => void })
             <input name="motivo" placeholder="motivo" className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-red-400" />
             <button className="shrink-0 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100">
               Perdida
+            </button>
+          </form>
+        </div>
+
+        {/* Excluir definitivamente */}
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <form
+            action={async () => {
+              await excluirNegociacao(card.id);
+              onClose();
+            }}
+          >
+            <button
+              onClick={(e) => {
+                if (!confirm(`Excluir o card de ${card.cliente}? Esta ação não pode ser desfeita.`)) {
+                  e.preventDefault();
+                }
+              }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-600"
+            >
+              <Trash2 size={13} /> Excluir card
             </button>
           </form>
         </div>

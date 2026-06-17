@@ -81,24 +81,30 @@ async function llmTexto(
   throw new Error("Nenhum provedor de IA configurado.");
 }
 
-const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas New Holland
-no sul do Espírito Santo. Analise a conversa com um cliente e devolva SOMENTE um JSON válido,
-sem texto antes ou depois, com as chaves:
+const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION
+(New Holland Construction e Dynapac) no sul do Espírito Santo. O vendedor NÃO trabalha com máquinas
+agrícolas nem tratores (não existe T7, TL, colheitadeira, etc. no portfólio dele).
+Os equipamentos são: escavadeiras (ex: E215C), retroescavadeiras (ex: B95C), pás-carregadeiras (ex: W190B),
+motoniveladoras (ex: RG170.B) e rolos compactadores Dynapac (ex: CA2500, CC2200).
+
+Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto antes ou depois, com as chaves:
 {
   "resumo": string,                       // 1-2 frases do que aconteceu
-  "perfil": string,                       // perfil do cliente (produtor, construtora, etc.)
+  "perfil": string,                       // perfil do cliente (construtora, empreiteira, locadora, prefeitura, etc.)
   "nomeCliente": string|null,             // nome do cliente, se identificável na conversa
   "telefoneCliente": string|null,         // telefone do cliente (só dígitos), se aparecer
   "municipio": string|null,               // cidade/município do cliente, se mencionado (ex: "Vila Velha")
-  "maquina": string|null,                 // modelo negociado (ex: "T7", "TL5")
+  "maquina": string|null,                 // modelo SOMENTE se o cliente mencionar explicitamente (ex: "E215C", "B95C", "CA2500"). NUNCA invente um modelo. Se nada for citado, use null.
   "valor": number|null,                   // valor em reais (número puro)
   "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"outro"|null,
-  "concorrente": string|null,             // concorrente citado (John Deere, Valtra...)
+  "concorrente": string|null,             // concorrente citado (Caterpillar, Komatsu, Volvo, JCB, Case, XCMG, Sany...)
   "dataVisita": string|null,              // ISO 8601 se houver agendamento de visita
   "sentimento": "positivo"|"neutro"|"negativo",
   "ehProspectReal": boolean,              // realmente negociou/pediu info de máquina?
   "rascunhoResposta": string              // resposta sugerida no tom do vendedor
-}`;
+}
+REGRA CRÍTICA: o campo "maquina" só pode ser preenchido com um modelo que o cliente realmente citou na conversa.
+Se o cliente não citar nenhum modelo, "maquina" DEVE ser null. Jamais use um modelo padrão/exemplo.`;
 
 export async function analisarConversaIA(
   texto: string,
