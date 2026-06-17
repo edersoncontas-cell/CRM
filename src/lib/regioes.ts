@@ -9,6 +9,12 @@ export const REGIOES_FORA_AREA = ["Região Vix", "Região Norte"];
 // Municípios inválidos que devem ser removidos do banco caso existam.
 const MUNICIPIOS_REMOVER = ["Palantino"];
 
+// Municípios do sul do ES que precisam existir com coordenadas mas podem não
+// estar no banco de produção (ex.: adicionados depois do seed inicial).
+const MUNICIPIOS_GARANTIDOS: { nome: string; lat: number; lng: number }[] = [
+  { nome: "Alfredo Chaves", lat: -20.6367, lng: -40.7508 },
+];
+
 let garantido = false;
 
 // Garante (idempotente) que as regiões fora de área existam e remove entradas inválidas.
@@ -19,6 +25,14 @@ export async function garantirRegioes(): Promise<void> {
       where: { nome },
       update: { foraDeArea: true, regiao: "Fora da área" },
       create: { nome, foraDeArea: true, regiao: "Fora da área" },
+    });
+  }
+  // Garante municípios adicionados após o seed inicial
+  for (const m of MUNICIPIOS_GARANTIDOS) {
+    await db.municipio.upsert({
+      where: { nome: m.nome },
+      update: { lat: m.lat, lng: m.lng },
+      create: { nome: m.nome, lat: m.lat, lng: m.lng },
     });
   }
   // Remove municípios incorretos silenciosamente (ignora se não existir)
