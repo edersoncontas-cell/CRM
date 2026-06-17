@@ -98,6 +98,7 @@ model Maquina {
   pesoOperacional Float? // kg (para casar faixa de peso no comparativo)
   potencia    Int?       // cv
   descricao   String?
+  especificacoes String? // ficha técnica livre (ex: "Força de escavação: 142 kN\nProfundidade: 6,4 m")
   pontosFortes String?   // argumentos prontos de venda (das minhas máquinas)
   diferenciais String?   // diferenciais recorrentes (o que o mercado mais elogia)
   curiosidades String?

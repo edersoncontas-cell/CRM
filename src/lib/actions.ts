@@ -398,6 +398,30 @@ export async function toggleMaquinaComercializada(id: string, valor: boolean) {
   revalidatePath("/maquinas");
 }
 
+// ---------- Fichas Técnicas ----------
+export async function salvarFichaTecnica(
+  id: string,
+  dados: {
+    especificacoes?: string;
+    descricao?: string;
+    pontosFortes?: string;
+    diferenciais?: string;
+  }
+) {
+  "use server";
+  await db.maquina.update({
+    where: { id },
+    data: {
+      especificacoes: dados.especificacoes ?? null,
+      descricao: dados.descricao ?? null,
+      pontosFortes: dados.pontosFortes ?? null,
+      diferenciais: dados.diferenciais ?? null,
+    },
+  });
+  revalidatePath("/maquinas/fichas");
+  revalidatePath("/comparativo");
+}
+
 // ---------- Conversas + IA ----------
 export async function analisarConversaAction(formData: FormData) {
   const conteudo = String(formData.get("conteudo") ?? "").trim();

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone, GraduationCap, Star,
+  Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -28,6 +28,7 @@ const GRUPOS = [
     links: [
       { href: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
+      { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
       { href: "/agenda", label: "Agenda", icon: Calendar },
@@ -66,6 +67,18 @@ const GRUPOS = [
     ],
   },
 ];
+
+const TODOS_HREFS = GRUPOS.flatMap((g) => g.links.map((l) => l.href));
+
+// O link ativo é o de match mais específico (ex.: /maquinas/fichas vence /maquinas).
+function hrefAtivo(pathname: string, href: string): boolean {
+  const candidatos = TODOS_HREFS.filter(
+    (h) => pathname === h || (h !== "/" && pathname.startsWith(h + "/"))
+  );
+  if (candidatos.length === 0) return false;
+  const maisEspecifico = candidatos.reduce((a, b) => (b.length > a.length ? b : a));
+  return href === maisEspecifico;
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -126,7 +139,7 @@ export function Sidebar() {
                 {grupo.label}
               </div>
               {grupo.links.map(({ href, label, icon: Icon }) => {
-                const ativo = pathname === href || (pathname.startsWith(href + "/") && href !== "/");
+                const ativo = hrefAtivo(pathname, href);
                 return (
                   <Link
                     key={href}
