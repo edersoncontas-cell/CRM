@@ -38,6 +38,7 @@ const MUNICIPIOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Santa Leopoldina", lat: -20.0986, lng: -40.5306 },
   { nome: "Itarana", lat: -19.8731, lng: -40.8761 },
   { nome: "Itaguaçu", lat: -19.8000, lng: -40.8567 },
+  { nome: "Alfredo Chaves", lat: -20.6367, lng: -40.7508 },
 ];
 
 interface MaquinaSeed {

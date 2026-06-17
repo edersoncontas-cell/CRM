@@ -521,3 +521,42 @@ export async function moverTarefa(id: string, coluna: string) {
   await db.tarefaKanban.update({ where: { id }, data: { coluna } });
   revalidatePath("/pipeline");
 }
+
+export async function gerarEstrategiaAction(formData: FormData): Promise<{
+  ok: boolean;
+  estrategia?: { id: string; titulo: string; conteudo: string };
+  erro?: string;
+}> {
+  "use server";
+  const tema = (formData.get("tema") as string | null)?.trim();
+  const perfil = (formData.get("perfil") as string | null) || null;
+  const contexto = (formData.get("contexto") as string | null) || null;
+  if (!tema) return { ok: false, erro: "Informe um tema." };
+
+  const { gerarEstrategiaVendaIA } = await import("@/lib/ai");
+  const resultado = await gerarEstrategiaVendaIA({ tema, perfil, contexto });
+
+  const salvo = await db.estrategiaVenda.create({
+    data: {
+      titulo: resultado.titulo,
+      conteudo: resultado.conteudo,
+      categoria: "ideia",
+      perfilAlvo: perfil || null,
+      fonte: "ia",
+    },
+  });
+  revalidatePath("/academia");
+  return { ok: true, estrategia: { id: salvo.id, titulo: salvo.titulo, conteudo: salvo.conteudo } };
+}
+
+export async function toggleFavoritoEstrategia(id: string, favorito: boolean) {
+  "use server";
+  await db.estrategiaVenda.update({ where: { id }, data: { favorito } });
+  revalidatePath("/academia");
+}
+
+export async function excluirEstrategia(id: string) {
+  "use server";
+  await db.estrategiaVenda.delete({ where: { id } });
+  revalidatePath("/academia");
+}

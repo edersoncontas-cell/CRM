@@ -7,7 +7,7 @@ import { VisitasCliente } from "@/components/VisitasCliente";
 import { garantirRegioes } from "@/lib/regioes";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, MapPin, Home, Bot, FileText, Swords, Clock, MessageCircle } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Home, Bot, Swords, Clock, MessageCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -190,13 +190,6 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
                         <Swords size={13} /> Comparar
                       </Link>
                     )}
-                    <Link
-                      href={`/proposta/${n.id}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
-                    >
-                      <FileText size={13} /> Gerar proposta
-                    </Link>
                   </div>
                 </div>
               </Card>

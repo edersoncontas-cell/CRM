@@ -319,4 +319,89 @@ function _postHeuristico(
   return templates[tipo] ?? templates.avulso;
 }
 
+// ────────────────────────────────────────────────────────────
+// Academia de Vendas — geração de estratégias e abordagem por perfil
+// ────────────────────────────────────────────────────────────
+
+const PERFIL_DESC: Record<string, string> = {
+  D: "Dominante (decisor direto, foca resultado/ROI, decide rápido, sem paciência para enrolação)",
+  I: "Influente (relacional, comunicativo, decide pela emoção e relação, valoriza status e prova social)",
+  S: "Estável (cauteloso, evita risco, valoriza segurança, garantia e pós-venda, leal quando confia)",
+  C: "Cauteloso-Analítico (técnico, quer dados, especificações e comparativos, decide pela lógica)",
+};
+
+// Gera uma estratégia de venda personalizada (em português) para máquinas pesadas.
+export async function gerarEstrategiaVendaIA(opts: {
+  tema: string;
+  perfil?: string | null;
+  contexto?: string | null;
+}): Promise<{ titulo: string; conteudo: string }> {
+  const perfilTxt = opts.perfil ? `\nPerfil do cliente (DISC): ${PERFIL_DESC[opts.perfil] ?? opts.perfil}.` : "";
+  const contextoTxt = opts.contexto ? `\nContexto adicional: ${opts.contexto}` : "";
+
+  if (!iaHabilitada()) {
+    return {
+      titulo: opts.tema,
+      conteudo:
+        "Configure uma chave de IA (GROQ_API_KEY grátis ou ANTHROPIC_API_KEY) para gerar estratégias personalizadas. Enquanto isso, consulte as metodologias e perfis curados na Academia.",
+    };
+  }
+
+  try {
+    const raw = await llmTexto(
+      `Você é um treinador de vendas de elite, especialista em venda consultiva de máquinas pesadas
+(linha amarela / construction: escavadeiras, retroescavadeiras, pás-carregadeiras, motoniveladoras
+da New Holland Construction e rolos compactadores Dynapac) no Brasil.
+Baseie-se nas melhores metodologias do mundo (SPIN Selling, Challenger Sale, Gap Selling, venda
+consultiva, princípios de persuasão de Cialdini) e em perfis de personalidade (DISC).
+Escreva SEMPRE em português brasileiro, prático, com exemplos reais aplicados a máquinas pesadas.
+Devolva SOMENTE um JSON válido: {"titulo": string, "conteudo": string}.
+"conteudo": estratégia acionável com passos numerados, frases prontas para usar com o cliente e
+exemplos. Use quebras de linha (\\n) e seja específico. Máximo ~1800 caracteres.`,
+      `Tema: ${opts.tema}.${perfilTxt}${contextoTxt}`,
+      { maxTokens: 1200, json: true }
+    );
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    return {
+      titulo: parsed.titulo ?? opts.tema,
+      conteudo: parsed.conteudo ?? "",
+    };
+  } catch (e) {
+    console.error("Falha ao gerar estratégia:", e);
+    return {
+      titulo: opts.tema,
+      conteudo: "Não foi possível gerar agora. Tente novamente em instantes.",
+    };
+  }
+}
+
+// Sugere o perfil DISC do cliente e a melhor abordagem, a partir das conversas dele.
+export async function sugerirAbordagemIA(
+  conversas: string[]
+): Promise<{ perfil: "D" | "I" | "S" | "C" | null; abordagem: string }> {
+  const amostra = conversas.slice(0, 15).join("\n---\n").slice(0, 4000);
+  if (!iaHabilitada() || !amostra.trim()) {
+    return { perfil: null, abordagem: "Sem conversas suficientes para sugerir um perfil." };
+  }
+  try {
+    const raw = await llmTexto(
+      `Você é especialista em perfis de personalidade DISC aplicados a vendas de máquinas pesadas.
+Analise as mensagens do cliente e classifique o perfil dele:
+D=Dominante (direto, foca resultado), I=Influente (relacional, emotivo),
+S=Estável (cauteloso, busca segurança), C=Cauteloso-Analítico (técnico, quer dados).
+Devolva SOMENTE JSON: {"perfil": "D"|"I"|"S"|"C", "abordagem": string}.
+"abordagem": 2-4 frases em português dizendo COMO o vendedor deve abordar esse cliente
+e uma frase de fechamento ideal para o perfil.`,
+      `Mensagens do cliente:\n${amostra}`,
+      { maxTokens: 500, json: true }
+    );
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    const perfil = ["D", "I", "S", "C"].includes(parsed.perfil) ? parsed.perfil : null;
+    return { perfil, abordagem: parsed.abordagem ?? "" };
+  } catch (e) {
+    console.error("Falha ao sugerir abordagem:", e);
+    return { perfil: null, abordagem: "Não foi possível analisar agora." };
+  }
+}
+
 export type { ExtracaoConversa };

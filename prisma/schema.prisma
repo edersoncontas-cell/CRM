@@ -40,6 +40,8 @@ model Cliente {
   observacoes String?
   ultimoContato     DateTime? // último contato (recebido ou enviado)
   aguardandoResposta Boolean  @default(false) // cliente mandou mensagem e ainda não respondi
+  perfilDISC  String?   // D | I | S | C — perfil de personalidade para abordagem
+  abordagemIA String?   // abordagem sugerida pela IA conforme o perfil
   dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
   maquinaComprada String?
   indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
@@ -234,6 +236,18 @@ model Motivacao {
 model Configuracao {
   chave String @id
   valor String
+}
+
+// Academia de Vendas — estratégias salvas/geradas pela IA (sempre atualizando).
+model EstrategiaVenda {
+  id         String   @id @default(cuid())
+  titulo     String
+  categoria  String   // metodologia | perfil | objecao | fechamento | prospeccao | ideia
+  perfilAlvo String?  // D | I | S | C | null (geral)
+  conteudo   String   // texto da estratégia (markdown simples)
+  fonte      String   @default("ia") // ia | curado
+  favorito   Boolean  @default(false)
+  criadoEm   DateTime @default(now())
 }
 
 // Log de auditoria — registra ações automáticas da IA e do sistema.

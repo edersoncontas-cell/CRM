@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone,
+  Banknote, ClipboardList, Smartphone, GraduationCap,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -40,6 +40,12 @@ const GRUPOS = [
       { href: "/marketing", label: "Marketing IA", icon: BrainCircuit },
       { href: "/campanhas", label: "Campanhas", icon: Send },
       { href: "/midia", label: "Mídia", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Treinamento",
+    links: [
+      { href: "/academia", label: "Academia de Vendas", icon: GraduationCap },
     ],
   },
   {
