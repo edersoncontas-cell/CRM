@@ -51,6 +51,16 @@ export function comissaoEstimada(valor: number, pct = TAXA_COMISSAO): number {
   return valor * (pct / 100);
 }
 
+// Estágio de "VENDAS CONFIRMADAS" (único que conta para comissão).
+export const ESTAGIO_VENDAS_CONFIRMADAS = "proposta_aprovada";
+
+// Comissão real: somente cards que estão na coluna VENDAS CONFIRMADAS.
+export function comissaoConfirmada(negs: NegLite[]): number {
+  return negs
+    .filter((n) => n.status === "aberta" && n.estagio === ESTAGIO_VENDAS_CONFIRMADAS)
+    .reduce((s, n) => s + comissaoEstimada(n.valor ?? 0), 0);
+}
+
 export const COR_CLASSE: Record<string, "green" | "yellow" | "slate"> = {
   A: "green",
   B: "yellow",

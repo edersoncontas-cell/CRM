@@ -7,6 +7,7 @@ import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 import { deveDescartarContato } from "@/lib/utils";
 import { modoFimDeSemanaAtivo } from "@/lib/config";
 import * as zapi from "@/lib/integrations/zapi";
+import { enviarPushNotificacao } from "@/lib/push";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -196,6 +197,15 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
       ultimoContato: new Date(),
       aguardandoResposta: true,
     },
+  });
+
+  // Envia push notification para o celular (se configurado).
+  const previa = msg.texto.length > 60 ? msg.texto.slice(0, 60) + "…" : msg.texto;
+  await enviarPushNotificacao({
+    title: `📱 ${cliente.nome}`,
+    body: previa,
+    url: "/inbox",
+    tag: `msg-${cliente.id}`,
   });
 }
 

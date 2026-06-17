@@ -14,7 +14,7 @@ export const ESTAGIOS: EstagioDef[] = [
   { id: "visita_pendente", titulo: "Visitas pendentes", cor: "border-t-agro-400" },
   { id: "visita_realizada", titulo: "Visita realizada", cor: "border-t-emerald-400" },
   { id: "proposta_bcnh", titulo: "Proposta no BCNH", cor: "border-t-violet-400" },
-  { id: "proposta_aprovada", titulo: "Proposta aprovada", cor: "border-t-green-500" },
+  { id: "proposta_aprovada", titulo: "VENDAS CONFIRMADAS", cor: "border-t-green-500" },
 ];
 
 // Coluna especial (status = perdida).

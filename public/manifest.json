@@ -1,12 +1,13 @@
 {
-  "name": "CRM New Holland — Vendas Inteligentes",
-  "short_name": "CRM Vendas",
-  "description": "CRM pessoal com IA para vendas de máquinas pesadas no sul do ES.",
+  "name": "CRM DO EDY — Vendas NH",
+  "short_name": "CRM Edy",
+  "description": "CRM pessoal com IA para vendas de máquinas pesadas (New Holland · Dynapac).",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#152357",
-  "theme_color": "#164de1",
-  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait-primary",
+  "categories": ["productivity", "business"],
   "icons": [
     {
       "src": "/icon.svg",

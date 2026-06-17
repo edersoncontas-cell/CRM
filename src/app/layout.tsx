@@ -13,12 +13,22 @@ export const metadata: Metadata = {
   title: "CRM DO EDY — Vendas Inteligentes",
   description: "CRM pessoal com IA para vendas de máquinas pesadas (New Holland · Dynapac).",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, title: "CRM DO EDY", statusBarStyle: "default" },
+  appleWebApp: {
+    capable: true,
+    title: "CRM Edy",
+    statusBarStyle: "black-translucent",
+  },
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0b",
+  themeColor: "#09090b",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

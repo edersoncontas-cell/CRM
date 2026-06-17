@@ -3,7 +3,7 @@ import { PageHeader, Badge } from "@/components/ui";
 import { formatCurrency, diasDesde } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
-import { forecastValor, comissaoEstimada, classificarLead, COR_CLASSE } from "@/lib/insights";
+import { comissaoConfirmada, classificarLead, COR_CLASSE, ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
 import { ESTAGIOS, normalizarEstagio } from "@/lib/pipeline";
 import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
@@ -21,42 +21,59 @@ export const dynamic = "force-dynamic";
 // Accents:  #BFDE4D agro | #22c55e green | #f59e0b amber | #f87171 red | #60a5fa blue
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
-  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardando] = await Promise.all([
-    db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
-    db.alerta.findMany({
-      where: { resolvido: false },
-      include: { cliente: true },
-      orderBy: { diasDesde: "desc" },
-    }),
-    db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
-    db.cliente.count(),
-    db.negociacao.findMany({
-      where: { status: "aberta" },
-      include: { cliente: true },
-      orderBy: { ultimoContato: "asc" },
-    }),
-    db.cliente.findMany({
-      where: { aguardandoResposta: true },
-      orderBy: { ultimoContato: "asc" },
-      take: 8,
-    }),
-  ]);
+// Palavras que indicam conversa encerrada — IA não precisa responder.
+const DESPEDIDA_RE =
+  /\b(obrigad[ao]|valeu|até logo|tchau|tchauzinho|boa noite|boa tarde|bom dia(?! pessoal)|até mais|abraços?|foi um prazer|tudo certo|combinado|fechado|até amanhã|até segunda|pode ser|ok obrigad[ao])\b/i;
 
+export default async function DashboardPage() {
   const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const inicioAno = new Date(anoAtual, 0, 1);
+
+  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw] =
+    await Promise.all([
+      db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
+      db.alerta.findMany({
+        where: { resolvido: false },
+        include: { cliente: true },
+        orderBy: { diasDesde: "desc" },
+      }),
+      db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
+      db.cliente.count(),
+      db.negociacao.findMany({
+        where: { status: "aberta" },
+        include: { cliente: true },
+        orderBy: { ultimoContato: "asc" },
+      }),
+      db.cliente.findMany({
+        where: { aguardandoResposta: true },
+        include: {
+          conversas: { orderBy: { criadoEm: "desc" }, take: 1 },
+        },
+        orderBy: { ultimoContato: "asc" },
+      }),
+    ]);
+
   const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
   const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
-  const visitasHoje = await db.negociacao.count({
-    where: { dataVisita: { gte: inicioDia, lte: fimDia }, status: { not: "perdida" } },
-  });
+  const [visitasHoje, vendasGanhasAno] = await Promise.all([
+    db.negociacao.count({
+      where: { dataVisita: { gte: inicioDia, lte: fimDia }, status: { not: "perdida" } },
+    }),
+    db.negociacao.count({
+      where: { status: "ganha", atualizadoEm: { gte: inicioAno } },
+    }),
+  ]);
 
   const hora = hoje.getHours();
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
 
+  const META_ANUAL = 40;
+  const faltamVendas = Math.max(0, META_ANUAL - vendasGanhasAno);
+
   const valorPipeline = negociacoes.reduce((s, n) => s + (n.valor ?? 0), 0);
-  const forecast = forecastValor(negociacoes);
-  const comissao = comissaoEstimada(forecast);
+  const comissao = comissaoConfirmada(negociacoes);
   const leadsEsfriando = negociacoes.filter((n) => classificarLead(n).esfriando).slice(0, 6);
   const porEstagio = ESTAGIOS.map((e) => ({
     estagio: e.id,
@@ -64,6 +81,16 @@ export default async function DashboardPage() {
   }));
   const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
   const filaAguardando = aguardandoFiltrado.slice(0, 6);
+
+  // Filtra "aguardando retorno no WhatsApp": exclui conversas que terminaram em despedida.
+  const clientesAguardando = clientesAguardandoRaw
+    .filter((c) => {
+      const ultima = c.conversas[0];
+      if (!ultima) return true;
+      if (ultima.remetente === "vendedor") return false; // eu já respondi
+      return !DESPEDIDA_RE.test(ultima.conteudo);
+    })
+    .slice(0, 8);
 
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
@@ -112,8 +139,16 @@ export default async function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 sm:flex-col">
-            <MiniStat label="Forecast" valor={formatCurrency(forecast)} cor="#BFDE4D" />
-            <MiniStat label="Comissão est." valor={formatCurrency(comissao)} cor="#4ade80" />
+            <Link href="/pipeline">
+              <MiniStat
+                label={faltamVendas === 0 ? "Meta anual atingida! 🎉" : `Faltam ${faltamVendas} p/ meta`}
+                valor={`${vendasGanhasAno}/${META_ANUAL} vendas`}
+                cor={faltamVendas === 0 ? "#4ade80" : "#BFDE4D"}
+              />
+            </Link>
+            <Link href="/pipeline">
+              <MiniStat label="Comissão (confirmadas)" valor={formatCurrency(comissao)} cor="#4ade80" />
+            </Link>
           </div>
         </div>
       </div>
@@ -142,6 +177,7 @@ export default async function DashboardPage() {
           accentColor="#a78bfa"
         />
         <DarkStatCard
+          href="#alertas"
           icone={<AlertTriangle size={18} />}
           rotulo="Alertas abertos"
           valor={String(alertas.length)}
@@ -195,7 +231,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Alertas + Aguardando ──────────────────────────────────────── */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div id="alertas" className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DarkCard>
           <SectionLabel icone={<Bell size={15} />} cor="#f87171">Clientes sem resposta</SectionLabel>
           {alertas.length === 0 ? (
@@ -285,6 +321,7 @@ export default async function DashboardPage() {
                 {clientesAguardando.length}
               </span>
             )}
+            <span className="ml-1 text-xs" style={{ color: "#52525b" }} title="Despedidas e agradecimentos são filtrados automaticamente">🤖 IA filtra despedidas</span>
             <Link href="/inbox" className="ml-auto text-xs font-semibold hover:underline" style={{ color: "#BFDE4D" }}>
               Abrir WhatsApp →
             </Link>

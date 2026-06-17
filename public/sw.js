@@ -1,5 +1,5 @@
-// Service worker simples: deixa o app instalável e responde quando offline.
-const CACHE = "crm-nh-v1";
+// Service worker: deixa o app instalável, responde quando offline e envia push.
+const CACHE = "crm-nh-v2";
 const ESSENCIAIS = ["/dashboard", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
@@ -17,7 +17,6 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
-  // network-first com fallback ao cache (bom para dados dinâmicos)
   e.respondWith(
     fetch(req)
       .then((res) => {
@@ -26,5 +25,37 @@ self.addEventListener("fetch", (e) => {
         return res;
       })
       .catch(() => caches.match(req).then((r) => r || caches.match("/dashboard")))
+  );
+});
+
+// ── Push Notifications ────────────────────────────────────────────────────────
+
+self.addEventListener("push", (e) => {
+  let data = { title: "CRM Edy", body: "Nova mensagem recebida!", url: "/inbox", tag: "msg" };
+  try { data = { ...data, ...e.data.json() }; } catch {}
+
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      tag: data.tag,
+      renotify: true,
+      data: { url: data.url },
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url ?? "/inbox";
+  e.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.includes(url) && "focus" in c) return c.focus();
+      }
+      return clients.openWindow(url);
+    })
   );
 });
