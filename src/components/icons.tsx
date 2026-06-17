@@ -18,48 +18,26 @@ export function ExcavatorIcon({
       className={className}
       aria-hidden="true"
     >
-      {/* Esteira (trilho de borracha/aço — retângulo com arredondamento oval) */}
-      <rect x="4" y="50" width="56" height="13" rx="6" />
-
-      {/* Roda guia dianteira e roda motriz traseira (recortes em negativo) */}
+      {/* Esteira (track) — formato pílula com 3 rodas vazadas */}
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M10 50a6 6 0 0 0 0 13 6 6 0 0 0 0-13Zm0 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"
-        fill="black"
-        fillOpacity="0.25"
+        d="M12 47h24a8 8 0 0 1 0 16H12a8 8 0 0 1 0-16Zm2 4.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm10 0a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm10 0a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
       />
+      {/* Casa / cabine em degrau, sobre a esteira */}
+      <path d="M6 46V33a2 2 0 0 1 2-2h4v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5h11v15H6Z" />
+      {/* Lança (boom) — barra diagonal grossa subindo para a direita */}
+      <path d="M28 33.5 35.5 41 56 21l-7.5-7.5L28 33.5Z" />
+      {/* Polia no topo da lança (círculo com furo) */}
       <path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M54 50a6 6 0 0 0 0 13 6 6 0 0 0 0-13Zm0 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"
-        fill="black"
-        fillOpacity="0.25"
+        d="M52.5 11a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm0 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"
       />
-
-      {/* Estructura inferior / carbody (une esteira à plataforma giratória) */}
-      <rect x="10" y="42" width="44" height="10" rx="2" />
-
-      {/* Cabine (cab) — lateral esquerda da plataforma, com janela vazada */}
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M12 42 L12 27 L32 27 L32 42 Z M14 29 L14 40 L30 40 L30 29 Z"
-      />
-
-      {/* Capô do motor + contrapeso (parte direita da plataforma) */}
-      {/* Forma trapezoidal: capô mais baixo, contrapeso mais alto no extremo direito */}
-      <path d="M32 42 L32 27 L46 25 L54 29 L56 42 Z" />
-
-      {/* Lança / boom — viga diagonal subindo para cima-esquerda */}
-      {/* Base na frente da cabine, ponta no alto à esquerda */}
-      <path d="M17 34 L23 26 L15 4 L9 12 Z" />
-
-      {/* Braço / stick — pendente da ponta da lança, vai para baixo-direita */}
-      <path d="M9 12 L15 4 L24 18 L18 26 Z" />
-
-      {/* Caçamba — formato em C na ponta do braço */}
-      <path d="M18 26 L24 18 L32 26 Q35 37 24 40 L18 36 Q11 32 18 26 Z" />
+      {/* Braço (stick) descendo da polia até a caçamba */}
+      <path d="M49 19.5 55.5 26 52 37l-7-3.5L49 19.5Z" />
+      {/* Caçamba (bucket) — concha curva na ponta */}
+      <path d="M44 32q-3 12 8 13l5.5-5q1-8-7-11Z" />
     </svg>
   );
 }
