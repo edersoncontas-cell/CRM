@@ -88,9 +88,28 @@ function previewData(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
 }
 
-// Conta mensagens não lidas do cliente (mensagens dele no fim da conversa).
-function naoLidasIniciais(c: Contato): number {
+// ── Persistência de "já vi" no localStorage ───────────────────────────────
+// Guarda o ID da última mensagem vista por conversa para que badges não voltem
+// após recarregar a página — só mensagens POSTERIORES ao que foi visto geram badge.
+const LIDO_KEY = "inbox_lido_v2";
+
+function lerLido(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(LIDO_KEY) ?? "{}"); } catch { return {}; }
+}
+function salvarLido(clienteId: string, msgId: string) {
+  try {
+    const v = lerLido();
+    v[clienteId] = msgId;
+    localStorage.setItem(LIDO_KEY, JSON.stringify(v));
+  } catch {}
+}
+
+// Conta mensagens não lidas do cliente. Consulta o localStorage para saber se
+// a última mensagem já foi vista antes mesmo do primeiro polling desta sessão.
+function naoLidasIniciais(c: Contato, lido: Record<string, string>): number {
   if (!c.aguardando) return 0;
+  const ultimaId = c.mensagens[c.mensagens.length - 1]?.id;
+  if (ultimaId && lido[c.id] === ultimaId) return 0; // já viu essa mensagem antes
   let n = 0;
   for (let i = c.mensagens.length - 1; i >= 0; i--) {
     if (c.mensagens[i].remetente === "cliente") n++;
@@ -111,9 +130,10 @@ export function InboxClient({
   const [selId, setSelId] = useState<string | null>(contatosInit[0]?.id ?? null);
   const [busca, setBusca] = useState("");
   const [contatos, setContatos] = useState<Contato[]>(contatosInit);
-  const [naoLidos, setNaoLidos] = useState<Record<string, number>>(
-    () => Object.fromEntries(contatosInit.map((c) => [c.id, naoLidasIniciais(c)]))
-  );
+  const [naoLidos, setNaoLidos] = useState<Record<string, number>>(() => {
+    const lido = lerLido();
+    return Object.fromEntries(contatosInit.map((c) => [c.id, naoLidasIniciais(c, lido)]));
+  });
   const [altura, setAltura] = useState<number | null>(null);
   const [aoVivo, setAoVivo] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,7 +141,10 @@ export function InboxClient({
   // Refs para o polling global acessar o estado atual sem re-assinar o intervalo.
   const selIdRef = useRef(selId);
   selIdRef.current = selId;
-  // Última mensagem conhecida de cada contato (para detectar novidades e tocar alerta).
+  // Espelho do estado contatos para callbacks que não podem re-assinar o efeito.
+  const contatosRef = useRef(contatos);
+  contatosRef.current = contatos;
+  // Último ID de mensagem conhecido por contato (detecta novidades no polling).
   const ultimaMsgRef = useRef<Record<string, string>>(
     Object.fromEntries(
       contatosInit.map((c) => [c.id, c.mensagens[c.mensagens.length - 1]?.id ?? ""])
@@ -135,10 +158,14 @@ export function InboxClient({
     if (salvo) setAltura(Number(salvo));
   }, []);
 
-  // Ao abrir uma conversa, zera o contador de não lidas (como no WhatsApp).
+  // Ao abrir uma conversa, zera o contador e persiste qual foi a última msg vista
+  // para que o badge não reapareça ao recarregar a página.
   const abrir = useCallback((id: string) => {
     setSelId(id);
     setNaoLidos((prev) => ({ ...prev, [id]: 0 }));
+    const c = contatosRef.current.find((x) => x.id === id);
+    const ultimaId = c?.mensagens[c.mensagens.length - 1]?.id;
+    if (ultimaId) salvarLido(id, ultimaId);
   }, []);
 
   const filtrados = busca.trim()
@@ -150,14 +177,16 @@ export function InboxClient({
   const sel = contatos.find((c) => c.id === selId) ?? null;
 
   const updateMensagens = useCallback((clienteId: string, novas: Mensagem[], aguardando: boolean) => {
-    setContatos((prev) =>
-      prev.map((c) => {
+    setContatos((prev) => {
+      const updated = prev.map((c) => {
         if (c.id !== clienteId) return c;
         const existentes = new Set(c.mensagens.map((m) => m.id));
         const add = novas.filter((m) => !existentes.has(m.id));
         if (add.length === 0 && c.aguardando === aguardando) return c;
         const todas = [...c.mensagens, ...add];
         const ultima = todas[todas.length - 1];
+        // Se a conversa está aberta, marca imediatamente como lida no localStorage.
+        if (ultima && selIdRef.current === clienteId) salvarLido(clienteId, ultima.id);
         return {
           ...c,
           mensagens: todas,
@@ -165,8 +194,10 @@ export function InboxClient({
           previa: ultima?.conteudo ?? c.previa,
           ultimoContato: ultima?.criadoEm ?? c.ultimoContato,
         };
-      })
-    );
+      });
+      // Reordena imediatamente: conversa com nova mensagem sobe para o topo.
+      return [...updated].sort((a, b) => +new Date(b.ultimoContato) - +new Date(a.ultimoContato));
+    });
   }, []);
 
   // Mescla o resumo global (todas as conversas) no estado: atualiza prévia,
@@ -204,8 +235,9 @@ export function InboxClient({
       return next;
     });
 
-    // Detecta mensagens novas para badge de não lidas e alerta sonoro/aba.
+    // Detecta mensagens novas para badge de não lidas e alerta sonoro.
     let chegouNova = false;
+    const lido = lerLido(); // snapshot do que foi visto antes do reload
     setNaoLidos((prev) => {
       const next = { ...prev };
       for (const r of resumo) {
@@ -213,10 +245,19 @@ export function InboxClient({
         if (r.ultimaMsgId && r.ultimaMsgId !== conhecida) {
           ultimaMsgRef.current[r.id] = r.ultimaMsgId;
           if (selIdRef.current === r.id) {
-            next[r.id] = 0; // conversa aberta = já lida
-          } else if (r.ultimaMsgRemetente === "cliente" && !primeiroSyncRef.current) {
-            next[r.id] = (next[r.id] ?? 0) + 1;
-            chegouNova = true;
+            // Conversa aberta: marca como lida automaticamente.
+            next[r.id] = 0;
+            salvarLido(r.id, r.ultimaMsgId);
+          } else if (r.ultimaMsgRemetente === "cliente") {
+            // Só gera badge se esta mensagem ainda não foi vista nesta ou em sessão anterior.
+            const jaViu = lido[r.id] === r.ultimaMsgId;
+            if (!jaViu && !primeiroSyncRef.current) {
+              next[r.id] = (next[r.id] ?? 0) + 1;
+              chegouNova = true;
+            } else if (!jaViu && primeiroSyncRef.current) {
+              // Primeiro sync: respeita o que foi calculado na inicialização (evita duplicar).
+              // Não incrementa, mas o naoLidasIniciais já calculou corretamente.
+            }
           }
         }
       }
@@ -275,6 +316,9 @@ export function InboxClient({
         if (!cancelado && (data.mensagens.length > 0 || data.aguardando !== contato.aguardando)) {
           updateMensagens(clienteId, data.mensagens, data.aguardando);
           setNaoLidos((prev) => ({ ...prev, [clienteId]: 0 }));
+          // Persiste que viu até esta mensagem (evita badge no próximo reload).
+          const ultima = data.mensagens[data.mensagens.length - 1];
+          if (ultima?.id) salvarLido(clienteId, ultima.id);
         }
       } catch {}
     }
