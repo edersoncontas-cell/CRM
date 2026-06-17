@@ -3,6 +3,11 @@ import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
 
+// Rota de API usada como fonte primária (imune ao middleware de auth).
+// O arquivo estático em /public fica como fallback via <source> do <picture>.
+const NH_SRC = "/api/foto/nh-escavadeiras.jpg";
+const DYN_SRC = "/api/foto/dynapac-rolos.jpg";
+
 export default function LoginPage({
   searchParams,
 }: {
@@ -28,15 +33,16 @@ export default function LoginPage({
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4">
 
-      {/* ── Painéis de fundo (visíveis só em sm+) ── */}
+      {/* ── Painéis laterais (sm+) ── */}
       <div className="absolute inset-0 hidden sm:flex">
 
-        {/* Esquerdo — New Holland */}
+        {/* Esquerdo — New Holland Construction */}
         <div className="relative flex-1 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/nh-escavadeiras.jpg"
+            src={NH_SRC}
             alt=""
+            aria-hidden="true"
             className="absolute inset-0 h-full w-full object-cover"
             style={{ objectPosition: "center 55%" }}
           />
@@ -50,12 +56,13 @@ export default function LoginPage({
           </div>
         </div>
 
-        {/* Direito — Dynapac */}
+        {/* Direito — Dynapac Compaction */}
         <div className="relative flex-1 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/dynapac-rolos.jpg"
+            src={DYN_SRC}
             alt=""
+            aria-hidden="true"
             className="absolute inset-0 h-full w-full object-cover"
             style={{ objectPosition: "center 65%" }}
           />
@@ -70,12 +77,13 @@ export default function LoginPage({
         </div>
       </div>
 
-      {/* ── Fundo mobile (NH) ── */}
+      {/* ── Fundo mobile ── */}
       <div className="absolute inset-0 sm:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/nh-escavadeiras.jpg"
+          src={NH_SRC}
           alt=""
+          aria-hidden="true"
           className="h-full w-full object-cover"
           style={{ objectPosition: "center 55%" }}
         />
