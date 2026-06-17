@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { MaquinaPicker } from "@/components/MaquinaPicker";
+import { ComparativoIA } from "@/components/ComparativoIA";
 import {
   concorrentesSimilares, vantagemContra, delta, CATEGORIAS, type MaquinaComparavel,
 } from "@/lib/comparativo";
@@ -120,6 +121,13 @@ export default async function ComparativoPage({
               </tbody>
             </table>
           </Card>
+
+          {/* Análise da IA usando as fichas técnicas */}
+          <ComparativoIA
+            minhaId={minha.id}
+            minhaModelo={minha.modelo}
+            concorrentes={concorrentes.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo }))}
+          />
 
           {/* Battlecards */}
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-700">

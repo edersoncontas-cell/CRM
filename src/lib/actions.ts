@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
@@ -420,6 +420,64 @@ export async function salvarFichaTecnica(
   });
   revalidatePath("/maquinas/fichas");
   revalidatePath("/comparativo");
+}
+
+// Preenche a ficha técnica automaticamente com a IA (a partir do conhecimento
+// público dos fabricantes). Não sobrescreve cegamente: retorna os dados para o
+// usuário revisar e salvar.
+export async function preencherFichaTecnicaIA(id: string): Promise<{
+  ok: boolean;
+  especificacoes?: string;
+  descricao?: string;
+  pontosFortes?: string;
+  diferenciais?: string;
+  erro?: string;
+}> {
+  "use server";
+  const maq = await db.maquina.findUnique({
+    where: { id },
+    select: { marca: true, modelo: true, categoria: true, proprio: true },
+  });
+  if (!maq) return { ok: false, erro: "Máquina não encontrada" };
+
+  const ficha = await gerarFichaTecnicaIA(maq);
+  if (!ficha.especificacoes && !ficha.descricao) {
+    return { ok: false, erro: "IA não habilitada ou sem dados. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+  }
+  return { ok: true, ...ficha };
+}
+
+// Gera os argumentos de venda (battlecards) comparando minha máquina com os
+// concorrentes da mesma faixa, usando as fichas técnicas. Chamado sob demanda.
+export async function gerarBattlecardsComparativoIA(
+  minhaId: string,
+  concorrentesIds: string[]
+): Promise<{ ok: boolean; cards?: { id: string; texto: string }[]; erro?: string }> {
+  "use server";
+  const minha = await db.maquina.findUnique({
+    where: { id: minhaId },
+    select: { marca: true, modelo: true, categoria: true, especificacoes: true, pontosFortes: true },
+  });
+  if (!minha) return { ok: false, erro: "Máquina não encontrada" };
+
+  const concs = await db.maquina.findMany({
+    where: { id: { in: concorrentesIds } },
+    select: { id: true, marca: true, modelo: true, especificacoes: true },
+  });
+
+  try {
+    const cards = await Promise.all(
+      concs.map(async (c) => ({ id: c.id, texto: await gerarBattlecardIA(minha, c) }))
+    );
+    const validos = cards.filter((c) => c.texto.trim());
+    if (validos.length === 0) {
+      return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+    }
+    return { ok: true, cards: validos };
+  } catch (e) {
+    console.error("Erro nos battlecards:", e);
+    return { ok: false, erro: "Erro ao gerar argumentos" };
+  }
 }
 
 // ---------- Conversas + IA ----------

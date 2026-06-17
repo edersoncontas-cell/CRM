@@ -210,6 +210,88 @@ export async function gerarMidiaIA(maquina: {
   }
 }
 
+// Gera/preenche a FICHA TÉCNICA de uma máquina a partir do conhecimento da IA
+// (modelos New Holland Construction, Dynapac e concorrentes do ramo construction).
+// Retorna campos vazios se a IA não estiver habilitada — nunca inventa fonte.
+export async function gerarFichaTecnicaIA(maquina: {
+  marca: string;
+  modelo: string;
+  categoria: string;
+  proprio: boolean;
+}): Promise<{
+  especificacoes: string;
+  descricao: string;
+  pontosFortes: string;
+  diferenciais: string;
+}> {
+  const vazio = { especificacoes: "", descricao: "", pontosFortes: "", diferenciais: "" };
+  if (!iaHabilitada()) return vazio;
+
+  try {
+    const campos = maquina.proprio
+      ? `{
+  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha). Inclua: Motor, Potência (cv), Peso operacional (kg), e os principais dados da categoria (capacidade de caçamba, profundidade/altura de escavação, força de escavação, largura de trabalho, etc.)
+  "descricao": string,       // 1-2 frases sobre a máquina e seu uso principal
+  "pontosFortes": string,    // argumentos de venda, separados por ';'
+  "diferenciais": string     // diferenciais de mercado, separados por ';'
+}`
+      : `{
+  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha): Motor, Potência (cv), Peso operacional (kg) e principais dados da categoria
+  "descricao": string,       // 1-2 frases sobre a máquina
+  "pontosFortes": "",        // deixe vazio para máquina concorrente
+  "diferenciais": ""         // deixe vazio para máquina concorrente
+}`;
+
+    const raw = await llmTexto(
+      `Você é um especialista técnico em máquinas pesadas do ramo construction (linha amarela) no Brasil.
+Gere a ficha técnica da máquina informada com base em especificações públicas dos fabricantes.
+Use unidades do mercado brasileiro (cv, kg, m³, mm, kN). Se algum dado não for conhecido com segurança, omita a linha — NUNCA invente números.
+Devolva SOMENTE um JSON válido, sem texto fora do JSON, no formato:
+${campos}`,
+      `Máquina: ${maquina.marca} ${maquina.modelo} — categoria ${maquina.categoria}.`,
+      { maxTokens: 900, json: true }
+    );
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    return {
+      especificacoes: typeof parsed.especificacoes === "string" ? parsed.especificacoes.trim() : "",
+      descricao: typeof parsed.descricao === "string" ? parsed.descricao.trim() : "",
+      pontosFortes: typeof parsed.pontosFortes === "string" ? parsed.pontosFortes.trim() : "",
+      diferenciais: typeof parsed.diferenciais === "string" ? parsed.diferenciais.trim() : "",
+    };
+  } catch (err) {
+    console.error("Falha ao gerar ficha técnica:", err);
+    return vazio;
+  }
+}
+
+// Gera um BATTLECARD preciso (minha máquina vs concorrente) usando as fichas
+// técnicas de ambas para comparar números reais e montar o argumento de venda.
+export async function gerarBattlecardIA(
+  minha: { marca: string; modelo: string; categoria: string; especificacoes?: string | null; pontosFortes?: string | null },
+  conc: { marca: string; modelo: string; especificacoes?: string | null }
+): Promise<string> {
+  if (!iaHabilitada()) return "";
+  try {
+    return await llmTexto(
+      `Você é consultor de vendas de máquinas pesadas (New Holland Construction / Dynapac) no sul do ES.
+Compare a MINHA máquina com a do CONCORRENTE usando as fichas técnicas fornecidas.
+Escreva um argumento de venda CURTO (3-4 frases), comparando números reais quando existirem (peso, potência, capacidade, força).
+Seja honesto: se o concorrente tem vantagem em algo, reconheça e compense com pós-venda, revenda, custo, rede de peças e Finame.
+Responda apenas com o texto do argumento, sem títulos nem JSON.`,
+      `MINHA: ${minha.marca} ${minha.modelo} (${minha.categoria})
+Ficha: ${minha.especificacoes ?? "—"}
+Pontos fortes: ${minha.pontosFortes ?? "—"}
+
+CONCORRENTE: ${conc.marca} ${conc.modelo}
+Ficha: ${conc.especificacoes ?? "—"}`,
+      { maxTokens: 400 }
+    );
+  } catch (err) {
+    console.error("Falha ao gerar battlecard:", err);
+    return "";
+  }
+}
+
 // ────────────────────────────────────────────────────────────
 // Marketing post generation
 // ────────────────────────────────────────────────────────────

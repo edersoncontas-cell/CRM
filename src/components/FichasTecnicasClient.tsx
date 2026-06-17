@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { salvarFichaTecnica } from "@/lib/actions";
-import { Pencil, X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { salvarFichaTecnica, preencherFichaTecnicaIA } from "@/lib/actions";
+import { Pencil, X, Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 
 type Maquina = {
   id: string;
@@ -45,6 +45,25 @@ function EditModal({
   const [pontos, setPontos] = useState(m.pontosFortes ?? "");
   const [difs, setDifs] = useState(m.diferenciais ?? "");
   const [pending, start] = useTransition();
+  const [preenchendo, startPreencher] = useTransition();
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  function preencherComIA() {
+    setAviso(null);
+    startPreencher(async () => {
+      const r = await preencherFichaTecnicaIA(m.id);
+      if (!r.ok) {
+        setAviso(r.erro ?? "Não foi possível preencher.");
+        return;
+      }
+      // Só preenche o que veio e não sobrescreve o que você já tinha digitado à toa:
+      if (r.especificacoes) setSpecs(r.especificacoes);
+      if (r.descricao) setDesc(r.descricao);
+      if (m.proprio && r.pontosFortes) setPontos(r.pontosFortes);
+      if (m.proprio && r.diferenciais) setDifs(r.diferenciais);
+      setAviso("Preenchido pela IA — confira os números e salve. ✓");
+    });
+  }
 
   function salvar() {
     start(async () => {
@@ -80,6 +99,24 @@ function EditModal({
             <X size={18} />
           </button>
         </div>
+
+        <button
+          onClick={preencherComIA}
+          disabled={preenchendo}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-60"
+          style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)" }}
+        >
+          <Sparkles size={15} />
+          {preenchendo ? "Buscando ficha com a IA..." : "Preencher automaticamente com IA"}
+        </button>
+        {aviso && (
+          <p
+            className="mb-4 -mt-2 text-xs"
+            style={{ color: aviso.includes("✓") ? "#4ade80" : "#f87171" }}
+          >
+            {aviso}
+          </p>
+        )}
 
         <div className="space-y-4">
           <div>
