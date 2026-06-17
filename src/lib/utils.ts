@@ -18,6 +18,7 @@ export function formatDate(date?: Date | string | null) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -28,6 +29,7 @@ export function formatDateTime(date?: Date | string | null) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

@@ -4,6 +4,29 @@
 import { db } from "@/lib/db";
 import { analisarConversaIA } from "@/lib/ai";
 
+const normalizar = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+// Vincula (e cria se necessário) o município do cliente a partir do nome detectado.
+export async function vincularMunicipio(
+  clienteId: string,
+  nomeMunicipio: string | null
+): Promise<void> {
+  if (!nomeMunicipio?.trim()) return;
+  const alvo = normalizar(nomeMunicipio);
+
+  const todos = await db.municipio.findMany();
+  let muni = todos.find((m) => normalizar(m.nome) === alvo);
+  if (!muni) {
+    muni = await db.municipio.create({ data: { nome: nomeMunicipio.trim() } });
+  }
+
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
+  if (cliente && !cliente.municipioId) {
+    await db.cliente.update({ where: { id: clienteId }, data: { municipioId: muni.id } });
+  }
+}
+
 type MensagemRecebida = {
   telefone: string;
   nomeContato?: string | null;
@@ -99,5 +122,6 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
   if (extracao.perfil && !cliente.perfilIA) {
     await db.cliente.update({ where: { id: cliente.id }, data: { perfilIA: extracao.perfil } });
   }
+  await vincularMunicipio(cliente.id, extracao.municipio);
   await alimentarNegociacao(cliente.id, extracao);
 }

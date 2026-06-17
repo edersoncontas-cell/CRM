@@ -10,15 +10,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CRM New Holland — Vendas Inteligentes",
-  description: "CRM pessoal com IA para vendas de máquinas pesadas no sul do ES.",
+  title: "CRM DO EDY — Vendas Inteligentes",
+  description: "CRM pessoal com IA para vendas de máquinas pesadas (New Holland · Dynapac).",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, title: "CRM Vendas", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "CRM DO EDY", statusBarStyle: "default" },
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#164de1",
+  themeColor: "#0a0a0b",
 };
 
 export default function RootLayout({

@@ -9,24 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Paleta inspirada na New Holland (azul) com toques de "agro" (amarelo/verde)
+        // Identidade New Holland Construction: PRETO + AMARELO.
+        // "brand" = escala grafite/preto (estrutura). "agro" = amarelo NH (destaque).
         brand: {
-          50: "#eef6ff",
-          100: "#d9ebff",
-          200: "#bcdcff",
-          300: "#8ec6ff",
-          400: "#59a6ff",
-          500: "#2f82ff",
-          600: "#1a63f5",
-          700: "#164de1",
-          800: "#193fb6",
-          900: "#1a398f",
-          950: "#152357",
+          50: "#f6f6f7",
+          100: "#ededef",
+          200: "#d8d8dc",
+          300: "#b4b4ba",
+          400: "#85858d",
+          500: "#62626a",
+          600: "#3f3f46",
+          700: "#2a2a2e",
+          800: "#1c1c1f",
+          900: "#141416",
+          950: "#0a0a0b",
         },
         agro: {
-          400: "#f9c84e",
-          500: "#f5b417",
-          600: "#d99708",
+          50: "#fffbeb",
+          100: "#fef3c7",
+          200: "#fde68a",
+          300: "#fcd34d",
+          400: "#ffcb2d",
+          500: "#ffb81c",
+          600: "#e09e00",
+          700: "#b97e00",
         },
       },
       fontFamily: {

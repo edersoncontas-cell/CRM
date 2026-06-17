@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
-  TrendingDown, Sparkles, Megaphone, Settings, Tractor, Menu, X, Calculator,
+  TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit,
 } from "lucide-react";
+import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -63,10 +64,10 @@ export function Sidebar() {
       {/* Topbar mobile */}
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-brand-800 bg-brand-900 px-4 py-3 text-white md:hidden">
         <div className="flex items-center gap-2.5 font-bold tracking-tight">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-agro-500">
-            <Tractor size={16} className="text-white" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-agro-400">
+            <ExcavatorIcon size={17} className="text-black" />
           </div>
-          CRM New Holland
+          CRM DO EDY
         </div>
         <button
           onClick={() => setAberto((v) => !v)}
@@ -93,12 +94,12 @@ export function Sidebar() {
       >
         {/* Logo — desktop */}
         <div className="hidden items-center gap-3 px-5 py-5 md:flex">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-agro-500 shadow-md">
-            <Tractor size={20} className="text-white" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-agro-400 shadow-md shadow-agro-500/20">
+            <ExcavatorIcon size={22} className="text-black" />
           </div>
           <div>
-            <div className="text-sm font-bold leading-none text-white">CRM New Holland</div>
-            <div className="mt-0.5 text-[10px] text-brand-400">Sul do Espírito Santo</div>
+            <div className="text-sm font-bold leading-none text-white">CRM DO EDY</div>
+            <div className="mt-0.5 text-[10px] text-agro-400">New Holland · Dynapac</div>
           </div>
         </div>
 

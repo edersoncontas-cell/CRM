@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
 import { analisarConversaIA } from "./ai";
+import { vincularMunicipio } from "./integrations/inbox";
 import * as googleCalendar from "./integrations/googleCalendar";
 
 // ---------- Clientes ----------
@@ -235,13 +236,14 @@ export async function analisarConversaAction(formData: FormData) {
     },
   });
 
-  // Guarda o perfil no cliente quando ainda não houver.
+  // Guarda o perfil e o município no cliente quando ainda não houver.
   if (clienteId && extracao.perfil) {
     const c = await db.cliente.findUnique({ where: { id: clienteId } });
     if (c && !c.perfilIA) {
       await db.cliente.update({ where: { id: clienteId }, data: { perfilIA: extracao.perfil } });
     }
   }
+  if (clienteId) await vincularMunicipio(clienteId, extracao.municipio);
 
   revalidatePath("/conversas");
   revalidatePath("/clientes");

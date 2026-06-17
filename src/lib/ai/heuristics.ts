@@ -7,6 +7,7 @@ export interface ExtracaoConversa {
   perfil: string | null;
   nomeCliente: string | null;
   telefoneCliente: string | null;
+  municipio: string | null;
   maquina: string | null;
   valor: number | null;
   condicaoPagamento: string | null;
@@ -156,6 +157,34 @@ export function extrairTelefone(texto: string): string | null {
   return dig.length >= 10 ? dig : null;
 }
 
+// Municípios do ES (sul, Caparaó, serrana e Grande Vitória) para casar por nome.
+const MUNICIPIOS_ES = [
+  "Cachoeiro de Itapemirim", "Itapemirim", "Marataízes", "Presidente Kennedy",
+  "Piúma", "Anchieta", "Iconha", "Rio Novo do Sul", "Vargem Alta", "Castelo",
+  "Alegre", "Guaçuí", "Mimoso do Sul", "Muqui", "Atílio Vivácqua", "Apiacá",
+  "Bom Jesus do Norte", "São José do Calçado", "Jerônimo Monteiro", "Muniz Freire",
+  "Ibitirama", "Divino de São Lourenço", "Dores do Rio Preto", "Conceição do Castelo",
+  "Brejetuba", "Iúna", "Ibatiba", "Irupi", "Afonso Cláudio", "Venda Nova do Imigrante",
+  "Marechal Floriano", "Domingos Martins", "Vila Velha", "Vitória", "Serra",
+  "Cariacica", "Viana", "Guarapari", "Fundão", "Santa Teresa", "Linhares",
+  "Aracruz", "Colatina", "São Mateus",
+];
+
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// Detecta o município citado na conversa (ex.: "sou de Vila Velha", "aqui em Castelo").
+export function extrairMunicipio(texto: string): string | null {
+  const t = norm(texto);
+  // prioriza os de nome mais longo (evita casar "Vitória" dentro de "Cachoeiro")
+  const ordenados = [...MUNICIPIOS_ES].sort((a, b) => b.length - a.length);
+  for (const m of ordenados) {
+    const re = new RegExp(`\\b${norm(m).replace(/ /g, "\\s+")}\\b`);
+    if (re.test(t)) return m;
+  }
+  return null;
+}
+
 // Tenta achar o nome do cliente: frases explícitas ou o remetente da conversa
 // exportada do WhatsApp ("12/06/2026 14:30 - Fulano: ...").
 export function extrairNome(texto: string): string | null {
@@ -215,6 +244,7 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
     perfil: maquina ? `Potencial comprador de ${maquina}` : null,
     nomeCliente: extrairNome(texto),
     telefoneCliente: extrairTelefone(texto),
+    municipio: extrairMunicipio(texto),
     maquina,
     valor,
     condicaoPagamento: condicao,
