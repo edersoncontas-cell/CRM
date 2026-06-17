@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone, GraduationCap,
+  Banknote, ClipboardList, Smartphone, GraduationCap, Star,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -27,6 +27,7 @@ const GRUPOS = [
     label: "Vendas",
     links: [
       { href: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
+      { href: "/maquinas", label: "Modelos em Foco", icon: Star },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
       { href: "/agenda", label: "Agenda", icon: Calendar },

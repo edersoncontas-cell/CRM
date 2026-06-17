@@ -109,7 +109,11 @@ Se o cliente não citar nenhum modelo, "maquina" DEVE ser null. Jamais use um mo
 
 export async function analisarConversaIA(
   texto: string,
-  opts?: { estiloDeFala?: string | null; base?: Date }
+  opts?: {
+    estiloDeFala?: string | null;
+    base?: Date;
+    modelosDestaque?: { marca: string; modelo: string; categoria: string }[];
+  }
 ): Promise<ExtracaoConversa> {
   if (!iaHabilitada()) {
     return extrairHeuristica(texto, opts?.base);
@@ -126,7 +130,11 @@ export async function analisarConversaIA(
       `\nAo cumprimentar no rascunhoResposta, use OBRIGATORIAMENTE "${saudacaoBrasilia(agora)}" conforme o período atual do dia` +
       ` — nunca copie a saudação de mensagens antigas do cliente.` +
       `\nAo interpretar datas relativas ("amanhã", "quinta", "semana que vem"), calcule a partir desta data atual.`;
-    const raw = await llmTexto(SCHEMA_INSTRUCAO + contextoData + tom, `Conversa:\n${texto}`, {
+    const modelos = opts?.modelosDestaque?.length
+      ? `\n\nMODELOS MAIS COMERCIALIZADOS PELO VENDEDOR (priorize estes ao sugerir máquinas e ao construir argumentos de venda):\n` +
+        opts.modelosDestaque.map((m) => `• ${m.marca} ${m.modelo} (${m.categoria})`).join("\n")
+      : "";
+    const raw = await llmTexto(SCHEMA_INSTRUCAO + contextoData + modelos + tom, `Conversa:\n${texto}`, {
       maxTokens: 1024,
       json: true,
     });

@@ -93,7 +93,8 @@ model Maquina {
   marca       String  @default("New Holland") // New Holland | Dynapac | Caterpillar | Komatsu | ...
   modelo      String
   categoria   String  // miniescavadeira | escavadeira | retroescavadeira | pacarregadeira | motoniveladora | tratoresteira | rolo_solo | rolo_tandem | rolo_pneumatico | paver | leve
-  proprio     Boolean @default(false) // true = minha linha (New Holland / Dynapac)
+  proprio              Boolean @default(false) // true = minha linha (New Holland / Dynapac)
+  maisComercializado   Boolean @default(false) // marcado pelo vendedor como modelo prioritário
   pesoOperacional Float? // kg (para casar faixa de peso no comparativo)
   potencia    Int?       // cv
   descricao   String?

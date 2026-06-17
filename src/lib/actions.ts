@@ -391,14 +391,30 @@ async function acharOuCriarCliente(
   return novo.id;
 }
 
+// ---------- Modelos em Foco ----------
+export async function toggleMaquinaComercializada(id: string, valor: boolean) {
+  "use server";
+  await db.maquina.update({ where: { id }, data: { maisComercializado: valor } });
+  revalidatePath("/maquinas");
+}
+
 // ---------- Conversas + IA ----------
 export async function analisarConversaAction(formData: FormData) {
   const conteudo = String(formData.get("conteudo") ?? "").trim();
   if (!conteudo) return;
   let clienteId = String(formData.get("clienteId") ?? "") || null;
 
-  const estilo = await db.estiloDeFala.findFirst();
-  const extracao = await analisarConversaIA(conteudo, { estiloDeFala: estilo?.guia });
+  const [estilo, modelosDestaque] = await Promise.all([
+    db.estiloDeFala.findFirst(),
+    db.maquina.findMany({
+      where: { maisComercializado: true, proprio: true },
+      select: { marca: true, modelo: true, categoria: true },
+    }),
+  ]);
+  const extracao = await analisarConversaIA(conteudo, {
+    estiloDeFala: estilo?.guia,
+    modelosDestaque,
+  });
 
   // Sem cliente vinculado: cria/encontra a partir do que a IA identificou.
   if (!clienteId && (extracao.nomeCliente || extracao.telefoneCliente)) {
