@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
+  Banknote, ClipboardList,
 } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
 import { useState } from "react";
@@ -44,6 +45,7 @@ const GRUPOS = [
   {
     label: "Análise",
     links: [
+      { href: "/financeiro", label: "Financeiro", icon: Banknote },
       { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
       { href: "/sugestoes", label: "Sugestões IA", icon: Sparkles },
     ],
@@ -51,6 +53,7 @@ const GRUPOS = [
   {
     label: "Sistema",
     links: [
+      { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
       { href: "/configuracoes", label: "Configurações", icon: Settings },
     ],
   },

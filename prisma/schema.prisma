@@ -229,3 +229,22 @@ model Motivacao {
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
 }
+
+// Configurações globais do CRM (key-value).
+model Configuracao {
+  chave String @id
+  valor String
+}
+
+// Log de auditoria — registra ações automáticas da IA e do sistema.
+model AuditLog {
+  id         String   @id @default(cuid())
+  acao       String   // "cliente_criado", "negociacao_atualizada", "campanha_enviada", etc.
+  origem     String   @default("ia") // ia | usuario | sistema
+  descricao  String   // texto legível
+  entidade   String?  // "Cliente" | "Negociacao" | "CampanhaMarketing" | etc.
+  entidadeId String?  // ID do registro afetado
+  clienteId  String?  // atalho para filtrar por cliente
+  extra      String?  // JSON com dados adicionais (valor, modelo, etc.)
+  criadoEm  DateTime @default(now())
+}

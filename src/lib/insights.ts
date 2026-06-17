@@ -43,8 +43,11 @@ export function forecastValor(negs: NegLite[]): number {
     .reduce((s, n) => s + (n.valor ?? 0) * (PROB_ESTAGIO[n.estagio] ?? 0), 0);
 }
 
-// Comissão estimada (% padrão configurável).
-export function comissaoEstimada(valor: number, pct = 2): number {
+// Taxa de comissão do vendedor (0.5% sobre o valor negociado).
+export const TAXA_COMISSAO = 0.5;
+
+// Comissão estimada sobre um valor.
+export function comissaoEstimada(valor: number, pct = TAXA_COMISSAO): number {
   return valor * (pct / 100);
 }
 

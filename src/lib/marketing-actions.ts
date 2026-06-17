@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { gerarPostMarketingIA, type TipoPost } from "@/lib/ai/index";
+import { registrarAudit } from "@/lib/audit";
 
 // Gera um novo post de marketing e salva como rascunho
 export async function gerarPostAction(formData: FormData) {
@@ -22,7 +23,7 @@ export async function gerarPostAction(formData: FormData) {
 
   const post = await gerarPostMarketingIA(maquina, tipo);
 
-  await db.campanhaMarketing.create({
+  const campanha = await db.campanhaMarketing.create({
     data: {
       tipo,
       titulo: post.titulo,
@@ -33,6 +34,14 @@ export async function gerarPostAction(formData: FormData) {
       categoria: maquina?.categoria ?? categoria ?? null,
       status: "rascunho",
     },
+  });
+  await registrarAudit({
+    acao: "post_gerado",
+    origem: "ia",
+    descricao: `Post de marketing gerado: "${post.titulo}"`,
+    entidade: "CampanhaMarketing",
+    entidadeId: campanha.id,
+    extra: { tipo, canal, marca: campanha.marca, categoria: campanha.categoria },
   });
 
   revalidatePath("/marketing");
@@ -134,6 +143,14 @@ export async function enviarCampanha(
       municipioFiltro: filtro.municipioFiltro ?? null,
       marca: filtro.marca ?? undefined,
     },
+  });
+  await registrarAudit({
+    acao: "campanha_enviada",
+    origem: "sistema",
+    descricao: `Campanha de marketing enviada para ${clientes.length} cliente(s)`,
+    entidade: "CampanhaMarketing",
+    entidadeId: id,
+    extra: { totalEnviado: clientes.length, municipio: filtro.municipioFiltro, marca: filtro.marca },
   });
 
   revalidatePath("/marketing");

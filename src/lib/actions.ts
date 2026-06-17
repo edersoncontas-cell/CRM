@@ -7,6 +7,7 @@ import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
+import { registrarAudit } from "./audit";
 
 // ---------- Clientes ----------
 export async function criarCliente(formData: FormData) {
@@ -113,6 +114,15 @@ export async function enviarResposta(
   await db.cliente.update({
     where: { id: clienteId },
     data: { aguardandoResposta: false, ultimoContato: new Date() },
+  });
+  await registrarAudit({
+    acao: "mensagem_enviada",
+    origem: "usuario",
+    descricao: `Mensagem enviada via WhatsApp para ${cliente.nome}`,
+    entidade: "Cliente",
+    entidadeId: clienteId,
+    clienteId,
+    extra: { chars: conteudo.length, modo: envio.modo },
   });
 
   revalidatePath("/inbox");
@@ -252,22 +262,44 @@ export async function excluirNegociacao(id: string) {
 }
 
 export async function marcarPerdida(id: string, motivo: string) {
-  await db.negociacao.update({
+  const neg = await db.negociacao.update({
     where: { id },
     data: { status: "perdida", motivoPerda: motivo, estagio: COL_PERDIDO.id },
+    include: { cliente: true },
+  });
+  await registrarAudit({
+    acao: "negociacao_perdida",
+    origem: "usuario",
+    descricao: `Negociação marcada como perdida. Motivo: ${motivo || "não informado"}`,
+    entidade: "Negociacao",
+    entidadeId: id,
+    clienteId: neg.clienteId,
+    extra: { motivo, maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
   });
   revalidatePath("/pipeline");
   revalidatePath("/vendas-perdidas");
+  revalidatePath("/financeiro");
 }
 
 export async function marcarGanha(id: string) {
   const neg = await db.negociacao.update({
     where: { id },
     data: { status: "ganha", estagio: "proposta_aprovada" },
+    include: { cliente: true },
   });
   await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
+  await registrarAudit({
+    acao: "negociacao_ganha",
+    origem: "usuario",
+    descricao: `Venda fechada! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
+    entidade: "Negociacao",
+    entidadeId: id,
+    clienteId: neg.clienteId,
+    extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
+  });
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
 }
 
 // Acha um cliente por telefone/nome ou cria um novo. Usado na análise de
@@ -408,6 +440,32 @@ export async function analisarConversaAction(formData: FormData) {
       },
     });
     await vincularMunicipio(clienteId, extracao.municipio);
+    await registrarAudit({
+      acao: "conversa_analisada",
+      origem: "ia",
+      descricao: `Conversa analisada. Sentimento: ${extracao.sentimento ?? "neutro"}. ${extracao.maquina ? "Máquina: " + extracao.maquina + "." : ""} ${extracao.valor ? "Valor: R$ " + extracao.valor.toLocaleString("pt-BR") + "." : ""}`,
+      entidade: "Conversa",
+      entidadeId: conversa.id,
+      clienteId,
+      extra: {
+        sentimento: extracao.sentimento,
+        maquina: extracao.maquina,
+        valor: extracao.valor,
+        prospect: extracao.ehProspectReal,
+        fonte: extracao.fonte,
+      },
+    });
+    if (extracao.dataVisita) {
+      await registrarAudit({
+        acao: "visita_detectada",
+        origem: "ia",
+        descricao: `Visita detectada automaticamente para ${extracao.dataVisita.toLocaleDateString("pt-BR")}`,
+        entidade: "Negociacao",
+        entidadeId: negociacaoId ?? undefined,
+        clienteId,
+        extra: { dataVisita: extracao.dataVisita.toISOString(), maquina: extracao.maquina },
+      });
+    }
   }
 
   revalidatePath("/conversas");
