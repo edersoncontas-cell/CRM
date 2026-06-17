@@ -2,9 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
-
-// Fotos reais: NH = foto do Ederson; Dynapac = aguardando foto (fundo escuro por ora).
-const FOTO_ESCAVADEIRA = "/nh-escavadeiras.jpg";
+import Image from "next/image";
 
 export default function LoginPage({
   searchParams,
@@ -30,15 +28,21 @@ export default function LoginPage({
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4">
-      {/* Fundo dividido com fotos reais */}
-      <div className="absolute inset-0 grid grid-cols-1 sm:grid-cols-2">
-        {/* New Holland Construction — escavadeira */}
-        <div className="relative hidden overflow-hidden sm:block">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${FOTO_ESCAVADEIRA})` }}
+      {/* Painéis laterais com fotos reais */}
+      <div className="absolute inset-0 hidden sm:grid sm:grid-cols-2">
+
+        {/* Esquerdo — New Holland: fila de escavadeiras */}
+        <div className="relative overflow-hidden">
+          <Image
+            src="/nh-escavadeiras.jpg"
+            alt="Escavadeiras New Holland"
+            fill
+            priority
+            className="object-cover object-[center_55%]"
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-black via-black/85 to-brand-900/60" />
+          {/* Overlay escuro à esquerda, abre à direita para não cobrir o card */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-black/30" />
+          {/* Branding embaixo */}
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
             <ExcavatorIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
@@ -48,29 +52,37 @@ export default function LoginPage({
           </div>
         </div>
 
-        {/* Dynapac — rolos compactadores */}
-        <div className="relative hidden overflow-hidden sm:block">
-          <div
-            className="absolute inset-0 bg-cover"
-            style={{ backgroundImage: "url(/dynapac-rolos.jpg)", backgroundPosition: "center 60%" }}
+        {/* Direito — Dynapac: fila de rolos compactadores */}
+        <div className="relative overflow-hidden">
+          <Image
+            src="/dynapac-rolos.jpg"
+            alt="Rolos compactadores Dynapac"
+            fill
+            priority
+            className="object-cover object-[center_65%]"
           />
-          {/* Overlay escuro suave para leitura do texto, deixa os rolos vermelhos aparecerem */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
+          {/* Overlay escuro na base para legibilidade; deixa os rolos aparecerem */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
             <RollerIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
-              <div className="text-2xl font-black tracking-tight text-white drop-shadow-lg">DYNAPAC</div>
+              <div className="text-2xl font-black tracking-tight text-white">DYNAPAC</div>
               <div className="text-xs font-semibold tracking-[0.4em] text-agro-400">COMPACTION</div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Fundo mobile (uma foto só) */}
-        <div
-          className="absolute inset-0 bg-cover bg-center sm:hidden"
-          style={{ backgroundImage: `url(${FOTO_ESCAVADEIRA})` }}
+      {/* Mobile: NH no fundo */}
+      <div className="absolute inset-0 sm:hidden">
+        <Image
+          src="/nh-escavadeiras.jpg"
+          alt=""
+          fill
+          priority
+          className="object-cover object-center"
         />
-        <div className="absolute inset-0 bg-black/70 sm:hidden" />
+        <div className="absolute inset-0 bg-black/70" />
       </div>
 
       {/* Card de login flutuante */}
