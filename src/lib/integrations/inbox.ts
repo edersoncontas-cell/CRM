@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { analisarConversaIA } from "@/lib/ai";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
+import { deveDescartarContato } from "@/lib/utils";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -81,12 +82,16 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
 
+  // Descarta silenciosamente contatos de pousadas, hotéis, etc.
+  const nomeContato = msg.nomeContato?.trim() || `Contato ${telefone}`;
+  if (deveDescartarContato(nomeContato)) return;
+
   // Encontra ou cadastra o cliente automaticamente.
   let cliente = await db.cliente.findFirst({ where: { telefone } });
   if (!cliente) {
     cliente = await db.cliente.create({
       data: {
-        nome: msg.nomeContato?.trim() || `Contato ${telefone}`,
+        nome: nomeContato,
         telefone,
         origem: "whatsapp",
       },

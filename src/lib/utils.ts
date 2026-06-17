@@ -44,6 +44,15 @@ export function diasDesde(date?: Date | string | null): number {
   return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Palavras que identificam contatos irrelevantes para a venda de máquinas pesadas.
+// Contatos cujo nome contém qualquer um desses termos são silenciosamente descartados.
+const NOMES_DESCARTADOS = ["POUSADA", "HOTEL"];
+
+export function deveDescartarContato(nome: string): boolean {
+  const upper = nome.toUpperCase();
+  return NOMES_DESCARTADOS.some((termo) => upper.includes(termo));
+}
+
 export function iniciais(nome: string) {
   return nome
     .split(" ")

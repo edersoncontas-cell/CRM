@@ -8,11 +8,12 @@ import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
+import { deveDescartarContato } from "./utils";
 
 // ---------- Clientes ----------
 export async function criarCliente(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
-  if (!nome) return;
+  if (!nome || deveDescartarContato(nome)) return;
   await db.cliente.create({
     data: {
       nome,
@@ -143,6 +144,7 @@ export async function importarClientesCsv(formData: FormData): Promise<void> {
     const [nomeRaw, telRaw, muniRaw] = linha.split(/[,;]/).map((c) => c?.trim());
     if (!nomeRaw) continue;
     if (/^nome$/i.test(nomeRaw)) continue; // cabeçalho
+    if (deveDescartarContato(nomeRaw)) continue; // pousadas, hotéis, etc.
     const telefone = telRaw ? telRaw.replace(/\D/g, "") : null;
 
     // dedup
@@ -193,6 +195,7 @@ export async function criarNegociacaoCard(formData: FormData) {
   let clienteId = String(formData.get("clienteId") ?? "") || null;
   const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
   if (!clienteId && nomeNovo) {
+    if (deveDescartarContato(nomeNovo)) return;
     const novo = await db.cliente.create({ data: { nome: nomeNovo, origem: "pipeline" } });
     clienteId = novo.id;
   }
@@ -311,6 +314,7 @@ async function acharOuCriarCliente(
 ): Promise<string | null> {
   const tel = telefone ? telefone.replace(/\D/g, "") : null;
   if (!nome && !tel) return null;
+  if (nome && deveDescartarContato(nome)) return null;
 
   const existente = await db.cliente.findFirst({
     where: {
@@ -484,10 +488,13 @@ export async function resolverSugestao(id: string, acao: "confirmar" | "rejeitar
       data: { telefone: sug.telefone },
     });
   } else if (acao === "confirmar" && !sug.clienteId) {
-    // cria novo cliente a partir da sugestão
-    await db.cliente.create({
-      data: { nome: sug.nomeDetectado ?? "Novo contato", telefone: sug.telefone, origem: "whatsapp" },
-    });
+    // cria novo cliente a partir da sugestão (ignora pousadas/hotéis)
+    const nomeS = sug.nomeDetectado ?? "Novo contato";
+    if (!deveDescartarContato(nomeS)) {
+      await db.cliente.create({
+        data: { nome: nomeS, telefone: sug.telefone, origem: "whatsapp" },
+      });
+    }
   }
   await db.sugestaoVinculo.update({
     where: { id },
