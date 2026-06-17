@@ -48,18 +48,18 @@ export default function LoginPage({
           </div>
         </div>
 
-        {/* Dynapac — fundo escuro profissional (foto do rolo será adicionada em breve) */}
-        <div className="relative hidden overflow-hidden sm:block bg-gradient-to-br from-slate-900 via-brand-950 to-black">
-          {/* Padrão geométrico de fundo */}
-          <div className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: "repeating-linear-gradient(45deg, #ffb81c 0px, #ffb81c 1px, transparent 1px, transparent 50px), repeating-linear-gradient(-45deg, #ffb81c 0px, #ffb81c 1px, transparent 1px, transparent 50px)"
-            }}
+        {/* Dynapac — rolos compactadores */}
+        <div className="relative hidden overflow-hidden sm:block">
+          <div
+            className="absolute inset-0 bg-cover"
+            style={{ backgroundImage: "url(/dynapac-rolos.jpg)", backgroundPosition: "center 60%" }}
           />
+          {/* Overlay escuro suave para leitura do texto, deixa os rolos vermelhos aparecerem */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
             <RollerIcon size={64} className="text-agro-400 drop-shadow-lg" />
             <div>
-              <div className="text-2xl font-black tracking-tight text-white">DYNAPAC</div>
+              <div className="text-2xl font-black tracking-tight text-white drop-shadow-lg">DYNAPAC</div>
               <div className="text-xs font-semibold tracking-[0.4em] text-agro-400">COMPACTION</div>
             </div>
           </div>
