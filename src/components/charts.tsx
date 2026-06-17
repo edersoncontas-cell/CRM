@@ -5,14 +5,15 @@ import {
 } from "recharts";
 
 const ROTULOS: Record<string, string> = {
-  novo: "Novo",
-  contato: "Contato",
-  proposta: "Proposta",
-  negociacao: "Negociação",
-  fechamento: "Fechamento",
+  demandas: "Demandas",
+  primeiro_contato: "1º contato",
+  visita_pendente: "Visita pend.",
+  visita_realizada: "Visita feita",
+  proposta_bcnh: "Prop. BCNH",
+  proposta_aprovada: "Prop. aprov.",
 };
 
-const CORES = ["#8ec6ff", "#59a6ff", "#2f82ff", "#1a63f5", "#193fb6"];
+const CORES = ["#b4b4ba", "#7dd3fc", "#ffcb2d", "#6ee7b7", "#c4b5fd", "#22c55e"];
 
 export function PipelineChart({ data }: { data: { estagio: string; total: number }[] }) {
   const dados = data.map((d) => ({ nome: ROTULOS[d.estagio] ?? d.estagio, total: d.total }));

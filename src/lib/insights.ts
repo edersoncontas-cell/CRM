@@ -13,11 +13,12 @@ export interface NegLite {
 
 // Probabilidade de fechamento por estágio (para o forecast).
 export const PROB_ESTAGIO: Record<string, number> = {
-  novo: 0.1,
-  contato: 0.25,
-  proposta: 0.5,
-  negociacao: 0.7,
-  fechamento: 0.9,
+  demandas: 0.1,
+  primeiro_contato: 0.2,
+  visita_pendente: 0.35,
+  visita_realizada: 0.5,
+  proposta_bcnh: 0.7,
+  proposta_aprovada: 0.9,
 };
 
 export function classificarLead(n: NegLite): { classe: "A" | "B" | "C"; esfriando: boolean } {

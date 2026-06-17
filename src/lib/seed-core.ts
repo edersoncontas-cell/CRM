@@ -378,7 +378,7 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
   // Clientes + negociações
   if ((await db.cliente.count()) === 0) {
     const minhas = MINHAS.map((m) => m.modelo);
-    const estagios = ["novo", "contato", "proposta", "negociacao", "fechamento"];
+    const estagios = ["demandas", "primeiro_contato", "visita_pendente", "visita_realizada", "proposta_bcnh", "proposta_aprovada"];
     const criados: string[] = [];
     for (let i = 0; i < NOMES.length; i++) {
       const muni = municipios[i % municipios.length];

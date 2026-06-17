@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "./db";
 import { analisarConversaIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 
 // ---------- Clientes ----------
@@ -88,7 +89,7 @@ export async function criarNegociacao(formData: FormData) {
       maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
       valor: valorRaw ? Number(valorRaw) : null,
       condicaoPagamento: String(formData.get("condicaoPagamento") ?? "") || null,
-      estagio: "novo",
+      estagio: ESTAGIO_INICIAL,
       ultimoContato: new Date(),
     },
   });
@@ -96,15 +97,76 @@ export async function criarNegociacao(formData: FormData) {
   revalidatePath("/pipeline");
 }
 
-export async function moverNegociacao(id: string, estagio: string) {
-  await db.negociacao.update({ where: { id }, data: { estagio, ultimoContato: new Date() } });
+// Cria um card direto no pipeline (estilo Trello): aceita cliente existente
+// ou um nome novo, em qualquer coluna.
+export async function criarNegociacaoCard(formData: FormData) {
+  let clienteId = String(formData.get("clienteId") ?? "") || null;
+  const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
+  if (!clienteId && nomeNovo) {
+    const novo = await db.cliente.create({ data: { nome: nomeNovo, origem: "pipeline" } });
+    clienteId = novo.id;
+  }
+  if (!clienteId) return;
+
+  const valorRaw = String(formData.get("valor") ?? "").replace(/\D/g, "");
+  const estagio = String(formData.get("estagio") ?? "") || ESTAGIO_INICIAL;
+  await db.negociacao.create({
+    data: {
+      clienteId,
+      maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
+      valor: valorRaw ? Number(valorRaw) : null,
+      estagio,
+      ultimoContato: new Date(),
+    },
+  });
   revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
+}
+
+// Edita os campos de um card do pipeline.
+export async function editarNegociacao(id: string, formData: FormData) {
+  const valorRaw = String(formData.get("valor") ?? "").replace(/\D/g, "");
+  const dataVisitaRaw = String(formData.get("dataVisita") ?? "");
+  // O input datetime-local vem sem fuso; interpretamos como horário de Brasília (-03:00).
+  const dataVisita = dataVisitaRaw ? new Date(`${dataVisitaRaw}:00-03:00`) : null;
+  await db.negociacao.update({
+    where: { id },
+    data: {
+      maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
+      valor: valorRaw ? Number(valorRaw) : null,
+      condicaoPagamento: String(formData.get("condicaoPagamento") ?? "") || null,
+      proximaAcao: String(formData.get("proximaAcao") ?? "") || null,
+      dataVisita,
+      estagio: String(formData.get("estagio") ?? "") || undefined,
+      ultimoContato: new Date(),
+    },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+}
+
+export async function moverNegociacao(id: string, estagio: string) {
+  if (estagio === COL_PERDIDO.id) {
+    await db.negociacao.update({
+      where: { id },
+      data: { status: "perdida", estagio, ultimoContato: new Date() },
+    });
+  } else {
+    // Volta para aberta caso estivesse perdida e seja reposicionada.
+    await db.negociacao.update({
+      where: { id },
+      data: { status: "aberta", estagio, ultimoContato: new Date() },
+    });
+  }
+  revalidatePath("/pipeline");
+  revalidatePath("/vendas-perdidas");
 }
 
 export async function marcarPerdida(id: string, motivo: string) {
   await db.negociacao.update({
     where: { id },
-    data: { status: "perdida", motivoPerda: motivo, estagio: "perdido" },
+    data: { status: "perdida", motivoPerda: motivo, estagio: COL_PERDIDO.id },
   });
   revalidatePath("/pipeline");
   revalidatePath("/vendas-perdidas");
@@ -113,10 +175,11 @@ export async function marcarPerdida(id: string, motivo: string) {
 export async function marcarGanha(id: string) {
   const neg = await db.negociacao.update({
     where: { id },
-    data: { status: "ganha", estagio: "fechamento" },
+    data: { status: "ganha", estagio: "proposta_aprovada" },
   });
   await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
   revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
 }
 
 // Acha um cliente por telefone/nome ou cria um novo. Usado na análise de
@@ -198,11 +261,20 @@ export async function analisarConversaAction(formData: FormData) {
         extracao.sentimento === "positivo" ? 80 : extracao.sentimento === "negativo" ? 30 : 55,
     };
     if (negExistente) {
-      await db.negociacao.update({ where: { id: negExistente.id }, data: dados });
+      // Visita marcada promove o card para "Visitas pendentes".
+      const estagio =
+        extracao.dataVisita && ESTAGIOS_PRE_VISITA.includes(negExistente.estagio)
+          ? "visita_pendente"
+          : negExistente.estagio;
+      await db.negociacao.update({ where: { id: negExistente.id }, data: { ...dados, estagio } });
       negociacaoId = negExistente.id;
     } else if (extracao.ehProspectReal) {
       const nova = await db.negociacao.create({
-        data: { clienteId, estagio: "novo", ...dados },
+        data: {
+          clienteId,
+          estagio: extracao.dataVisita ? "visita_pendente" : ESTAGIO_INICIAL,
+          ...dados,
+        },
       });
       negociacaoId = nova.id;
     }

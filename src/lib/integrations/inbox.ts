@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { analisarConversaIA } from "@/lib/ai";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -56,12 +57,17 @@ async function alimentarNegociacao(
   };
 
   if (aberta) {
-    await db.negociacao.update({ where: { id: aberta.id }, data: dados });
+    // Visita marcada promove o card para "Visitas pendentes".
+    const estagio =
+      ex.dataVisita && ESTAGIOS_PRE_VISITA.includes(aberta.estagio)
+        ? "visita_pendente"
+        : aberta.estagio;
+    await db.negociacao.update({ where: { id: aberta.id }, data: { ...dados, estagio } });
   } else if (ex.ehProspectReal) {
     await db.negociacao.create({
       data: {
         clienteId,
-        estagio: "novo",
+        estagio: ex.dataVisita ? "visita_pendente" : ESTAGIO_INICIAL,
         termometro: ex.sentimento === "positivo" ? 65 : 50,
         proximaAcao: "Retornar contato e qualificar interesse",
         ...dados,

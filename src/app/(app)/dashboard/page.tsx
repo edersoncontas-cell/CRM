@@ -4,6 +4,7 @@ import { formatCurrency, diasDesde } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
 import { forecastValor, comissaoEstimada, classificarLead, COR_CLASSE } from "@/lib/insights";
+import { ESTAGIOS, normalizarEstagio } from "@/lib/pipeline";
 import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
@@ -46,9 +47,9 @@ export default async function DashboardPage() {
   const forecast = forecastValor(negociacoes);
   const comissao = comissaoEstimada(forecast);
   const leadsEsfriando = negociacoes.filter((n) => classificarLead(n).esfriando).slice(0, 6);
-  const porEstagio = ["novo", "contato", "proposta", "negociacao", "fechamento"].map((e) => ({
-    estagio: e,
-    total: negociacoes.filter((n) => n.estagio === e).length,
+  const porEstagio = ESTAGIOS.map((e) => ({
+    estagio: e.id,
+    total: negociacoes.filter((n) => normalizarEstagio(n.estagio) === e.id).length,
   }));
   const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
   const filaAguardando = aguardandoFiltrado.slice(0, 6);
