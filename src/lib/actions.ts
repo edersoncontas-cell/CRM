@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA } from "./ai";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
 import { deveDescartarContato } from "./utils";
+import { CHAVES, setConfig } from "./config";
 
 // ---------- Clientes ----------
 export async function criarCliente(formData: FormData) {
@@ -48,6 +49,14 @@ export async function atualizarCliente(id: string, formData: FormData) {
   revalidatePath("/clientes");
 }
 
+export async function excluirCliente(id: string): Promise<{ ok: boolean }> {
+  await db.cliente.delete({ where: { id } });
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
 // ---------- Visitas ----------
 // Registra uma visita ao cliente (data + observação) e marca como visitado.
 export async function adicionarVisita(clienteId: string, formData: FormData) {
@@ -81,6 +90,50 @@ export async function marcarRespondido(clienteId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/inbox");
   revalidatePath("/clientes");
+}
+
+// ---------- Modo fim de semana (resposta automática da IA) ----------
+// Quando ATIVO, a IA responde os clientes por mim (no meu estilo) assim que eles
+// mandam mensagem. Quando desativo, a IA volta a só sugerir rascunhos.
+// Por segurança, o envio automático SÓ acontece com esta opção explicitamente ligada.
+export async function definirModoFimDeSemana(
+  ativo: boolean
+): Promise<{ ok: boolean }> {
+  await setConfig(CHAVES.modoFimDeSemana, ativo ? "on" : "off");
+  // Ao ligar, a IA aprende meu jeito de falar a partir do meu histórico real.
+  if (ativo) {
+    await aprenderMeuEstilo();
+  }
+  await registrarAudit({
+    acao: "modo_fim_de_semana",
+    origem: "usuario",
+    descricao: ativo
+      ? "Modo fim de semana ATIVADO — IA responderá automaticamente."
+      : "Modo fim de semana DESATIVADO — IA volta a só sugerir.",
+  });
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
+// Aprende o estilo de fala do Ederson a partir das mensagens que ele já enviou
+// e salva no banco para a IA imitar nas respostas.
+export async function aprenderMeuEstilo(): Promise<{ ok: boolean }> {
+  const minhas = await db.conversa.findMany({
+    where: { remetente: "vendedor", tipo: "texto" },
+    orderBy: { criadoEm: "desc" },
+    take: 40,
+    select: { conteudo: true },
+  });
+  if (minhas.length === 0) return { ok: false };
+
+  const guia = await aprenderTomIA(minhas.map((m) => m.conteudo));
+  const existente = await db.estiloDeFala.findFirst();
+  if (existente) {
+    await db.estiloDeFala.update({ where: { id: existente.id }, data: { guia } });
+  } else {
+    await db.estiloDeFala.create({ data: { guia } });
+  }
+  return { ok: true };
 }
 
 // ---------- WhatsApp: responder direto do CRM ----------

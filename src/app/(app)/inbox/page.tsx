@@ -3,10 +3,12 @@ import { PageHeader, Badge } from "@/components/ui";
 import { InboxClient, type Contato } from "@/components/InboxClient";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import * as zapi from "@/lib/integrations/zapi";
+import { modoFimDeSemanaAtivo } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
 export default async function InboxPage() {
+  const modoFimDeSemana = await modoFimDeSemanaAtivo();
   // Clientes que já têm alguma conversa (recebida ou enviada).
   const clientes = await db.cliente.findMany({
     where: { conversas: { some: {} } },
@@ -70,7 +72,7 @@ export default async function InboxPage() {
           </div>
         }
       />
-      <InboxClient contatos={contatos} zapiAtiva={zapi.isEnabled()} />
+      <InboxClient contatos={contatos} zapiAtiva={zapi.isEnabled()} modoFimDeSemana={modoFimDeSemana} />
     </div>
   );
 }

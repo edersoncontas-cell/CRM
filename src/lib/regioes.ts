@@ -27,3 +27,26 @@ export async function garantirRegioes(): Promise<void> {
   }
   garantido = true;
 }
+
+// Termos que indicam contatos que NÃO são clientes (o CRM é exclusivo de clientes).
+const TERMOS_DESCARTE = ["POUSADA", "HOTEL", "PME"];
+
+let limpezaFeita = false;
+
+// Remove do banco contatos que não são clientes (pousadas, hotéis, PME...).
+// Mantém-se idempotente e barato (dataset pequeno).
+export async function limparContatosDescartados(): Promise<void> {
+  if (limpezaFeita) return;
+  try {
+    await db.cliente.deleteMany({
+      where: {
+        OR: TERMOS_DESCARTE.map((t) => ({
+          nome: { contains: t, mode: "insensitive" as const },
+        })),
+      },
+    });
+  } catch {
+    // silencioso — não bloqueia o carregamento da página
+  }
+  limpezaFeita = true;
+}

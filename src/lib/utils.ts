@@ -46,7 +46,8 @@ export function diasDesde(date?: Date | string | null): number {
 
 // Palavras que identificam contatos irrelevantes para a venda de máquinas pesadas.
 // Contatos cujo nome contém qualquer um desses termos são silenciosamente descartados.
-const NOMES_DESCARTADOS = ["POUSADA", "HOTEL"];
+// O CRM é exclusivo para CLIENTES (compradores de máquinas).
+const NOMES_DESCARTADOS = ["POUSADA", "HOTEL", "PME"];
 
 export function deveDescartarContato(nome: string): boolean {
   const upper = nome.toUpperCase();

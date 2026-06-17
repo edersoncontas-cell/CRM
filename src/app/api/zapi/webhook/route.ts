@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as zapi from "@/lib/integrations/zapi";
 import { isEnabled as transcricaoAtiva, transcreverBuffer } from "@/lib/integrations/transcription";
-import { registrarMensagemRecebida } from "@/lib/integrations/inbox";
+import { registrarMensagemRecebida, registrarMensagemEnviada } from "@/lib/integrations/inbox";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,8 +39,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Ignora: mensagens enviadas por mim, atualizações de status e grupos.
-    if (body?.fromMe === true) return NextResponse.json({ ok: true });
+    // Ignora atualizações de status e grupos.
     if (body?.isStatusReply === true) return NextResponse.json({ ok: true });
     if (body?.isGroup === true) return NextResponse.json({ ok: true });
 
@@ -49,6 +48,13 @@ export async function POST(req: NextRequest) {
 
     const { texto, tipo, transcricao } = await extrairTexto(body);
     if (!texto) return NextResponse.json({ ok: true });
+
+    // Mensagem enviada por mim (pelo celular): sincroniza o histórico e, se for
+    // áudio agendando visita, a IA joga na agenda.
+    if (body?.fromMe === true) {
+      await registrarMensagemEnviada({ telefone, texto, tipo, transcricao, canal: "whatsapp" });
+      return NextResponse.json({ ok: true });
+    }
 
     await registrarMensagemRecebida({
       telefone,

@@ -12,7 +12,8 @@ export type AcaoAudit =
   | "campanha_enviada"
   | "post_gerado"
   | "mensagem_enviada"
-  | "perfil_atualizado";
+  | "perfil_atualizado"
+  | "modo_fim_de_semana";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema";
 

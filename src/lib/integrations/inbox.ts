@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { analisarConversaIA } from "@/lib/ai";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 import { deveDescartarContato } from "@/lib/utils";
+import { modoFimDeSemanaAtivo } from "@/lib/config";
+import * as zapi from "@/lib/integrations/zapi";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -64,17 +66,39 @@ async function alimentarNegociacao(
         ? "visita_pendente"
         : aberta.estagio;
     await db.negociacao.update({ where: { id: aberta.id }, data: { ...dados, estagio } });
-  } else if (ex.ehProspectReal) {
+  } else if (ex.ehProspectReal || ex.dataVisita) {
+    // Cria a negociação se for prospect real OU se houver visita agendada
+    // (uma visita marcada já é interesse concreto que precisa entrar na agenda).
     await db.negociacao.create({
       data: {
         clienteId,
         estagio: ex.dataVisita ? "visita_pendente" : ESTAGIO_INICIAL,
         termometro: ex.sentimento === "positivo" ? 65 : 50,
-        proximaAcao: "Retornar contato e qualificar interesse",
+        proximaAcao: ex.dataVisita ? "Confirmar e realizar a visita" : "Retornar contato e qualificar interesse",
         ...dados,
       },
     });
   }
+}
+
+// Registra a visita detectada na agenda do cliente (tabela Visita), evitando
+// duplicar a mesma data. Alimentado tanto por mensagens do cliente quanto por
+// áudios meus (ex.: "marquei visita quinta 14h").
+async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null) {
+  if (!dataVisita) return;
+  const jaExiste = await db.visita.findFirst({
+    where: {
+      clienteId,
+      data: {
+        gte: new Date(dataVisita.getTime() - 30 * 60 * 1000),
+        lte: new Date(dataVisita.getTime() + 30 * 60 * 1000),
+      },
+    },
+  });
+  if (jaExiste) return;
+  await db.visita.create({
+    data: { clienteId, data: dataVisita, observacao: "Detectada automaticamente pela IA" },
+  });
 }
 
 // Registra uma mensagem recebida de qualquer canal de WhatsApp.
@@ -130,7 +154,41 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
     },
   });
 
-  // Atualiza o cliente: perfil, último contato e marca que aguarda meu retorno.
+  await vincularMunicipio(cliente.id, extracao.municipio);
+  await alimentarNegociacao(cliente.id, extracao);
+  await registrarVisitaAgenda(cliente.id, extracao.dataVisita);
+
+  // ── Resposta automática (modo fim de semana) ──────────────────────────────
+  // SÓ envia automaticamente se o Ederson tiver ativado o modo fim de semana.
+  // Caso contrário, apenas marca que o cliente aguarda o retorno dele.
+  const fimDeSemanaAtivo = await modoFimDeSemanaAtivo();
+  const respostaIA = extracao.rascunhoResposta?.trim();
+
+  if (fimDeSemanaAtivo && respostaIA && zapi.isEnabled()) {
+    const envio = await zapi.enviarMensagem(telefone, respostaIA);
+    if (envio.ok) {
+      await db.conversa.create({
+        data: {
+          conteudo: respostaIA,
+          clienteId: cliente.id,
+          canal: "whatsapp",
+          tipo: "texto",
+          remetente: "vendedor",
+        },
+      });
+      await db.cliente.update({
+        where: { id: cliente.id },
+        data: {
+          ...(extracao.perfil && !cliente.perfilIA ? { perfilIA: extracao.perfil } : {}),
+          ultimoContato: new Date(),
+          aguardandoResposta: false, // a IA já respondeu por mim
+        },
+      });
+      return;
+    }
+  }
+
+  // Modo normal: registra que o cliente aguarda meu retorno.
   await db.cliente.update({
     where: { id: cliente.id },
     data: {
@@ -139,6 +197,46 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
       aguardandoResposta: true,
     },
   });
-  await vincularMunicipio(cliente.id, extracao.municipio);
-  await alimentarNegociacao(cliente.id, extracao);
+}
+
+// Registra uma mensagem que EU enviei (pelo celular), mantendo o histórico da
+// conversa sincronizado. Se for um áudio agendando visita, a IA interpreta e
+// alimenta a agenda/negociação automaticamente.
+export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<void> {
+  const telefone = msg.telefone.replace(/\D/g, "");
+  if (!telefone || !msg.texto) return;
+
+  // Só sincroniza se o destinatário já for um cliente do CRM (não cria do nada).
+  const cliente = await db.cliente.findFirst({ where: { telefone } });
+  if (!cliente) return;
+
+  await db.conversa.create({
+    data: {
+      conteudo: msg.texto,
+      transcricao: msg.transcricao ?? null,
+      clienteId: cliente.id,
+      canal: msg.canal ?? "whatsapp",
+      tipo: msg.tipo,
+      remetente: "vendedor",
+    },
+  });
+
+  // Eu respondi → não está mais aguardando meu retorno.
+  await db.cliente.update({
+    where: { id: cliente.id },
+    data: { ultimoContato: new Date(), aguardandoResposta: false },
+  });
+
+  // Áudio/mensagem minha agendando visita → IA interpreta e joga na agenda.
+  if (msg.tipo === "audio" || /\b(visita|visitar|passar a[íi]|agendar|marcar)\b/i.test(msg.texto)) {
+    try {
+      const extracao = await analisarConversaIA(msg.texto);
+      if (extracao.dataVisita) {
+        await alimentarNegociacao(cliente.id, extracao);
+        await registrarVisitaAgenda(cliente.id, extracao.dataVisita);
+      }
+    } catch {
+      // silencioso — não impede o registro da mensagem
+    }
+  }
 }

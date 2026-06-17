@@ -4,7 +4,8 @@ import { iniciais, diasDesde } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
-import { garantirRegioes } from "@/lib/regioes";
+import { ClienteAcoes } from "@/components/ClienteAcoes";
+import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
 import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -18,6 +19,7 @@ export default async function ClientesPage({
   const filtro = searchParams.municipio;
   const busca = (searchParams.q ?? "").trim();
   await garantirRegioes();
+  await limparContatosDescartados();
   const [clientes, municipios] = await Promise.all([
     db.cliente.findMany({
       where: {
@@ -129,13 +131,13 @@ export default async function ClientesPage({
                 const neg = c.negociacoes[0];
                 const dias = neg ? diasDesde(neg.ultimoContato) : null;
                 return (
-                  <Link key={c.id} href={`/clientes/${c.id}`}>
-                    <Card className="cursor-pointer transition-all hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5">
+                  <div key={c.id} className="relative">
+                    <Card className="transition-all hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5">
                       <div className="flex items-start gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-sm font-bold text-brand-700">
                           {iniciais(c.nome)}
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 pr-6">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-base font-bold text-slate-900">{c.nome}</span>
                             {c.jaComprou && <Badge tom="green">✓ cliente</Badge>}
@@ -157,7 +159,30 @@ export default async function ClientesPage({
                         </div>
                       </div>
                     </Card>
-                  </Link>
+                    {/* Link sobreposto para abrir a ficha (não cobre o menu) */}
+                    <Link
+                      href={`/clientes/${c.id}`}
+                      aria-label={`Abrir ${c.nome}`}
+                      className="absolute inset-0 z-10 rounded-2xl"
+                    />
+                    {/* Menu de ações (acima do link) */}
+                    <div className="absolute right-3 top-3 z-20">
+                      <ClienteAcoes
+                        cliente={{
+                          id: c.id,
+                          nome: c.nome,
+                          telefone: c.telefone,
+                          email: c.email,
+                          endereco: c.endereco,
+                          municipioId: c.municipioId,
+                          observacoes: c.observacoes,
+                          jaComprou: c.jaComprou,
+                          visitado: c.visitado,
+                        }}
+                        municipios={municipios}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>

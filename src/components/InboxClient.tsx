@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { enviarResposta, marcarRespondido } from "@/lib/actions";
+import { enviarResposta, marcarRespondido, definirModoFimDeSemana } from "@/lib/actions";
 import { iniciais, diasDesde, cn } from "@/lib/utils";
 import {
   Send, Sparkles, Check, CheckCheck, Mic, User, ArrowLeft, Phone,
-  MapPin, Search, Smile, Paperclip, MoreVertical,
+  MapPin, Search, Smile, Paperclip, MoreVertical, Bot, X, GripHorizontal,
 } from "lucide-react";
 
 export type Mensagem = {
@@ -30,11 +30,8 @@ export type Contato = {
 };
 
 function horaMsg(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -43,10 +40,10 @@ function labelData(iso: string) {
   const hoje = new Date();
   const ontem = new Date(hoje);
   ontem.setDate(ontem.getDate() - 1);
-  const mesmaData = (a: Date, b: Date) =>
+  const mesma = (a: Date, b: Date) =>
     a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-  if (mesmaData(d, hoje)) return "Hoje";
-  if (mesmaData(d, ontem)) return "Ontem";
+  if (mesma(d, hoje)) return "Hoje";
+  if (mesma(d, ontem)) return "Ontem";
   return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
@@ -58,33 +55,67 @@ function previewData(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
 }
 
-export function InboxClient({ contatos: contatosInit, zapiAtiva }: { contatos: Contato[]; zapiAtiva: boolean }) {
+// Conta mensagens não lidas do cliente (mensagens dele no fim da conversa).
+function naoLidasIniciais(c: Contato): number {
+  if (!c.aguardando) return 0;
+  let n = 0;
+  for (let i = c.mensagens.length - 1; i >= 0; i--) {
+    if (c.mensagens[i].remetente === "cliente") n++;
+    else break;
+  }
+  return n || 1;
+}
+
+export function InboxClient({
+  contatos: contatosInit,
+  zapiAtiva,
+  modoFimDeSemana: modoInicial,
+}: {
+  contatos: Contato[];
+  zapiAtiva: boolean;
+  modoFimDeSemana: boolean;
+}) {
   const [selId, setSelId] = useState<string | null>(contatosInit[0]?.id ?? null);
   const [busca, setBusca] = useState("");
   const [contatos, setContatos] = useState<Contato[]>(contatosInit);
+  const [naoLidos, setNaoLidos] = useState<Record<string, number>>(
+    () => Object.fromEntries(contatosInit.map((c) => [c.id, naoLidasIniciais(c)]))
+  );
+  const [altura, setAltura] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Restaura a altura preferida (redimensionável).
+  useEffect(() => {
+    const salvo = localStorage.getItem("inbox_altura");
+    if (salvo) setAltura(Number(salvo));
+  }, []);
+
+  // Ao abrir uma conversa, zera o contador de não lidas (como no WhatsApp).
+  const abrir = useCallback((id: string) => {
+    setSelId(id);
+    setNaoLidos((prev) => ({ ...prev, [id]: 0 }));
+  }, []);
 
   const filtrados = busca.trim()
     ? contatos.filter((c) =>
-        c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-        (c.telefone ?? "").includes(busca)
+        c.nome.toLowerCase().includes(busca.toLowerCase()) || (c.telefone ?? "").includes(busca)
       )
     : contatos;
 
   const sel = contatos.find((c) => c.id === selId) ?? null;
 
-  // Polling global: check for new messages in selected chat every 4s
   const updateMensagens = useCallback((clienteId: string, novas: Mensagem[], aguardando: boolean) => {
     setContatos((prev) =>
       prev.map((c) => {
         if (c.id !== clienteId) return c;
-        const existingIds = new Set(c.mensagens.map((m) => m.id));
-        const added = novas.filter((m) => !existingIds.has(m.id));
-        if (added.length === 0 && c.aguardando === aguardando) return c;
-        const todasMensagens = [...c.mensagens, ...added];
-        const ultima = todasMensagens[todasMensagens.length - 1];
+        const existentes = new Set(c.mensagens.map((m) => m.id));
+        const add = novas.filter((m) => !existentes.has(m.id));
+        if (add.length === 0 && c.aguardando === aguardando) return c;
+        const todas = [...c.mensagens, ...add];
+        const ultima = todas[todas.length - 1];
         return {
           ...c,
-          mensagens: todasMensagens,
+          mensagens: todas,
           aguardando,
           previa: ultima?.conteudo ?? c.previa,
           ultimoContato: ultima?.criadoEm ?? c.ultimoContato,
@@ -93,33 +124,54 @@ export function InboxClient({ contatos: contatosInit, zapiAtiva }: { contatos: C
     );
   }, []);
 
+  // Polling: busca novas mensagens da conversa aberta a cada 4s.
   useEffect(() => {
     if (!selId) return;
     const clienteId = selId;
-    let cancelled = false;
+    let cancelado = false;
     async function poll() {
-      if (cancelled) return;
+      if (cancelado) return;
       const contato = contatos.find((c) => c.id === clienteId);
       if (!contato) return;
-      const lastMsg = contato.mensagens[contato.mensagens.length - 1];
-      const after = lastMsg?.criadoEm ?? new Date(0).toISOString();
+      const ultima = contato.mensagens[contato.mensagens.length - 1];
+      const after = ultima?.criadoEm ?? new Date(0).toISOString();
       try {
         const res = await fetch(`/api/inbox?clienteId=${clienteId}&after=${encodeURIComponent(after)}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && (data.mensagens.length > 0 || data.aguardando !== contato.aguardando)) {
+        if (!cancelado && (data.mensagens.length > 0 || data.aguardando !== contato.aguardando)) {
           updateMensagens(clienteId, data.mensagens, data.aguardando);
+          // Conversa está aberta → mantém lida.
+          setNaoLidos((prev) => ({ ...prev, [clienteId]: 0 }));
         }
       } catch {}
     }
     const iv = setInterval(poll, 4000);
     poll();
-    return () => {
-      cancelled = true;
-      clearInterval(iv);
-    };
+    return () => { cancelado = true; clearInterval(iv); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selId, updateMensagens]);
+
+  // Redimensionamento por arraste (mouse).
+  const iniciarResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = containerRef.current?.offsetHeight ?? 560;
+    const onMove = (ev: MouseEvent) => {
+      const nh = Math.min(window.innerHeight - 40, Math.max(420, startH + ev.clientY - startY));
+      setAltura(nh);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      const h = containerRef.current?.offsetHeight;
+      if (h) localStorage.setItem("inbox_altura", String(h));
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   if (contatosInit.length === 0) {
     return (
@@ -128,146 +180,191 @@ export function InboxClient({ contatos: contatosInit, zapiAtiva }: { contatos: C
           <Send size={24} className="text-[#25D366]" />
         </div>
         <p className="font-semibold text-[#e9edef]">Nenhuma conversa ainda</p>
-        <p className="text-sm text-[#8696a0]">
-          Quando um cliente te mandar mensagem, ela aparece aqui.
-        </p>
+        <p className="text-sm text-[#8696a0]">Quando um cliente te mandar mensagem, ela aparece aqui.</p>
       </div>
     );
   }
 
   return (
-    <div
-      className="flex overflow-hidden rounded-xl shadow-xl"
-      style={{ height: "calc(100vh - 200px)", minHeight: 520, background: "#111b21" }}
-    >
-      {/* Sidebar de contatos — WhatsApp Web style */}
-      <aside
-        className={cn(
-          "flex w-full shrink-0 flex-col border-r border-[#222d34] sm:w-[360px]",
-          sel ? "hidden sm:flex" : "flex"
-        )}
-        style={{ background: "#111b21" }}
+    <div>
+      <div
+        ref={containerRef}
+        className="flex overflow-hidden rounded-xl shadow-xl"
+        style={{ height: altura ? `${altura}px` : "calc(100vh - 170px)", minHeight: 420, background: "#111b21" }}
       >
-        {/* Header sidebar */}
-        <div className="flex items-center justify-between px-4 py-3" style={{ background: "#202c33" }}>
-          <span className="text-base font-semibold text-[#e9edef]">WhatsApp</span>
-          <div className="flex items-center gap-3 text-[#8696a0]">
-            {!zapiAtiva && (
-              <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-medium text-yellow-400">
-                não conectado
-              </span>
-            )}
-            <MoreVertical size={18} className="cursor-pointer hover:text-[#e9edef]" />
-          </div>
-        </div>
-
-        {/* Busca */}
-        <div className="px-3 py-2" style={{ background: "#111b21" }}>
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Pesquisar ou começar uma nova conversa"
-              className="w-full rounded-lg py-2 pl-9 pr-3 text-sm text-[#e9edef] outline-none placeholder:text-[#8696a0]"
-              style={{ background: "#202c33" }}
-            />
-          </div>
-        </div>
-
-        {/* Lista */}
-        <div className="flex-1 overflow-y-auto">
-          {filtrados.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelId(c.id)}
-              className={cn(
-                "flex w-full items-center gap-3 border-b px-3 py-3 text-left transition-colors",
-                selId === c.id ? "bg-[#2a3942]" : "hover:bg-[#202c33]"
+        {/* ── Sidebar ─────────────────────────────────────────────────── */}
+        <aside
+          className={cn("flex w-full shrink-0 flex-col border-r border-[#222d34] sm:w-[360px]", sel ? "hidden sm:flex" : "flex")}
+          style={{ background: "#111b21" }}
+        >
+          <div className="flex items-center justify-between px-4 py-3" style={{ background: "#202c33" }}>
+            <span className="text-base font-semibold text-[#e9edef]">WhatsApp</span>
+            <div className="flex items-center gap-3 text-[#8696a0]">
+              {!zapiAtiva && (
+                <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-medium text-yellow-400">não conectado</span>
               )}
-              style={{ borderColor: "#222d34" }}
-            >
-              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#25D366]/20 text-sm font-bold text-[#25D366]">
-                {iniciais(c.nome)}
-                {c.aguardando && (
-                  <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#111b21] bg-[#25D366]" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-sm font-semibold text-[#e9edef]">{c.nome}</span>
-                  <span className={cn("shrink-0 text-[11px]", c.aguardando ? "text-[#25D366]" : "text-[#8696a0]")}>
-                    {previewData(c.ultimoContato)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-1">
-                  <p className="truncate text-[13px] text-[#8696a0]">{c.previa || "—"}</p>
-                  {c.aguardando && (
-                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#25D366] px-1 text-[11px] font-bold text-black">
-                      {c.mensagens.filter((m) => m.remetente === "cliente").length > 0
-                        ? c.mensagens.filter((m) => m.remetente === "cliente").length
-                        : "!"}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))}
-          {filtrados.length === 0 && (
-            <p className="p-6 text-center text-sm text-[#8696a0]">Nenhuma conversa encontrada.</p>
-          )}
-        </div>
-      </aside>
-
-      {/* Área da conversa */}
-      <section className={cn("flex flex-1 flex-col", sel ? "flex" : "hidden sm:flex")}>
-        {sel ? (
-          <Conversa
-            key={sel.id}
-            contato={sel}
-            zapiAtiva={zapiAtiva}
-            onVoltar={() => setSelId(null)}
-            onMensagemEnviada={(nova) => {
-              setContatos((prev) =>
-                prev.map((c) =>
-                  c.id === sel.id
-                    ? { ...c, mensagens: [...c.mensagens, nova], previa: nova.conteudo, ultimoContato: nova.criadoEm }
-                    : c
-                )
-              );
-            }}
-          />
-        ) : (
-          <div
-            className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center"
-            style={{ background: "#222e35" }}
-          >
-            <div className="flex h-20 w-20 items-center justify-center rounded-full" style={{ background: "#2a3942" }}>
-              <Send size={36} className="text-[#25D366]" />
-            </div>
-            <div>
-              <p className="text-xl font-semibold text-[#e9edef]">WhatsApp CRM</p>
-              <p className="mt-1 text-sm text-[#8696a0]">Selecione uma conversa para começar.</p>
+              <MoreVertical size={18} className="cursor-pointer hover:text-[#e9edef]" />
             </div>
           </div>
-        )}
-      </section>
+
+          {/* Modo fim de semana */}
+          <ModoFimDeSemana inicial={modoInicial} />
+
+          {/* Busca */}
+          <div className="px-3 py-2" style={{ background: "#111b21" }}>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Pesquisar ou começar uma nova conversa"
+                className="w-full rounded-lg py-2 pl-9 pr-3 text-sm text-[#e9edef] outline-none placeholder:text-[#8696a0]"
+                style={{ background: "#202c33" }}
+              />
+            </div>
+          </div>
+
+          {/* Lista */}
+          <div className="flex-1 overflow-y-auto">
+            {filtrados.map((c) => {
+              const unread = naoLidos[c.id] ?? 0;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => abrir(c.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 border-b px-3 py-3 text-left transition-colors",
+                    selId === c.id ? "bg-[#2a3942]" : "hover:bg-[#202c33]"
+                  )}
+                  style={{ borderColor: "#222d34" }}
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#25D366]/20 text-sm font-bold text-[#25D366]">
+                    {iniciais(c.nome)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="truncate text-sm font-semibold text-[#e9edef]">{c.nome}</span>
+                      <span className={cn("shrink-0 text-[11px]", unread > 0 ? "text-[#25D366]" : "text-[#8696a0]")}>
+                        {previewData(c.ultimoContato)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="truncate text-[13px] text-[#8696a0]">{c.previa || "—"}</p>
+                      {unread > 0 && (
+                        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#25D366] px-1.5 text-[11px] font-bold text-black">
+                          {unread}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {filtrados.length === 0 && (
+              <p className="p-6 text-center text-sm text-[#8696a0]">Nenhuma conversa encontrada.</p>
+            )}
+          </div>
+        </aside>
+
+        {/* ── Conversa ────────────────────────────────────────────────── */}
+        <section className={cn("flex flex-1 flex-col", sel ? "flex" : "hidden sm:flex")}>
+          {sel ? (
+            <Conversa
+              key={sel.id}
+              contato={sel}
+              zapiAtiva={zapiAtiva}
+              onVoltar={() => setSelId(null)}
+              onMensagemEnviada={(nova) => {
+                setContatos((prev) =>
+                  prev.map((c) =>
+                    c.id === sel.id
+                      ? { ...c, mensagens: [...c.mensagens, nova], previa: nova.conteudo, ultimoContato: nova.criadoEm, aguardando: false }
+                      : c
+                  )
+                );
+              }}
+            />
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center" style={{ background: "#222e35" }}>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full" style={{ background: "#2a3942" }}>
+                <Send size={36} className="text-[#25D366]" />
+              </div>
+              <div>
+                <p className="text-xl font-semibold text-[#e9edef]">WhatsApp CRM</p>
+                <p className="mt-1 text-sm text-[#8696a0]">Selecione uma conversa para começar.</p>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Alça de redimensionamento — arraste para ajustar a altura */}
+      <div
+        onMouseDown={iniciarResize}
+        title="Arraste para aumentar ou diminuir a janela"
+        className="group mx-auto mt-1 flex h-4 w-full cursor-ns-resize items-center justify-center"
+      >
+        <div className="flex h-1.5 w-16 items-center justify-center rounded-full bg-[#2a3942] transition group-hover:bg-[#25D366]">
+          <GripHorizontal size={12} className="text-[#8696a0] group-hover:text-black" />
+        </div>
+      </div>
     </div>
   );
 }
 
+// ── Toggle do modo fim de semana ────────────────────────────────────────────
+function ModoFimDeSemana({ inicial }: { inicial: boolean }) {
+  const [ativo, setAtivo] = useState(inicial);
+  const [salvando, start] = useTransition();
+
+  function alternar() {
+    const novo = !ativo;
+    setAtivo(novo);
+    start(async () => {
+      const r = await definirModoFimDeSemana(novo);
+      if (!r.ok) setAtivo(!novo); // reverte em caso de erro
+    });
+  }
+
+  return (
+    <button
+      onClick={alternar}
+      disabled={salvando}
+      className="flex items-center gap-2 border-b border-[#222d34] px-4 py-2.5 text-left transition hover:bg-[#202c33]"
+      style={{ background: ativo ? "rgba(37,211,102,0.08)" : "#111b21" }}
+    >
+      <Bot size={16} className={ativo ? "text-[#25D366]" : "text-[#8696a0]"} />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold text-[#e9edef]">Resposta automática (fim de semana)</div>
+        <div className="text-[10px] text-[#8696a0]">
+          {ativo ? "IA respondendo por você, no seu estilo" : "IA apenas sugere — não envia sozinha"}
+        </div>
+      </div>
+      {/* Switch */}
+      <span
+        className="relative h-5 w-9 shrink-0 rounded-full transition"
+        style={{ background: ativo ? "#25D366" : "#3b4a54" }}
+      >
+        <span
+          className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+          style={{ left: ativo ? "18px" : "2px" }}
+        />
+      </span>
+    </button>
+  );
+}
+
+// ── Conversa ────────────────────────────────────────────────────────────────
 function Conversa({
-  contato,
-  zapiAtiva,
-  onVoltar,
-  onMensagemEnviada,
+  contato, zapiAtiva, onVoltar, onMensagemEnviada,
 }: {
   contato: Contato;
   zapiAtiva: boolean;
   onVoltar: () => void;
   onMensagemEnviada: (m: Mensagem) => void;
 }) {
-  const [texto, setTexto] = useState(contato.rascunho ?? "");
+  // A caixa de digitação começa VAZIA — a sugestão fica só no campo dela.
+  const [texto, setTexto] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, startEnviar] = useTransition();
   const [baixando, startBaixar] = useTransition();
@@ -275,13 +372,8 @@ function Conversa({
   const fimRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    fimRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [contato.mensagens.length]);
-
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, [contato.id]);
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth" }); }, [contato.mensagens.length]);
+  useEffect(() => { textareaRef.current?.focus(); }, [contato.id]);
 
   function enviar() {
     setErro(null);
@@ -289,38 +381,29 @@ function Conversa({
     if (!t) return;
     const agora = new Date().toISOString();
     const tempId = `temp-${Date.now()}`;
-    // Otimista: adiciona a mensagem imediatamente na UI
     onMensagemEnviada({ id: tempId, conteudo: t, remetente: "vendedor", tipo: "texto", criadoEm: agora });
     setTexto("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     startEnviar(async () => {
       const r = await enviarResposta(contato.id, t);
       if (!r.ok) setErro(r.erro ?? "Falha ao enviar.");
     });
   }
 
-  // Agrupa mensagens por data para exibir separadores
+  // Agrupa por data.
   const grupos: { data: string; msgs: Mensagem[] }[] = [];
   for (const m of contato.mensagens) {
     const d = labelData(m.criadoEm);
     const ultimo = grupos[grupos.length - 1];
-    if (!ultimo || ultimo.data !== d) {
-      grupos.push({ data: d, msgs: [m] });
-    } else {
-      ultimo.msgs.push(m);
-    }
+    if (!ultimo || ultimo.data !== d) grupos.push({ data: d, msgs: [m] });
+    else ultimo.msgs.push(m);
   }
 
   return (
     <>
-      {/* Header da conversa */}
-      <div
-        className="flex items-center gap-3 px-4 py-3"
-        style={{ background: "#202c33" }}
-      >
-        <button
-          onClick={onVoltar}
-          className="rounded-full p-1 text-[#8696a0] hover:bg-[#2a3942] sm:hidden"
-        >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3" style={{ background: "#202c33" }}>
+        <button onClick={onVoltar} className="rounded-full p-1 text-[#8696a0] hover:bg-[#2a3942] sm:hidden">
           <ArrowLeft size={20} />
         </button>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366]/20 text-sm font-bold text-[#25D366]">
@@ -341,7 +424,7 @@ function Conversa({
         </Link>
       </div>
 
-      {/* Área de mensagens */}
+      {/* Mensagens */}
       <div
         className="flex-1 overflow-y-auto px-6 py-4"
         style={{
@@ -351,26 +434,19 @@ function Conversa({
       >
         {grupos.map((grupo) => (
           <div key={grupo.data}>
-            {/* Separador de data */}
             <div className="my-3 flex items-center justify-center">
-              <span className="rounded-lg px-3 py-1 text-[11px] font-medium text-[#e9edef]"
-                style={{ background: "#182229" }}>
+              <span className="rounded-lg px-3 py-1 text-[11px] font-medium text-[#e9edef]" style={{ background: "#182229" }}>
                 {grupo.data}
               </span>
             </div>
-
             {grupo.msgs.map((m) => {
               const meu = m.remetente === "vendedor";
               return (
                 <div key={m.id} className={cn("mb-1 flex", meu ? "justify-end" : "justify-start")}>
                   <div
-                    className={cn(
-                      "relative max-w-[65%] rounded-lg px-3 py-2 text-sm shadow",
-                      meu ? "rounded-tr-sm" : "rounded-tl-sm"
-                    )}
+                    className={cn("relative max-w-[65%] rounded-lg px-3 py-2 text-sm shadow", meu ? "rounded-tr-sm" : "rounded-tl-sm")}
                     style={{ background: meu ? "#005c4b" : "#202c33" }}
                   >
-                    {/* Triângulo do balão */}
                     {meu ? (
                       <span className="absolute -right-1.5 top-0 h-3 w-2 overflow-hidden">
                         <svg viewBox="0 0 8 13" className="h-3 w-2" fill="#005c4b"><path d="M0 0L8 0L8 13L0 0Z" /></svg>
@@ -380,20 +456,15 @@ function Conversa({
                         <svg viewBox="0 0 8 13" className="h-3 w-2" fill="#202c33"><path d="M8 0L0 0L0 13L8 0Z" /></svg>
                       </span>
                     )}
-
                     {m.tipo === "audio" && (
-                      <div className="mb-1 flex items-center gap-1 text-xs text-[#25D366]">
-                        <Mic size={11} /> áudio transcrito
-                      </div>
+                      <div className="mb-1 flex items-center gap-1 text-xs text-[#25D366]"><Mic size={11} /> áudio transcrito</div>
                     )}
                     <p className="whitespace-pre-wrap break-words text-[#e9edef]">{m.conteudo}</p>
-                    <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", meu ? "text-[#8696a0]" : "text-[#8696a0]")}>
+                    <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-[#8696a0]">
                       <span>{horaMsg(m.criadoEm)}</span>
-                      {meu && (
-                        m.id.startsWith("temp-")
-                          ? <Check size={12} className="text-[#8696a0]" />
-                          : <CheckCheck size={12} className="text-[#53bdeb]" />
-                      )}
+                      {meu && (m.id.startsWith("temp-")
+                        ? <Check size={12} className="text-[#8696a0]" />
+                        : <CheckCheck size={12} className="text-[#53bdeb]" />)}
                     </div>
                   </div>
                 </div>
@@ -404,29 +475,7 @@ function Conversa({
         <div ref={fimRef} />
       </div>
 
-      {/* Rascunho da IA */}
-      {mostrarRascunho && contato.rascunho && (
-        <div className="flex items-start gap-2 px-4 py-2" style={{ background: "#182229" }}>
-          <Sparkles size={14} className="mt-0.5 shrink-0 text-[#25D366]" />
-          <p className="flex-1 text-[13px] italic text-[#8696a0]">{contato.rascunho}</p>
-          <div className="flex shrink-0 gap-2">
-            <button
-              onClick={() => { setTexto(contato.rascunho ?? ""); setMostrarRascunho(false); textareaRef.current?.focus(); }}
-              className="rounded-lg bg-[#25D366] px-3 py-1 text-xs font-semibold text-black hover:bg-[#1da851]"
-            >
-              Usar
-            </button>
-            <button
-              onClick={() => setMostrarRascunho(false)}
-              className="text-xs text-[#8696a0] hover:text-[#e9edef]"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Input de mensagem */}
+      {/* Caixa de digitação */}
       <div className="flex items-end gap-2 px-3 py-3" style={{ background: "#202c33" }}>
         <div className="flex flex-1 items-end gap-2 overflow-hidden rounded-xl px-3 py-2" style={{ background: "#2a3942" }}>
           <Smile size={22} className="mb-0.5 shrink-0 cursor-pointer text-[#8696a0] hover:text-[#e9edef]" />
@@ -439,10 +488,7 @@ function Conversa({
               e.target.style.height = Math.min(e.target.scrollHeight, 128) + "px";
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                enviar();
-              }
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); }
             }}
             rows={1}
             placeholder={zapiAtiva ? "Digite uma mensagem" : "WhatsApp não conectado"}
@@ -462,13 +508,43 @@ function Conversa({
         </button>
       </div>
 
-      {/* Erros e ação de marcar respondido */}
+      {/* Campo de SUGESTÃO da IA — colado abaixo da caixa, separado da digitação */}
+      {mostrarRascunho && contato.rascunho && (
+        <div className="border-t border-[#0b141a] px-3 py-2" style={{ background: "#1d2a31" }}>
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#25D366]">
+            <Sparkles size={12} /> Sugestão da IA
+          </div>
+          <div className="mt-1 flex items-end gap-2">
+            <p className="flex-1 rounded-lg px-3 py-2 text-[13px] italic text-[#cfd8dc]" style={{ background: "#0b141a" }}>
+              {contato.rascunho}
+            </p>
+            <div className="flex shrink-0 flex-col gap-1.5">
+              <button
+                onClick={() => {
+                  setTexto(contato.rascunho ?? "");
+                  setMostrarRascunho(false);
+                  setTimeout(() => textareaRef.current?.focus(), 0);
+                }}
+                className="rounded-lg bg-[#25D366] px-3 py-1 text-xs font-bold text-black hover:bg-[#1da851]"
+              >
+                Usar
+              </button>
+              <button
+                onClick={() => setMostrarRascunho(false)}
+                className="flex items-center justify-center gap-1 rounded-lg px-3 py-1 text-xs font-medium text-[#8696a0] hover:bg-[#0b141a] hover:text-[#e9edef]"
+              >
+                <X size={11} /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Erros + marcar respondido */}
       {(erro || contato.aguardando) && (
         <div className="flex items-center justify-between px-4 py-1.5" style={{ background: "#182229" }}>
           {erro && (
-            <span className="text-xs text-red-400">
-              {erro}{!zapiAtiva && " — Conecte o WhatsApp em Configurações."}
-            </span>
+            <span className="text-xs text-red-400">{erro}{!zapiAtiva && " — Conecte o WhatsApp em Configurações."}</span>
           )}
           {contato.aguardando && (
             <button

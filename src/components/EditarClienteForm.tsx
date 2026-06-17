@@ -9,6 +9,9 @@ type Municipio = { id: string; nome: string; foraDeArea?: boolean };
 export function EditarClienteForm({
   cliente,
   municipios,
+  open,
+  onClose,
+  hideTrigger = false,
 }: {
   cliente: {
     id: string;
@@ -22,31 +25,38 @@ export function EditarClienteForm({
     visitado: boolean;
   };
   municipios: Municipio[];
+  open?: boolean;          // modo controlado (opcional)
+  onClose?: () => void;
+  hideTrigger?: boolean;   // esconde o botão padrão "Editar dados"
 }) {
-  const [aberto, setAberto] = useState(false);
+  const [interno, setInterno] = useState(false);
+  const aberto = open ?? interno;
+  const fechar = () => { setInterno(false); onClose?.(); };
 
   return (
     <>
-      <button
-        onClick={() => setAberto(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-      >
-        <Pencil size={14} /> Editar dados
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={() => setInterno(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+        >
+          <Pencil size={14} /> Editar dados
+        </button>
+      )}
 
       {aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAberto(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
           <form
             action={async (fd) => {
               await atualizarCliente(cliente.id, fd);
-              setAberto(false);
+              fechar();
             }}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800">Editar cliente</h2>
-              <button type="button" onClick={() => setAberto(false)}>
+              <button type="button" onClick={fechar}>
                 <X className="text-slate-400" />
               </button>
             </div>
