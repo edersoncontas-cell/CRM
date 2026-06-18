@@ -150,10 +150,22 @@ model TarefaKanban {
   descricao String?
   coluna    String   @default("a_fazer")
   ordem     Int      @default(0)
+  checklist String?  // JSON: [{ "t": "item", "d": false }]
   cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   clienteId String?
   dueDate   DateTime?
   criadoEm  DateTime @default(now())
+}
+
+// Colunas de "demandas" (estilo Trello), separadas do funil de negociação.
+// As fixas ("Demandas" e "Demandas Concluída") não podem ser excluídas.
+model ColunaDemanda {
+  id       String   @id @default(cuid())
+  titulo   String
+  cor      String   @default("border-t-slate-400")
+  ordem    Int      @default(0)
+  fixa     Boolean  @default(false)
+  criadoEm DateTime @default(now())
 }
 
 model Meta {

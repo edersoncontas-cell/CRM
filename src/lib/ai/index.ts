@@ -179,6 +179,35 @@ export async function aprenderTomIA(mensagensVendedor: string[]): Promise<string
   }
 }
 
+// Resume uma conversa de WhatsApp em poucos pontos objetivos para o vendedor
+// revisar e decidir o próximo passo (criar card, agendar visita ou nada).
+export async function resumirConversaIA(thread: string): Promise<string> {
+  const texto = thread.trim();
+  if (!texto) return "Sem mensagens nesta conversa.";
+  if (!iaHabilitada()) {
+    // Fallback: usa as últimas linhas da conversa como resumo bruto.
+    const linhas = texto.split("\n").filter((l) => l.trim()).slice(-6);
+    return linhas.join("\n");
+  }
+  try {
+    return await llmTexto(
+      `Você ajuda um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES).
+Resuma a conversa de WhatsApp abaixo em português, de forma curta e acionável, com bullets:
+• O que o cliente quer / interesse principal
+• Máquina(s) e valores mencionados (se houver)
+• Concorrente citado (se houver)
+• Visita/data combinada (se houver)
+• Próximo passo sugerido
+Seja objetivo. Não invente dados que não estão na conversa.`,
+      `Conversa:\n${texto}`,
+      { maxTokens: 512 }
+    );
+  } catch {
+    const linhas = texto.split("\n").filter((l) => l.trim()).slice(-6);
+    return linhas.join("\n");
+  }
+}
+
 // Gera um post de mídia chamativo sobre uma máquina (curiosidade/atração).
 export async function gerarMidiaIA(maquina: {
   modelo: string;

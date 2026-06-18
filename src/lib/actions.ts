@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA } from "./ai";
+import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import { vincularMunicipio } from "./integrations/inbox";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
@@ -839,5 +840,158 @@ export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean
   await db.cliente.delete({ where: { id: clienteId, origem: "prospect_ia" } });
   revalidatePath("/roteiro");
   revalidatePath("/clientes");
+  return { ok: true };
+}
+
+// ---------- Demandas (cards estilo Trello) ----------
+
+// Cria uma tarefa (card livre) em uma coluna de demandas.
+export async function criarTarefa(formData: FormData) {
+  "use server";
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const coluna = String(formData.get("coluna") ?? "demandas") || "demandas";
+  if (!titulo) return;
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  const checklist = String(formData.get("checklist") ?? "").trim() || null;
+  const ultima = await db.tarefaKanban.findFirst({
+    where: { coluna },
+    orderBy: { ordem: "desc" },
+    select: { ordem: true },
+  });
+  await db.tarefaKanban.create({
+    data: { titulo, descricao, coluna, checklist, ordem: (ultima?.ordem ?? 0) + 1 },
+  });
+  revalidatePath("/pipeline");
+}
+
+// Edita título, descrição e checklist de uma tarefa.
+export async function editarTarefa(id: string, formData: FormData) {
+  "use server";
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  if (!titulo) return;
+  await db.tarefaKanban.update({
+    where: { id },
+    data: {
+      titulo,
+      descricao: String(formData.get("descricao") ?? "").trim() || null,
+      checklist: String(formData.get("checklist") ?? "").trim() || null,
+    },
+  });
+  revalidatePath("/pipeline");
+}
+
+export async function excluirTarefa(id: string) {
+  "use server";
+  await db.tarefaKanban.delete({ where: { id } });
+  revalidatePath("/pipeline");
+}
+
+// ---------- Colunas de demandas ----------
+
+export async function criarColunaDemanda(titulo: string) {
+  "use server";
+  const nome = titulo.trim();
+  if (!nome) return { ok: false };
+  await garantirColunasDemanda();
+  const total = await db.colunaDemanda.count();
+  const cor = CORES_COLUNA[total % CORES_COLUNA.length];
+  await db.colunaDemanda.create({ data: { titulo: nome, cor, ordem: total } });
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// Exclui uma coluna personalizada. As fixas não podem ser removidas. Os cards
+// da coluna voltam para "Demandas" para não se perderem.
+export async function excluirColunaDemanda(id: string) {
+  "use server";
+  const col = await db.colunaDemanda.findUnique({ where: { id } });
+  if (!col || col.fixa) return { ok: false, erro: "Coluna fixa não pode ser excluída." };
+  await db.tarefaKanban.updateMany({ where: { coluna: id }, data: { coluna: "demandas" } });
+  await db.colunaDemanda.delete({ where: { id } });
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// ---------- Resumos de conversa (página /resumos) ----------
+
+// Gera um resumo de IA da conversa de WhatsApp de um cliente.
+export async function gerarResumoConversa(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
+  "use server";
+  const conversas = await db.conversa.findMany({
+    where: { clienteId },
+    orderBy: { criadoEm: "asc" },
+    take: 60,
+    select: { conteudo: true, remetente: true },
+  });
+  if (conversas.length === 0) return { ok: false, erro: "Sem conversas para resumir." };
+  const thread = conversas
+    .map((c) => `${c.remetente === "cliente" ? "Cliente" : "Eu"}: ${c.conteudo}`)
+    .join("\n");
+  try {
+    const resumo = await resumirConversaIA(thread);
+    return { ok: true, resumo };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+// Cria um card a partir do resumo: se a coluna for do funil de negociação,
+// cria uma Negociacao; se for uma coluna de demandas, cria uma TarefaKanban.
+export async function criarCardDeResumo(formData: FormData): Promise<{ ok: boolean; tipo?: string }> {
+  "use server";
+  const clienteId = String(formData.get("clienteId") ?? "");
+  const coluna = String(formData.get("coluna") ?? "");
+  const texto = String(formData.get("texto") ?? "").trim();
+  if (!clienteId || !coluna) return { ok: false };
+
+  const colunasFunil = ESTAGIOS.map((e) => e.id);
+  if (colunasFunil.includes(coluna)) {
+    await db.negociacao.create({
+      data: {
+        clienteId,
+        estagio: coluna,
+        proximaAcao: texto || null,
+        ultimoContato: new Date(),
+      },
+    });
+    revalidatePath("/pipeline");
+    return { ok: true, tipo: "negociacao" };
+  }
+
+  // Coluna de demandas → tarefa Trello, com o nome do cliente no título.
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } });
+  const ultima = await db.tarefaKanban.findFirst({
+    where: { coluna },
+    orderBy: { ordem: "desc" },
+    select: { ordem: true },
+  });
+  await db.tarefaKanban.create({
+    data: {
+      titulo: cliente?.nome ?? "Demanda",
+      descricao: texto || null,
+      coluna,
+      clienteId,
+      ordem: (ultima?.ordem ?? 0) + 1,
+    },
+  });
+  revalidatePath("/pipeline");
+  return { ok: true, tipo: "tarefa" };
+}
+
+// Envia para a agenda a partir do resumo: cria uma visita na data informada.
+export async function agendarDeResumo(
+  clienteId: string,
+  dataRaw: string,
+  observacao: string
+): Promise<{ ok: boolean; erro?: string }> {
+  "use server";
+  if (!clienteId || !dataRaw) return { ok: false, erro: "Informe a data." };
+  // Campo type="date" (YYYY-MM-DD) → meio-dia em Brasília para não virar o dia.
+  const data = new Date(`${dataRaw}T12:00:00-03:00`);
+  await db.visita.create({
+    data: { clienteId, data, observacao: observacao.trim() || "Agendada pelo resumo da conversa" },
+  });
+  revalidatePath("/agenda");
+  revalidatePath(`/clientes/${clienteId}`);
   return { ok: true };
 }

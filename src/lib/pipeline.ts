@@ -8,8 +8,8 @@ export interface EstagioDef {
 }
 
 // Colunas das negociações ABERTAS, na ordem do funil.
+// "Demandas" saiu do funil: virou coluna Trello (ver lib/demandas.ts).
 export const ESTAGIOS: EstagioDef[] = [
-  { id: "demandas", titulo: "Demandas", cor: "border-t-slate-400" },
   { id: "primeiro_contato", titulo: "Primeiro contato", cor: "border-t-sky-400" },
   { id: "visita_pendente", titulo: "Visitas pendentes", cor: "border-t-agro-400" },
   { id: "visita_realizada", titulo: "Visita realizada", cor: "border-t-emerald-400" },
@@ -24,18 +24,20 @@ export const COL_PERDIDO: EstagioDef = {
   cor: "border-t-red-400",
 };
 
-export const ESTAGIO_INICIAL = "demandas";
+export const ESTAGIO_INICIAL = "primeiro_contato";
 
 // Estágios "antes da visita" — usados para promover o card quando uma visita é marcada.
-export const ESTAGIOS_PRE_VISITA = ["demandas", "primeiro_contato"];
+export const ESTAGIOS_PRE_VISITA = ["primeiro_contato"];
 
 export const ROTULO_ESTAGIO: Record<string, string> = Object.fromEntries(
   [...ESTAGIOS, COL_PERDIDO].map((e) => [e.id, e.titulo])
 );
 
 // Compatibilidade com estágios antigos (dados criados antes da reformulação).
+// "demandas"/"novo" agora caem em "primeiro_contato" (o funil não tem mais Demandas).
 const LEGADO: Record<string, string> = {
-  novo: "demandas",
+  novo: "primeiro_contato",
+  demandas: "primeiro_contato",
   contato: "primeiro_contato",
   proposta: "proposta_bcnh",
   negociacao: "proposta_bcnh",

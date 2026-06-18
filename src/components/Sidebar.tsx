@@ -32,6 +32,7 @@ const GRUPOS = [
       { href: "/super-trunfo", label: "Super Trunfo", icon: Trophy },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
+      { href: "/resumos", label: "Resumos IA", icon: ClipboardList },
       { href: "/agenda", label: "Agenda", icon: Calendar },
       { href: "/roteiro", label: "Roteiro", icon: Route },
       { href: "/simulador", label: "Simulador", icon: Calculator },
