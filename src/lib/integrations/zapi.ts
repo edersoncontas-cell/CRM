@@ -29,7 +29,14 @@ export async function enviarMensagem(para: string, texto: string) {
     headers: headers(),
     body: JSON.stringify({ phone: para.replace(/\D/g, ""), message: texto }),
   });
-  return { ok: res.ok, modo: "live" as const, status: res.status };
+  let mensagemErro: string | null = null;
+  if (!res.ok) {
+    try {
+      const body = await res.json();
+      mensagemErro = body?.message ?? body?.error ?? body?.value ?? null;
+    } catch {}
+  }
+  return { ok: res.ok, modo: "live" as const, status: res.status, mensagemErro };
 }
 
 // Baixa um áudio recebido a partir da URL fornecida pela Z-API (URL direta).

@@ -152,7 +152,9 @@ export async function enviarResposta(
   if (!envio.ok) {
     return {
       ok: false,
-      erro: envio.modo === "stub" ? "WhatsApp (Z-API) não está conectado." : "Falha ao enviar pela Z-API.",
+      erro: envio.modo === "stub"
+        ? "WhatsApp (Z-API) não está conectado. Configure em /conexao."
+        : `Z-API retornou erro ${envio.status}${envio.mensagemErro ? ": " + envio.mensagemErro : " — verifique a conexão em /conexao."}`,
     };
   }
 

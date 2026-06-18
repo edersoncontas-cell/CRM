@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { enviarResposta } from "@/lib/actions";
-import { Calendar, MessageCircle, X } from "lucide-react";
+import { Calendar, MessageCircle, X, ExternalLink } from "lucide-react";
 
 function saudacao(): string {
   const hora = new Date().getHours();
@@ -120,6 +120,16 @@ export function AgendarVisitaDialog({
                   }`}
                 >
                   {resultado.msg}
+                  {!resultado.ok && (
+                    <a
+                      href="/conexao"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 flex items-center gap-1 font-semibold underline"
+                    >
+                      <ExternalLink size={12} /> Verificar conexão WhatsApp
+                    </a>
+                  )}
                 </div>
               )}
             </div>
