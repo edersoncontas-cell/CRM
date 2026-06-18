@@ -155,6 +155,68 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Profundidade de escavação: 6.255 mm",
     ].join("\n"),
   },
+
+  // ── Retroescavadeira ──────────────────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "B95C",
+    especificacoes: [
+      "Motor: FPT S8000 (Tier III)",
+      "Potência: 95 cv",
+      "Peso operacional: 7.000 kg",
+      "Caçamba dianteira: 1 m³",
+      "Profundidade de escavação: 4.500 – 5.600 mm (braço extensível)",
+      "Tração: 4x4 disponível",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "B110C",
+    especificacoes: [
+      "Motor: FPT 4,5 L turbo",
+      "Potência: 110 cv",
+      "Peso operacional: 7.500 kg",
+      "Caçamba dianteira: 1 m³",
+      "Profundidade de escavação: 4.727 – 5.623 mm",
+      "Vazão hidráulica: até 152 l/min",
+      "Transmissão: Power Shuttle 4x4",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "416F2",
+    especificacoes: [
+      "Motor: Cat 3054C",
+      "Potência: 87 cv",
+      "Peso operacional: 7.210 kg",
+      "Caçamba (traseira): 0,76 m³",
+      "Profundidade de escavação: 4.350 mm",
+      "Alcance horizontal: 5.610 mm",
+      "Força de escavação: 47,9 kN",
+    ].join("\n"),
+  },
+  {
+    marca: "Case",
+    modelo: "580N",
+    especificacoes: [
+      "Potência: 90 cv",
+      "Peso operacional: 6.860 kg",
+      "Profundidade de escavação: 4.460 mm (5.500+ com Extendahoe)",
+      "Força de escavação: 47,2 kN",
+      "Emissões: Tier 4 Interim",
+    ].join("\n"),
+  },
+  {
+    marca: "JCB",
+    modelo: "3CX",
+    especificacoes: [
+      "Potência: 74 – 109 cv (conforme versão)",
+      "Peso operacional: 7.400 – 8.070 kg",
+      "Caçamba carregadeira: 1,0 m³",
+      "Profundidade de escavação: até 6.140 mm (6.510 com extensível)",
+      "Vazão hidráulica: 165 l/min",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;
