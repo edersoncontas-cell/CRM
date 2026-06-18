@@ -632,20 +632,45 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
 
 let fichasGarantidas = false;
 
+// Versão das fichas. Bump aqui quando FICHAS_VERIFICADAS mudar para reaplicar.
+const FICHAS_VERSAO = "v1";
+const CHAVE_VERSAO = "fichas_verificadas_versao";
+
 // Preenche o campo `especificacoes` das máquinas que têm ficha verificada,
 // sem sobrescrever conteúdo já preenchido manualmente pelo usuário (só preenche
 // se estiver vazio). Roda na abertura da página Super Trunfo.
+//
+// Performance: depois de preenchidas uma vez, grava uma flag de versão no banco
+// e passa a SAIR cedo (1 query em vez de 57). Quando precisa rodar, dispara os
+// updates em PARALELO. Antes, eram 57 queries sequenciais a cada cold start —
+// causa da lentidão (~10s) ao abrir o Super Trunfo.
 export async function garantirFichasVerificadas(): Promise<void> {
   if (fichasGarantidas) return;
   try {
-    // Garante que máquinas novas (pós-seed) existam antes de colar suas fichas.
+    // Máquinas novas (pós-seed) — barato, tem guarda própria em memória.
     await garantirMaquinasNovas();
-    for (const f of FICHAS_VERIFICADAS) {
-      await db.maquina.updateMany({
-        where: { marca: f.marca, modelo: f.modelo, especificacoes: null },
-        data: { especificacoes: f.especificacoes },
-      });
+
+    // Já preenchido nesta versão? Pula os 57 updates.
+    const cfg = await db.configuracao.findUnique({ where: { chave: CHAVE_VERSAO } });
+    if (cfg?.valor === FICHAS_VERSAO) {
+      fichasGarantidas = true;
+      return;
     }
+
+    await Promise.all(
+      FICHAS_VERIFICADAS.map((f) =>
+        db.maquina.updateMany({
+          where: { marca: f.marca, modelo: f.modelo, especificacoes: null },
+          data: { especificacoes: f.especificacoes },
+        })
+      )
+    );
+
+    await db.configuracao.upsert({
+      where: { chave: CHAVE_VERSAO },
+      update: { valor: FICHAS_VERSAO },
+      create: { chave: CHAVE_VERSAO, valor: FICHAS_VERSAO },
+    });
   } catch (e) {
     console.error("Falha ao garantir fichas verificadas:", e);
   }
