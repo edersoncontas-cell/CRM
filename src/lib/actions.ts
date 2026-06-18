@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA } from "./ai";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
+import type { AcaoPlano } from "./assistente";
 import { vincularMunicipio } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
@@ -1060,4 +1061,210 @@ export async function agendarDeResumo(
   revalidatePath("/agenda");
   revalidatePath(`/clientes/${clienteId}`);
   return { ok: true };
+}
+
+// ---------- Assistente IA (comando por voz/texto, com confirmação) ----------
+
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+async function acharClientePorNomeAprox(nome: string) {
+  const n = nome.trim();
+  if (!n) return null;
+  const exato = await db.cliente.findFirst({ where: { nome: { equals: n, mode: "insensitive" } } });
+  if (exato) return exato;
+  return db.cliente.findFirst({ where: { nome: { contains: n, mode: "insensitive" } } });
+}
+
+async function acharOuCriarMunicipioAssist(nome: string) {
+  const alvo = nome.trim();
+  if (!alvo) return null;
+  const todos = await db.municipio.findMany();
+  let m = todos.find((x) => norm(x.nome) === norm(alvo)) ?? null;
+  if (!m) m = await db.municipio.create({ data: { nome: alvo } });
+  return m;
+}
+
+function resolverEstagioAssist(v?: string): string | undefined {
+  if (!v) return undefined;
+  const s = v.toLowerCase().trim();
+  const porId = ESTAGIOS.find((e) => e.id === s);
+  if (porId) return porId.id;
+  const porTitulo = ESTAGIOS.find((e) => e.titulo.toLowerCase() === s);
+  return porTitulo?.id;
+}
+
+function dataBR(s?: string): string {
+  if (!s) return "";
+  const [y, m, d] = s.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : s;
+}
+
+// Interpreta um comando em linguagem natural e devolve um PLANO de ações
+// resolvidas (com nomes reais) para o usuário confirmar antes de executar.
+export async function interpretarComando(
+  texto: string
+): Promise<{ ok: boolean; resposta?: string; plano?: AcaoPlano[]; erro?: string }> {
+  "use server";
+  const t = texto.trim();
+  if (!t) return { ok: false, erro: "Diga um comando." };
+
+  const { interpretarComandoIA } = await import("@/lib/ai");
+  const { resposta, acoes } = await interpretarComandoIA(t);
+  if (!acoes.length) {
+    return { ok: true, resposta: resposta || "Não entendi o comando. Pode reformular?", plano: [] };
+  }
+
+  await garantirColunasDemanda();
+  const plano: AcaoPlano[] = [];
+
+  for (const a of acoes) {
+    const tipo = String((a as { tipo?: string }).tipo ?? "");
+    const g = (k: string) => (a as Record<string, unknown>)[k];
+    const str = (k: string) => (g(k) != null ? String(g(k)).trim() : "");
+
+    if (tipo === "criar_cliente") {
+      const nome = str("nome");
+      if (!nome) { plano.push({ tipo: "criar_cliente", descricao: "Criar cliente", dados: {}, erro: "Nome não informado." }); continue; }
+      plano.push({
+        tipo: "criar_cliente",
+        descricao: `Criar cliente "${nome}"${str("municipio") ? ` em ${str("municipio")}` : ""}${str("telefone") ? ` · ${str("telefone")}` : ""}${g("interesseFuturo") ? " · interesse futuro" : ""}`,
+        dados: {
+          nome, telefone: str("telefone") || null, municipio: str("municipio") || null,
+          observacoes: str("observacoes") || null,
+          interesseFuturo: !!g("interesseFuturo"),
+          interesseFuturoData: str("interesseFuturoData") || null,
+          interesseFuturoNota: str("interesseFuturoNota") || null,
+        },
+      });
+    } else if (tipo === "editar_cliente") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "editar_cliente", descricao: `Editar "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const partes: string[] = [];
+      if (str("telefone")) partes.push(`telefone ${str("telefone")}`);
+      if (str("municipio")) partes.push(`município ${str("municipio")}`);
+      if (str("observacoes")) partes.push("observações");
+      if (g("jaComprou") != null) partes.push(g("jaComprou") ? "já comprou" : "não comprou");
+      if (g("visitado") != null) partes.push(g("visitado") ? "visitado" : "não visitado");
+      if (g("interesseFuturo") != null) partes.push(g("interesseFuturo") ? "interesse futuro" : "sem interesse futuro");
+      if (str("interesseFuturoNota")) partes.push(`aguardando: ${str("interesseFuturoNota")}`);
+      plano.push({
+        tipo: "editar_cliente",
+        descricao: `Editar ${c.nome}: ${partes.join(", ") || "sem mudanças"}`,
+        dados: {
+          clienteId: c.id,
+          telefone: g("telefone") != null ? str("telefone") : undefined,
+          municipio: str("municipio") || undefined,
+          observacoes: g("observacoes") != null ? str("observacoes") : undefined,
+          jaComprou: g("jaComprou") != null ? !!g("jaComprou") : undefined,
+          visitado: g("visitado") != null ? !!g("visitado") : undefined,
+          interesseFuturo: g("interesseFuturo") != null ? !!g("interesseFuturo") : undefined,
+          interesseFuturoData: g("interesseFuturoData") != null ? str("interesseFuturoData") : undefined,
+          interesseFuturoNota: g("interesseFuturoNota") != null ? str("interesseFuturoNota") : undefined,
+        },
+      });
+    } else if (tipo === "criar_card") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "criar_card", descricao: `Card para "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const estagio = resolverEstagioAssist(str("estagio"));
+      const rotuloEstagio = ESTAGIOS.find((e) => e.id === estagio)?.titulo ?? "Primeiro contato";
+      const valor = typeof g("valor") === "number" ? (g("valor") as number) : null;
+      plano.push({
+        tipo: "criar_card",
+        descricao: `Criar card de negociação para ${c.nome} em "${rotuloEstagio}"${str("maquina") ? ` · ${str("maquina")}` : ""}${valor ? ` · R$ ${valor.toLocaleString("pt-BR")}` : ""}`,
+        dados: { clienteId: c.id, estagio, maquina: str("maquina") || null, valor },
+      });
+    } else if (tipo === "criar_tarefa") {
+      const titulo = str("titulo");
+      if (!titulo) { plano.push({ tipo: "criar_tarefa", descricao: "Criar demanda", dados: {}, erro: "Título não informado." }); continue; }
+      let colId = "demandas", colTit = "Demandas";
+      if (str("coluna")) {
+        const col = await db.colunaDemanda.findFirst({ where: { titulo: { contains: str("coluna"), mode: "insensitive" } } });
+        if (col) { colId = col.id; colTit = col.titulo; }
+      }
+      plano.push({
+        tipo: "criar_tarefa",
+        descricao: `Criar demanda "${titulo}" em "${colTit}"`,
+        dados: { titulo, descricao: str("descricao") || null, colunaId: colId },
+      });
+    } else if (tipo === "agendar_visita") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "agendar_visita", descricao: `Agendar visita "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const data = str("data");
+      if (!data) { plano.push({ tipo: "agendar_visita", descricao: `Agendar visita ${c.nome}`, dados: {}, erro: "Data não informada." }); continue; }
+      plano.push({
+        tipo: "agendar_visita",
+        descricao: `Agendar visita ${c.nome} em ${dataBR(data)}${str("observacao") ? ` · ${str("observacao")}` : ""}`,
+        dados: { clienteId: c.id, data, observacao: str("observacao") || null },
+      });
+    }
+  }
+
+  return { ok: true, resposta, plano };
+}
+
+// Executa o plano confirmado pelo usuário. Cada ação usa os dados já resolvidos.
+export async function executarPlano(
+  plano: AcaoPlano[]
+): Promise<{ ok: boolean; feitos: number; mensagem: string }> {
+  "use server";
+  let feitos = 0;
+  for (const a of plano) {
+    if (a.erro) continue;
+    const d = a.dados as Record<string, unknown>;
+    const s = (k: string) => (d[k] != null ? String(d[k]) : "");
+    try {
+      if (a.tipo === "criar_cliente") {
+        const muni = s("municipio") ? await acharOuCriarMunicipioAssist(s("municipio")) : null;
+        await db.cliente.create({
+          data: {
+            nome: s("nome"), telefone: s("telefone") || null, municipioId: muni?.id ?? null,
+            observacoes: s("observacoes") || null, origem: "assistente",
+            interesseFuturo: !!d.interesseFuturo,
+            interesseFuturoData: parseDataBR(s("interesseFuturoData")),
+            interesseFuturoNota: s("interesseFuturoNota") || null,
+          },
+        });
+      } else if (a.tipo === "editar_cliente") {
+        const data: Record<string, unknown> = {};
+        if (d.telefone !== undefined) data.telefone = s("telefone") || null;
+        if (d.observacoes !== undefined) data.observacoes = s("observacoes") || null;
+        if (d.jaComprou !== undefined) data.jaComprou = !!d.jaComprou;
+        if (d.visitado !== undefined) data.visitado = !!d.visitado;
+        if (d.interesseFuturo !== undefined) data.interesseFuturo = !!d.interesseFuturo;
+        if (d.interesseFuturoData !== undefined) data.interesseFuturoData = parseDataBR(s("interesseFuturoData"));
+        if (d.interesseFuturoNota !== undefined) data.interesseFuturoNota = s("interesseFuturoNota") || null;
+        if (s("municipio")) { const m = await acharOuCriarMunicipioAssist(s("municipio")); if (m) data.municipioId = m.id; }
+        await db.cliente.update({ where: { id: s("clienteId") }, data });
+      } else if (a.tipo === "criar_card") {
+        await db.negociacao.create({
+          data: {
+            clienteId: s("clienteId"), estagio: s("estagio") || ESTAGIO_INICIAL,
+            maquinaModelo: s("maquina") || null,
+            valor: typeof d.valor === "number" ? (d.valor as number) : null,
+            ultimoContato: new Date(),
+          },
+        });
+      } else if (a.tipo === "criar_tarefa") {
+        const ultima = await db.tarefaKanban.findFirst({ where: { coluna: s("colunaId") }, orderBy: { ordem: "desc" }, select: { ordem: true } });
+        await db.tarefaKanban.create({
+          data: { titulo: s("titulo"), descricao: s("descricao") || null, coluna: s("colunaId") || "demandas", ordem: (ultima?.ordem ?? 0) + 1 },
+        });
+      } else if (a.tipo === "agendar_visita") {
+        await db.visita.create({
+          data: { clienteId: s("clienteId"), data: parseDataBR(s("data")) ?? new Date(), observacao: s("observacao") || "Agendada pelo assistente" },
+        });
+      }
+      feitos++;
+    } catch (e) {
+      console.error("Falha ao executar ação do assistente:", a.tipo, e);
+    }
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath("/pipeline");
+  revalidatePath("/agenda");
+  revalidatePath("/dashboard");
+
+  return { ok: feitos > 0, feitos, mensagem: feitos > 0 ? `${feitos} ação(ões) executada(s).` : "Nada foi executado." };
 }

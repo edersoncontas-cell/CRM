@@ -208,6 +208,48 @@ Seja objetivo. Não invente dados que não estão na conversa.`,
   }
 }
 
+// Interpreta um COMANDO em linguagem natural (voz/texto) do vendedor e devolve
+// uma lista de ações estruturadas para o assistente do CRM executar (após
+// confirmação). Não inventa dados; se não entender, devolve lista vazia.
+export async function interpretarComandoIA(
+  texto: string,
+  opts?: { base?: Date }
+): Promise<{ resposta: string; acoes: Record<string, unknown>[] }> {
+  if (!iaHabilitada()) {
+    return { resposta: "A IA não está configurada (defina ANTHROPIC_API_KEY ou GROQ_API_KEY).", acoes: [] };
+  }
+  const agora = opts?.base ?? new Date();
+  const system = `Você é o assistente de um CRM de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES).
+Converta o COMANDO do vendedor em ações estruturadas. Responda SOMENTE com JSON válido, sem texto fora do JSON:
+{
+  "resposta": string,   // fala curta e amigável confirmando o que entendeu
+  "acoes": []           // lista de ações (vazia se não entendeu)
+}
+Tipos de ação válidos (use exatamente estes valores em "tipo"):
+- {"tipo":"criar_cliente","nome":string,"telefone"?:string,"municipio"?:string,"observacoes"?:string,"interesseFuturo"?:boolean,"interesseFuturoData"?:"YYYY-MM-DD","interesseFuturoNota"?:string}
+- {"tipo":"editar_cliente","cliente":string,"telefone"?:string,"municipio"?:string,"observacoes"?:string,"jaComprou"?:boolean,"visitado"?:boolean,"interesseFuturo"?:boolean,"interesseFuturoData"?:"YYYY-MM-DD","interesseFuturoNota"?:string}
+- {"tipo":"criar_card","cliente":string,"estagio"?:string,"maquina"?:string,"valor"?:number}
+- {"tipo":"criar_tarefa","titulo":string,"descricao"?:string,"coluna"?:string}
+- {"tipo":"agendar_visita","cliente":string,"data":"YYYY-MM-DD","observacao"?:string}
+Regras:
+- "cliente" = nome do cliente como o vendedor falou (o sistema buscará no cadastro).
+- "criar_card" = card no funil de negociação. Estágios válidos: "primeiro_contato","visita_pendente","visita_realizada","proposta_bcnh","proposta_aprovada". Se não souber, omita.
+- "criar_tarefa" = demanda/lembrete estilo Trello. "coluna" é opcional (ex: "Demandas").
+- Interprete datas relativas ("amanhã","sexta","semana que vem") a partir da DATA ATUAL: ${agoraBrasiliaExtenso(agora)}.
+- Um comando pode gerar mais de uma ação. Não invente dados. Se não corresponder a nenhuma ação, devolva "acoes": [].`;
+  try {
+    const raw = await llmTexto(system, `Comando: ${texto}`, { maxTokens: 1024, json: true });
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    return {
+      resposta: typeof parsed.resposta === "string" ? parsed.resposta : "",
+      acoes: Array.isArray(parsed.acoes) ? parsed.acoes : [],
+    };
+  } catch (err) {
+    console.error("Falha ao interpretar comando:", err);
+    return { resposta: "Não consegui entender o comando. Pode reformular?", acoes: [] };
+  }
+}
+
 // Gera um post de mídia chamativo sobre uma máquina (curiosidade/atração).
 export async function gerarMidiaIA(maquina: {
   modelo: string;
