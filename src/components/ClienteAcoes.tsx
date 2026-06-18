@@ -17,6 +17,9 @@ type ClienteData = {
   observacoes: string | null;
   jaComprou: boolean;
   visitado: boolean;
+  interesseFuturo?: boolean;
+  interesseFuturoData?: string | null;
+  interesseFuturoNota?: string | null;
 };
 
 export function ClienteAcoes({

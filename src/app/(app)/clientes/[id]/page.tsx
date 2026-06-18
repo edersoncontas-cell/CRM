@@ -101,6 +101,11 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
               observacoes: cliente.observacoes,
               jaComprou: cliente.jaComprou,
               visitado: cliente.visitado,
+              interesseFuturo: cliente.interesseFuturo,
+              interesseFuturoData: cliente.interesseFuturoData
+                ? cliente.interesseFuturoData.toISOString().slice(0, 10)
+                : null,
+              interesseFuturoNota: cliente.interesseFuturoNota,
             }}
             municipios={municipios}
           />

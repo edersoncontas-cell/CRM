@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -715,7 +716,14 @@ function CardView({
     >
       <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-bold leading-tight text-white">{card.cliente}</span>
+          <Link
+            href={`/clientes/${card.clienteId}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="text-sm font-bold leading-tight text-white hover:text-agro-400 hover:underline"
+            title="Abrir cadastro do cliente"
+          >
+            {card.cliente}
+          </Link>
           {card.maquina && (
             <span className="shrink-0 rounded-lg bg-agro-400 px-2 py-0.5 text-xs font-bold text-black shadow">
               {card.maquina}

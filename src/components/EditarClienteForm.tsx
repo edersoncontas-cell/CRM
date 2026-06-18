@@ -23,6 +23,9 @@ export function EditarClienteForm({
     observacoes: string | null;
     jaComprou: boolean;
     visitado: boolean;
+    interesseFuturo?: boolean;
+    interesseFuturoData?: string | null; // YYYY-MM-DD
+    interesseFuturoNota?: string | null;
   };
   municipios: Municipio[];
   open?: boolean;          // modo controlado (opcional)
@@ -100,6 +103,22 @@ export function EditarClienteForm({
                 <label className="flex items-center gap-2">
                   <input type="checkbox" name="visitado" defaultChecked={cliente.visitado} /> Já recebeu visita
                 </label>
+              </div>
+
+              {/* Interesse futuro (ex: aguardando Plano Safra) */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                  <input type="checkbox" name="interesseFuturo" defaultChecked={cliente.interesseFuturo} />
+                  ⏳ Interesse futuro (aguardando o momento certo)
+                </label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Campo label="Lembrar em">
+                    <input type="date" name="interesseFuturoData" defaultValue={cliente.interesseFuturoData ?? ""} className="campo" />
+                  </Campo>
+                  <Campo label="Aguardando o quê?">
+                    <input name="interesseFuturoNota" defaultValue={cliente.interesseFuturoNota ?? ""} placeholder="ex: Plano Safra 25/26" className="campo" />
+                  </Campo>
+                </div>
               </div>
             </div>
             <button className="mt-5 w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 hover:bg-brand-800">

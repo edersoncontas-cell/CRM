@@ -44,6 +44,9 @@ model Cliente {
   abordagemIA String?   // abordagem sugerida pela IA conforme o perfil
   dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
   maquinaComprada String?
+  interesseFuturo     Boolean   @default(false) // aguarda momento futuro (ex: Plano Safra)
+  interesseFuturoData DateTime? // quando retomar o contato
+  interesseFuturoNota String?   // o que está aguardando (ex: "saída do Plano Safra 25/26")
   indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId String?
   indicados     Cliente[] @relation("Indicacoes")

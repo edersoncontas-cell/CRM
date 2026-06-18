@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   const corteEsquecido = new Date(hoje);
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw, esquecidos] =
+  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw, esquecidos, futuros] =
     await Promise.all([
       db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
       db.alerta.findMany({
@@ -66,7 +66,21 @@ export default async function DashboardPage() {
         orderBy: { ultimoContato: "asc" },
         take: 8,
       }),
+      // Clientes com interesse futuro (ex: aguardando Plano Safra)
+      db.cliente.findMany({
+        where: { interesseFuturo: true },
+        orderBy: { interesseFuturoData: "asc" },
+        take: 12,
+        select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
+      }),
     ]);
+
+  // "Chegou a hora": data de retomar o contato já passou ou está a até 30 dias.
+  const em30Dias = new Date(hoje);
+  em30Dias.setDate(em30Dias.getDate() + 30);
+  const futurosNaHora = futuros.filter(
+    (f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias
+  ).length;
 
   const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
   const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
@@ -413,6 +427,60 @@ export default async function DashboardPage() {
                         : { background: "rgba(192,132,252,0.15)", color: "#c084fc" }}
                     >
                       {dias}d
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </DarkCard>
+        </div>
+      )}
+
+      {/* ── Interesse futuro (ex: aguardando Plano Safra) ─────────────── */}
+      {futuros.length > 0 && (
+        <div className="mt-6">
+          <DarkCard>
+            <div className="mb-4 flex items-center gap-2">
+              <Clock size={15} style={{ color: "#fbbf24" }} />
+              <span className="font-semibold text-white text-sm">Interesse futuro</span>
+              {futurosNaHora > 0 && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-xs font-bold"
+                  style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                >
+                  {futurosNaHora} na hora de contatar
+                </span>
+              )}
+              <span className="ml-1 text-xs" style={{ color: "#52525b" }}>
+                clientes aguardando o momento certo (ex: Plano Safra)
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {futuros.map((f) => {
+                const naHora = !!f.interesseFuturoData && f.interesseFuturoData <= em30Dias;
+                const dataFmt = f.interesseFuturoData
+                  ? f.interesseFuturoData.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "2-digit" })
+                  : null;
+                return (
+                  <Link
+                    key={f.id}
+                    href={`/clientes/${f.id}`}
+                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
+                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
+                  >
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-white">{f.nome}</span>
+                      <p className="truncate text-xs" style={{ color: "#71717a" }}>
+                        {f.interesseFuturoNota ?? "Aguardando momento certo"}
+                      </p>
+                    </div>
+                    <span
+                      className="ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                      style={naHora
+                        ? { background: "rgba(34,197,94,0.15)", color: "#4ade80" }
+                        : { background: "rgba(251,191,36,0.15)", color: "#fbbf24" }}
+                    >
+                      {naHora ? "agora!" : dataFmt ?? "futuro"}
                     </span>
                   </Link>
                 );

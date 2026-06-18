@@ -85,6 +85,22 @@ export function NovoClienteForm({
                   <input type="checkbox" name="visitado" /> Já recebeu visita
                 </label>
               </div>
+
+              {/* Interesse futuro (ex: aguardando Plano Safra) */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                  <input type="checkbox" name="interesseFuturo" />
+                  ⏳ Interesse futuro (aguardando o momento certo)
+                </label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Campo label="Lembrar em">
+                    <input type="date" name="interesseFuturoData" className="campo" />
+                  </Campo>
+                  <Campo label="Aguardando o quê?">
+                    <input name="interesseFuturoNota" placeholder="ex: Plano Safra 25/26" className="campo" />
+                  </Campo>
+                </div>
+              </div>
             </div>
             <button className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700">
               Salvar

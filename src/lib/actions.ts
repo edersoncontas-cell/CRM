@@ -26,10 +26,19 @@ export async function criarCliente(formData: FormData) {
       origem: String(formData.get("origem") ?? "manual") || null,
       jaComprou: formData.get("jaComprou") === "on",
       visitado: formData.get("visitado") === "on",
+      interesseFuturo: formData.get("interesseFuturo") === "on",
+      interesseFuturoData: parseDataBR(String(formData.get("interesseFuturoData") ?? "")),
+      interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
     },
   });
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
+}
+
+// Converte o campo date (YYYY-MM-DD) em Date ao meio-dia de Brasília (ou null).
+function parseDataBR(raw: string): Date | null {
+  const d = raw.trim();
+  return d ? new Date(`${d}T12:00:00-03:00`) : null;
 }
 
 export async function atualizarCliente(id: string, formData: FormData) {
@@ -44,10 +53,14 @@ export async function atualizarCliente(id: string, formData: FormData) {
       jaComprou: formData.get("jaComprou") === "on",
       visitado: formData.get("visitado") === "on",
       observacoes: String(formData.get("observacoes") ?? "") || null,
+      interesseFuturo: formData.get("interesseFuturo") === "on",
+      interesseFuturoData: parseDataBR(String(formData.get("interesseFuturoData") ?? "")),
+      interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
     },
   });
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
+  revalidatePath("/dashboard");
 }
 
 export async function excluirCliente(id: string): Promise<{ ok: boolean }> {

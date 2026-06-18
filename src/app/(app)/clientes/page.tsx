@@ -230,6 +230,11 @@ export default async function ClientesPage({
                           observacoes: c.observacoes,
                           jaComprou: c.jaComprou,
                           visitado: c.visitado,
+                          interesseFuturo: c.interesseFuturo,
+                          interesseFuturoData: c.interesseFuturoData
+                            ? c.interesseFuturoData.toISOString().slice(0, 10)
+                            : null,
+                          interesseFuturoNota: c.interesseFuturoNota,
                         }}
                         municipios={municipios}
                       />
