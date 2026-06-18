@@ -82,7 +82,7 @@ export function NovoClienteForm({
                   <input type="checkbox" name="jaComprou" /> Já comprou
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="visitado" /> Visitado
+                  <input type="checkbox" name="visitado" /> Já recebeu visita
                 </label>
               </div>
             </div>

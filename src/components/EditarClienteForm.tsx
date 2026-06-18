@@ -98,7 +98,7 @@ export function EditarClienteForm({
                   <input type="checkbox" name="jaComprou" defaultChecked={cliente.jaComprou} /> Já comprou
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="visitado" defaultChecked={cliente.visitado} /> Visitado
+                  <input type="checkbox" name="visitado" defaultChecked={cliente.visitado} /> Já recebeu visita
                 </label>
               </div>
             </div>
