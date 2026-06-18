@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { salvarFichaTecnica, preencherFichaTecnicaIA } from "@/lib/actions";
-import { Pencil, X, Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { salvarFichaTecnica, preencherFichaTecnicaIA, extrairFichaDeArquivo } from "@/lib/actions";
+import { Pencil, X, Check, ChevronDown, ChevronUp, Sparkles, Paperclip } from "lucide-react";
 
 type Maquina = {
   id: string;
@@ -46,7 +46,30 @@ function EditModal({
   const [difs, setDifs] = useState(m.diferenciais ?? "");
   const [pending, start] = useTransition();
   const [preenchendo, startPreencher] = useTransition();
+  const [lendoArquivo, startArquivo] = useTransition();
   const [aviso, setAviso] = useState<string | null>(null);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+
+  function aoEscolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAviso(null);
+    startArquivo(async () => {
+      const fd = new FormData();
+      fd.set("arquivo", file);
+      const r = await extrairFichaDeArquivo(m.id, fd);
+      if (arquivoRef.current) arquivoRef.current.value = "";
+      if (!r.ok) {
+        setAviso(r.erro ?? "Não foi possível ler o arquivo.");
+        return;
+      }
+      if (r.especificacoes) setSpecs(r.especificacoes);
+      if (r.descricao) setDesc(r.descricao);
+      if (m.proprio && r.pontosFortes) setPontos(r.pontosFortes);
+      if (m.proprio && r.diferenciais) setDifs(r.diferenciais);
+      setAviso("Extraído do arquivo — confira os números e salve. ✓");
+    });
+  }
 
   function preencherComIA() {
     setAviso(null);
@@ -100,15 +123,36 @@ function EditModal({
           </button>
         </div>
 
-        <button
-          onClick={preencherComIA}
-          disabled={preenchendo}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-60"
-          style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)" }}
-        >
-          <Sparkles size={15} />
-          {preenchendo ? "Buscando ficha com a IA..." : "Preencher automaticamente com IA"}
-        </button>
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            onClick={preencherComIA}
+            disabled={preenchendo || lendoArquivo}
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-60"
+            style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)" }}
+          >
+            <Sparkles size={15} />
+            {preenchendo ? "Buscando com a IA..." : "Preencher com IA"}
+          </button>
+          <button
+            onClick={() => arquivoRef.current?.click()}
+            disabled={lendoArquivo || preenchendo}
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-60"
+            style={{ background: "rgba(191,222,77,0.12)", color: "#BFDE4D", border: "1px solid rgba(191,222,77,0.3)" }}
+          >
+            <Paperclip size={15} />
+            {lendoArquivo ? "Lendo arquivo..." : "Anexar arquivo (PDF/foto)"}
+          </button>
+          <input
+            ref={arquivoRef}
+            type="file"
+            accept="application/pdf,image/*"
+            onChange={aoEscolherArquivo}
+            className="hidden"
+          />
+        </div>
+        <p className="mb-3 -mt-1 text-[11px] text-zinc-500">
+          📎 Anexe o catálogo/ficha do fabricante (PDF ou foto) — a IA lê e preenche os campos. O arquivo não é guardado.
+        </p>
         {aviso && (
           <p
             className="mb-4 -mt-2 text-xs"

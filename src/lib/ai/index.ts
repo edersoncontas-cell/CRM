@@ -293,6 +293,88 @@ ${campos}`,
   }
 }
 
+// Extrai a ficha técnica de um ARQUIVO anexado (PDF ou imagem do catálogo).
+// Usa o Claude (Anthropic), que lê PDF e imagem nativamente. O arquivo NÃO é
+// guardado — só o conteúdo extraído. Exige ANTHROPIC_API_KEY (o Groq não lê PDF).
+export async function extrairFichaDeArquivoIA(
+  maquina: { marca: string; modelo: string; categoria: string; proprio: boolean },
+  arquivo: { base64: string; mediaType: string }
+): Promise<{
+  ok: boolean;
+  especificacoes?: string;
+  descricao?: string;
+  pontosFortes?: string;
+  diferenciais?: string;
+  erro?: string;
+}> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, erro: "A leitura de arquivos exige a chave da Anthropic (ANTHROPIC_API_KEY)." };
+  }
+  const ehPdf = arquivo.mediaType === "application/pdf";
+  const ehImagem = arquivo.mediaType.startsWith("image/");
+  if (!ehPdf && !ehImagem) {
+    return { ok: false, erro: "Formato não suportado. Envie um PDF ou uma imagem (JPG/PNG)." };
+  }
+
+  const campos = maquina.proprio
+    ? `{
+  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha): Motor, Potência (cv), Peso operacional (kg) e os principais dados da categoria
+  "descricao": string,       // 1-2 frases sobre a máquina e seu uso principal
+  "pontosFortes": string,    // argumentos de venda separados por ';'
+  "diferenciais": string     // diferenciais de mercado separados por ';'
+}`
+    : `{
+  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha)
+  "descricao": string,       // 1-2 frases sobre a máquina
+  "pontosFortes": "",
+  "diferenciais": ""
+}`;
+
+  const system = `Você é um especialista técnico em máquinas pesadas do ramo construction (linha amarela).
+Leia o ARQUIVO anexado (catálogo/ficha do fabricante) e EXTRAIA as especificações técnicas da máquina.
+Use unidades do mercado brasileiro (cv, kg, m³, mm, kN). Extraia SOMENTE o que estiver no arquivo — NUNCA invente números.
+Se o arquivo trouxer várias máquinas, foque na ${maquina.marca} ${maquina.modelo}.
+Devolva SOMENTE um JSON válido, sem texto fora do JSON, no formato:
+${campos}`;
+
+  try {
+    const bloco = ehPdf
+      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64 } }
+      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64 } };
+
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      system,
+      messages: [
+        {
+          role: "user",
+          content: [bloco, { type: "text" as const, text: `Extraia a ficha técnica da ${maquina.marca} ${maquina.modelo} (${maquina.categoria}).` }] as Anthropic.MessageParam["content"],
+        },
+      ],
+    });
+    const raw = resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    const especificacoes = typeof parsed.especificacoes === "string" ? parsed.especificacoes.trim() : "";
+    if (!especificacoes && !parsed.descricao) {
+      return { ok: false, erro: "Não consegui extrair dados do arquivo. Tente outro arquivo mais legível." };
+    }
+    return {
+      ok: true,
+      especificacoes,
+      descricao: typeof parsed.descricao === "string" ? parsed.descricao.trim() : "",
+      pontosFortes: typeof parsed.pontosFortes === "string" ? parsed.pontosFortes.trim() : "",
+      diferenciais: typeof parsed.diferenciais === "string" ? parsed.diferenciais.trim() : "",
+    };
+  } catch (err) {
+    console.error("Falha ao extrair ficha de arquivo:", err);
+    return { ok: false, erro: "Erro ao ler o arquivo. Verifique se é um PDF ou imagem válida." };
+  }
+}
+
 // Gera um BATTLECARD preciso (minha máquina vs concorrente) usando as fichas
 // técnicas de ambas para comparar números reais e montar o argumento de venda.
 export async function gerarBattlecardIA(

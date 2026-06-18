@@ -472,6 +472,39 @@ export async function preencherFichaTecnicaIA(id: string): Promise<{
   return { ok: true, ...ficha };
 }
 
+// Extrai a ficha técnica de um arquivo anexado (PDF/imagem do catálogo) via IA.
+// O arquivo NÃO é guardado — só o conteúdo extraído é devolvido para revisão.
+export async function extrairFichaDeArquivo(maquinaId: string, formData: FormData): Promise<{
+  ok: boolean;
+  especificacoes?: string;
+  descricao?: string;
+  pontosFortes?: string;
+  diferenciais?: string;
+  erro?: string;
+}> {
+  "use server";
+  const arquivo = formData.get("arquivo");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { ok: false, erro: "Nenhum arquivo enviado." };
+  }
+  // Limite: PDF até 32MB (limite da Anthropic), imagem até 8MB.
+  const ehPdf = arquivo.type === "application/pdf";
+  const limite = ehPdf ? 32 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (arquivo.size > limite) {
+    return { ok: false, erro: `Arquivo muito grande (máx. ${ehPdf ? "32MB" : "8MB"}).` };
+  }
+
+  const maq = await db.maquina.findUnique({
+    where: { id: maquinaId },
+    select: { marca: true, modelo: true, categoria: true, proprio: true },
+  });
+  if (!maq) return { ok: false, erro: "Máquina não encontrada." };
+
+  const { extrairFichaDeArquivoIA } = await import("@/lib/ai");
+  const base64 = Buffer.from(await arquivo.arrayBuffer()).toString("base64");
+  return extrairFichaDeArquivoIA(maq, { base64, mediaType: arquivo.type });
+}
+
 // Análise de categoria (Super Trunfo): minhas máquinas vs concorrentes.
 export async function gerarAnaliseCategoriaIAAction(
   categoria: string
