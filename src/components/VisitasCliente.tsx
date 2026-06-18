@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { adicionarVisita, removerVisita } from "@/lib/actions";
-import { formatDateTime } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { CalendarPlus, MapPin, Trash2, X } from "lucide-react";
 
 type Visita = { id: string; data: string; observacao: string | null };
@@ -51,8 +51,8 @@ export function VisitasCliente({
             </button>
           </div>
           <label className="block">
-            <span className="mb-1 block text-xs text-slate-500">Data e hora</span>
-            <input type="datetime-local" name="data" required className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-agro-500" />
+            <span className="mb-1 block text-xs text-slate-500">Data</span>
+            <input type="date" name="data" required className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-agro-500" />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs text-slate-500">Observação (opcional)</span>
@@ -71,7 +71,7 @@ export function VisitasCliente({
           {visitas.map((v) => (
             <li key={v.id} className="flex items-start justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-700">{formatDateTime(v.data)}</div>
+                <div className="text-sm font-semibold text-slate-700">{formatDate(v.data)}</div>
                 {v.observacao && <p className="text-xs text-slate-500">{v.observacao}</p>}
               </div>
               <button

@@ -104,7 +104,7 @@ export function ConversaAnaliser({
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         rows={4}
-        placeholder="Ex: Bom dia! Fechei a T7 por 450 mil, vai ser financiado. Pode marcar a visita quinta às 14h."
+        placeholder="Ex: Bom dia! Fechei a escavadeira E175 por 850 mil, financiamento. Visita quinta às 14h."
         className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
       />
       <div className="mt-2 flex items-center justify-between gap-2">

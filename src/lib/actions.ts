@@ -62,8 +62,9 @@ export async function excluirCliente(id: string): Promise<{ ok: boolean }> {
 export async function adicionarVisita(clienteId: string, formData: FormData) {
   const dataRaw = String(formData.get("data") ?? "");
   if (!dataRaw) return;
-  // datetime-local sem fuso: interpretamos como horário de Brasília (-03:00).
-  const data = new Date(`${dataRaw}:00-03:00`);
+  // Campo type="date" → formato YYYY-MM-DD. Fixa meio-dia em Brasília para evitar
+  // virar o dia anterior por diferença de fuso ao salvar no banco.
+  const data = new Date(`${dataRaw}T12:00:00-03:00`);
   await db.visita.create({
     data: {
       clienteId,
