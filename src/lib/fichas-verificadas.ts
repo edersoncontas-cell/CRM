@@ -465,7 +465,54 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
     ].join("\n"),
   },
 
+  {
+    marca: "Dynapac",
+    modelo: "CA1500",
+    especificacoes: [
+      "Motor: Deutz TD3.6 (ou Cummins QSB3.3)",
+      "Potência: 75 cv",
+      "Peso operacional: 7.200 kg",
+      "Largura do cilindro: 1.676 mm",
+      "Força centrífuga: 133 / 72 kN (alta/baixa amplitude)",
+    ].join("\n"),
+  },
+  {
+    marca: "Dynapac",
+    modelo: "CA4000",
+    especificacoes: [
+      "Motor: Cummins",
+      "Potência: 162 cv (119 kW)",
+      "Peso operacional: 13.400 kg (máx. 13.700 kg)",
+      "Largura do cilindro: 2.130 mm",
+      "Carga linear estática: 41 kg/cm",
+    ].join("\n"),
+  },
+  {
+    marca: "Dynapac",
+    modelo: "CA6500",
+    especificacoes: [
+      "Potência: 200 cv",
+      "Peso operacional: 20.700 kg",
+      "Largura do cilindro: 2.130 mm",
+      "Diâmetro do cilindro: 1.550 mm",
+      "Amplitude: 2,1 mm · Frequência: 30 Hz",
+      "Carga linear estática: 65 kg/cm",
+    ].join("\n"),
+  },
+
   // ── Rolo tandem asfalto (Dynapac CC) ──────────────────────────────────────
+  {
+    marca: "Dynapac",
+    modelo: "CC1300",
+    especificacoes: [
+      "Motor: Kubota",
+      "Potência: 45 cv (33 kW)",
+      "Peso operacional: 4.000 kg",
+      "Largura de trabalho: 1.300 mm",
+      "Força centrífuga: 33 / 36 kN",
+      "Versão combi disponível (cilindro + 4 pneus)",
+    ].join("\n"),
+  },
   {
     marca: "Dynapac",
     modelo: "CC2200",
@@ -489,7 +536,27 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
     ].join("\n"),
   },
 
+  {
+    marca: "Dynapac",
+    modelo: "CC6200",
+    especificacoes: [
+      "Peso operacional: 12.200 kg",
+      "Largura de trabalho: 2.130 mm",
+      "Força centrífuga: 166 / 106 kN (alta/baixa amplitude)",
+    ].join("\n"),
+  },
+
   // ── Rolo pneumático (Dynapac CP) ──────────────────────────────────────────
+  {
+    marca: "Dynapac",
+    modelo: "CP2700",
+    especificacoes: [
+      "Peso (vazio): 10.440 kg · com lastro: até 27.000 kg",
+      "Largura de rolagem: 2.300 mm",
+      "Pneus: 9 (5 dianteiros + 4 traseiros)",
+      "Lastro: 4 a 16 blocos de aço (até 8 t)",
+    ].join("\n"),
+  },
   {
     marca: "Dynapac",
     modelo: "CP2100",
