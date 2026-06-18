@@ -44,6 +44,63 @@ export function AssistenteIA() {
   const recRef = useRef<unknown>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Posição do botão flutuante (arrastável). null = posição padrão (canto inf. direito).
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const posRef = useRef<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; offX: number; offY: number; moved: boolean } | null>(null);
+  const BTN = 56;
+
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem("assistente_pos");
+      if (s) { const p = JSON.parse(s); setPos(p); posRef.current = p; }
+    } catch {}
+  }, []);
+
+  function onPointerDown(e: React.PointerEvent) {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    btnRef.current?.setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, offX: e.clientX - rect.left, offY: e.clientY - rect.top, moved: false };
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    const d = dragRef.current;
+    if (!d) return;
+    if (Math.abs(e.clientX - d.startX) > 6 || Math.abs(e.clientY - d.startY) > 6) d.moved = true;
+    if (!d.moved) return;
+    const x = Math.max(8, Math.min(window.innerWidth - BTN - 8, e.clientX - d.offX));
+    const y = Math.max(8, Math.min(window.innerHeight - BTN - 8, e.clientY - d.offY));
+    const np = { x, y };
+    posRef.current = np;
+    setPos(np);
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    const d = dragRef.current;
+    dragRef.current = null;
+    btnRef.current?.releasePointerCapture(e.pointerId);
+    if (d && !d.moved) {
+      setAberto((v) => !v); // toque sem arrastar = abrir/fechar
+    } else if (d && d.moved && posRef.current) {
+      try { localStorage.setItem("assistente_pos", JSON.stringify(posRef.current)); } catch {}
+    }
+  }
+
+  // Calcula onde o painel abre, próximo ao botão e dentro da tela.
+  function painelStyle(): React.CSSProperties {
+    if (!pos || typeof window === "undefined") {
+      return { bottom: "calc(6rem + env(safe-area-inset-bottom))", right: "1.25rem" };
+    }
+    const w = Math.min(window.innerWidth * 0.92, 384);
+    const h = Math.min(window.innerHeight * 0.7, 520);
+    const gap = 12;
+    let left = pos.x + BTN / 2 > window.innerWidth / 2 ? pos.x + BTN - w : pos.x;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = pos.y + BTN / 2 > window.innerHeight / 2 ? pos.y - h - gap : pos.y + BTN + gap;
+    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+    return { left, top, width: w };
+  }
+
   useEffect(() => {
     if (aberto) setTimeout(() => inputRef.current?.focus(), 50);
   }, [aberto]);
@@ -103,21 +160,32 @@ export function AssistenteIA() {
 
   return (
     <>
-      {/* Botão flutuante (robozinho) */}
+      {/* Botão flutuante (robozinho) — arrastável; toque abre/fecha */}
       <button
-        onClick={() => setAberto((v) => !v)}
-        aria-label="Assistente IA"
-        className="fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition hover:scale-105"
-        style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))", background: "linear-gradient(135deg,#1a63f5,#0b3aa0)", boxShadow: "0 0 0 4px rgba(191,222,77,0.15),0 8px 24px rgba(0,0,0,0.3)" }}
+        ref={btnRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        aria-label="Assistente IA (arraste para mover)"
+        title="Toque para abrir · arraste para mover"
+        className="fixed z-40 flex h-14 w-14 touch-none select-none items-center justify-center rounded-full shadow-xl transition hover:scale-105"
+        style={{
+          ...(pos
+            ? { left: pos.x, top: pos.y }
+            : { right: "1.25rem", bottom: "calc(1.25rem + env(safe-area-inset-bottom))" }),
+          background: "linear-gradient(135deg,#1a63f5,#0b3aa0)",
+          boxShadow: "0 0 0 4px rgba(191,222,77,0.15),0 8px 24px rgba(0,0,0,0.3)",
+          cursor: "grab",
+        }}
       >
         <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-agro-400 text-[9px] font-black text-black">IA</span>
         <ExcavatorIcon size={26} className="text-white" />
-        {!aberto && <span className="absolute inset-0 animate-ping rounded-full" style={{ background: "rgba(26,99,245,0.25)" }} />}
+        {!aberto && !pos && <span className="absolute inset-0 animate-ping rounded-full" style={{ background: "rgba(26,99,245,0.25)" }} />}
       </button>
 
       {/* Painel */}
       {aberto && (
-        <div className="fixed bottom-24 right-5 z-40 flex max-h-[70vh] w-[92vw] max-w-sm flex-col overflow-hidden rounded-2xl border border-slate-700 shadow-2xl" style={{ background: "#18181b" }}>
+        <div className="fixed z-40 flex max-h-[70vh] w-[92vw] max-w-sm flex-col overflow-hidden rounded-2xl border border-slate-700 shadow-2xl" style={{ background: "#18181b", ...painelStyle() }}>
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-3" style={{ background: "#0b3aa0" }}>
             <ExcavatorIcon size={20} className="text-agro-400" />
