@@ -107,8 +107,8 @@ export function AssistenteIA() {
       <button
         onClick={() => setAberto((v) => !v)}
         aria-label="Assistente IA"
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition hover:scale-105"
-        style={{ background: "linear-gradient(135deg,#1a63f5,#0b3aa0)", boxShadow: "0 0 0 4px rgba(191,222,77,0.15),0 8px 24px rgba(0,0,0,0.3)" }}
+        className="fixed right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition hover:scale-105"
+        style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom))", background: "linear-gradient(135deg,#1a63f5,#0b3aa0)", boxShadow: "0 0 0 4px rgba(191,222,77,0.15),0 8px 24px rgba(0,0,0,0.3)" }}
       >
         <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-agro-400 text-[9px] font-black text-black">IA</span>
         <ExcavatorIcon size={26} className="text-white" />

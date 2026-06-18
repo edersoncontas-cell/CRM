@@ -18,7 +18,6 @@ export const metadata: Metadata = {
     title: "CRM Edy",
     statusBarStyle: "black-translucent",
   },
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
   formatDetection: { telephone: false },
 };
 
