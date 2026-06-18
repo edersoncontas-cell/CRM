@@ -278,6 +278,75 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Caçamba: 3,3 – 3,4 m³",
     ].join("\n"),
   },
+
+  // ── Motoniveladora ────────────────────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "RG140.B",
+    especificacoes: [
+      "Motor: FPT (Tier 3)",
+      "Potência líquida: 140 – 160 cv",
+      "Peso operacional: 14.605 – 16.395 kg",
+      "Lâmina (moldboard): 3.660 mm",
+      "Transmissão: Powershift automática",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "RG170.B",
+    especificacoes: [
+      "Motor: NH/FPT 6.7L (Tier 3)",
+      "Potência líquida: 178 / 190 / 205 cv",
+      "Peso operacional máx.: 17.642 kg",
+      "Lâmina central Roll Away com controle hidráulico",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "RG200.B",
+    especificacoes: [
+      "Motor: NH/FPT 6.7L (Tier 3)",
+      "Potência líquida: 205 / 219 cv",
+      "Torque líquido: 864 / 924 Nm",
+      "Transmissão: Powershift com conversor",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "120",
+    especificacoes: [
+      "Potência líquida: 165 cv (145 – 189 cv AWD)",
+      "Peso operacional: 15.906 kg",
+      "Lâmina (moldboard): 3.658 mm (12 ft)",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "140",
+    especificacoes: [
+      "Potência líquida: 187 cv",
+      "Peso operacional: 20.235 kg",
+      "Lâmina (moldboard): 3.660 mm (inclinação até 30°)",
+    ].join("\n"),
+  },
+  {
+    marca: "Komatsu",
+    modelo: "GD555",
+    especificacoes: [
+      "Potência líquida: 193 cv",
+      "Peso operacional: 15.135 kg",
+      "Lâmina (moldboard): 3.710 mm",
+    ].join("\n"),
+  },
+  {
+    marca: "Volvo",
+    modelo: "G940",
+    especificacoes: [
+      "Potência líquida: 215 cv",
+      "Peso operacional: 19.278 kg",
+      "Lâmina (moldboard): 3.650 mm",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;
