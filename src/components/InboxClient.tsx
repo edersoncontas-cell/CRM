@@ -299,33 +299,45 @@ export function InboxClient({
   }, [mergeResumo]);
 
   // Polling da CONVERSA ABERTA: busca o conteúdo completo das mensagens novas.
+  // Usa contatosRef.current (e não 'contatos') para evitar stale closure — o ref
+  // é atualizado a cada render, então o 'after' sempre reflete a última mensagem.
   useEffect(() => {
     if (!selId) return;
     const clienteId = selId;
     let cancelado = false;
     async function poll() {
       if (cancelado || document.hidden) return;
-      const contato = contatos.find((c) => c.id === clienteId);
+      const contato = contatosRef.current.find((c) => c.id === clienteId);
       if (!contato) return;
       const ultima = contato.mensagens[contato.mensagens.length - 1];
       const after = ultima?.criadoEm ?? new Date(0).toISOString();
       try {
-        const res = await fetch(`/api/inbox?clienteId=${clienteId}&after=${encodeURIComponent(after)}`);
+        const res = await fetch(
+          `/api/inbox?clienteId=${clienteId}&after=${encodeURIComponent(after)}`,
+          { cache: "no-store" }
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelado && (data.mensagens.length > 0 || data.aguardando !== contato.aguardando)) {
           updateMensagens(clienteId, data.mensagens, data.aguardando);
           setNaoLidos((prev) => ({ ...prev, [clienteId]: 0 }));
-          // Persiste que viu até esta mensagem (evita badge no próximo reload).
-          const ultima = data.mensagens[data.mensagens.length - 1];
-          if (ultima?.id) salvarLido(clienteId, ultima.id);
+          const novaMais = data.mensagens[data.mensagens.length - 1];
+          if (novaMais?.id) salvarLido(clienteId, novaMais.id);
         }
       } catch {}
     }
     const iv = setInterval(poll, 2500);
     poll();
-    return () => { cancelado = true; clearInterval(iv); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Retoma imediatamente ao voltar o foco (garante que o usuário não espere 2.5s).
+    const aoFocar = () => { if (!document.hidden) poll(); };
+    document.addEventListener("visibilitychange", aoFocar);
+    window.addEventListener("focus", aoFocar);
+    return () => {
+      cancelado = true;
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", aoFocar);
+      window.removeEventListener("focus", aoFocar);
+    };
   }, [selId, updateMensagens]);
 
   // Redimensionamento por arraste (mouse).

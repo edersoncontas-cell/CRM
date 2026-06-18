@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cookies } from "next/headers";
+
+export const dynamic = "force-dynamic";
 
 // GET /api/inbox?clienteId=xxx&after=<iso-timestamp>
 // Returns new messages for a client since the given timestamp.
