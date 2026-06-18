@@ -217,6 +217,67 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Vazão hidráulica: 165 l/min",
     ].join("\n"),
   },
+
+  // ── Pá carregadeira ───────────────────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "W130B",
+    especificacoes: [
+      "Motor: FPT 6.7L (Tier 3, 6 cil. turbo)",
+      "Potência líquida: 127 cv (bruta 142 cv)",
+      "Peso operacional: 11.945 – 12.155 kg",
+      "Caçamba: 1,5 – 3,0 m³ (padrão 2,1 m³)",
+      "Torque máx.: 607 Nm",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "W170B",
+    especificacoes: [
+      "Potência líquida: 183 cv",
+      "Peso operacional: 14.430 kg",
+      "Caçamba: 2,6 m³",
+      "Altura máx. de descarga: 2.780 mm",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "W190B",
+    especificacoes: [
+      "Motor: New Holland 667TA/EB3 (Tier IIIA)",
+      "Potência líquida: 213 cv",
+      "Peso operacional: 19.353 kg",
+      "Caçamba: 3,0 – 3,5 m³",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "930",
+    especificacoes: [
+      "Potência líquida: 149 cv",
+      "Peso operacional: 13.000 kg",
+      "Caçamba: 2,5 m³",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "950",
+    especificacoes: [
+      "Potência: 227 cv",
+      "Peso operacional: 18.850 kg",
+      "Caçamba: 3,1 m³ (2,7 – 4,4 m³)",
+      "Força de levantamento: 154 kN",
+    ].join("\n"),
+  },
+  {
+    marca: "Volvo",
+    modelo: "L120",
+    especificacoes: [
+      "Potência líquida: 230 cv (169 – 179 kW)",
+      "Peso operacional: 18.000 – 20.000 kg",
+      "Caçamba: 3,3 – 3,4 m³",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;
