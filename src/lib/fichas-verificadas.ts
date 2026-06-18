@@ -347,6 +347,87 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Lâmina (moldboard): 3.650 mm",
     ].join("\n"),
   },
+
+  // ── Minicarregadeira (skid steer) ─────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "L320",
+    especificacoes: [
+      "Motor: FPT (Tier 4 Final)",
+      "Potência: 67 cv",
+      "Peso operacional: 2.930 kg",
+      "Capacidade operacional (ROC): 905 kg",
+      "Altura de descarga: 2.330 mm",
+      "Elevação: vertical Super Boom",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "L330",
+    especificacoes: [
+      "Motor: FPT",
+      "Potência: 90 cv (67 kW)",
+      "Peso operacional: 3.765 kg",
+      "Capacidade operacional (ROC): 1.360 kg",
+      "Altura de descarga: 2.655 mm",
+      "Elevação: vertical",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "L325",
+    especificacoes: [
+      "Motor: FPT F5C (4 cil., turbo)",
+      "Potência: 76 cv",
+      "Peso operacional: 3.580 kg",
+      "Capacidade operacional (ROC): 1.135 kg",
+      "Carga de tombamento: 2.270 kg",
+      "Altura de descarga: 2.615 mm",
+      "Transmissão: hidrostática 2 velocidades",
+    ].join("\n"),
+  },
+  {
+    marca: "Bobcat",
+    modelo: "S650",
+    especificacoes: [
+      "Potência: 74 cv (Tier 4)",
+      "Peso operacional: 3.777 kg",
+      "Capacidade operacional (ROC): 1.282 kg",
+      "Carga de tombamento: 2.564 kg",
+      "Altura de elevação: 3.100 mm",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "236",
+    especificacoes: [
+      "Motor: Cat C3.3B (236D3)",
+      "Potência: 73 cv",
+      "Peso operacional: 2.970 kg",
+      "Capacidade operacional (ROC): 820 kg",
+      "Carga de tombamento: 1.640 kg",
+    ].join("\n"),
+  },
+  {
+    marca: "Case",
+    modelo: "SR210",
+    especificacoes: [
+      "Potência: 74 cv (SR210B)",
+      "Peso operacional: 3.160 kg",
+      "Capacidade operacional (ROC): 955 kg",
+      "Carga de tombamento: 1.905 kg",
+    ].join("\n"),
+  },
+  {
+    marca: "JCB",
+    modelo: "155",
+    especificacoes: [
+      "Potência: 59 cv (42 kW)",
+      "Peso operacional: 2.950 kg",
+      "Capacidade operacional (ROC): 703 kg",
+      "Caçamba: 0,4 m³",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;

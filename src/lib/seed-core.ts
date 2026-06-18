@@ -87,9 +87,17 @@ const MINHAS: MaquinaSeed[] = [
     pontosFortes: "Maior profundidade de escavação; potência de levante; robustez.",
     diferenciais: "Motor FPT e a melhor rede de assistência do segmento." },
   // New Holland — minicarregadeira (skid steer)
+  { marca: "New Holland", modelo: "L320", categoria: "minicarregadeira", proprio: true, pesoOperacional: 2930, potencia: 67,
+    descricao: "Minicarregadeira Série 300 de entrada, ágil para obras compactas e paisagismo.",
+    pontosFortes: "Elevação vertical Super Boom; compacta e econômica.",
+    diferenciais: "Robustez New Holland com baixo custo operacional." },
   { marca: "New Holland", modelo: "L325", categoria: "minicarregadeira", proprio: true, pesoOperacional: 3700, potencia: 74,
     descricao: "Minicarregadeira Série 300, robusta e versátil para obras compactas.",
     pontosFortes: "Capacidade de carga e altura de elevação líderes; troca rápida de implementos.",
+    diferenciais: "Robustez New Holland com baixo custo operacional." },
+  { marca: "New Holland", modelo: "L330", categoria: "minicarregadeira", proprio: true, pesoOperacional: 3765, potencia: 90,
+    descricao: "Minicarregadeira Série 300 topo de linha, maior potência e capacidade de carga.",
+    pontosFortes: "90 cv e ROC de 1.360 kg; elevação vertical para trabalhos pesados.",
     diferenciais: "Robustez New Holland com baixo custo operacional." },
   // New Holland — pás carregadeiras
   { marca: "New Holland", modelo: "W12D", categoria: "pacarregadeira", proprio: true, pesoOperacional: 4800, potencia: 75,
