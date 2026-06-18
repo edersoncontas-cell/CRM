@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 
 // Fichas técnicas VERIFICADAS em fontes oficiais / bases de specs (LECTURA, sites
 // dos fabricantes). Usadas para popular o campo `especificacoes` no banco de
@@ -438,6 +439,8 @@ let fichasGarantidas = false;
 export async function garantirFichasVerificadas(): Promise<void> {
   if (fichasGarantidas) return;
   try {
+    // Garante que máquinas novas (pós-seed) existam antes de colar suas fichas.
+    await garantirMaquinasNovas();
     for (const f of FICHAS_VERIFICADAS) {
       await db.maquina.updateMany({
         where: { marca: f.marca, modelo: f.modelo, especificacoes: null },
