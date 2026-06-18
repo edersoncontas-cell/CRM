@@ -5,8 +5,8 @@ import Link from "next/link";
 import { enviarResposta, marcarRespondido, definirModoFimDeSemana } from "@/lib/actions";
 import { iniciais, diasDesde, cn } from "@/lib/utils";
 import {
-  Send, Sparkles, Check, CheckCheck, Mic, User, ArrowLeft, Phone,
-  MapPin, Search, Smile, Paperclip, MoreVertical, Bot, X, GripHorizontal,
+  Send, Check, CheckCheck, Mic, User, ArrowLeft, Phone,
+  MapPin, Search, Smile, Paperclip, MoreVertical, Bot, GripHorizontal,
 } from "lucide-react";
 
 export type Mensagem = {
@@ -104,18 +104,19 @@ function salvarLido(clienteId: string, msgId: string) {
   } catch {}
 }
 
-// Conta mensagens não lidas do cliente. Consulta o localStorage para saber se
-// a última mensagem já foi vista antes mesmo do primeiro polling desta sessão.
+// Conta mensagens não lidas: só há badge quando a ÚLTIMA mensagem é do cliente
+// e ainda não foi vista (comparando o id salvo no localStorage). Se a última
+// mensagem for minha (vendedor), não há nada não lido — independente de "aguardando".
 function naoLidasIniciais(c: Contato, lido: Record<string, string>): number {
-  if (!c.aguardando) return 0;
-  const ultimaId = c.mensagens[c.mensagens.length - 1]?.id;
-  if (ultimaId && lido[c.id] === ultimaId) return 0; // já viu essa mensagem antes
+  const ultima = c.mensagens[c.mensagens.length - 1];
+  if (!ultima || ultima.remetente !== "cliente") return 0;
+  if (lido[c.id] === ultima.id) return 0; // já viu essa mensagem antes
   let n = 0;
   for (let i = c.mensagens.length - 1; i >= 0; i--) {
     if (c.mensagens[i].remetente === "cliente") n++;
     else break;
   }
-  return n || 1;
+  return n;
 }
 
 export function InboxClient({
@@ -158,15 +159,26 @@ export function InboxClient({
     if (salvo) setAltura(Number(salvo));
   }, []);
 
-  // Ao abrir uma conversa, zera o contador e persiste qual foi a última msg vista
-  // para que o badge não reapareça ao recarregar a página.
-  const abrir = useCallback((id: string) => {
-    setSelId(id);
-    setNaoLidos((prev) => ({ ...prev, [id]: 0 }));
+  // Marca uma conversa como lida: zera o badge e persiste a última msg vista no
+  // localStorage para que o badge NÃO reapareça ao recarregar/reabrir a página.
+  const marcarLida = useCallback((id: string) => {
+    setNaoLidos((prev) => (prev[id] ? { ...prev, [id]: 0 } : prev));
     const c = contatosRef.current.find((x) => x.id === id);
-    const ultimaId = c?.mensagens[c.mensagens.length - 1]?.id;
+    const ultimaId = c?.mensagens[c.mensagens.length - 1]?.id ?? ultimaMsgRef.current[id];
     if (ultimaId) salvarLido(id, ultimaId);
   }, []);
+
+  // Ao abrir uma conversa, seleciona e marca como lida.
+  const abrir = useCallback((id: string) => {
+    setSelId(id);
+    marcarLida(id);
+  }, [marcarLida]);
+
+  // Marca a conversa SELECIONADA como lida — cobre tanto o clique quanto a
+  // auto-seleção da primeira conversa no carregamento (que antes ficava com badge).
+  useEffect(() => {
+    if (selId) marcarLida(selId);
+  }, [selId, marcarLida]);
 
   const filtrados = busca.trim()
     ? contatos.filter((c) =>
@@ -571,7 +583,6 @@ function Conversa({
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, startEnviar] = useTransition();
   const [baixando, startBaixar] = useTransition();
-  const [mostrarRascunho, setMostrarRascunho] = useState(!!contato.rascunho);
   const fimRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -710,38 +721,6 @@ function Conversa({
           <Send size={18} className="text-white" />
         </button>
       </div>
-
-      {/* Campo de SUGESTÃO da IA — colado abaixo da caixa, separado da digitação */}
-      {mostrarRascunho && contato.rascunho && (
-        <div className="border-t border-[#0b141a] px-3 py-2" style={{ background: "#1d2a31" }}>
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#25D366]">
-            <Sparkles size={12} /> Sugestão da IA
-          </div>
-          <div className="mt-1 flex items-end gap-2">
-            <p className="flex-1 rounded-lg px-3 py-2 text-[13px] italic text-[#cfd8dc]" style={{ background: "#0b141a" }}>
-              {contato.rascunho}
-            </p>
-            <div className="flex shrink-0 flex-col gap-1.5">
-              <button
-                onClick={() => {
-                  setTexto(contato.rascunho ?? "");
-                  setMostrarRascunho(false);
-                  setTimeout(() => textareaRef.current?.focus(), 0);
-                }}
-                className="rounded-lg bg-[#25D366] px-3 py-1 text-xs font-bold text-black hover:bg-[#1da851]"
-              >
-                Usar
-              </button>
-              <button
-                onClick={() => setMostrarRascunho(false)}
-                className="flex items-center justify-center gap-1 rounded-lg px-3 py-1 text-xs font-medium text-[#8696a0] hover:bg-[#0b141a] hover:text-[#e9edef]"
-              >
-                <X size={11} /> Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Erros + marcar respondido */}
       {(erro || contato.aguardando) && (
