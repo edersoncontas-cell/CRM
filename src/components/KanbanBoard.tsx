@@ -9,12 +9,15 @@ import {
   moverNegociacao, marcarPerdida, marcarGanha,
   criarNegociacaoCard, editarNegociacao, excluirNegociacao,
   criarTarefa, editarTarefa, moverTarefa, excluirTarefa,
-  criarColunaDemanda, excluirColunaDemanda,
+  criarColunaDemanda, excluirColunaDemanda, renomearColunaDemanda, reordenarColunasDemanda,
 } from "@/lib/actions";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
 import { ESTAGIOS, COL_PERDIDO } from "@/lib/pipeline";
-import { Plus, X, Pencil, Trophy, Calendar, Trash2, CheckSquare, Square, ListChecks } from "lucide-react";
+import {
+  Plus, X, Pencil, Trophy, Calendar, Trash2, CheckSquare, Square, ListChecks,
+  GripVertical, MoreVertical, Check,
+} from "lucide-react";
 
 interface CardData {
   id: string;
@@ -89,6 +92,7 @@ export function KanbanBoard({
 }) {
   const [cards, setCards] = useState(cardsIniciais);
   const [demandas, setDemandas] = useState(demandasIniciais);
+  const [colunas, setColunas] = useState(colunasDemanda);
   const [ativoNeg, setAtivoNeg] = useState<CardData | null>(null);
   const [ativoTar, setAtivoTar] = useState<DemandaCard | null>(null);
   const [editando, setEditando] = useState<CardData | null>(null);
@@ -98,11 +102,14 @@ export function KanbanBoard({
   // Re-sincroniza com o servidor após cada ação (as actions revalidam a rota).
   useEffect(() => setCards(cardsIniciais), [cardsIniciais]);
   useEffect(() => setDemandas(demandasIniciais), [demandasIniciais]);
+  useEffect(() => setColunas(colunasDemanda), [colunasDemanda]);
 
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
     if (id.startsWith("tar:")) {
       setAtivoTar(demandas.find((d) => `tar:${d.id}` === id) ?? null);
+    } else if (id.startsWith("col:")) {
+      // arraste de coluna — sem overlay
     } else {
       setAtivoNeg(cards.find((c) => c.id === id) ?? null);
     }
@@ -116,6 +123,24 @@ export function KanbanBoard({
     if (!over) return;
     const activeId = String(active.id);
     const overId = String(over.id);
+
+    // Coluna de demanda → reordenar conforme a coluna alvo sob o ponteiro.
+    if (activeId.startsWith("col:")) {
+      const colId = activeId.slice(4);
+      const alvoId = overId.startsWith("dem:") || overId.startsWith("col:") ? overId.slice(4) : null;
+      if (!alvoId || alvoId === colId) return;
+      setColunas((cs) => {
+        const from = cs.findIndex((c) => c.id === colId);
+        const to = cs.findIndex((c) => c.id === alvoId);
+        if (from < 0 || to < 0) return cs;
+        const arr = [...cs];
+        const [m] = arr.splice(from, 1);
+        arr.splice(to, 0, m);
+        reordenarColunasDemanda(arr.map((c) => c.id));
+        return arr;
+      });
+      return;
+    }
 
     // Tarefa (card Trello) → só pode cair em coluna de demanda.
     if (activeId.startsWith("tar:")) {
@@ -149,7 +174,7 @@ export function KanbanBoard({
         <div className="rounded-2xl bg-gradient-to-b from-black via-slate-950 to-slate-900 p-3 shadow-xl ring-1 ring-slate-800">
         <div className="flex gap-3 overflow-x-auto pb-2">
           {/* Colunas de DEMANDAS (estilo Trello) */}
-          {colunasDemanda.map((col) => (
+          {colunas.map((col) => (
             <ColunaDemandaView
               key={col.id}
               coluna={col}
@@ -208,8 +233,11 @@ function ColunaDemandaView({
   onEditar: (t: DemandaCard) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `dem:${coluna.id}` });
+  const drag = useDraggable({ id: `col:${coluna.id}` });
   const [adicionando, setAdicionando] = useState(false);
   const [excluindo, startExcluir] = useTransition();
+  const [menu, setMenu] = useState(false);
+  const [renomeando, setRenomeando] = useState(false);
 
   return (
     <div
@@ -217,31 +245,82 @@ function ColunaDemandaView({
       className={cn(
         "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/70 p-3 transition-all",
         coluna.cor,
-        isOver && "bg-slate-800 ring-2 ring-agro-400"
+        isOver && "bg-slate-800 ring-2 ring-agro-400",
+        drag.isDragging && "opacity-50"
       )}
     >
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <ListChecks size={15} className="text-slate-400" />
-          <span className="text-sm font-bold text-slate-100">{coluna.titulo}</span>
-          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
-            {cards.length}
-          </span>
-        </div>
-        {!coluna.fixa && (
+        <div className="flex min-w-0 items-center gap-1.5">
           <button
-            onClick={() => {
-              if (confirm(`Excluir a coluna "${coluna.titulo}"? Os cards voltam para Demandas.`)) {
-                startExcluir(() => excluirColunaDemanda(coluna.id).then(() => {}));
-              }
-            }}
-            disabled={excluindo}
-            title="Excluir coluna"
-            className="rounded p-1 text-slate-400 hover:bg-red-500/20 hover:text-red-400"
+            ref={drag.setNodeRef}
+            {...drag.listeners}
+            {...drag.attributes}
+            title="Arraste para mover a coluna"
+            className="shrink-0 cursor-grab text-slate-500 hover:text-slate-300 active:cursor-grabbing"
           >
-            <Trash2 size={13} />
+            <GripVertical size={15} />
           </button>
-        )}
+          {renomeando ? (
+            <form
+              action={async (fd) => {
+                await renomearColunaDemanda(coluna.id, String(fd.get("titulo") ?? ""));
+                setRenomeando(false);
+              }}
+              className="flex items-center gap-1"
+            >
+              <input
+                name="titulo"
+                defaultValue={coluna.titulo}
+                autoFocus
+                className="w-32 rounded bg-slate-800 px-2 py-0.5 text-sm text-white outline-none ring-1 ring-slate-600 focus:ring-agro-400"
+              />
+              <button className="text-green-400 hover:text-green-300"><Check size={14} /></button>
+            </form>
+          ) : (
+            <>
+              <span className="truncate text-sm font-bold text-slate-100">{coluna.titulo}</span>
+              <span className="shrink-0 rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
+                {cards.length}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setMenu((v) => !v)}
+            title="Opções da coluna"
+            className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+          >
+            <MoreVertical size={16} />
+          </button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+              <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl">
+                <button
+                  onClick={() => { setRenomeando(true); setMenu(false); }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+                >
+                  <Pencil size={12} /> Renomear
+                </button>
+                {!coluna.fixa && (
+                  <button
+                    onClick={() => {
+                      setMenu(false);
+                      if (confirm(`Excluir a coluna "${coluna.titulo}"? Os cards voltam para Demandas.`)) {
+                        startExcluir(() => excluirColunaDemanda(coluna.id).then(() => {}));
+                      }
+                    }}
+                    disabled={excluindo}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-slate-700"
+                  >
+                    <Trash2 size={12} /> Excluir
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

@@ -912,6 +912,26 @@ export async function excluirColunaDemanda(id: string) {
   return { ok: true };
 }
 
+// Renomeia uma coluna de demanda (o id permanece o mesmo).
+export async function renomearColunaDemanda(id: string, titulo: string) {
+  "use server";
+  const nome = titulo.trim();
+  if (!nome) return { ok: false };
+  await db.colunaDemanda.update({ where: { id }, data: { titulo: nome } });
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// Reordena as colunas de demanda conforme a lista de ids recebida.
+export async function reordenarColunasDemanda(ids: string[]) {
+  "use server";
+  await Promise.all(
+    ids.map((id, i) => db.colunaDemanda.update({ where: { id }, data: { ordem: i } }))
+  );
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
 // ---------- Resumos de conversa (página /resumos) ----------
 
 // Gera um resumo de IA da conversa de WhatsApp de um cliente.
