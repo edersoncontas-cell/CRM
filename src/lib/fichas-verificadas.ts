@@ -283,7 +283,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   // ── Motoniveladora ────────────────────────────────────────────────────────
   {
     marca: "New Holland",
-    modelo: "RG140.B",
+    modelo: "RG140.B EVO",
     especificacoes: [
       "Motor: FPT (Tier 3)",
       "Potência líquida: 140 – 160 cv",
@@ -294,7 +294,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "RG170.B",
+    modelo: "RG170.B EVO",
     especificacoes: [
       "Motor: NH/FPT 6.7L (Tier 3)",
       "Potência líquida: 178 / 190 / 205 cv",
@@ -304,7 +304,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "RG200.B",
+    modelo: "RG200.B EVO",
     especificacoes: [
       "Motor: NH/FPT 6.7L (Tier 3)",
       "Potência líquida: 205 / 219 cv",
@@ -341,10 +341,11 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Volvo",
-    modelo: "G940",
+    modelo: "G930",
     especificacoes: [
-      "Potência líquida: 215 cv",
-      "Peso operacional: 19.278 kg",
+      "Motor: Volvo D7E",
+      "Potência líquida: 155 cv",
+      "Peso operacional: 16.000 kg",
       "Lâmina (moldboard): 3.650 mm",
     ].join("\n"),
   },
