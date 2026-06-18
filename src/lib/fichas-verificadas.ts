@@ -60,6 +60,101 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Força de escavação: 36,2 kN",
     ].join("\n"),
   },
+
+  // ── Escavadeira hidráulica ────────────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "E145C EVO",
+    especificacoes: [
+      "Motor: FPT",
+      "Potência líquida: 95 cv",
+      "Peso operacional: 13.080 kg",
+      "Caçamba: 0,37 – 0,65 m³",
+      "Cabine: ROPS",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "E175C EVO",
+    especificacoes: [
+      "Motor: FPT",
+      "Potência líquida: 120 cv",
+      "Peso operacional: 17.500 kg",
+      "Caçamba: 0,55 – 0,98 m³",
+      "Cabine: ROPS",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "E215C EVO",
+    especificacoes: [
+      "Motor: FPT NEF6",
+      "Potência: 148 cv",
+      "Peso operacional: 22.000 kg",
+      "Profundidade de escavação: 6.600 mm",
+      "Caçamba: 1,1 – 1,7 m³",
+      "Cabine: ROPS/FOPS, display LED 7\"",
+    ].join("\n"),
+  },
+  {
+    marca: "New Holland",
+    modelo: "E245C EVO",
+    especificacoes: [
+      "Motor: FPT",
+      "Potência: 173 cv",
+      "Peso operacional: 25.000 kg",
+      "Força de escavação (caçamba): 142 kN (152 kN c/ Power-Boost)",
+      "Força de escavação (braço): 123 kN (132 kN c/ Power-Boost)",
+      "Profundidade de escavação: 6.500 mm",
+      "Caçamba: 1,4 – 1,5 m³",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "320",
+    especificacoes: [
+      "Motor: Cat C4.4 (Tier 4 Final)",
+      "Peso operacional: 21.900 kg",
+      "Caçamba: 1,19 m³",
+      "Profundidade de escavação: 6.720 mm",
+      "Alcance horizontal máx.: 9.860 mm",
+      "Força de escavação: 150 kN",
+    ].join("\n"),
+  },
+  {
+    marca: "Komatsu",
+    modelo: "PC200",
+    especificacoes: [
+      "Potência líquida: 138 cv",
+      "Peso operacional: 20.500 kg",
+      "Caçamba: até 1,2 m³",
+      "Profundidade de escavação: 6.620 mm",
+      "Alcance horizontal máx.: 9.700 mm",
+    ].join("\n"),
+  },
+  {
+    marca: "Volvo",
+    modelo: "EC210",
+    especificacoes: [
+      "Potência: 160 cv",
+      "Peso operacional: 21.000 kg",
+      "Caçamba: até 1,6 m³",
+      "Força de escavação: 159,9 kN",
+      "Profundidade de escavação: 7.730 mm",
+    ].join("\n"),
+  },
+  {
+    marca: "Sany",
+    modelo: "SY215C",
+    especificacoes: [
+      "Motor: Cummins QSB6.7",
+      "Potência: 164 cv",
+      "Peso operacional: 21.500 kg",
+      "Caçamba: 1,2 m³",
+      "Força de escavação: 138 kN",
+      "Profundidade de escavação: 6.255 mm",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;
