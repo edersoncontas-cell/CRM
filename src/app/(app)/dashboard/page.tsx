@@ -557,18 +557,19 @@ function DarkStatCard({
   const inner = (
     <>
       <div
-        className="rounded-xl p-2.5"
+        className="w-fit rounded-xl p-2.5"
         style={{ background: `${accentColor}18`, color: accentColor }}
       >
         {icone}
       </div>
-      <div className="min-w-0">
-        <div className="truncate text-xs font-medium" style={{ color: "#71717a" }}>{rotulo}</div>
-        <div className="text-xl font-bold text-white">{valor}</div>
+      <div className="min-w-0 w-full">
+        <div className="text-xs font-medium leading-tight" style={{ color: "#71717a" }}>{rotulo}</div>
+        <div className="text-lg font-bold text-white sm:text-xl">{valor}</div>
       </div>
     </>
   );
-  const cls = "flex items-center gap-4 rounded-2xl p-4 transition hover:brightness-110";
+  const cls =
+    "flex flex-col items-start gap-2 rounded-2xl p-4 transition hover:brightness-110 sm:flex-row sm:items-center sm:gap-4";
   const style = { background: "#18181b", border: "1px solid #27272a" };
   if (href) return <Link href={href} className={cls} style={style}>{inner}</Link>;
   return <div className={cls} style={style}>{inner}</div>;

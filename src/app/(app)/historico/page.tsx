@@ -97,13 +97,13 @@ export default async function HistoricoPage() {
           <div className="mt-1 text-xs text-slate-500">Negócios perdidos</div>
         </Card>
         <Card className="text-center">
-          <div className="text-lg font-bold text-slate-800">
+          <div className="text-base font-bold leading-tight text-slate-800 sm:text-lg">
             {ticketMedio ? formatCurrency(ticketMedio) : "—"}
           </div>
           <div className="mt-1 text-xs text-slate-500">Ticket médio</div>
         </Card>
         <Card className="text-center">
-          <div className="text-lg font-bold text-brand-700">
+          <div className="text-base font-bold leading-tight text-brand-700 sm:text-lg">
             {totalFaturado > 0 ? formatCurrency(totalFaturado) : "—"}
           </div>
           <div className="mt-1 text-xs text-slate-500">Total faturado</div>
