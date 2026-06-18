@@ -171,6 +171,11 @@ export function KanbanBoard({
 
   return (
     <>
+      {/* Gerenciar colunas de demanda — fica na área branca, acima do board */}
+      <div className="mb-3">
+        <NovaColuna />
+      </div>
+
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="rounded-2xl bg-gradient-to-b from-black via-slate-950 to-slate-900 p-3 shadow-xl ring-1 ring-slate-800">
         <div className="flex gap-3 overflow-x-auto pb-2">
@@ -183,9 +188,6 @@ export function KanbanBoard({
               onEditar={setEditandoTarefa}
             />
           ))}
-
-          {/* Botão de nova coluna de demanda */}
-          <NovaColuna />
 
           {/* Separador visual entre demandas e funil */}
           <div className="mx-1 w-px shrink-0 self-stretch bg-slate-700" />
@@ -485,41 +487,39 @@ function ChecklistEditor({
   );
 }
 
-// Botão/forma para criar uma nova coluna de demanda.
+// Botão/forma para criar uma nova coluna de demanda (na área branca da página).
 function NovaColuna() {
   const [aberto, setAberto] = useState(false);
   return (
-    <div className="w-60 shrink-0">
+    <div>
       {aberto ? (
         <form
           action={async (fd) => {
             await criarColunaDemanda(String(fd.get("titulo") ?? ""));
             setAberto(false);
           }}
-          className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-3"
+          className="flex items-center gap-2"
         >
           <input
             name="titulo"
             required
             autoFocus
-            placeholder="Nome da coluna"
-            className="mb-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-agro-500"
+            placeholder="Nome da nova coluna de demanda"
+            className="w-64 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-agro-500 focus:ring-2 focus:ring-agro-200"
           />
-          <div className="flex gap-2">
-            <button className="flex-1 rounded-lg bg-black py-1.5 text-xs font-bold text-agro-400 hover:bg-brand-800">
-              Criar coluna
-            </button>
-            <button type="button" onClick={() => setAberto(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200">
-              <X size={14} />
-            </button>
-          </div>
+          <button className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-agro-400 hover:bg-brand-800">
+            Criar
+          </button>
+          <button type="button" onClick={() => setAberto(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <X size={16} />
+          </button>
         </form>
       ) : (
         <button
           onClick={() => setAberto(true)}
-          className="flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-slate-600 text-xs font-semibold text-slate-400 hover:border-agro-400 hover:text-agro-400"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500 transition hover:border-agro-400 hover:text-agro-700"
         >
-          <Plus size={15} /> Nova coluna
+          <Plus size={15} /> Nova coluna de demanda
         </button>
       )}
     </div>
