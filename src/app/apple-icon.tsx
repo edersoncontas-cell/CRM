@@ -16,11 +16,16 @@ export default function AppleIcon() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg,#1a63f5,#0b3aa0)",
+          background: "#BFDE4D",
         }}
       >
-        <div style={{ fontSize: 60, fontWeight: 800, color: "#ffffff", lineHeight: 1 }}>CRM</div>
-        <div style={{ fontSize: 52, fontWeight: 800, color: "#BFDE4D", lineHeight: 1, marginTop: 8 }}>EDY</div>
+        <div style={{ fontSize: 38, fontWeight: 900, color: "#0b1220", letterSpacing: 2, lineHeight: 1 }}>
+          CRM
+        </div>
+        <div style={{ fontSize: 70, fontWeight: 900, color: "#0b1220", lineHeight: 1, marginTop: 2 }}>
+          EDY
+        </div>
+        <div style={{ marginTop: 10, width: 70, height: 7, borderRadius: 4, background: "#1a63f5" }} />
       </div>
     ),
     { ...size }
