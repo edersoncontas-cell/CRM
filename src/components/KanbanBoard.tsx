@@ -46,6 +46,13 @@ type ItemChecklist = { t: string; d: boolean };
 
 const COLUNAS_NEG = [...ESTAGIOS, COL_PERDIDO];
 
+// Tema de cor do card de negociação conforme a "quentura" do negócio (termômetro).
+function temaCalor(t: number): string {
+  if (t >= 70) return "from-orange-500/30 to-rose-600/15 border-orange-400/50";
+  if (t >= 40) return "from-amber-400/30 to-yellow-600/15 border-amber-400/50";
+  return "from-sky-500/30 to-blue-600/15 border-sky-400/50";
+}
+
 // Parse seguro do checklist (JSON) — local para não importar código de servidor.
 function lerChecklist(raw: string | null | undefined): ItemChecklist[] {
   if (!raw) return [];
@@ -139,7 +146,8 @@ export function KanbanBoard({
   return (
     <>
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="rounded-2xl bg-gradient-to-b from-black via-slate-950 to-slate-900 p-3 shadow-xl ring-1 ring-slate-800">
+        <div className="flex gap-3 overflow-x-auto pb-2">
           {/* Colunas de DEMANDAS (estilo Trello) */}
           {colunasDemanda.map((col) => (
             <ColunaDemandaView
@@ -154,7 +162,7 @@ export function KanbanBoard({
           <NovaColuna />
 
           {/* Separador visual entre demandas e funil */}
-          <div className="mx-1 w-px shrink-0 self-stretch bg-slate-200" />
+          <div className="mx-1 w-px shrink-0 self-stretch bg-slate-700" />
 
           {/* Colunas do FUNIL de negociação */}
           {COLUNAS_NEG.map((col) => {
@@ -175,6 +183,7 @@ export function KanbanBoard({
               />
             );
           })}
+        </div>
         </div>
         <DragOverlay>
           {ativoNeg && <CardView card={ativoNeg} arrastando />}
@@ -206,16 +215,16 @@ function ColunaDemandaView({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-50 p-3 transition-all",
+        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/70 p-3 transition-all",
         coluna.cor,
-        isOver && "bg-agro-50 ring-2 ring-agro-400"
+        isOver && "bg-slate-800 ring-2 ring-agro-400"
       )}
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <ListChecks size={15} className="text-slate-400" />
-          <span className="text-sm font-bold text-slate-700">{coluna.titulo}</span>
-          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-500 shadow-sm">
+          <span className="text-sm font-bold text-slate-100">{coluna.titulo}</span>
+          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
             {cards.length}
           </span>
         </div>
@@ -228,7 +237,7 @@ function ColunaDemandaView({
             }}
             disabled={excluindo}
             title="Excluir coluna"
-            className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+            className="rounded p-1 text-slate-400 hover:bg-red-500/20 hover:text-red-400"
           >
             <Trash2 size={13} />
           </button>
@@ -247,7 +256,7 @@ function ColunaDemandaView({
         ) : (
           <button
             onClick={() => setAdicionando(true)}
-            className="flex w-full items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-200 py-2 text-xs font-medium text-slate-400 hover:border-agro-400 hover:text-agro-700"
+            className="flex w-full items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-600 py-2 text-xs font-medium text-slate-400 hover:border-agro-400 hover:text-agro-400"
           >
             <Plus size={14} /> Adicionar card
           </button>
@@ -274,18 +283,18 @@ function DemandaCardView({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group rounded-xl border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md",
-        (isDragging || arrastando) && "opacity-70 shadow-xl ring-2 ring-agro-400"
+        "group rounded-xl border border-violet-400/40 bg-gradient-to-br from-violet-500/30 to-indigo-700/15 p-3 shadow-md transition hover:brightness-110 hover:shadow-lg",
+        (isDragging || arrastando) && "opacity-80 shadow-xl ring-2 ring-agro-400"
       )}
     >
       <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-        <span className="text-sm font-semibold leading-tight text-slate-800">{card.titulo}</span>
+        <span className="text-sm font-semibold leading-tight text-white">{card.titulo}</span>
         {card.descricao && (
-          <p className="mt-1 line-clamp-3 text-xs text-slate-500">{card.descricao}</p>
+          <p className="mt-1 line-clamp-3 text-xs text-violet-100/80">{card.descricao}</p>
         )}
         {itens.length > 0 && (
-          <div className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-400">
-            <CheckSquare size={12} className={feitos === itens.length ? "text-green-500" : ""} />
+          <div className="mt-2 flex items-center gap-1 text-xs font-medium text-violet-200">
+            <CheckSquare size={12} className={feitos === itens.length ? "text-green-400" : ""} />
             {feitos}/{itens.length}
           </div>
         )}
@@ -293,7 +302,7 @@ function DemandaCardView({
       {!arrastando && onEditar && (
         <button
           onClick={onEditar}
-          className="mt-2.5 flex w-full items-center justify-center gap-1 border-t border-slate-100 pt-2 text-xs font-medium text-slate-500 hover:text-agro-700"
+          className="mt-2.5 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2 text-xs font-medium text-violet-200 hover:text-white"
         >
           <Pencil size={12} /> Abrir
         </button>
@@ -428,7 +437,7 @@ function NovaColuna() {
       ) : (
         <button
           onClick={() => setAberto(true)}
-          className="flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-slate-200 text-xs font-semibold text-slate-400 hover:border-agro-400 hover:text-agro-700"
+          className="flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-slate-600 text-xs font-semibold text-slate-400 hover:border-agro-400 hover:text-agro-400"
         >
           <Plus size={15} /> Nova coluna
         </button>
@@ -512,18 +521,18 @@ function Coluna({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-50 p-3 transition-all",
+        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/70 p-3 transition-all",
         cor,
-        isOver && "bg-agro-50 ring-2 ring-agro-400"
+        isOver && "bg-slate-800 ring-2 ring-agro-400"
       )}
     >
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-sm font-bold text-slate-700">{titulo}</span>
-        <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-500 shadow-sm">
+        <span className="text-sm font-bold text-slate-100">{titulo}</span>
+        <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
           {cards.length}
         </span>
       </div>
-      <div className="mb-3 text-xs font-medium text-slate-400">{formatCurrency(total)}</div>
+      <div className="mb-3 text-xs font-medium text-agro-300">{formatCurrency(total)}</div>
 
       <div className="flex flex-col gap-2">
         {cards.map((c) => (
@@ -538,7 +547,7 @@ function Coluna({
           ) : (
             <button
               onClick={() => setAdicionando(true)}
-              className="flex w-full items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-200 py-2 text-xs font-medium text-slate-400 hover:border-agro-400 hover:text-agro-700"
+              className="flex w-full items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-600 py-2 text-xs font-medium text-slate-400 hover:border-agro-400 hover:text-agro-400"
             >
               <Plus size={14} /> Adicionar
             </button>
@@ -611,34 +620,38 @@ function CardView({
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined;
+  const tema = card.status === "perdida"
+    ? "from-slate-700/50 to-slate-800 border-slate-600"
+    : temaCalor(card.termometro);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group rounded-xl border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md",
-        (isDragging || arrastando) && "opacity-70 shadow-xl ring-2 ring-agro-400"
+        "group rounded-xl border bg-gradient-to-br p-3 shadow-md transition hover:brightness-110 hover:shadow-lg",
+        tema,
+        (isDragging || arrastando) && "opacity-80 shadow-xl ring-2 ring-agro-400"
       )}
     >
       <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-bold leading-tight text-slate-800">{card.cliente}</span>
+          <span className="text-sm font-bold leading-tight text-white">{card.cliente}</span>
           {card.maquina && (
-            <span className="shrink-0 rounded-lg bg-agro-100 px-2 py-0.5 text-xs font-semibold text-agro-700">
+            <span className="shrink-0 rounded-lg bg-agro-400 px-2 py-0.5 text-xs font-bold text-black shadow">
               {card.maquina}
             </span>
           )}
         </div>
-        <div className="mt-1 text-xs text-slate-400">{card.municipio ?? "Sem município"}</div>
-        <div className="mt-1.5 text-base font-bold text-emerald-600">{formatCurrency(card.valor)}</div>
+        <div className="mt-1 text-xs text-slate-300">{card.municipio ?? "Sem município"}</div>
+        <div className="mt-1.5 text-lg font-bold text-emerald-300">{formatCurrency(card.valor)}</div>
         {card.dataVisita && (
-          <div className="mt-1 flex items-center gap-1 text-xs text-brand-600">
+          <div className="mt-1 flex items-center gap-1 text-xs text-sky-300">
             <Calendar size={12} /> {formatDateTime(card.dataVisita)}
           </div>
         )}
         {card.concorrente && (
-          <div className="mt-1 rounded bg-red-50 px-2 py-0.5 text-xs text-red-700">
+          <div className="mt-1 inline-block rounded bg-red-500/25 px-2 py-0.5 text-xs font-medium text-red-200">
             ⚔ vs {card.concorrente}
           </div>
         )}
@@ -647,7 +660,7 @@ function CardView({
       {!arrastando && onEditar && (
         <button
           onClick={onEditar}
-          className="mt-2.5 flex w-full items-center justify-center gap-1 border-t border-slate-100 pt-2 text-xs font-medium text-slate-500 hover:text-agro-700"
+          className="mt-2.5 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2 text-xs font-medium text-slate-200 hover:text-agro-400"
         >
           <Pencil size={12} /> Editar
         </button>
