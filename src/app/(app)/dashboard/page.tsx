@@ -10,7 +10,7 @@ import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
 import {
   Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
-  Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle,
+  Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle, UserX,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,11 @@ export default async function DashboardPage() {
   const anoAtual = hoje.getFullYear();
   const inicioAno = new Date(anoAtual, 0, 1);
 
-  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw] =
+  const DIAS_ESQUECIDO = 15;
+  const corteEsquecido = new Date(hoje);
+  corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
+
+  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw, esquecidos] =
     await Promise.all([
       db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
       db.alerta.findMany({
@@ -51,6 +55,16 @@ export default async function DashboardPage() {
           conversas: { orderBy: { criadoEm: "desc" }, take: 1 },
         },
         orderBy: { ultimoContato: "asc" },
+      }),
+      // Clientes com negociação aberta e sem contato há 15+ dias
+      db.negociacao.findMany({
+        where: {
+          status: "aberta",
+          ultimoContato: { lt: corteEsquecido },
+        },
+        include: { cliente: true },
+        orderBy: { ultimoContato: "asc" },
+        take: 8,
       }),
     ]);
 
@@ -354,6 +368,59 @@ export default async function DashboardPage() {
           )}
         </DarkCard>
       </div>
+
+      {/* ── Clientes esquecidos ──────────────────────────────────────── */}
+      {esquecidos.length > 0 && (
+        <div className="mt-6">
+          <DarkCard>
+            <div className="mb-4 flex items-center gap-2">
+              <UserX size={15} style={{ color: "#c084fc" }} />
+              <span className="font-semibold text-white text-sm">Clientes esquecidos</span>
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
+                style={{ background: "rgba(192,132,252,0.15)", color: "#c084fc" }}
+              >
+                {esquecidos.length}
+              </span>
+              <span className="ml-1 text-xs" style={{ color: "#52525b" }}>
+                +{DIAS_ESQUECIDO} dias sem contato em negociação aberta
+              </span>
+              <Link href="/clientes?esquecidos=1" className="ml-auto text-xs font-semibold hover:underline" style={{ color: "#BFDE4D" }}>
+                Ver todos →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {esquecidos.map((n) => {
+                const dias = diasDesde(n.ultimoContato);
+                const urgente = dias >= 30;
+                return (
+                  <Link
+                    key={n.id}
+                    href={`/clientes/${n.clienteId}`}
+                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
+                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
+                  >
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-white">{n.cliente.nome}</span>
+                      <p className="text-xs truncate" style={{ color: "#71717a" }}>
+                        {n.maquinaModelo ?? "—"} · {n.estagio}
+                      </p>
+                    </div>
+                    <span
+                      className="ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
+                      style={urgente
+                        ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
+                        : { background: "rgba(192,132,252,0.15)", color: "#c084fc" }}
+                    >
+                      {dias}d
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </DarkCard>
+        </div>
+      )}
 
       {/* ── Leads esfriando ──────────────────────────────────────────── */}
       {leadsEsfriando.length > 0 && (

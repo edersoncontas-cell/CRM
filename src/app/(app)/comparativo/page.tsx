@@ -16,7 +16,7 @@ function peso(v: number | null) {
 export default async function ComparativoPage({
   searchParams,
 }: {
-  searchParams: { maquina?: string; modelo?: string };
+  searchParams: { maquina?: string; modelo?: string; vs?: string };
 }) {
   const todas = (await db.maquina.findMany({ orderBy: [{ categoria: "asc" }, { pesoOperacional: "asc" }] })) as MaquinaComparavel[];
   const minhas = todas.filter((m) => m.proprio);
@@ -36,7 +36,29 @@ export default async function ComparativoPage({
     );
   }
 
+  const vsParam = (searchParams.vs ?? "").toLowerCase().trim();
   const concorrentes = concorrentesSimilares(minha, todas);
+  // Se vier ?vs=NomeConcorrente, coloca esse primeiro na lista
+  const concorrentesOrdenados = vsParam
+    ? [
+        ...concorrentes.filter((c) =>
+          `${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) ||
+          vsParam.includes(c.marca.toLowerCase())
+        ),
+        ...concorrentes.filter(
+          (c) =>
+            !`${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) &&
+            !vsParam.includes(c.marca.toLowerCase())
+        ),
+      ]
+    : concorrentes;
+  const vsDestaque = vsParam
+    ? concorrentesOrdenados.find(
+        (c) =>
+          `${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) ||
+          vsParam.includes(c.marca.toLowerCase())
+      )
+    : undefined;
 
   return (
     <div>
@@ -44,6 +66,16 @@ export default async function ComparativoPage({
         titulo="Comparativo de máquinas"
         subtitulo="Sua máquina vs concorrentes da mesma categoria e faixa de peso — com argumentos prontos"
       />
+
+      {vsDestaque && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <Swords size={16} className="shrink-0 text-red-500" />
+          <span className="text-sm text-red-700">
+            Modo batalha ativado — mostrando <b>{minha.modelo}</b> vs{" "}
+            <b>{vsDestaque.marca} {vsDestaque.modelo}</b> em destaque
+          </span>
+        </div>
+      )}
 
       <div className="mb-6">
         <label className="mb-1 block text-sm font-medium text-slate-700">Selecione sua máquina</label>
@@ -89,7 +121,7 @@ export default async function ComparativoPage({
         <Swords size={18} className="text-red-500" /> Concorrentes na mesma faixa ({concorrentes.length})
       </h2>
 
-      {concorrentes.length === 0 ? (
+      {concorrentesOrdenados.length === 0 ? (
         <Card><p className="text-sm text-slate-400">Nenhum concorrente cadastrado nesta faixa ainda.</p></Card>
       ) : (
         <>
@@ -110,14 +142,24 @@ export default async function ComparativoPage({
                   <td className="py-2">{minha.potencia ? `${minha.potencia} cv` : "—"}</td>
                   <td className="py-2 text-slate-400">—</td>
                 </tr>
-                {concorrentes.map((c, idx) => (
-                  <tr key={c.id} className={`border-b transition-colors hover:bg-brand-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                    <td className="py-2.5 font-medium text-slate-700">{c.marca} {c.modelo}</td>
-                    <td className="py-2.5">{peso(c.pesoOperacional)}</td>
-                    <td className="py-2.5">{c.potencia ? `${c.potencia} cv` : "—"}</td>
-                    <td className="py-2.5 font-mono text-slate-500">{delta(minha.pesoOperacional, c.pesoOperacional)} kg</td>
-                  </tr>
-                ))}
+                {concorrentesOrdenados.map((c) => {
+                  const emDestaque = vsDestaque?.id === c.id;
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`border-b transition-colors ${emDestaque ? "bg-red-50 font-semibold" : "hover:bg-brand-50"}`}
+                    >
+                      <td className="py-2.5 font-medium text-slate-700">
+                        {emDestaque && <span className="mr-1 text-red-500">⚔️</span>}
+                        {c.marca} {c.modelo}
+                        {emDestaque && <span className="ml-2"><Badge tom="red">foco</Badge></span>}
+                      </td>
+                      <td className="py-2.5">{peso(c.pesoOperacional)}</td>
+                      <td className="py-2.5">{c.potencia ? `${c.potencia} cv` : "—"}</td>
+                      <td className="py-2.5 font-mono text-slate-500">{delta(minha.pesoOperacional, c.pesoOperacional)} kg</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </Card>
@@ -126,7 +168,7 @@ export default async function ComparativoPage({
           <ComparativoIA
             minhaId={minha.id}
             minhaModelo={minha.modelo}
-            concorrentes={concorrentes.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo }))}
+            concorrentes={concorrentesOrdenados.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo }))}
           />
 
           {/* Battlecards */}
@@ -134,14 +176,18 @@ export default async function ComparativoPage({
             <Trophy size={18} className="text-agro-600" /> Argumentos prontos (por que a {minha.modelo} ganha)
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {concorrentes.map((c) => (
-              <Card key={c.id}>
-                <div className="mb-1 flex items-center gap-2">
-                  <Badge tom="red">vs {c.marca} {c.modelo}</Badge>
-                </div>
-                <p className="text-sm text-slate-600">{vantagemContra(minha, c)}</p>
-              </Card>
-            ))}
+            {concorrentesOrdenados.map((c) => {
+              const emDestaque = vsDestaque?.id === c.id;
+              return (
+                <Card key={c.id} className={emDestaque ? "border-red-300 ring-2 ring-red-100" : ""}>
+                  <div className="mb-1 flex items-center gap-2">
+                    <Badge tom="red">vs {c.marca} {c.modelo}</Badge>
+                    {emDestaque && <Badge tom="yellow">⚔️ batalha atual</Badge>}
+                  </div>
+                  <p className="text-sm text-slate-600">{vantagemContra(minha, c)}</p>
+                </Card>
+              );
+            })}
           </div>
         </>
       )}

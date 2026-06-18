@@ -184,10 +184,11 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
                   <div className="flex gap-2">
                     {n.maquinaModelo && (
                       <Link
-                        href={`/comparativo?modelo=${encodeURIComponent(n.maquinaModelo)}`}
+                        href={`/comparativo?modelo=${encodeURIComponent(n.maquinaModelo)}${n.concorrenteMencionado ? `&vs=${encodeURIComponent(n.concorrenteMencionado)}` : ""}`}
                         className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+                        title={n.concorrenteMencionado ? `Batalha vs ${n.concorrenteMencionado}` : "Comparar com concorrentes"}
                       >
-                        <Swords size={13} /> Comparar
+                        <Swords size={13} /> {n.concorrenteMencionado ? `vs ${n.concorrenteMencionado}` : "Comparar"}
                       </Link>
                     )}
                   </div>

@@ -55,6 +55,7 @@ const GRUPOS = [
     label: "Análise",
     links: [
       { href: "/financeiro", label: "Financeiro", icon: Banknote },
+      { href: "/historico", label: "Histórico de Negócios", icon: ClipboardList },
       { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
       { href: "/sugestoes", label: "Sugestões IA", icon: Sparkles },
     ],

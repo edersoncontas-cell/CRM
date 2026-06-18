@@ -11,16 +11,23 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+const DIAS_ESQUECIDO = 15;
+
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; q?: string };
+  searchParams: { municipio?: string; q?: string; esquecidos?: string };
 }) {
   const filtro = searchParams.municipio;
   const busca = (searchParams.q ?? "").trim();
+  const apenasEsquecidos = searchParams.esquecidos === "1";
   await garantirRegioes();
   await limparContatosDescartados();
-  const [clientes, municipios] = await Promise.all([
+
+  const corteEsquecido = new Date();
+  corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
+
+  const [clientes, municipios, totalEsquecidos] = await Promise.all([
     db.cliente.findMany({
       where: {
         ...(filtro ? { municipioId: filtro } : {}),
@@ -32,13 +39,21 @@ export default async function ClientesPage({
               ],
             }
           : {}),
+        ...(apenasEsquecidos
+          ? { negociacoes: { some: { status: "aberta", ultimoContato: { lt: corteEsquecido } } } }
+          : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
-      orderBy: { atualizadoEm: "desc" },
+      orderBy: apenasEsquecidos
+        ? { negociacoes: { _count: "desc" } }
+        : { atualizadoEm: "desc" },
     }),
     db.municipio.findMany({
       include: { _count: { select: { clientes: true } } },
       orderBy: { nome: "asc" },
+    }),
+    db.cliente.count({
+      where: { negociacoes: { some: { status: "aberta", ultimoContato: { lt: corteEsquecido } } } },
     }),
   ]);
 
@@ -58,9 +73,31 @@ export default async function ClientesPage({
         }
       />
 
+      {/* Abas: todos / esquecidos */}
+      <div className="mb-4 flex gap-2">
+        <Link
+          href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasEsquecidos ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+        >
+          Todos
+        </Link>
+        <Link
+          href={filtro ? `/clientes?municipio=${filtro}&esquecidos=1` : "/clientes?esquecidos=1"}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasEsquecidos ? "bg-red-600 text-white" : "border border-red-200 text-red-600 hover:bg-red-50"}`}
+        >
+          ⏰ Esquecidos
+          {totalEsquecidos > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasEsquecidos ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>
+              {totalEsquecidos}
+            </span>
+          )}
+        </Link>
+      </div>
+
       {/* Busca por nome ou telefone */}
       <form method="GET" className="mb-5 flex gap-2">
         {filtro && <input type="hidden" name="municipio" value={filtro} />}
+        {apenasEsquecidos && <input type="hidden" name="esquecidos" value="1" />}
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
