@@ -39,6 +39,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
+    // Log compacto para diagnóstico (visível nos logs da Vercel).
+    console.log("[zapi webhook]", JSON.stringify({
+      type: body?.type, fromMe: body?.fromMe, phone: body?.phone,
+      isGroup: body?.isGroup, isStatusReply: body?.isStatusReply,
+      temTexto: !!(body?.text?.message),
+    }));
+
     // Ignora atualizações de status e grupos.
     if (body?.isStatusReply === true) return NextResponse.json({ ok: true });
     if (body?.isGroup === true) return NextResponse.json({ ok: true });

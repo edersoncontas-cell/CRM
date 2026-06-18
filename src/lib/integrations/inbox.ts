@@ -102,6 +102,19 @@ async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null)
   });
 }
 
+// Casa um telefone de forma flexível: tenta exato e, se não achar, pelos últimos
+// 8 dígitos (resolve diferenças de DDI/9º dígito entre o que a Z-API manda e o
+// que está salvo no cadastro). Evita duplicar cliente e perder mensagens.
+async function acharClientePorTelefone(telefone: string) {
+  const digits = telefone.replace(/\D/g, "");
+  if (!digits) return null;
+  const exato = await db.cliente.findFirst({ where: { telefone: digits } });
+  if (exato) return exato;
+  const sufixo = digits.slice(-8);
+  if (sufixo.length < 8) return null;
+  return db.cliente.findFirst({ where: { telefone: { endsWith: sufixo } } });
+}
+
 // Registra uma mensagem recebida de qualquer canal de WhatsApp.
 export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<void> {
   const telefone = msg.telefone.replace(/\D/g, "");
@@ -112,7 +125,7 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
   if (deveDescartarContato(nomeContato)) return;
 
   // Encontra ou cadastra o cliente automaticamente.
-  let cliente = await db.cliente.findFirst({ where: { telefone } });
+  let cliente = await acharClientePorTelefone(telefone);
   if (!cliente) {
     cliente = await db.cliente.create({
       data: {
@@ -216,9 +229,17 @@ export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<v
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
 
-  // Só sincroniza se o destinatário já for um cliente do CRM (não cria do nada).
-  const cliente = await db.cliente.findFirst({ where: { telefone } });
-  if (!cliente) return;
+  // Casa o telefone de forma flexível. Se eu iniciei a conversa com um número
+  // ainda não cadastrado, cria o cliente para a conversa aparecer no CRM
+  // (comportamento "igual ao WhatsApp"). Descarta contatos indesejados.
+  let cliente = await acharClientePorTelefone(telefone);
+  if (!cliente) {
+    const nome = msg.nomeContato?.trim() || `Contato ${telefone}`;
+    if (deveDescartarContato(nome)) return;
+    cliente = await db.cliente.create({
+      data: { nome, telefone, origem: "whatsapp" },
+    });
+  }
 
   await db.conversa.create({
     data: {
