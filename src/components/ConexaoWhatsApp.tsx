@@ -10,9 +10,33 @@ type Status = {
   configurado: boolean;
   conectado: boolean;
   precisaQrCode: boolean;
+  clientTokenConfigurado: boolean;
   telefone?: string | null;
   erro?: string | null;
 };
+
+// Aviso quando o ZAPI_CLIENT_TOKEN está faltando — o número até recebe mensagens,
+// mas NÃO consegue enviar (a Z-API recusa com "client-token is not configured").
+function AvisoClientToken() {
+  return (
+    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4">
+      <div className="mb-1.5 flex items-center gap-2 font-semibold text-red-800">
+        <AlertTriangle size={17} /> Falta o token de envio (ZAPI_CLIENT_TOKEN)
+      </div>
+      <p className="text-sm text-red-700">
+        O número recebe mensagens, mas <b>não consegue enviar</b> — a Z-API exige o
+        &quot;Token de segurança da conta&quot; (Client-Token) no envio.
+      </p>
+      <ol className="mt-2 space-y-1 text-sm text-red-700">
+        <li>1. No painel da <b>Z-API</b>, abra <b>Segurança</b> e copie o <b>Account Security Token</b>.</li>
+        <li>2. No Vercel, em <b>Settings → Environment Variables</b>, adicione:
+          <code className="ml-1 rounded bg-red-100 px-1.5 py-0.5">ZAPI_CLIENT_TOKEN</code>
+        </li>
+        <li>3. Faça um <b>redeploy</b> para a variável entrar em vigor.</li>
+      </ol>
+    </div>
+  );
+}
 
 export function ConexaoWhatsApp() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -27,7 +51,7 @@ export function ConexaoWhatsApp() {
       setStatus(data);
       return data;
     } catch {
-      setStatus({ configurado: true, conectado: false, precisaQrCode: true, erro: "Falha ao consultar status." });
+      setStatus({ configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true, erro: "Falha ao consultar status." });
       return null;
     }
   }, []);
@@ -107,6 +131,8 @@ export function ConexaoWhatsApp() {
   // Conectado.
   if (status.conectado) {
     return (
+      <div>
+      {!status.clientTokenConfigurado && <AvisoClientToken />}
       <div className="rounded-xl border border-green-200 bg-green-50 p-5">
         <div className="mb-1 flex items-center gap-2 text-lg font-bold text-green-700">
           <CheckCircle2 size={22} /> WhatsApp conectado
@@ -126,11 +152,14 @@ export function ConexaoWhatsApp() {
           {pending ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Desconectar
         </button>
       </div>
+      </div>
     );
   }
 
   // Precisa escanear o QR.
   return (
+    <div>
+    {!status.clientTokenConfigurado && <AvisoClientToken />}
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
         <QrCode size={18} className="text-brand-600" /> Escaneie para conectar
@@ -177,6 +206,7 @@ export function ConexaoWhatsApp() {
           {pending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Reiniciar instância
         </button>
       </div>
+    </div>
     </div>
   );
 }

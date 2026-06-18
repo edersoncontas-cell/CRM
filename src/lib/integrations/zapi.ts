@@ -59,14 +59,16 @@ export type StatusConexao = {
   configurado: boolean;       // env vars presentes?
   conectado: boolean;         // celular pareado e online?
   precisaQrCode: boolean;     // aguardando leitura do QR?
+  clientTokenConfigurado: boolean; // ZAPI_CLIENT_TOKEN presente? (obrigatório p/ enviar)
   telefone?: string | null;   // número conectado
   erro?: string | null;
 };
 
 // Consulta o status da instância na Z-API.
 export async function statusConexao(): Promise<StatusConexao> {
+  const clientTokenConfigurado = !!process.env.ZAPI_CLIENT_TOKEN;
   if (!isEnabled()) {
-    return { configurado: false, conectado: false, precisaQrCode: false };
+    return { configurado: false, conectado: false, precisaQrCode: false, clientTokenConfigurado };
   }
   try {
     const res = await fetch(`${baseUrl()}/status`, { headers: headers(), cache: "no-store" });
@@ -80,10 +82,11 @@ export async function statusConexao(): Promise<StatusConexao> {
       configurado: true,
       conectado,
       precisaQrCode: !conectado,
+      clientTokenConfigurado,
       erro: data.error ?? null,
     };
   } catch (e) {
-    return { configurado: true, conectado: false, precisaQrCode: true, erro: String(e) };
+    return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado, erro: String(e) };
   }
 }
 
