@@ -4,6 +4,7 @@ import { formatCurrency, formatDate, formatDateTime, iniciais, diasDesde } from 
 import { ConversaAnaliser } from "@/components/ConversaAnaliser";
 import { EditarClienteForm } from "@/components/EditarClienteForm";
 import { VisitasCliente } from "@/components/VisitasCliente";
+import { AgendarVisitaDialog } from "@/components/AgendarVisitaDialog";
 import { garantirRegioes } from "@/lib/regioes";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -77,7 +78,12 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             {cliente.aguardandoResposta && <Badge tom="red">aguardando seu retorno</Badge>}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <AgendarVisitaDialog
+            clienteId={cliente.id}
+            clienteNome={cliente.nome}
+            clienteTelefone={cliente.telefone}
+          />
           <Link
             href="/inbox"
             className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-sm font-semibold text-agro-400 hover:bg-brand-800"
