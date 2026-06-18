@@ -13,6 +13,7 @@ export default async function MaquinasPage() {
       modelo: true,
       categoria: true,
       maisComercializado: true,
+      volumeVendas: true,
       potencia: true,
       pesoOperacional: true,
     },
@@ -29,9 +30,10 @@ export default async function MaquinasPage() {
           <h1 className="text-2xl font-bold tracking-tight text-white">Modelos em Foco</h1>
         </div>
         <p className="text-sm ml-1 mt-1" style={{ color: "#71717a" }}>
-          Clique nos modelos que você{" "}
-          <span style={{ color: "#facc15" }}>mais negocia</span> para marcá-los.
-          A IA usará esses modelos como referência ao analisar conversas e sugerir argumentos de venda.
+          Toque na <span style={{ color: "#facc15" }}>estrela</span> para marcar os modelos que você
+          mais negocia (a IA prioriza esses nas análises). Informe as{" "}
+          <span style={{ color: "#34d399" }}>unidades vendidas</span> de cada um para montar o
+          ranking das mais vendidas na sua região.
         </p>
       </div>
 

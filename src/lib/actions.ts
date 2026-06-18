@@ -398,6 +398,14 @@ export async function toggleMaquinaComercializada(id: string, valor: boolean) {
   revalidatePath("/maquinas");
 }
 
+// ---------- Ranking de vendas ----------
+export async function setVolumeVendas(id: string, valor: number) {
+  "use server";
+  const v = Number.isFinite(valor) && valor > 0 ? Math.round(valor) : 0;
+  await db.maquina.update({ where: { id }, data: { volumeVendas: v } });
+  revalidatePath("/maquinas");
+}
+
 // ---------- Fichas Técnicas ----------
 export async function salvarFichaTecnica(
   id: string,
@@ -545,6 +553,7 @@ export async function analisarConversaAction(formData: FormData) {
     db.maquina.findMany({
       where: { maisComercializado: true, proprio: true },
       select: { marca: true, modelo: true, categoria: true },
+      orderBy: [{ volumeVendas: "desc" }, { modelo: "asc" }],
     }),
   ]);
   const extracao = await analisarConversaIA(conteudo, {
