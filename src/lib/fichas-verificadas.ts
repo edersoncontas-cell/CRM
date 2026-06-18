@@ -429,6 +429,121 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
       "Caçamba: 0,4 m³",
     ].join("\n"),
   },
+
+  // ── Rolo de solo (Dynapac CA) ─────────────────────────────────────────────
+  {
+    marca: "Dynapac",
+    modelo: "CA2500",
+    especificacoes: [
+      "Peso operacional: 10.100 kg",
+      "Largura do cilindro: 2.130 mm",
+      "Força centrífuga: 250 / 130 kN (alta/baixa amplitude)",
+      "Amplitude: 1,8 / 0,9 mm",
+      "Frequência: 34 Hz",
+    ].join("\n"),
+  },
+  {
+    marca: "Dynapac",
+    modelo: "CA3500",
+    especificacoes: [
+      "Motor: Cummins QSF3.8 (Tier 4F)",
+      "Potência: 130 cv",
+      "Peso operacional: 11.900 kg",
+      "Largura do cilindro: 2.130 mm",
+      "Força centrífuga: 280 / 170 kN (alta/baixa amplitude)",
+      "Frequência: 31 / 34 Hz",
+    ].join("\n"),
+  },
+  {
+    marca: "Dynapac",
+    modelo: "CA5000",
+    especificacoes: [
+      "Peso operacional: 16.000 kg",
+      "Largura do cilindro: 2.130 mm",
+      "Diâmetro do cilindro: 1.524 mm",
+    ].join("\n"),
+  },
+
+  // ── Rolo tandem asfalto (Dynapac CC) ──────────────────────────────────────
+  {
+    marca: "Dynapac",
+    modelo: "CC2200",
+    especificacoes: [
+      "Motor: Deutz TCD 3.6 (Tier 4F)",
+      "Potência: 74 cv",
+      "Peso operacional: 9.100 kg",
+      "Largura de trabalho: 1.500 – 1.680 mm",
+      "Tecnologia SEISMIC (frequência automática) + modo ECO",
+    ].join("\n"),
+  },
+  {
+    marca: "Dynapac",
+    modelo: "CC4200",
+    especificacoes: [
+      "Motor: Cummins QSB4.5",
+      "Potência: 130 cv",
+      "Peso operacional máx.: 13.150 kg",
+      "Largura de trabalho: 1.680 mm",
+      "Força centrífuga: 139 / 92 kN (alta/baixa amplitude)",
+    ].join("\n"),
+  },
+
+  // ── Rolo pneumático (Dynapac CP) ──────────────────────────────────────────
+  {
+    marca: "Dynapac",
+    modelo: "CP2100",
+    especificacoes: [
+      "Peso (vazio): 10.395 kg · com lastro: até 16.340 kg",
+      "Largura de rolagem: 1.800 mm",
+      "Pneus: 9 (11.00-20)",
+      "Carga por roda: até 3.000 kg",
+      "Lastro: 7 (3,5 t) ou 13 (6,5 t) blocos de aço",
+    ].join("\n"),
+  },
+
+  // ── Rolos — concorrentes ──────────────────────────────────────────────────
+  {
+    marca: "Hamm",
+    modelo: "3411",
+    especificacoes: [
+      "Potência: 136 cv (100 kW)",
+      "Peso operacional: 11.310 – 11.800 kg",
+      "Largura do cilindro: 2.140 mm",
+      "Força centrífuga: 246 kN",
+      "Amplitude: 1,9 mm · Frequência: 37 Hz",
+    ].join("\n"),
+  },
+  {
+    marca: "Bomag",
+    modelo: "BW211",
+    especificacoes: [
+      "Peso operacional: 10.600 kg",
+      "Largura do cilindro: 2.130 mm",
+      "Amplitude: 1,83 mm · Frequência: 34 Hz",
+      "Carga linear estática: 26,6 kg/cm",
+    ].join("\n"),
+  },
+  {
+    marca: "Caterpillar",
+    modelo: "CS54B",
+    especificacoes: [
+      "Motor: Cat C4.4",
+      "Peso operacional: 11.500 kg",
+      "Largura do cilindro: 2.134 mm",
+      "Frequência: 23,3 – 30,5 Hz",
+    ].join("\n"),
+  },
+  {
+    marca: "Hamm",
+    modelo: "HD110",
+    especificacoes: [
+      "Motor: Deutz TCD 2012 L04",
+      "Potência: 136 cv (100 kW)",
+      "Peso operacional: 10.265 kg (máx. 13.180 kg)",
+      "Largura do cilindro: 1.680 mm",
+      "Força centrífuga: 120 kN · Frequência: 50 Hz",
+    ].join("\n"),
+  },
 ];
 
 let fichasGarantidas = false;
