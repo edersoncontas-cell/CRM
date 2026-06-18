@@ -431,6 +431,22 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
     ].join("\n"),
   },
 
+  // ── Mini pá carregadeira ──────────────────────────────────────────────────
+  {
+    marca: "New Holland",
+    modelo: "W12D",
+    especificacoes: [
+      "Motor: FPT NEF6 (Tier 3, turbo)",
+      "Potência: 130 cv",
+      "Peso operacional máx.: 10.500 kg",
+      "Caçamba: 2,3 m³",
+      "Braço: duplo z-bar",
+      "Transmissão: Powershift",
+      "Cabine: ROPS/FOPS",
+      "Eixos: ZF HD",
+    ].join("\n"),
+  },
+
   // ── Rolo de solo (Dynapac CA) ─────────────────────────────────────────────
   {
     marca: "Dynapac",
