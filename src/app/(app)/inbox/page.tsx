@@ -4,6 +4,7 @@ import { InboxClient, type Contato } from "@/components/InboxClient";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { LimparDuplicados } from "@/components/LimparDuplicados";
 import { ImportarHistorico } from "@/components/ImportarHistorico";
+import { BotaoNotificacoes } from "@/components/BotaoNotificacoes";
 import * as zapi from "@/lib/integrations/zapi";
 import { modoFimDeSemanaAtivo } from "@/lib/config";
 
@@ -65,7 +66,8 @@ export default async function InboxPage() {
         titulo="WhatsApp"
         subtitulo="Converse com seus clientes sem sair do CRM — com rascunho da IA pronto pra enviar"
         acao={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <BotaoNotificacoes />
             <BotaoAtualizar />
             <ImportarHistorico />
             <LimparDuplicados />
