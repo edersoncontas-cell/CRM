@@ -45,7 +45,7 @@ type MensagemRecebida = {
 // True se já registramos essa mensagem da Z-API (evita duplicar ao vivo x import).
 async function jaRegistrada(zapiId?: string | null): Promise<boolean> {
   if (!zapiId) return false;
-  const existe = await db.conversa.findUnique({ where: { zapiId }, select: { id: true } });
+  const existe = await db.conversa.findFirst({ where: { zapiId }, select: { id: true } });
   return !!existe;
 }
 

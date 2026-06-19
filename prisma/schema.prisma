@@ -121,11 +121,13 @@ model Conversa {
   conteudo    String
   transcricao String?
   remetente   String    @default("cliente") // cliente | vendedor
-  zapiId      String?   @unique // id da mensagem na Z-API (dedupe import x ao vivo)
+  zapiId      String?   // id da mensagem na Z-API (dedupe import x ao vivo)
   analisadaEm DateTime?
   criadoEm    DateTime  @default(now())
 
   analise     AnaliseIA?
+
+  @@index([zapiId])
 }
 
 model AnaliseIA {

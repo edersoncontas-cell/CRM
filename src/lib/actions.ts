@@ -1394,19 +1394,27 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
     }
 
     const ordenadas = [...msgs].sort((a, b) => a.momentMs - b.momentMs);
-    const res = await db.conversa.createMany({
-      data: ordenadas.map((m) => ({
-        conteudo: m.texto,
-        clienteId: cliente!.id,
-        canal: "whatsapp",
-        tipo: m.tipo === "audio" ? "audio" : "texto",
-        remetente: m.fromMe ? "vendedor" : "cliente",
-        zapiId: m.messageId,
-        criadoEm: new Date(m.momentMs),
-      })),
-      skipDuplicates: true, // ignora mensagens já existentes (zapiId único)
-    });
-    novasConversas += res.count;
+    // Deduplica manualmente: descarta as que já existem (mesmo zapiId).
+    const ids = ordenadas.map((m) => m.messageId);
+    const existentes = new Set(
+      (await db.conversa.findMany({ where: { zapiId: { in: ids } }, select: { zapiId: true } }))
+        .map((c) => c.zapiId)
+    );
+    const novas = ordenadas.filter((m) => !existentes.has(m.messageId));
+    if (novas.length) {
+      await db.conversa.createMany({
+        data: novas.map((m) => ({
+          conteudo: m.texto,
+          clienteId: cliente!.id,
+          canal: "whatsapp",
+          tipo: m.tipo === "audio" ? "audio" : "texto",
+          remetente: m.fromMe ? "vendedor" : "cliente",
+          zapiId: m.messageId,
+          criadoEm: new Date(m.momentMs),
+        })),
+      });
+      novasConversas += novas.length;
+    }
 
     const ultima = ordenadas[ordenadas.length - 1];
     await db.cliente.update({
