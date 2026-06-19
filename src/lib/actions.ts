@@ -1340,15 +1340,25 @@ export async function excluirMaquinaUsada(id: string) {
   return { ok: true };
 }
 
-// Remove os contatos automáticos duplicados ("Contato <número>") que não têm
-// nenhuma negociação — lixo gerado por mensagens enviadas que não casavam.
+// Remove os contatos automáticos duplicados ("Contato <número>").
+// - Com 14+ dígitos = identificador interno do WhatsApp (lid), NÃO é telefone →
+//   lixo certo, remove sempre (mesmo com negociação, que também é falsa).
+// - Com até 13 dígitos (telefone normal) → só remove se não tiver negociação,
+//   para não apagar um prospect real cadastrado automaticamente.
 export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removidos: number }> {
   "use server";
   const candidatos = await db.cliente.findMany({
-    where: { nome: { startsWith: "Contato " }, negociacoes: { none: {} } },
-    select: { id: true, nome: true },
+    where: { nome: { startsWith: "Contato " } },
+    select: { id: true, nome: true, _count: { select: { negociacoes: true } } },
   });
-  const ids = candidatos.filter((c) => /^Contato \d+$/.test(c.nome)).map((c) => c.id);
+  const ids = candidatos
+    .filter((c) => {
+      const m = c.nome.match(/^Contato (\d+)$/);
+      if (!m) return false;
+      if (m[1].length >= 14) return true; // lid do WhatsApp = lixo
+      return c._count.negociacoes === 0;  // telefone normal: só sem negociação
+    })
+    .map((c) => c.id);
   if (ids.length) await db.cliente.deleteMany({ where: { id: { in: ids } } });
   revalidatePath("/inbox");
   revalidatePath("/clientes");
@@ -1371,6 +1381,7 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
   let novosClientes = 0;
 
   for (const chat of chats.slice(0, 20)) {
+    if (chat.phone.length > 13) continue; // lid do WhatsApp, não é telefone real
     const msgs = await zapi.mensagensDoChat(chat.phone, 20);
     if (!msgs.length) continue;
 

@@ -127,6 +127,9 @@ export async function acharClientePorTelefone(telefone: string) {
 export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<void> {
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
+  // Ignora "telefones" longos demais (14+ dígitos): são identificadores internos
+  // do WhatsApp (lid), não números reais — evita criar "Contato 7189..." lixo.
+  if (telefone.length > 13) return;
   if (await jaRegistrada(msg.zapiId)) return; // já importada/recebida
 
   // Descarta silenciosamente contatos de pousadas, hotéis, etc.
@@ -238,6 +241,7 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
 export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<void> {
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
+  if (telefone.length > 13) return; // lid do WhatsApp, não é telefone real
   if (await jaRegistrada(msg.zapiId)) return; // já importada/registrada
 
   // Mensagem QUE EU ENVIEI: só sincroniza se o número já for um cliente do CRM.
