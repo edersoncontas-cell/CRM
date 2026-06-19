@@ -29,6 +29,15 @@ export default function LoginPage({
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4">
 
+      {/* Cobre a tela de preto IMEDIATAMENTE se houver sessão salva, evitando o
+          flash do formulário antes do splash do React aparecer. */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "try{if(localStorage.getItem('crm_token')){var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:95;background:#000';document.body.appendChild(d);}}catch(e){}",
+        }}
+      />
+
       {/* Auto-login + splash futurista (reforço para o PWA do iPhone) */}
       <EntradaAutomatica />
 
