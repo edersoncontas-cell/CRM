@@ -56,10 +56,12 @@ export async function POST(req: NextRequest) {
     const { texto, tipo, transcricao } = await extrairTexto(body);
     if (!texto) return NextResponse.json({ ok: true });
 
+    const zapiId = body?.messageId ? String(body.messageId) : null;
+
     // Mensagem enviada por mim (pelo celular): sincroniza o histórico e, se for
     // áudio agendando visita, a IA joga na agenda.
     if (body?.fromMe === true) {
-      await registrarMensagemEnviada({ telefone, texto, tipo, transcricao, canal: "whatsapp" });
+      await registrarMensagemEnviada({ telefone, texto, tipo, transcricao, canal: "whatsapp", zapiId });
       return NextResponse.json({ ok: true });
     }
 
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
       tipo,
       transcricao,
       canal: "whatsapp",
+      zapiId,
     });
 
     return NextResponse.json({ ok: true });

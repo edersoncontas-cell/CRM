@@ -53,6 +53,82 @@ export async function baixarAudio(
   }
 }
 
+// ---------- Histórico (importar conversas recentes) ----------
+
+export type ChatZapi = { phone: string; name?: string | null; isGroup?: boolean };
+export type MensagemZapi = {
+  messageId: string;
+  phone: string;
+  fromMe: boolean;
+  momentMs: number;        // timestamp em ms
+  texto: string;
+  tipo: "texto" | "audio" | "imagem" | "outro";
+  senderName?: string | null;
+};
+
+// Lista os chats recentes da conta (para sabermos de quem importar mensagens).
+export async function listarChats(): Promise<ChatZapi[]> {
+  if (!isEnabled()) return [];
+  try {
+    const res = await fetch(`${baseUrl()}/chats`, { headers: headers(), cache: "no-store" });
+    if (!res.ok) return [];
+    const data = (await res.json().catch(() => [])) as Record<string, unknown>[];
+    if (!Array.isArray(data)) return [];
+    return data.map((c) => ({
+      phone: String(c.phone ?? c.id ?? "").replace(/\D/g, ""),
+      name: (c.name as string) ?? (c.chatName as string) ?? null,
+      isGroup: c.isGroup === true || String(c.phone ?? "").includes("-"),
+    })).filter((c) => c.phone && !c.isGroup);
+  } catch {
+    return [];
+  }
+}
+
+// Extrai texto/tipo de uma mensagem da Z-API de forma tolerante a variações.
+function parseMsgZapi(m: Record<string, unknown>): MensagemZapi | null {
+  const messageId = String(m.messageId ?? m.id ?? "");
+  const phone = String(m.phone ?? "").replace(/\D/g, "");
+  if (!messageId || !phone) return null;
+  const momentMs = Number(m.momment ?? m.moment ?? m.messageTimestamp ?? 0) || Date.now();
+  const txt = m.text as { message?: string } | string | undefined;
+  let texto = "";
+  let tipo: MensagemZapi["tipo"] = "texto";
+  if (typeof txt === "string") texto = txt;
+  else if (txt?.message) texto = txt.message;
+  const img = m.image as { caption?: string } | undefined;
+  const aud = m.audio as object | undefined;
+  if (!texto && img) { texto = img.caption || "[imagem]"; tipo = "imagem"; }
+  else if (!texto && aud) { texto = "[áudio]"; tipo = "audio"; }
+  else if (!texto) {
+    const leg = (m.video as { caption?: string })?.caption ?? (m.document as { caption?: string })?.caption;
+    if (leg) texto = leg;
+  }
+  if (!texto) return null;
+  return {
+    messageId,
+    phone,
+    fromMe: m.fromMe === true,
+    momentMs: momentMs < 1e12 ? momentMs * 1000 : momentMs, // segundos → ms se preciso
+    texto,
+    tipo,
+    senderName: (m.senderName as string) ?? (m.chatName as string) ?? null,
+  };
+}
+
+// Busca as últimas mensagens de um chat (telefone).
+export async function mensagensDoChat(phone: string, amount = 20): Promise<MensagemZapi[]> {
+  if (!isEnabled()) return [];
+  try {
+    const res = await fetch(`${baseUrl()}/chat-messages/${phone}?amount=${amount}`, { headers: headers(), cache: "no-store" });
+    if (!res.ok) return [];
+    const data = (await res.json().catch(() => [])) as Record<string, unknown>[];
+    if (!Array.isArray(data)) return [];
+    return data.map(parseMsgZapi).filter((m): m is MensagemZapi => m !== null);
+  } catch {
+    return [];
+  }
+}
+
 // ---------- Conexão (QR Code estilo WhatsApp Web) ----------
 
 export type StatusConexao = {

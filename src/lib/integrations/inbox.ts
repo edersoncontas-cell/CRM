@@ -39,7 +39,15 @@ type MensagemRecebida = {
   tipo: "texto" | "audio";
   transcricao?: string | null;
   canal?: string;
+  zapiId?: string | null; // id da mensagem na Z-API (dedupe com importação)
 };
+
+// True se já registramos essa mensagem da Z-API (evita duplicar ao vivo x import).
+async function jaRegistrada(zapiId?: string | null): Promise<boolean> {
+  if (!zapiId) return false;
+  const existe = await db.conversa.findUnique({ where: { zapiId }, select: { id: true } });
+  return !!existe;
+}
 
 // Alimenta a negociação aberta do cliente (ou cria uma nova se for prospect real).
 async function alimentarNegociacao(
@@ -105,7 +113,7 @@ async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null)
 // Casa um telefone de forma flexível pelos últimos 8 dígitos, comparando SOMENTE
 // dígitos dos dois lados (ignora DDI, 9º dígito e formatação tipo "(28) 99999-0000").
 // Faz a comparação em JS porque o telefone salvo pode ter máscara/símbolos.
-async function acharClientePorTelefone(telefone: string) {
+export async function acharClientePorTelefone(telefone: string) {
   const alvo = telefone.replace(/\D/g, "").slice(-8);
   if (alvo.length < 8) return null;
   const candidatos = await db.cliente.findMany({
@@ -119,6 +127,7 @@ async function acharClientePorTelefone(telefone: string) {
 export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<void> {
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
+  if (await jaRegistrada(msg.zapiId)) return; // já importada/recebida
 
   // Descarta silenciosamente contatos de pousadas, hotéis, etc.
   const nomeContato = msg.nomeContato?.trim() || `Contato ${telefone}`;
@@ -143,6 +152,7 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
     data: {
       conteudo: msg.texto,
       transcricao: msg.transcricao ?? null,
+      zapiId: msg.zapiId ?? null,
       clienteId: cliente.id,
       canal: msg.canal ?? "whatsapp",
       tipo: msg.tipo,
@@ -228,6 +238,7 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
 export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<void> {
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
+  if (await jaRegistrada(msg.zapiId)) return; // já importada/registrada
 
   // Mensagem QUE EU ENVIEI: só sincroniza se o número já for um cliente do CRM.
   // NÃO cria cliente novo aqui — isso evitava encher o inbox de "Contato 7189..."
@@ -241,6 +252,7 @@ export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<v
     data: {
       conteudo: msg.texto,
       transcricao: msg.transcricao ?? null,
+      zapiId: msg.zapiId ?? null,
       clienteId: cliente.id,
       canal: msg.canal ?? "whatsapp",
       tipo: msg.tipo,

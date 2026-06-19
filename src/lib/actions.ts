@@ -5,7 +5,7 @@ import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA } from "./ai";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
-import { vincularMunicipio } from "./integrations/inbox";
+import { vincularMunicipio, acharClientePorTelefone } from "./integrations/inbox";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
@@ -1354,4 +1354,62 @@ export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removi
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { ok: true, removidos: ids.length };
+}
+
+// ---------- Importar histórico recente do WhatsApp (Z-API) ----------
+// Puxa as conversas/mensagens recentes que já existem no número e preenche o CRM,
+// para a conversa não começar "vazia". Idempotente: re-rodar não duplica (zapiId).
+export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas: number; clientes: number; erro?: string }> {
+  "use server";
+  if (!zapi.isEnabled()) return { ok: false, conversas: 0, clientes: 0, erro: "Z-API não está conectada." };
+
+  const chats = await zapi.listarChats();
+  if (!chats.length) return { ok: false, conversas: 0, clientes: 0, erro: "A Z-API não retornou conversas (verifique a conexão)." };
+
+  const recente = Date.now() - 2 * 24 * 60 * 60 * 1000; // 2 dias
+  let novasConversas = 0;
+  let novosClientes = 0;
+
+  for (const chat of chats.slice(0, 20)) {
+    const msgs = await zapi.mensagensDoChat(chat.phone, 20);
+    if (!msgs.length) continue;
+
+    let cliente = await acharClientePorTelefone(chat.phone);
+    if (!cliente) {
+      const nome = (chat.name || msgs.find((m) => !m.fromMe)?.senderName || `Contato ${chat.phone}`).trim();
+      if (deveDescartarContato(nome)) continue;
+      cliente = await db.cliente.create({ data: { nome, telefone: chat.phone, origem: "whatsapp" } });
+      novosClientes++;
+    }
+
+    const ordenadas = [...msgs].sort((a, b) => a.momentMs - b.momentMs);
+    const res = await db.conversa.createMany({
+      data: ordenadas.map((m) => ({
+        conteudo: m.texto,
+        clienteId: cliente!.id,
+        canal: "whatsapp",
+        tipo: m.tipo === "audio" ? "audio" : "texto",
+        remetente: m.fromMe ? "vendedor" : "cliente",
+        zapiId: m.messageId,
+        criadoEm: new Date(m.momentMs),
+      })),
+      skipDuplicates: true, // ignora mensagens já existentes (zapiId único)
+    });
+    novasConversas += res.count;
+
+    const ultima = ordenadas[ordenadas.length - 1];
+    await db.cliente.update({
+      where: { id: cliente.id },
+      data: {
+        ultimoContato: new Date(ultima.momentMs),
+        // só marca "aguardando" se a última for do cliente E recente
+        aguardandoResposta: !ultima.fromMe && ultima.momentMs >= recente,
+      },
+    });
+  }
+
+  revalidatePath("/inbox");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+  return { ok: true, conversas: novasConversas, clientes: novosClientes };
 }
