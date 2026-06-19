@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as zapi from "@/lib/integrations/zapi";
 import { isEnabled as transcricaoAtiva, transcreverBuffer } from "@/lib/integrations/transcription";
 import { registrarMensagemRecebida, registrarMensagemEnviada } from "@/lib/integrations/inbox";
+import { registrarDiag, type EventoDiag } from "@/lib/zapi-diag";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -10,14 +11,13 @@ export const maxDuration = 60;
 async function extrairTexto(
   body: any
 ): Promise<{ texto: string; tipo: "texto" | "audio"; transcricao?: string }> {
-  // Texto simples
   if (body?.text?.message) return { texto: String(body.text.message), tipo: "texto" };
+  if (typeof body?.text === "string" && body.text) return { texto: body.text, tipo: "texto" };
 
-  // Imagem/vídeo/documento com legenda
   const legenda = body?.image?.caption ?? body?.video?.caption ?? body?.document?.caption;
   if (legenda) return { texto: String(legenda), tipo: "texto" };
+  if (body?.image) return { texto: "[imagem]", tipo: "texto" };
 
-  // Áudio / mensagem de voz (a Z-API entrega uma URL direta).
   const audioUrl = body?.audio?.audioUrl ?? body?.ptt?.audioUrl;
   if (audioUrl) {
     if (!transcricaoAtiva()) return { texto: "[áudio recebido — transcrição não configurada]", tipo: "audio" };
@@ -36,48 +36,38 @@ async function extrairTexto(
 
 // Recebe os callbacks de mensagem da Z-API (configurar "Ao receber" no painel).
 export async function POST(req: NextRequest) {
+  let diag: Omit<EventoDiag, "em"> = { dir: "-", phone: null, nome: null, texto: "", status: "?" };
   try {
     const body = await req.json();
+    const telefone: string | null = body?.phone ? String(body.phone) : null;
+    const nome: string | null = body?.senderName ?? body?.chatName ?? null;
+    diag = { dir: body?.fromMe ? "out" : "in", phone: telefone, nome, texto: "", status: "?" };
 
-    // Log compacto para diagnóstico (visível nos logs da Vercel).
     console.log("[zapi webhook]", JSON.stringify({
-      type: body?.type, fromMe: body?.fromMe, phone: body?.phone,
-      isGroup: body?.isGroup, isStatusReply: body?.isStatusReply,
-      temTexto: !!(body?.text?.message),
+      type: body?.type, fromMe: body?.fromMe, phone: telefone,
+      isGroup: body?.isGroup, isStatusReply: body?.isStatusReply, temTexto: !!(body?.text?.message),
     }));
 
-    // Ignora atualizações de status e grupos.
-    if (body?.isStatusReply === true) return NextResponse.json({ ok: true });
-    if (body?.isGroup === true) return NextResponse.json({ ok: true });
-
-    const telefone = body?.phone;
-    if (!telefone) return NextResponse.json({ ok: true });
-
-    const { texto, tipo, transcricao } = await extrairTexto(body);
-    if (!texto) return NextResponse.json({ ok: true });
-
-    const zapiId = body?.messageId ? String(body.messageId) : null;
-
-    // Mensagem enviada por mim (pelo celular): sincroniza o histórico e, se for
-    // áudio agendando visita, a IA joga na agenda.
-    if (body?.fromMe === true) {
-      await registrarMensagemEnviada({ telefone, texto, tipo, transcricao, canal: "whatsapp", zapiId });
-      return NextResponse.json({ ok: true });
+    if (body?.isStatusReply === true) { diag.status = "status"; }
+    else if (body?.isGroup === true) { diag.status = "grupo"; }
+    else if (!telefone) { diag.status = "sem-telefone"; }
+    else {
+      const { texto, tipo, transcricao } = await extrairTexto(body);
+      diag.texto = texto;
+      const zapiId = body?.messageId ? String(body.messageId) : null;
+      if (!texto) { diag.status = "sem-texto"; }
+      else if (body?.fromMe === true) {
+        await registrarMensagemEnviada({ telefone, texto, tipo, transcricao, canal: "whatsapp", zapiId });
+        diag.status = "enviada";
+      } else {
+        await registrarMensagemRecebida({ telefone, nomeContato: nome, texto, tipo, transcricao, canal: "whatsapp", zapiId });
+        diag.status = "recebida";
+      }
     }
-
-    await registrarMensagemRecebida({
-      telefone,
-      nomeContato: body?.senderName ?? body?.chatName ?? null,
-      texto,
-      tipo,
-      transcricao,
-      canal: "whatsapp",
-      zapiId,
-    });
-
-    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Erro no webhook Z-API:", err);
-    return NextResponse.json({ ok: false }, { status: 200 });
+    diag.status = "erro:" + String(err).slice(0, 60);
   }
+  await registrarDiag(diag);
+  return NextResponse.json({ ok: true });
 }
