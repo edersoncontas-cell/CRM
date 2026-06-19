@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { AssistenteIA } from "@/components/AssistenteIA";
 import { InstalarIOS } from "@/components/InstalarIOS";
 import { AuthPersist } from "@/components/AuthPersist";
+import { SplashBoot } from "@/components/SplashBoot";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AssistenteIA />
       <InstalarIOS />
       <AuthPersist modo="guardar" />
+      <SplashBoot />
     </div>
   );
 }
