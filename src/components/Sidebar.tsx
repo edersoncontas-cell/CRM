@@ -2,76 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
-  TrendingDown, Sparkles, Megaphone, Settings, Menu, X, Calculator,
-  Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText, Trophy,
-} from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-
-const GRUPOS = [
-  {
-    label: "Principal",
-    links: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/inbox", label: "WhatsApp", icon: MessageCircle },
-      { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/mapa", label: "Mapa", icon: Map },
-      { href: "/radar", label: "Radar de safra", icon: CalendarRange },
-    ],
-  },
-  {
-    label: "Vendas",
-    links: [
-      { href: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
-      { href: "/maquinas", label: "Modelos em Foco", icon: Star },
-      { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
-      { href: "/super-trunfo", label: "Super Trunfo", icon: Trophy },
-      { href: "/comparativo", label: "Comparativo", icon: Swords },
-      { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
-      { href: "/resumos", label: "Resumos IA", icon: ClipboardList },
-      { href: "/agenda", label: "Agenda", icon: Calendar },
-      { href: "/roteiro", label: "Roteiro", icon: Route },
-      { href: "/simulador", label: "Simulador", icon: Calculator },
-    ],
-  },
-  {
-    label: "Marketing",
-    links: [
-      { href: "/marketing", label: "Marketing IA", icon: BrainCircuit },
-      { href: "/campanhas", label: "Campanhas", icon: Send },
-      { href: "/midia", label: "Mídia", icon: Megaphone },
-    ],
-  },
-  {
-    label: "Treinamento",
-    links: [
-      { href: "/academia", label: "Academia de Vendas", icon: GraduationCap },
-    ],
-  },
-  {
-    label: "Análise",
-    links: [
-      { href: "/financeiro", label: "Financeiro", icon: Banknote },
-      { href: "/historico", label: "Histórico de Negócios", icon: ClipboardList },
-      { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
-      { href: "/sugestoes", label: "Sugestões IA", icon: Sparkles },
-    ],
-  },
-  {
-    label: "Sistema",
-    links: [
-      { href: "/conexao", label: "Conexão WhatsApp", icon: Smartphone },
-      { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
-      { href: "/configuracoes", label: "Configurações", icon: Settings },
-    ],
-  },
-];
-
-const TODOS_HREFS = GRUPOS.flatMap((g) => g.links.map((l) => l.href));
+import { GRUPOS, TODOS_HREFS, lerMenuOcultos, EVENTO_MENU } from "@/lib/menu";
 
 // O link ativo é o de match mais específico (ex.: /maquinas/fichas vence /maquinas).
 function hrefAtivo(pathname: string, href: string): boolean {
@@ -86,6 +21,24 @@ function hrefAtivo(pathname: string, href: string): boolean {
 export function Sidebar() {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
+  const [ocultos, setOcultos] = useState<string[]>([]);
+
+  // Lê a preferência de visibilidade e reage a mudanças (feitas em Configurações).
+  useEffect(() => {
+    const atualizar = () => setOcultos(lerMenuOcultos());
+    atualizar();
+    window.addEventListener(EVENTO_MENU, atualizar);
+    window.addEventListener("storage", atualizar);
+    return () => {
+      window.removeEventListener(EVENTO_MENU, atualizar);
+      window.removeEventListener("storage", atualizar);
+    };
+  }, []);
+
+  // Esconde os itens desmarcados (exceto os fixos), e grupos que ficaram vazios.
+  const grupos = GRUPOS
+    .map((g) => ({ ...g, links: g.links.filter((l) => l.fixo || !ocultos.includes(l.href)) }))
+    .filter((g) => g.links.length > 0);
 
   return (
     <>
@@ -136,7 +89,7 @@ export function Sidebar() {
 
         {/* Nav com grupos */}
         <nav className="flex-1 overflow-y-auto py-3 scrollbar-none">
-          {GRUPOS.map((grupo) => (
+          {grupos.map((grupo) => (
             <div key={grupo.label} className="mb-1 px-3">
               <div className="mb-1 mt-3 px-2 text-[10px] font-bold uppercase tracking-widest text-brand-500">
                 {grupo.label}

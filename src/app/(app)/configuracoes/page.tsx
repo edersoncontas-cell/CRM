@@ -7,6 +7,7 @@ import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
 import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight } from "lucide-react";
+import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,11 @@ export default async function ConfiguracoesPage() {
         titulo="Configurações"
         subtitulo="Ative as integrações conforme você obtiver as credenciais"
       />
+
+      {/* Visibilidade dos itens do menu lateral */}
+      <Card className="mb-6">
+        <VisibilidadeMenu />
+      </Card>
 
       <Link
         href="/conexao"
