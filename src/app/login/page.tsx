@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado } from "@/lib/auth";
+import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado, cookieOpts } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
 
 // Rota de API usada como fonte primária (imune ao middleware de auth).
@@ -19,12 +19,7 @@ export default function LoginPage({
     "use server";
     const senha = String(formData.get("senha") ?? "");
     if (await senhaCorreta(senha)) {
-      cookies().set(COOKIE_NAME, await tokenEsperado(), {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      });
+      cookies().set(COOKIE_NAME, await tokenEsperado(), cookieOpts());
       redirect("/dashboard");
     }
     redirect("/login?erro=1");

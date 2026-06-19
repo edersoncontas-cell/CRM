@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_NAME, authAtivo, tokenEsperado } from "@/lib/auth";
+import { COOKIE_NAME, authAtivo, tokenEsperado, cookieOpts } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
   if (!authAtivo()) return NextResponse.next();
@@ -20,7 +20,13 @@ export async function middleware(req: NextRequest) {
 
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
   const esperado = await tokenEsperado();
-  if (cookie === esperado) return NextResponse.next();
+  if (cookie === esperado) {
+    // Renova o cookie a cada visita (sessão deslizante de 1 ano) — você fica
+    // logado mesmo fechando/reabrindo o app, sem precisar digitar a senha de novo.
+    const res = NextResponse.next();
+    res.cookies.set(COOKIE_NAME, esperado, cookieOpts());
+    return res;
+  }
 
   const url = req.nextUrl.clone();
   url.pathname = "/login";

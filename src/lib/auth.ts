@@ -3,6 +3,19 @@
 
 export const COOKIE_NAME = "crm_auth";
 
+// Opções do cookie de sessão. `secure` em produção (HTTPS) é essencial para o
+// cookie persistir de forma confiável no Safari/PWA do iPhone. Validade de 1 ano
+// e renovada a cada visita (no middleware) → você fica logado mesmo fechando o app.
+export function cookieOpts() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365, // 1 ano
+  };
+}
+
 export function authAtivo() {
   return !!process.env.APP_PASSWORD;
 }
