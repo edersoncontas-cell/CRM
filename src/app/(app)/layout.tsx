@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/Sidebar";
 import { AssistenteIA } from "@/components/AssistenteIA";
 import { InstalarIOS } from "@/components/InstalarIOS";
+import { AuthPersist } from "@/components/AuthPersist";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8">{children}</main>
       <AssistenteIA />
       <InstalarIOS />
+      <AuthPersist modo="guardar" />
     </div>
   );
 }

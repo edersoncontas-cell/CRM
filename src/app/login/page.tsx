@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado, cookieOpts } from "@/lib/auth";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
+import { AuthPersist } from "@/components/AuthPersist";
 
 // Rota de API usada como fonte primária (imune ao middleware de auth).
 // O arquivo estático em /public fica como fallback via <source> do <picture>.
@@ -27,6 +28,9 @@ export default function LoginPage({
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4">
+
+      {/* Auto-login pelo armazenamento interno (reforço para o PWA do iPhone) */}
+      <AuthPersist modo="restaurar" />
 
       {/* ── Painéis laterais (sm+) ── */}
       <div className="absolute inset-0 hidden sm:flex">
