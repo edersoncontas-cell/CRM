@@ -1268,3 +1268,74 @@ export async function executarPlano(
 
   return { ok: feitos > 0, feitos, mensagem: feitos > 0 ? `${feitos} ação(ões) executada(s).` : "Nada foi executado." };
 }
+
+// ---------- Máquinas usadas (estoque de seminovos) ----------
+
+function numOuNull(v: FormDataEntryValue | null): number | null {
+  const s = String(v ?? "").replace(/\D/g, "");
+  return s ? Number(s) : null;
+}
+
+export async function criarMaquinaUsada(formData: FormData) {
+  "use server";
+  const marca = String(formData.get("marca") ?? "").trim();
+  const modelo = String(formData.get("modelo") ?? "").trim();
+  if (!marca || !modelo) return { ok: false };
+  await db.maquinaUsada.create({
+    data: {
+      marca,
+      modelo,
+      categoria: String(formData.get("categoria") ?? "outro") || "outro",
+      ano: numOuNull(formData.get("ano")),
+      horimetro: numOuNull(formData.get("horimetro")),
+      preco: numOuNull(formData.get("preco")),
+      estado: String(formData.get("estado") ?? "boa") || "boa",
+      localizacao: String(formData.get("localizacao") ?? "").trim() || null,
+      descricao: String(formData.get("descricao") ?? "").trim() || null,
+      fotoUrl: String(formData.get("fotoUrl") ?? "").trim() || null,
+      status: String(formData.get("status") ?? "disponivel") || "disponivel",
+    },
+  });
+  revalidatePath("/usadas");
+  return { ok: true };
+}
+
+export async function editarMaquinaUsada(id: string, formData: FormData) {
+  "use server";
+  const marca = String(formData.get("marca") ?? "").trim();
+  const modelo = String(formData.get("modelo") ?? "").trim();
+  if (!marca || !modelo) return { ok: false };
+  await db.maquinaUsada.update({
+    where: { id },
+    data: {
+      marca,
+      modelo,
+      categoria: String(formData.get("categoria") ?? "outro") || "outro",
+      ano: numOuNull(formData.get("ano")),
+      horimetro: numOuNull(formData.get("horimetro")),
+      preco: numOuNull(formData.get("preco")),
+      estado: String(formData.get("estado") ?? "boa") || "boa",
+      localizacao: String(formData.get("localizacao") ?? "").trim() || null,
+      descricao: String(formData.get("descricao") ?? "").trim() || null,
+      fotoUrl: String(formData.get("fotoUrl") ?? "").trim() || null,
+      status: String(formData.get("status") ?? "disponivel") || "disponivel",
+    },
+  });
+  revalidatePath("/usadas");
+  return { ok: true };
+}
+
+export async function definirStatusUsada(id: string, status: string) {
+  "use server";
+  const valido = ["disponivel", "reservada", "vendida"].includes(status) ? status : "disponivel";
+  await db.maquinaUsada.update({ where: { id }, data: { status: valido } });
+  revalidatePath("/usadas");
+  return { ok: true };
+}
+
+export async function excluirMaquinaUsada(id: string) {
+  "use server";
+  await db.maquinaUsada.delete({ where: { id } });
+  revalidatePath("/usadas");
+  return { ok: true };
+}

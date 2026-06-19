@@ -171,6 +171,24 @@ model ColunaDemanda {
   criadoEm DateTime @default(now())
 }
 
+// Estoque de máquinas usadas/seminovas que o vendedor tem para oferecer.
+model MaquinaUsada {
+  id           String   @id @default(cuid())
+  marca        String
+  modelo       String
+  categoria    String   @default("outro")
+  ano          Int?
+  horimetro    Int?     // horas de uso (horímetro)
+  preco        Float?
+  estado       String   @default("boa")        // seminova | boa | regular
+  localizacao  String?  // cidade onde está a máquina
+  descricao    String?
+  fotoUrl      String?  // link de uma foto (opcional)
+  status       String   @default("disponivel") // disponivel | reservada | vendida
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
 model Meta {
   id        String   @id @default(cuid())
   tipo      String   // prospeccao | conversas | negocios_banco | diaria | semanal | mensal
