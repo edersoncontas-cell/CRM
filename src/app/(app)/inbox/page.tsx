@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { InboxClient, type Contato } from "@/components/InboxClient";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { LimparDuplicados } from "@/components/LimparDuplicados";
 import * as zapi from "@/lib/integrations/zapi";
 import { modoFimDeSemanaAtivo } from "@/lib/config";
 
@@ -65,6 +66,7 @@ export default async function InboxPage() {
         acao={
           <div className="flex items-center gap-2">
             <BotaoAtualizar />
+            <LimparDuplicados />
             <Badge tom={zapi.isEnabled() ? "green" : "yellow"}>
               {zapi.isEnabled() ? "Z-API conectada" : "Z-API não conectada"}
             </Badge>

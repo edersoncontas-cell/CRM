@@ -1,13 +1,42 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   criarMaquinaUsada, editarMaquinaUsada, definirStatusUsada, excluirMaquinaUsada,
 } from "@/lib/actions";
 import { formatCurrency } from "@/lib/utils";
 import {
-  Plus, X, Pencil, Trash2, MapPin, Clock, Calendar, Tag, Share2, Check, Search, Truck,
+  Plus, X, Pencil, Trash2, MapPin, Clock, Calendar, Share2, Check, Search, Truck, Camera,
 } from "lucide-react";
+
+// Comprime a foto no navegador (redimensiona p/ no máx. 1000px e exporta JPEG)
+// e devolve uma data URL — assim guardamos a imagem sem precisar de servidor de arquivos.
+function comprimirFoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("falha ao ler"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("imagem inválida"));
+      img.onload = () => {
+        const MAX = 1000;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width >= height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("sem canvas"));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export type Usada = {
   id: string;
@@ -242,7 +271,23 @@ function CardUsada({ m, onEditar }: { m: Usada; onEditar: () => void }) {
 
 function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () => void }) {
   const [pend, start] = useTransition();
+  const [foto, setFoto] = useState(maquina?.fotoUrl ?? "");
+  const [erroFoto, setErroFoto] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const ed = maquina;
+
+  async function aoEscolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErroFoto(null);
+    try {
+      const dataUrl = await comprimirFoto(file);
+      setFoto(dataUrl);
+    } catch {
+      setErroFoto("Não consegui processar a imagem. Tente outra foto.");
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -288,7 +333,44 @@ function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () =
             </select>
           </Campo>
           <Campo label="Localização" full><input name="localizacao" defaultValue={ed?.localizacao ?? ""} placeholder="Cachoeiro de Itapemirim" className={inp} /></Campo>
-          <Campo label="Link da foto (opcional)" full><input name="fotoUrl" defaultValue={ed?.fotoUrl ?? ""} placeholder="https://..." className={inp} /></Campo>
+
+          {/* Foto da máquina (tirada/escolhida no celular) */}
+          <div className="col-span-2">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Foto da máquina</span>
+            <input type="hidden" name="fotoUrl" value={foto} />
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={aoEscolherFoto} className="hidden" />
+            {foto ? (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={foto} alt="Prévia" className="h-40 w-full rounded-xl border border-slate-200 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setFoto("")}
+                  className="absolute right-2 top-2 rounded-lg bg-black/60 p-1.5 text-white hover:bg-black/80"
+                  title="Remover foto"
+                >
+                  <X size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-black/80"
+                >
+                  <Camera size={13} /> Trocar
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-6 text-sm font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600"
+              >
+                <Camera size={18} /> Tirar / escolher foto
+              </button>
+            )}
+            {erroFoto && <p className="mt-1 text-xs text-red-500">{erroFoto}</p>}
+          </div>
+
           <Campo label="Descrição" full>
             <textarea name="descricao" rows={3} defaultValue={ed?.descricao ?? ""} placeholder="Detalhes, manutenções, pneus, opcionais…" className={`${inp} resize-none`} />
           </Campo>

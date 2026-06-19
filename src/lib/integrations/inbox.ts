@@ -102,17 +102,17 @@ async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null)
   });
 }
 
-// Casa um telefone de forma flexível: tenta exato e, se não achar, pelos últimos
-// 8 dígitos (resolve diferenças de DDI/9º dígito entre o que a Z-API manda e o
-// que está salvo no cadastro). Evita duplicar cliente e perder mensagens.
+// Casa um telefone de forma flexível pelos últimos 8 dígitos, comparando SOMENTE
+// dígitos dos dois lados (ignora DDI, 9º dígito e formatação tipo "(28) 99999-0000").
+// Faz a comparação em JS porque o telefone salvo pode ter máscara/símbolos.
 async function acharClientePorTelefone(telefone: string) {
-  const digits = telefone.replace(/\D/g, "");
-  if (!digits) return null;
-  const exato = await db.cliente.findFirst({ where: { telefone: digits } });
-  if (exato) return exato;
-  const sufixo = digits.slice(-8);
-  if (sufixo.length < 8) return null;
-  return db.cliente.findFirst({ where: { telefone: { endsWith: sufixo } } });
+  const alvo = telefone.replace(/\D/g, "").slice(-8);
+  if (alvo.length < 8) return null;
+  const candidatos = await db.cliente.findMany({
+    where: { telefone: { not: null } },
+    orderBy: { criadoEm: "asc" },
+  });
+  return candidatos.find((c) => c.telefone && c.telefone.replace(/\D/g, "").slice(-8) === alvo) ?? null;
 }
 
 // Registra uma mensagem recebida de qualquer canal de WhatsApp.
@@ -229,17 +229,13 @@ export async function registrarMensagemEnviada(msg: MensagemRecebida): Promise<v
   const telefone = msg.telefone.replace(/\D/g, "");
   if (!telefone || !msg.texto) return;
 
-  // Casa o telefone de forma flexível. Se eu iniciei a conversa com um número
-  // ainda não cadastrado, cria o cliente para a conversa aparecer no CRM
-  // (comportamento "igual ao WhatsApp"). Descarta contatos indesejados.
-  let cliente = await acharClientePorTelefone(telefone);
-  if (!cliente) {
-    const nome = msg.nomeContato?.trim() || `Contato ${telefone}`;
-    if (deveDescartarContato(nome)) return;
-    cliente = await db.cliente.create({
-      data: { nome, telefone, origem: "whatsapp" },
-    });
-  }
+  // Mensagem QUE EU ENVIEI: só sincroniza se o número já for um cliente do CRM.
+  // NÃO cria cliente novo aqui — isso evitava encher o inbox de "Contato 7189..."
+  // quando você manda mensagem do celular para números que não são clientes.
+  // Quando o cliente existir (ou for criado por uma mensagem recebida), a resposta
+  // entra na MESMA conversa graças à busca por telefone flexível.
+  const cliente = await acharClientePorTelefone(telefone);
+  if (!cliente) return;
 
   await db.conversa.create({
     data: {

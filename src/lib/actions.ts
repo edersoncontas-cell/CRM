@@ -1339,3 +1339,19 @@ export async function excluirMaquinaUsada(id: string) {
   revalidatePath("/usadas");
   return { ok: true };
 }
+
+// Remove os contatos automáticos duplicados ("Contato <número>") que não têm
+// nenhuma negociação — lixo gerado por mensagens enviadas que não casavam.
+export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removidos: number }> {
+  "use server";
+  const candidatos = await db.cliente.findMany({
+    where: { nome: { startsWith: "Contato " }, negociacoes: { none: {} } },
+    select: { id: true, nome: true },
+  });
+  const ids = candidatos.filter((c) => /^Contato \d+$/.test(c.nome)).map((c) => c.id);
+  if (ids.length) await db.cliente.deleteMany({ where: { id: { in: ids } } });
+  revalidatePath("/inbox");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+  return { ok: true, removidos: ids.length };
+}
