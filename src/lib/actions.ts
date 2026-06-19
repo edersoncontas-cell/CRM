@@ -1381,7 +1381,6 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
   let novosClientes = 0;
 
   for (const chat of chats.slice(0, 20)) {
-    if (chat.phone.length > 13) continue; // lid do WhatsApp, não é telefone real
     const msgs = await zapi.mensagensDoChat(chat.phone, 20);
     if (!msgs.length) continue;
 
