@@ -12,7 +12,7 @@ export async function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/whatsapp/webhook") ||
+    pathname.startsWith("/api/webhooks/zapi") ||
     pathname.startsWith("/api/zapi/webhook")
   ) {
     return NextResponse.next();
