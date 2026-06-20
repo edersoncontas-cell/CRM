@@ -18,7 +18,7 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Principal",
     links: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/inbox", label: "WhatsApp", icon: MessageCircle },
+      { href: "/atendimento", label: "WhatsApp", icon: MessageCircle },
       { href: "/clientes", label: "Clientes", icon: Users },
       { href: "/mapa", label: "Mapa", icon: Map },
       { href: "/radar", label: "Radar de safra", icon: CalendarRange },
