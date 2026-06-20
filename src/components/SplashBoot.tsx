@@ -14,8 +14,8 @@ export function SplashBoot() {
       sessionStorage.setItem("crm_booted", "1");
     } catch {}
     setEstado("ativo");
-    const tSair = setTimeout(() => setEstado("saindo"), 1900);
-    const tFim = setTimeout(() => setEstado("oculto"), 2350);
+    const tSair = setTimeout(() => setEstado("saindo"), 2900);
+    const tFim = setTimeout(() => setEstado("oculto"), 3400);
     return () => { clearTimeout(tSair); clearTimeout(tFim); };
   }, []);
 

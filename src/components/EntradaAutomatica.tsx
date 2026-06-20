@@ -24,7 +24,7 @@ export function EntradaAutomatica() {
         if (r.ok) {
           // marca que o splash já apareceu, para o dashboard não repetir
           try { sessionStorage.setItem("crm_booted", "1"); } catch {}
-          setTimeout(() => window.location.replace("/dashboard"), 1600);
+          setTimeout(() => window.location.replace("/dashboard"), 2900);
         } else {
           try { localStorage.removeItem(KEY); } catch {}
           setEntrando(false);
