@@ -301,3 +301,72 @@ model AuditLog {
   extra      String?  // JSON com dados adicionais (valor, modelo, etc.)
   criadoEm  DateTime @default(now())
 }
+
+// ============================================================
+// WhatsApp — sistema de atendimento (separado do CRM)
+// ============================================================
+
+model WhatsAppConversation {
+  id                String    @id @default(cuid())
+  externalPhone     String                       // número (só dígitos) ou ID do grupo
+  lid               String?                      // WhatsApp Linked ID (@lid)
+  contactName       String?
+  isGroup           Boolean   @default(false)
+  groupName         String?
+  status            String    @default("UNASSIGNED") // UNASSIGNED | IN_PROGRESS | RESOLVED
+  category          String?                      // CLIENTE | LEAD | GRUPO | OUTRO
+  categoryConfirmed Boolean   @default(false)
+  aiActive          Boolean   @default(false)
+  ignored           Boolean   @default(false)
+  lastMessageAt     DateTime  @default(now())
+  lastAccessedAt    DateTime?
+  contactPhotoUrl   String?
+  agnesScheduledAt  DateTime?
+  clienteId         String?                      // ponte opcional p/ a ficha do CRM
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  messages WhatsAppMessage[]
+
+  @@index([lid])
+  @@index([lastMessageAt])
+  @@index([externalPhone])
+}
+
+model WhatsAppMessage {
+  id                  String    @id @default(cuid())
+  conversationId      String
+  direction           String                       // IN | OUT
+  body                String
+  operatorDisplayName String?
+  senderName          String?
+  mediaUrl            String?
+  mediaType           String?                       // image | video | document | audio | sticker
+  mediaName           String?
+  transcript          String?
+  sentAt              DateTime  @default(now())
+  isDraft             Boolean   @default(false)
+  draftStatus         String?                       // PENDING | APPROVED | REJECTED
+  zapiMessageId       String?
+  origin              String?                       // CRM | EXTERNAL
+  sendStatus          String?                       // QUEUED | SENT | DELIVERED | READ | FAILED | UNCONFIRMED
+  retryCount          Int       @default(0)
+  lastRetryAt         DateTime?
+  lastSendError       String?
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt])
+  @@index([zapiMessageId])
+}
+
+model WhatsAppSettings {
+  id          String   @id @default(cuid())
+  instanceId  String   @default("")
+  token       String   @default("")
+  clientToken String   @default("")
+  apiUrl      String   @default("https://api.z-api.io")
+  isActive    Boolean  @default(false)
+  auditMode   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
