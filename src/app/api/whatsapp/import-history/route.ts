@@ -1,0 +1,80 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { listarChats, mensagensDoChat } from "@/lib/zapi";
+import { acharOuCriarConversa } from "@/lib/whatsapp-store";
+import { isGroupChatId } from "@/lib/whatsapp-routing";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+function parseHist(m: Record<string, unknown>) {
+  const id = String(m.messageId ?? m.id ?? "");
+  const fromMe = m.fromMe === true;
+  const tsRaw = Number(m.momment ?? m.moment ?? m.messageTimestamp ?? 0) || Date.now();
+  const sentAt = new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw);
+  let body = "";
+  const t = m.text as { message?: string } | string | undefined;
+  const img = m.image as { caption?: string } | undefined;
+  const aud = m.audio as { transcription?: string } | undefined;
+  const doc = m.document as { fileName?: string } | undefined;
+  if (t && typeof t === "object" && t.message) body = t.message;
+  else if (typeof t === "string") body = t;
+  else if (img) body = img.caption || "📷 Imagem";
+  else if (aud) body = aud.transcription || "🎵 Áudio";
+  else if (m.video) body = "🎬 Vídeo";
+  else if (doc) body = doc.fileName || "📄 Documento";
+  return { id, fromMe, sentAt, body, senderName: (m.senderName as string) ?? null };
+}
+
+// Importa um LOTE de chats. A UI chama em loop até hasMore=false.
+export async function POST(req: NextRequest) {
+  const { page = 1, pageSize = 5, messagesPerChat = 200 } = await req.json().catch(() => ({}));
+  const chats = await listarChats(page, pageSize);
+
+  let chatsProcessed = 0, messagesImported = 0, conversationsCreated = 0;
+
+  for (const chat of chats) {
+    chatsProcessed++;
+    const isGroup = chat.isGroup === true || isGroupChatId(chat.phone);
+    const phone = isGroup ? chat.phone : chat.phone.replace(/\D/g, "");
+    if (!phone) continue;
+
+    const { conv, criada } = await acharOuCriarConversa({
+      phone, lid: null, isGroup, contactName: chat.name ?? null, groupName: isGroup ? chat.name ?? null : null,
+    });
+    if (criada) conversationsCreated++;
+
+    const raw = await mensagensDoChat(chat.phone, messagesPerChat);
+    const parsed = raw.map(parseHist).filter((m) => m.body).sort((a, b) => +a.sentAt - +b.sentAt);
+    if (!parsed.length) continue;
+
+    const existentes = await db.whatsAppMessage.findMany({ where: { conversationId: conv.id }, select: { sentAt: true, body: true } });
+    const chaves = new Set(existentes.map((e) => `${e.sentAt.getTime()}|${e.body.slice(0, 60)}`));
+    const novas = parsed.filter((m) => !chaves.has(`${m.sentAt.getTime()}|${m.body.slice(0, 60)}`));
+    if (!novas.length) continue;
+
+    await db.whatsAppMessage.createMany({
+      data: novas.map((m) => ({
+        conversationId: conv.id,
+        direction: m.fromMe ? "OUT" : "IN",
+        body: isGroup && m.senderName && !m.fromMe ? `${m.senderName}: ${m.body}` : m.body,
+        senderName: isGroup ? m.senderName : null,
+        sentAt: m.sentAt,
+        origin: m.fromMe ? "EXTERNAL" : null,
+      })),
+    });
+    messagesImported += novas.length;
+
+    const ultima = parsed[parsed.length - 1];
+    await db.whatsAppConversation.update({ where: { id: conv.id }, data: { lastMessageAt: ultima.sentAt } });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    chatsProcessed,
+    messagesImported,
+    conversationsCreated,
+    hasMore: chats.length >= pageSize,
+    nextPage: page + 1,
+  });
+}

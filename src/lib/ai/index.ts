@@ -748,3 +748,37 @@ IMPORTANTE: retorne SOMENTE um JSON válido, array com até 8 objetos:
 }
 
 export type { ExtracaoConversa };
+
+// ---------- WhatsApp / Agnes ----------
+
+// Classifica a conversa em uma palavra (CLIENTE | LEAD | GRUPO | OUTRO).
+export async function classificarConversaIA(amostra: string): Promise<string> {
+  if (!iaHabilitada() || !amostra.trim()) return "OUTRO";
+  try {
+    const r = await llmTexto(
+      "Classifique a conversa de WhatsApp em UMA palavra: CLIENTE, LEAD, GRUPO ou OUTRO. Responda só a palavra.",
+      amostra.slice(0, 2000),
+      { maxTokens: 8 }
+    );
+    const c = r.trim().toUpperCase().replace(/[^A-Z]/g, "");
+    return ["CLIENTE", "LEAD", "GRUPO", "OUTRO"].includes(c) ? c : "OUTRO";
+  } catch {
+    return "OUTRO";
+  }
+}
+
+// Gera uma resposta curta para a última mensagem do cliente, no tom do vendedor.
+export async function gerarRespostaWhatsAppIA(historico: string, estilo?: string | null): Promise<string> {
+  if (!iaHabilitada() || !historico.trim()) return "";
+  try {
+    return (await llmTexto(
+      `Você é o assistente de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES).
+Responda a ÚLTIMA mensagem do cliente de forma curta, cordial e útil, no tom do vendedor.
+NUNCA invente preços ou prazos. Se faltar info, peça educadamente.${estilo ? `\nEstilo do vendedor: ${estilo}` : ""}`,
+      historico.slice(-4000),
+      { maxTokens: 400 }
+    )).trim();
+  } catch {
+    return "";
+  }
+}

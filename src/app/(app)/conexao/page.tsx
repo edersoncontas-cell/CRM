@@ -1,6 +1,7 @@
 import { PageHeader, Card } from "@/components/ui";
 import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
 import { diasDesde } from "@/lib/utils";
 import { MessageCircle, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
@@ -42,6 +43,17 @@ export default async function ConexaoPage() {
       <div className="mb-6 max-w-2xl">
         <ConexaoWhatsApp />
       </div>
+
+      <Card className="mb-6 max-w-2xl">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
+          <MessageCircle size={18} className="text-brand-600" /> Importar conversas para o Atendimento
+        </div>
+        <p className="mb-3 text-sm text-slate-500">
+          Puxa as conversas recentes do seu WhatsApp para a nova tela de <b>Atendimento</b>.
+          Rode uma vez após conectar o número (pode rodar de novo — não duplica).
+        </p>
+        <ImportarAtendimento />
+      </Card>
 
       {/* Diagnóstico do webhook — mostra se a Z-API está chamando o CRM */}
       <Card className="mb-6 max-w-2xl">
