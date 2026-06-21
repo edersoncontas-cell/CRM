@@ -203,42 +203,75 @@ export async function enviarResposta(
   return { ok: true };
 }
 
-// Importa clientes de um CSV colado (nome,telefone,municipio). Dedup por telefone/nome.
-export async function importarClientesCsv(formData: FormData): Promise<void> {
+// Normaliza telefone para 11 dígitos (remove 55 do início se tiver 13 dígitos).
+function normalizarTelefone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  // 5528999798168 → 28999798168 (13 dígitos BR com código de país)
+  if (digits.length === 13 && digits.startsWith("55")) return digits.slice(2);
+  // 55289998168 → 28999798168 (12 dígitos BR com código)
+  if (digits.length === 12 && digits.startsWith("55")) return digits.slice(2);
+  return digits;
+}
+
+// Importa clientes de um CSV colado (nome,telefone,municipio). Dedup por telefone.
+export async function importarClientesCsv(
+  formData: FormData
+): Promise<{ importados: number; ignorados: number; erros: number }> {
   const csv = String(formData.get("csv") ?? "");
   const linhas = csv.split(/\r?\n/).filter((l) => l.trim());
   const municipios = await db.municipio.findMany();
-  const norm = (s: string) =>
+  const normStr = (s: string) =>
     s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
+  let importados = 0;
+  let ignorados = 0;
+  let erros = 0;
+
   for (const linha of linhas) {
-    const [nomeRaw, telRaw, muniRaw] = linha.split(/[,;]/).map((c) => c?.trim());
+    // Suporta vírgula ou ponto-e-vírgula, campos com espaço, linha com só 1 ou 2 campos
+    const partes = linha.split(/[,;]/).map((c) => c?.trim() ?? "");
+    const nomeRaw = partes[0] ?? "";
+    const telRaw = partes[1] ?? "";
+    const muniRaw = partes[2] ?? "";
+
     if (!nomeRaw) continue;
-    if (/^nome$/i.test(nomeRaw)) continue; // cabeçalho
-    if (deveDescartarContato(nomeRaw)) continue; // pousadas, hotéis, etc.
-    const telefone = telRaw ? telRaw.replace(/\D/g, "") : null;
+    if (/^nome$/i.test(nomeRaw)) continue; // pula cabeçalho
+    if (deveDescartarContato(nomeRaw)) { ignorados++; continue; }
 
-    // dedup
-    const existe = await db.cliente.findFirst({
-      where: {
-        OR: [
-          telefone ? { telefone } : undefined,
-          { nome: nomeRaw },
-        ].filter(Boolean) as object[],
-      },
-    });
-    if (existe) continue;
+    const telefone = telRaw ? normalizarTelefone(telRaw) : null;
 
-    const muni = muniRaw
-      ? municipios.find((m) => norm(m.nome) === norm(muniRaw))
-      : undefined;
+    try {
+      // Dedup prioritariamente por telefone normalizado; só por nome se não tiver tel.
+      const condicoes: object[] = [];
+      if (telefone) {
+        condicoes.push({ telefone });
+        // Também verifica sem o 55 prefixado (caso DB tenha formato diferente)
+        if (!telefone.startsWith("55") && telefone.length >= 10) {
+          condicoes.push({ telefone: `55${telefone}` });
+        }
+      } else {
+        condicoes.push({ nome: nomeRaw });
+      }
+      const existe = await db.cliente.findFirst({ where: { OR: condicoes } });
+      if (existe) { ignorados++; continue; }
 
-    await db.cliente.create({
-      data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem: "importacao" },
-    });
+      const muni = muniRaw
+        ? municipios.find((m) => normStr(m.nome) === normStr(muniRaw))
+        : undefined;
+
+      await db.cliente.create({
+        data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem: "importacao" },
+      });
+      importados++;
+    } catch {
+      erros++;
+    }
   }
+
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
+  return { importados, ignorados, erros };
 }
 
 // ---------- Negociações ----------
