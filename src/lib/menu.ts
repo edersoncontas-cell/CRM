@@ -6,7 +6,7 @@ import {
   TrendingDown, Sparkles, Megaphone, Settings, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
   Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText, Trophy,
-  Truck,
+  Truck, Brain,
   type LucideIcon,
 } from "lucide-react";
 
@@ -66,9 +66,9 @@ export const GRUPOS: GrupoMenu[] = [
   {
     label: "Sistema",
     links: [
+      { href: "/cerebro", label: "Cérebro IA", icon: Brain, fixo: true },
       { href: "/conexao", label: "Conexão WhatsApp", icon: Smartphone },
       { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
-      // Configurações é fixo: nunca pode ser ocultado (senão não há como reativar).
       { href: "/configuracoes", label: "Configurações", icon: Settings, fixo: true },
     ],
   },

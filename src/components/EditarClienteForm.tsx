@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { atualizarCliente } from "@/lib/actions";
-import { Pencil, X } from "lucide-react";
+import { useState, useTransition } from "react";
+import { atualizarCliente, gerenciarFrotaCliente } from "@/lib/actions";
+import { Pencil, X, Plus, Trash2 } from "lucide-react";
 
 type Municipio = { id: string; nome: string; foraDeArea?: boolean };
+type MaquinaOpt = { id: string; marca: string; modelo: string; categoria: string };
+type FrotaItem = { id: string; marca: string; modelo: string };
+
+const STATUS_OPTS = [
+  { value: "cliente",      label: "✓ Cliente",          cor: "text-green-700 bg-green-50 border-green-200" },
+  { value: "potencial",    label: "Potencial cliente",   cor: "text-amber-700 bg-amber-50 border-amber-200" },
+  { value: "nao_cliente",  label: "Não é cliente",       cor: "text-red-700 bg-red-50 border-red-200" },
+];
 
 export function EditarClienteForm({
   cliente,
   municipios,
+  maquinas = [],
+  frotaAtual = [],
   open,
   onClose,
   hideTrigger = false,
@@ -18,23 +28,50 @@ export function EditarClienteForm({
     nome: string;
     telefone: string | null;
     email: string | null;
-    endereco: string | null;
+    endereco?: string | null;
     municipioId: string | null;
-    observacoes: string | null;
-    jaComprou: boolean;
-    visitado: boolean;
+    observacoes?: string | null;
+    jaComprou?: boolean;
+    visitado?: boolean;
+    status?: string | null;
     interesseFuturo?: boolean;
-    interesseFuturoData?: string | null; // YYYY-MM-DD
+    interesseFuturoData?: string | null;
     interesseFuturoNota?: string | null;
   };
   municipios: Municipio[];
-  open?: boolean;          // modo controlado (opcional)
+  maquinas?: MaquinaOpt[];
+  frotaAtual?: FrotaItem[];
+  open?: boolean;
   onClose?: () => void;
-  hideTrigger?: boolean;   // esconde o botão padrão "Editar dados"
+  hideTrigger?: boolean;
 }) {
   const [interno, setInterno] = useState(false);
   const aberto = open ?? interno;
   const fechar = () => { setInterno(false); onClose?.(); };
+
+  const statusInicial = (cliente.status ?? (cliente.jaComprou ? "cliente" : "potencial")) as string;
+  const [status, setStatus] = useState(statusInicial);
+  const [frota, setFrota] = useState<FrotaItem[]>(frotaAtual);
+  const [marcaSel, setMarcaSel] = useState("New Holland");
+  const [modeloSel, setModeloSel] = useState("");
+  const [, startFrota] = useTransition();
+
+  const marcas = ["New Holland", "Dynapac"];
+  const modelosPorMarca = maquinas
+    .filter((m) => m.marca === marcaSel)
+    .map((m) => m.modelo)
+    .sort();
+
+  function addFrota() {
+    if (!modeloSel) return;
+    const nova: FrotaItem = { id: `tmp-${Date.now()}`, marca: marcaSel, modelo: modeloSel };
+    setFrota((prev) => [...prev, nova]);
+    setModeloSel("");
+  }
+
+  function removeFrota(id: string) {
+    setFrota((prev) => prev.filter((f) => f.id !== id));
+  }
 
   return (
     <>
@@ -51,18 +88,22 @@ export function EditarClienteForm({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={fechar}>
           <form
             action={async (fd) => {
+              fd.set("status", status);
               await atualizarCliente(cliente.id, fd);
+              // Salva a frota separadamente
+              startFrota(async () => {
+                await gerenciarFrotaCliente(cliente.id, frota.map((f) => ({ marca: f.marca, modelo: f.modelo })));
+              });
               fechar();
             }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800">Editar cliente</h2>
-              <button type="button" onClick={fechar}>
-                <X className="text-slate-400" />
-              </button>
+              <button type="button" onClick={fechar}><X className="text-slate-400" /></button>
             </div>
+
             <div className="space-y-3">
               <Campo label="Nome *">
                 <input name="nome" required defaultValue={cliente.nome} className="campo" />
@@ -83,29 +124,79 @@ export function EditarClienteForm({
                       <option key={m.id} value={m.id}>{m.nome}</option>
                     ))}
                   </optgroup>
-                  <optgroup label="Fora da minha área (não recebe campanhas)">
+                  <optgroup label="Fora da minha área">
                     {municipios.filter((m) => m.foraDeArea).map((m) => (
                       <option key={m.id} value={m.id}>{m.nome}</option>
                     ))}
                   </optgroup>
                 </select>
               </Campo>
-              <Campo label="Endereço">
-                <input name="endereco" defaultValue={cliente.endereco ?? ""} placeholder="Rua, nº, bairro" className="campo" />
-              </Campo>
-              <Campo label="Observações">
-                <textarea name="observacoes" defaultValue={cliente.observacoes ?? ""} rows={2} className="campo" />
-              </Campo>
-              <div className="flex gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" name="jaComprou" defaultChecked={cliente.jaComprou} /> Já comprou
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" name="visitado" defaultChecked={cliente.visitado} /> Já recebeu visita
-                </label>
-              </div>
 
-              {/* Interesse futuro (ex: aguardando Plano Safra) */}
+              {/* Status */}
+              <Campo label="Status do cliente">
+                <div className="flex gap-2 flex-wrap">
+                  {STATUS_OPTS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setStatus(opt.value)}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${status === opt.value ? opt.cor + " ring-2 ring-offset-1 ring-current" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </Campo>
+
+              {/* Frota (só quando é cliente) */}
+              {status === "cliente" && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
+                  <div className="text-sm font-semibold text-blue-800">🚜 Frota do cliente</div>
+                  {frota.length > 0 && (
+                    <ul className="space-y-1">
+                      {frota.map((f) => (
+                        <li key={f.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-1.5 text-sm border border-blue-100">
+                          <span className="font-medium text-slate-700">{f.marca} — {f.modelo}</span>
+                          <button type="button" onClick={() => removeFrota(f.id)} className="text-red-400 hover:text-red-600 ml-2">
+                            <Trash2 size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex gap-2">
+                    <select
+                      value={marcaSel}
+                      onChange={(e) => { setMarcaSel(e.target.value); setModeloSel(""); }}
+                      className="campo flex-1"
+                    >
+                      {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select
+                      value={modeloSel}
+                      onChange={(e) => setModeloSel(e.target.value)}
+                      className="campo flex-1"
+                    >
+                      <option value="">Modelo…</option>
+                      {modelosPorMarca.map((m) => <option key={m} value={m}>{m}</option>)}
+                      <option value="__outro__">Outro (digitar)</option>
+                    </select>
+                    <button type="button" onClick={addFrota} disabled={!modeloSel}
+                      className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-white disabled:opacity-40 hover:bg-blue-700">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {modeloSel === "__outro__" && (
+                    <input
+                      placeholder="Digite o modelo"
+                      className="campo"
+                      onChange={(e) => setModeloSel(e.target.value || "__outro__")}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Interesse futuro */}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <label className="flex items-center gap-2 text-sm font-semibold text-amber-800">
                   <input type="checkbox" name="interesseFuturo" defaultChecked={cliente.interesseFuturo} />
@@ -121,6 +212,7 @@ export function EditarClienteForm({
                 </div>
               </div>
             </div>
+
             <button className="mt-5 w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 hover:bg-brand-800">
               Salvar alterações
             </button>

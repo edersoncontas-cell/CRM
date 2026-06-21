@@ -1,25 +1,50 @@
 import { db } from "@/lib/db";
+import { aplicarMigracoes } from "@/lib/migrations";
 
-// "Municípios" especiais que representam regiões de OUTROS vendedores.
-// Servem para classificar clientes fora da minha área e impedir que eles
-// recebam campanhas/disparos automáticos (mas ainda podem ser atendidos
-// normalmente se eles iniciarem a conversa).
-export const REGIOES_FORA_AREA = ["Região Vix", "Região Norte"];
+// Regiões de outros vendedores — com os novos nomes solicitados pelo Ederson.
+export const REGIOES_FORA_AREA = ["Cliente Cristiano", "Cliente Welligton"];
 
-// Municípios inválidos que devem ser removidos do banco caso existam.
-const MUNICIPIOS_REMOVER = ["Palantino"];
+const MUNICIPIOS_REMOVER = ["Palantino", "TINAPÁ", "Tinapá", "Interior de Goias", "Interior de Goiás"];
 
-// Municípios do sul do ES que precisam existir com coordenadas mas podem não
-// estar no banco de produção (ex.: adicionados depois do seed inicial).
+// Renomeia municípios antigos para os novos nomes.
+const RENOMEAR: { de: string; para: string }[] = [
+  { de: "Região Vix",   para: "Cliente Cristiano" },
+  { de: "Regiao Vix",   para: "Cliente Cristiano" },
+  { de: "Revisao vix",  para: "Cliente Cristiano" },
+  { de: "Região Norte", para: "Cliente Welligton" },
+  { de: "Regiao Norte", para: "Cliente Welligton" },
+];
+
 const MUNICIPIOS_GARANTIDOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Alfredo Chaves", lat: -20.6367, lng: -40.7508 },
 ];
 
 let garantido = false;
 
-// Garante (idempotente) que as regiões fora de área existam e remove entradas inválidas.
 export async function garantirRegioes(): Promise<void> {
   if (garantido) return;
+
+  // Aplica migrações de schema pendentes (idempotente)
+  await aplicarMigracoes();
+
+  // Renomeia municípios com nomes antigos
+  for (const { de, para } of RENOMEAR) {
+    try {
+      const existe = await db.municipio.findFirst({ where: { nome: { equals: de, mode: "insensitive" } } });
+      if (existe) {
+        const jaExistePara = await db.municipio.findFirst({ where: { nome: { equals: para, mode: "insensitive" } } });
+        if (jaExistePara) {
+          // Move clientes para o município destino e remove o antigo
+          await db.cliente.updateMany({ where: { municipioId: existe.id }, data: { municipioId: jaExistePara.id } });
+          await db.municipio.delete({ where: { id: existe.id } });
+        } else {
+          await db.municipio.update({ where: { id: existe.id }, data: { nome: para, foraDeArea: true, regiao: "Fora da área" } });
+        }
+      }
+    } catch {}
+  }
+
+  // Garante que regiões fora de área existam com nomes corretos
   for (const nome of REGIOES_FORA_AREA) {
     await db.municipio.upsert({
       where: { nome },
@@ -27,6 +52,7 @@ export async function garantirRegioes(): Promise<void> {
       create: { nome, foraDeArea: true, regiao: "Fora da área" },
     });
   }
+
   // Garante municípios adicionados após o seed inicial
   for (const m of MUNICIPIOS_GARANTIDOS) {
     await db.municipio.upsert({
@@ -35,20 +61,29 @@ export async function garantirRegioes(): Promise<void> {
       create: { nome: m.nome, lat: m.lat, lng: m.lng },
     });
   }
-  // Remove municípios incorretos silenciosamente (ignora se não existir)
+
+  // Remove municípios inválidos
   for (const nome of MUNICIPIOS_REMOVER) {
-    await db.municipio.deleteMany({ where: { nome } });
+    try {
+      await db.municipio.deleteMany({ where: { nome: { equals: nome, mode: "insensitive" } } });
+    } catch {}
   }
+
+  // Strip +55 de todos os telefones (idempotente — só altera quem ainda tem o prefixo)
+  try {
+    await db.$executeRawUnsafe(`
+      UPDATE "Cliente"
+      SET telefone = regexp_replace(telefone, '^(\\+55|55)(?=\\d{10,11}$)', '')
+      WHERE telefone ~ '^(\\+55|55)\\d{10,11}$'
+    `);
+  } catch {}
+
   garantido = true;
 }
 
-// Termos que indicam contatos que NÃO são clientes (o CRM é exclusivo de clientes).
 const TERMOS_DESCARTE = ["POUSADA", "HOTEL", "PME"];
-
 let limpezaFeita = false;
 
-// Remove do banco contatos que não são clientes (pousadas, hotéis, PME...).
-// Mantém-se idempotente e barato (dataset pequeno).
 export async function limparContatosDescartados(): Promise<void> {
   if (limpezaFeita) return;
   try {
@@ -59,8 +94,6 @@ export async function limparContatosDescartados(): Promise<void> {
         })),
       },
     });
-  } catch {
-    // silencioso — não bloqueia o carregamento da página
-  }
+  } catch {}
   limpezaFeita = true;
 }
