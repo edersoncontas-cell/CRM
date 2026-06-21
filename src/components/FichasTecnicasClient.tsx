@@ -62,9 +62,11 @@ const CAT_LABEL: Record<string, string> = {
 function EditModal({
   m,
   onClose,
+  temChaveIA,
 }: {
   m: Maquina;
   onClose: () => void;
+  temChaveIA: boolean;
 }) {
   const [specs, setSpecs] = useState(m.especificacoes ?? "");
   const [desc, setDesc] = useState(m.descricao ?? "");
@@ -189,14 +191,23 @@ function EditModal({
             className="hidden"
           />
         </div>
-        <p className="mb-3 -mt-1 text-[11px] text-zinc-500">
+        <p className="mb-2 -mt-1 text-[11px] text-zinc-500">
           📎 Anexe datasheet, folheto, comparativo ou foto da ficha (PDF, imagem, texto ou HTML) — pode mandar
           <b> vários de uma vez</b>. A IA lê, extrai e <b>mescla</b> os dados (só o que estiver no arquivo, sem inventar). O arquivo não é guardado.
         </p>
+        {!temChaveIA && (
+          <p className="mb-3 -mt-0.5 text-[11px] rounded-lg px-3 py-2" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
+            ⚠️ <b>PDF e imagens</b> exigem a chave da Anthropic (<code>ANTHROPIC_API_KEY</code>) — configure em <b>Configurações → Integrações</b>. Arquivos de texto e HTML funcionam normalmente.
+          </p>
+        )}
         {aviso && (
           <p
-            className="mb-4 -mt-2 text-xs"
-            style={{ color: aviso.includes("✓") ? "#4ade80" : "#f87171" }}
+            className="mb-4 -mt-1 text-xs rounded-lg px-3 py-2"
+            style={{
+              color: aviso.includes("✓") ? "#4ade80" : "#f87171",
+              background: aviso.includes("✓") ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)",
+              border: `1px solid ${aviso.includes("✓") ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)"}`,
+            }}
           >
             {aviso}
           </p>
@@ -328,7 +339,7 @@ function EditModal({
   );
 }
 
-function MaquinaRow({ m }: { m: Maquina }) {
+function MaquinaRow({ m, temChaveIA }: { m: Maquina; temChaveIA: boolean }) {
   const [editando, setEditando] = useState(false);
   const [expandida, setExpandida] = useState(false);
   const temEspec = !!m.especificacoes?.trim();
@@ -400,12 +411,12 @@ function MaquinaRow({ m }: { m: Maquina }) {
         </div>
       )}
 
-      {editando && <EditModal m={m} onClose={() => setEditando(false)} />}
+      {editando && <EditModal m={m} onClose={() => setEditando(false)} temChaveIA={temChaveIA} />}
     </>
   );
 }
 
-export function FichasTecnicasClient({ maquinas }: { maquinas: Maquina[] }) {
+export function FichasTecnicasClient({ maquinas, temChaveIA }: { maquinas: Maquina[]; temChaveIA: boolean }) {
   const [filtro, setFiltro] = useState<"todas" | "minhas" | "concorrentes">("minhas");
   const [busca, setBusca] = useState("");
 
@@ -466,7 +477,7 @@ export function FichasTecnicasClient({ maquinas }: { maquinas: Maquina[] }) {
         {lista.length === 0 ? (
           <p className="text-sm text-zinc-500 py-8 text-center">Nenhuma máquina encontrada.</p>
         ) : (
-          lista.map((m) => <MaquinaRow key={m.id} m={m} />)
+          lista.map((m) => <MaquinaRow key={m.id} m={m} temChaveIA={temChaveIA} />)
         )}
       </div>
     </div>
