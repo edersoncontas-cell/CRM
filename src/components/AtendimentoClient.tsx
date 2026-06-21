@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles,
+  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles, Trash2,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -103,6 +103,22 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     try {
       await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     } catch {}
+    router.refresh();
+  }
+
+  // Exclui a conversa (e suas mensagens). Pede confirmação antes.
+  async function excluirConversa(c: ConvLista) {
+    const nome = c.contactName || c.groupName || c.externalPhone || "esta conversa";
+    if (!window.confirm(`Excluir a conversa com "${nome}"?\n\nTodas as mensagens serão apagadas. Esta ação não pode ser desfeita.`)) return;
+    setMenuAberto(false);
+    try {
+      const r = await fetch(`/api/conversations/${c.id}`, { method: "DELETE" }).then((res) => res.json()).catch(() => null);
+      if (!r?.ok) { window.alert("Não foi possível excluir a conversa."); return; }
+    } catch {
+      window.alert("Não foi possível excluir a conversa.");
+      return;
+    }
+    if (selId === c.id) { setSelId(null); setMensagens([]); }
     router.refresh();
   }
 
@@ -426,6 +442,11 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                           {curr(sel).category === cat && <Check size={14} className="ml-auto text-emerald-600" />}
                         </button>
                       ))}
+                      <div className="my-1 border-t border-slate-100" />
+                      <button onClick={() => excluirConversa(sel)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-red-600 hover:bg-red-50">
+                        <Trash2 size={15} /> Excluir conversa
+                      </button>
                     </div>
                   </>
                 )}

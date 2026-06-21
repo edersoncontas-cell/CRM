@@ -23,3 +23,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const conv = await db.whatsAppConversation.update({ where: { id: params.id }, data });
   return NextResponse.json({ ok: true, conversation: conv });
 }
+
+// Exclui a conversa e todas as suas mensagens (cascade no schema).
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    await db.whatsAppConversation.delete({ where: { id: params.id } });
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ ok: false, erro: "conversa não encontrada" }, { status: 404 });
+  }
+}
