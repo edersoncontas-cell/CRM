@@ -13,6 +13,7 @@ export interface MaquinaComparavel {
   descricao: string | null;
   pontosFortes: string | null;
   diferenciais: string | null;
+  consumoLitrosHora?: number | null;
 }
 
 export const CATEGORIAS: Record<string, string> = {

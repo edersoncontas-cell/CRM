@@ -432,6 +432,9 @@ export async function salvarFichaTecnica(
     descricao?: string;
     pontosFortes?: string;
     diferenciais?: string;
+    valorInicial?: number | null;
+    consumoLitrosHora?: number | null;
+    argumentos?: string;
   }
 ) {
   "use server";
@@ -442,6 +445,9 @@ export async function salvarFichaTecnica(
       descricao: dados.descricao ?? null,
       pontosFortes: dados.pontosFortes ?? null,
       diferenciais: dados.diferenciais ?? null,
+      valorInicial: dados.valorInicial ?? null,
+      consumoLitrosHora: dados.consumoLitrosHora ?? null,
+      argumentos: dados.argumentos ?? null,
     },
   });
   revalidatePath("/maquinas/fichas");
@@ -481,6 +487,8 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
   descricao?: string;
   pontosFortes?: string;
   diferenciais?: string;
+  consumoLitrosHora?: number | null;
+  valorInicial?: number | null;
   erro?: string;
 }> {
   "use server";
@@ -488,11 +496,14 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
   if (!(arquivo instanceof File) || arquivo.size === 0) {
     return { ok: false, erro: "Nenhum arquivo enviado." };
   }
-  // Limite: PDF até 32MB (limite da Anthropic), imagem até 8MB.
-  const ehPdf = arquivo.type === "application/pdf";
-  const limite = ehPdf ? 32 * 1024 * 1024 : 8 * 1024 * 1024;
+  const nome = arquivo.name.toLowerCase();
+  const ehPdf = arquivo.type === "application/pdf" || nome.endsWith(".pdf");
+  const ehImagem = arquivo.type.startsWith("image/");
+  const ehTexto = arquivo.type.startsWith("text/") || /\.(txt|html?|md|csv)$/.test(nome);
+  // Limite: PDF até 32MB (limite da Anthropic), imagem até 8MB, texto até 2MB.
+  const limite = ehPdf ? 32 * 1024 * 1024 : ehImagem ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
   if (arquivo.size > limite) {
-    return { ok: false, erro: `Arquivo muito grande (máx. ${ehPdf ? "32MB" : "8MB"}).` };
+    return { ok: false, erro: `Arquivo muito grande (máx. ${ehPdf ? "32MB" : ehImagem ? "8MB" : "2MB"}).` };
   }
 
   const maq = await db.maquina.findUnique({
@@ -502,8 +513,18 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
   if (!maq) return { ok: false, erro: "Máquina não encontrada." };
 
   const { extrairFichaDeArquivoIA } = await import("@/lib/ai");
+
+  // Texto/HTML: extrai o texto puro e manda como texto (funciona com Groq também).
+  if (ehTexto && !ehPdf && !ehImagem) {
+    let texto = await arquivo.text();
+    if (/\.html?$/.test(nome) || arquivo.type.includes("html")) {
+      texto = texto.replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n").replace(/<[^>]+>/g, " ");
+    }
+    return extrairFichaDeArquivoIA(maq, { texto: texto.slice(0, 60000) });
+  }
+
   const base64 = Buffer.from(await arquivo.arrayBuffer()).toString("base64");
-  return extrairFichaDeArquivoIA(maq, { base64, mediaType: arquivo.type });
+  return extrairFichaDeArquivoIA(maq, { base64, mediaType: ehPdf ? "application/pdf" : arquivo.type });
 }
 
 // Análise de categoria (Super Trunfo): minhas máquinas vs concorrentes.

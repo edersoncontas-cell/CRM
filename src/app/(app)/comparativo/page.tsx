@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { MaquinaPicker } from "@/components/MaquinaPicker";
 import { ComparativoIA } from "@/components/ComparativoIA";
+import { ComparativoCombustivel } from "@/components/ComparativoCombustivel";
 import {
   concorrentesSimilares, vantagemContra, delta, CATEGORIAS, type MaquinaComparavel,
 } from "@/lib/comparativo";
@@ -163,6 +164,13 @@ export default async function ComparativoPage({
               </tbody>
             </table>
           </Card>
+
+          {/* Comparativo de combustível (cálculo local, offline) */}
+          <ComparativoCombustivel
+            minhaModelo={minha.modelo}
+            minhaConsumo={minha.consumoLitrosHora ?? null}
+            concorrentes={concorrentesOrdenados.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo, consumo: c.consumoLitrosHora ?? null }))}
+          />
 
           {/* Análise da IA usando as fichas técnicas */}
           <ComparativoIA

@@ -340,49 +340,83 @@ ${campos}`,
 // guardado — só o conteúdo extraído. Exige ANTHROPIC_API_KEY (o Groq não lê PDF).
 export async function extrairFichaDeArquivoIA(
   maquina: { marca: string; modelo: string; categoria: string; proprio: boolean },
-  arquivo: { base64: string; mediaType: string }
+  arquivo: { base64?: string; mediaType?: string; texto?: string }
 ): Promise<{
   ok: boolean;
   especificacoes?: string;
   descricao?: string;
   pontosFortes?: string;
   diferenciais?: string;
+  consumoLitrosHora?: number | null;
+  valorInicial?: number | null;
   erro?: string;
 }> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { ok: false, erro: "A leitura de arquivos exige a chave da Anthropic (ANTHROPIC_API_KEY)." };
-  }
+  const ehTexto = !!arquivo.texto;
   const ehPdf = arquivo.mediaType === "application/pdf";
-  const ehImagem = arquivo.mediaType.startsWith("image/");
-  if (!ehPdf && !ehImagem) {
-    return { ok: false, erro: "Formato não suportado. Envie um PDF ou uma imagem (JPG/PNG)." };
+  const ehImagem = !!arquivo.mediaType?.startsWith("image/");
+
+  // PDF/imagem exigem a Anthropic (lê nativamente). Texto pode usar Groq também.
+  if (!ehTexto && !process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, erro: "A leitura de PDF/imagem exige a chave da Anthropic (ANTHROPIC_API_KEY)." };
+  }
+  if (!ehTexto && !ehPdf && !ehImagem) {
+    return { ok: false, erro: "Formato não suportado. Envie PDF, imagem (JPG/PNG) ou texto/HTML." };
   }
 
   const campos = maquina.proprio
     ? `{
-  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha): Motor, Potência (cv), Peso operacional (kg) e os principais dados da categoria
-  "descricao": string,       // 1-2 frases sobre a máquina e seu uso principal
-  "pontosFortes": string,    // argumentos de venda separados por ';'
-  "diferenciais": string     // diferenciais de mercado separados por ';'
+  "especificacoes": string,       // ficha técnica em linhas "Atributo: valor" (uma por linha): Motor, Potência (cv), Peso operacional (kg) e os principais dados da categoria
+  "descricao": string,            // 1-2 frases sobre a máquina e seu uso principal
+  "pontosFortes": string,         // argumentos de venda separados por ';'
+  "diferenciais": string,         // diferenciais de mercado separados por ';'
+  "consumoLitrosHora": number|null, // consumo de diesel em litros/hora, se constar (só o número)
+  "valorInicial": number|null     // preço/valor em reais, se constar (só o número, sem R$ nem pontos)
 }`
     : `{
-  "especificacoes": string,  // ficha técnica em linhas "Atributo: valor" (uma por linha)
-  "descricao": string,       // 1-2 frases sobre a máquina
+  "especificacoes": string,       // ficha técnica em linhas "Atributo: valor" (uma por linha)
+  "descricao": string,            // 1-2 frases sobre a máquina
   "pontosFortes": "",
-  "diferenciais": ""
+  "diferenciais": "",
+  "consumoLitrosHora": number|null, // consumo de diesel em litros/hora, se constar
+  "valorInicial": null
 }`;
 
   const system = `Você é um especialista técnico em máquinas pesadas do ramo construction (linha amarela).
-Leia o ARQUIVO anexado (catálogo/ficha do fabricante) e EXTRAIA as especificações técnicas da máquina.
-Use unidades do mercado brasileiro (cv, kg, m³, mm, kN). Extraia SOMENTE o que estiver no arquivo — NUNCA invente números.
-Se o arquivo trouxer várias máquinas, foque na ${maquina.marca} ${maquina.modelo}.
+Leia o conteúdo (catálogo/ficha do fabricante/comparativo) e EXTRAIA as especificações técnicas da máquina.
+Use unidades do mercado brasileiro (cv, kg, m³, mm, kN, L/h). Extraia SOMENTE o que estiver no conteúdo — NUNCA invente números.
+Se trouxer várias máquinas, foque na ${maquina.marca} ${maquina.modelo}.
 Devolva SOMENTE um JSON válido, sem texto fora do JSON, no formato:
 ${campos}`;
 
+  const finalizar = (parsed: Record<string, unknown>) => {
+    const especificacoes = typeof parsed.especificacoes === "string" ? parsed.especificacoes.trim() : "";
+    if (!especificacoes && !parsed.descricao) {
+      return { ok: false as const, erro: "Não consegui extrair dados do arquivo. Tente outro mais legível." };
+    }
+    const num = (v: unknown) => (typeof v === "number" && isFinite(v) && v > 0 ? v : null);
+    return {
+      ok: true as const,
+      especificacoes,
+      descricao: typeof parsed.descricao === "string" ? parsed.descricao.trim() : "",
+      pontosFortes: typeof parsed.pontosFortes === "string" ? parsed.pontosFortes.trim() : "",
+      diferenciais: typeof parsed.diferenciais === "string" ? parsed.diferenciais.trim() : "",
+      consumoLitrosHora: num(parsed.consumoLitrosHora),
+      valorInicial: num(parsed.valorInicial),
+    };
+  };
+
   try {
+    // Caminho de TEXTO/HTML — usa o LLM de texto (Groq ou Anthropic).
+    if (ehTexto) {
+      const raw = await llmTexto(system, `Conteúdo do arquivo:\n\n${arquivo.texto}`, { maxTokens: 1500, json: true });
+      if (!raw) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+      return finalizar(JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)));
+    }
+
+    // Caminho de PDF/IMAGEM — Claude lê nativamente.
     const bloco = ehPdf
-      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64 } }
-      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64 } };
+      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64! } }
+      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64! } };
 
     const resp = await client().messages.create({
       model: MODEL,
@@ -399,21 +433,10 @@ ${campos}`;
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
-    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
-    const especificacoes = typeof parsed.especificacoes === "string" ? parsed.especificacoes.trim() : "";
-    if (!especificacoes && !parsed.descricao) {
-      return { ok: false, erro: "Não consegui extrair dados do arquivo. Tente outro arquivo mais legível." };
-    }
-    return {
-      ok: true,
-      especificacoes,
-      descricao: typeof parsed.descricao === "string" ? parsed.descricao.trim() : "",
-      pontosFortes: typeof parsed.pontosFortes === "string" ? parsed.pontosFortes.trim() : "",
-      diferenciais: typeof parsed.diferenciais === "string" ? parsed.diferenciais.trim() : "",
-    };
+    return finalizar(JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)));
   } catch (err) {
     console.error("Falha ao extrair ficha de arquivo:", err);
-    return { ok: false, erro: "Erro ao ler o arquivo. Verifique se é um PDF ou imagem válida." };
+    return { ok: false, erro: "Erro ao ler o arquivo. Verifique se é um PDF, imagem ou texto válido." };
   }
 }
 

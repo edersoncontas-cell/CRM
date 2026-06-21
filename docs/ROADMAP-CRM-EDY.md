@@ -30,16 +30,18 @@ fila e processam quando a internet voltar. Telas de consulta nunca dependem da n
 
 ## Módulos
 
-### A. Inteligência das Máquinas (base de conhecimento)
-- **A1. Fichas técnicas — importar arquivos:** botão para subir datasheet, folheto
-  técnico, comparativos, imagens, textos. A IA lê e **alimenta as informações
-  técnicas** da máquina, mantendo dados fiéis (sem inventar). Fonte fica registrada.
-- **A2. Banco de Negociação (por modelo):** valor inicial a passar ao cliente,
-  diferenciais, argumentos, textos prontos de cada máquina, consumo (litros/h),
-  KM/hora. Campo livre para adicionar argumentos e informações.
+### A. Inteligência das Máquinas (base de conhecimento) — ✅ 1ª versão entregue
+- **A1. Fichas técnicas — importar arquivos:** ✅ botão aceita **vários arquivos**
+  (PDF, imagem, texto, HTML — datasheet/folheto/comparativo). A IA lê, extrai e
+  **mescla** as informações técnicas, mantendo dados fiéis (sem inventar). Arquivo
+  não é guardado.
+- **A2. Banco de Negociação (por modelo):** ✅ campos de **valor inicial ao cliente**,
+  **consumo (L/h)** e **argumentos/condições de negociação** na ficha (além de
+  diferenciais e pontos fortes que já existiam). _Pendente:_ KM/hora.
 - **A3. Comparativos automáticos:**
-  - Combustível: "a máquina do concorrente faz X litros a mais" → IA calcula quanto
-    o cliente gasta a mais em **R$ por dia / semana / mês / ano**.
+  - ✅ Combustível: escolhe o concorrente (ou informa litros a mais) → calcula quanto
+    o cliente gasta a mais em **R$ por dia / semana / mês / ano** (e em 5 anos), com
+    argumento pronto. Cálculo local (funciona offline).
   - 🔔 **LEMBRETE (pegar dados com o Natã):** KM/hora e a diferença de **frete/saída**
     por venda nova até a cidade do cliente vs. saindo de Serra até o cliente.
 

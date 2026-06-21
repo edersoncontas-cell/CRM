@@ -16,7 +16,33 @@ type Maquina = {
   especificacoes: string | null;
   pontosFortes: string | null;
   diferenciais: string | null;
+  valorInicial: number | null;
+  consumoLitrosHora: number | null;
+  argumentos: string | null;
 };
+
+function brl(v: number | null) {
+  return v == null ? "" : v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// Mescla especificações por atributo (não repete "Potência" de dois arquivos).
+function mesclarSpecs(atual: string, novo: string): string {
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const l of (atual + "\n" + novo).split("\n").map((s) => s.trim()).filter(Boolean)) {
+    const chave = l.split(":")[0].toLowerCase().trim();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push(l);
+  }
+  return out.join("\n");
+}
+
+// Junta listas separadas por ';' sem duplicar.
+function juntarLista(a: string, b: string): string {
+  const set = new Set([...a.split(";"), ...b.split(";")].map((s) => s.trim()).filter(Boolean));
+  return Array.from(set).join("; ");
+}
 
 const CAT_LABEL: Record<string, string> = {
   miniescavadeira: "Mini Escavadeira",
@@ -44,30 +70,39 @@ function EditModal({
   const [desc, setDesc] = useState(m.descricao ?? "");
   const [pontos, setPontos] = useState(m.pontosFortes ?? "");
   const [difs, setDifs] = useState(m.diferenciais ?? "");
+  const [valor, setValor] = useState(m.valorInicial != null ? brl(m.valorInicial) : "");
+  const [consumo, setConsumo] = useState(m.consumoLitrosHora != null ? String(m.consumoLitrosHora).replace(".", ",") : "");
+  const [args, setArgs] = useState(m.argumentos ?? "");
   const [pending, start] = useTransition();
   const [preenchendo, startPreencher] = useTransition();
   const [lendoArquivo, startArquivo] = useTransition();
   const [aviso, setAviso] = useState<string | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
 
+  // Lê VÁRIOS arquivos (PDF, imagem, texto, HTML) e mescla as informações.
   function aoEscolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     setAviso(null);
     startArquivo(async () => {
-      const fd = new FormData();
-      fd.set("arquivo", file);
-      const r = await extrairFichaDeArquivo(m.id, fd);
-      if (arquivoRef.current) arquivoRef.current.value = "";
-      if (!r.ok) {
-        setAviso(r.erro ?? "Não foi possível ler o arquivo.");
-        return;
+      let okCount = 0, lastErr = "";
+      let accSpecs = specs, accDesc = desc, accPontos = pontos, accDifs = difs;
+      for (const file of files) {
+        const fd = new FormData();
+        fd.set("arquivo", file);
+        const r = await extrairFichaDeArquivo(m.id, fd);
+        if (!r.ok) { lastErr = r.erro ?? "falha"; continue; }
+        okCount++;
+        if (r.especificacoes) accSpecs = mesclarSpecs(accSpecs, r.especificacoes);
+        if (r.descricao && !accDesc) accDesc = r.descricao;
+        if (m.proprio && r.pontosFortes) accPontos = juntarLista(accPontos, r.pontosFortes);
+        if (m.proprio && r.diferenciais) accDifs = juntarLista(accDifs, r.diferenciais);
+        if (r.consumoLitrosHora) setConsumo(String(r.consumoLitrosHora).replace(".", ","));
+        if (m.proprio && r.valorInicial) setValor(brl(r.valorInicial));
       }
-      if (r.especificacoes) setSpecs(r.especificacoes);
-      if (r.descricao) setDesc(r.descricao);
-      if (m.proprio && r.pontosFortes) setPontos(r.pontosFortes);
-      if (m.proprio && r.diferenciais) setDifs(r.diferenciais);
-      setAviso("Extraído do arquivo — confira os números e salve. ✓");
+      setSpecs(accSpecs); setDesc(accDesc); setPontos(accPontos); setDifs(accDifs);
+      if (arquivoRef.current) arquivoRef.current.value = "";
+      setAviso(okCount ? `Li ${okCount} arquivo(s) — confira os números e salve. ✓` : (lastErr || "Não consegui ler os arquivos."));
     });
   }
 
@@ -95,6 +130,9 @@ function EditModal({
         descricao: desc || undefined,
         pontosFortes: pontos || undefined,
         diferenciais: difs || undefined,
+        valorInicial: valor ? Number(valor.replace(/[^\d]/g, "")) || null : null,
+        consumoLitrosHora: consumo ? Number(consumo.replace(",", ".")) || null : null,
+        argumentos: args || undefined,
       });
       onClose();
     });
@@ -140,18 +178,20 @@ function EditModal({
             style={{ background: "rgba(191,222,77,0.12)", color: "#BFDE4D", border: "1px solid rgba(191,222,77,0.3)" }}
           >
             <Paperclip size={15} />
-            {lendoArquivo ? "Lendo arquivo..." : "Anexar arquivo (PDF/foto)"}
+            {lendoArquivo ? "Lendo arquivos..." : "Anexar arquivos (PDF/foto/texto)"}
           </button>
           <input
             ref={arquivoRef}
             type="file"
-            accept="application/pdf,image/*"
+            accept="application/pdf,image/*,text/plain,text/html,.txt,.html,.htm,.md,.csv"
+            multiple
             onChange={aoEscolherArquivo}
             className="hidden"
           />
         </div>
         <p className="mb-3 -mt-1 text-[11px] text-zinc-500">
-          📎 Anexe o catálogo/ficha do fabricante (PDF ou foto) — a IA lê e preenche os campos. O arquivo não é guardado.
+          📎 Anexe datasheet, folheto, comparativo ou foto da ficha (PDF, imagem, texto ou HTML) — pode mandar
+          <b> vários de uma vez</b>. A IA lê, extrai e <b>mescla</b> os dados (só o que estiver no arquivo, sem inventar). O arquivo não é guardado.
         </p>
         {aviso && (
           <p
@@ -188,6 +228,54 @@ function EditModal({
               className="w-full rounded-xl p-3 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-yellow-500"
               style={{ background: "#09090b", border: "1px solid #3f3f46" }}
             />
+          </div>
+
+          {/* Banco de Negociação */}
+          <div className="rounded-xl p-3" style={{ background: "rgba(191,222,77,0.06)", border: "1px solid rgba(191,222,77,0.25)" }}>
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-bold" style={{ color: "#BFDE4D" }}>
+              💼 Banco de Negociação
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {m.proprio && (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Valor inicial ao cliente (R$)</label>
+                  <input
+                    value={valor}
+                    onChange={(e) => setValor(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Ex: 850.000"
+                    className="w-full rounded-xl p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    style={{ background: "#09090b", border: "1px solid #3f3f46" }}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Consumo diesel (L/h) <span className="font-normal text-zinc-500">— p/ comparativo</span>
+                </label>
+                <input
+                  value={consumo}
+                  onChange={(e) => setConsumo(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="Ex: 14,5"
+                  className="w-full rounded-xl p-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  style={{ background: "#09090b", border: "1px solid #3f3f46" }}
+                />
+              </div>
+            </div>
+            {m.proprio && (
+              <div className="mt-3">
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Argumentos / condições de negociação</label>
+                <textarea
+                  value={args}
+                  onChange={(e) => setArgs(e.target.value)}
+                  rows={3}
+                  placeholder="Ex: Entrada facilitada; bônus na troca; condição especial à vista; prazo de entrega; garantia estendida…"
+                  className="w-full rounded-xl p-3 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  style={{ background: "#09090b", border: "1px solid #3f3f46" }}
+                />
+              </div>
+            )}
           </div>
 
           {m.proprio && (

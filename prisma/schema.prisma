@@ -101,6 +101,9 @@ model Maquina {
   volumeVendas         Int     @default(0)     // unidades vendidas na região (ranking de mais vendidas)
   pesoOperacional Float? // kg (para casar faixa de peso no comparativo)
   potencia    Int?       // cv
+  valorInicial      Float?  // R$ — valor inicial a passar ao cliente (banco de negociação)
+  consumoLitrosHora Float?  // litros de diesel/hora (para o comparativo de combustível)
+  argumentos        String? // argumentos e condições de negociação livres (banco de negociação)
   descricao   String?
   especificacoes String? // ficha técnica livre (ex: "Força de escavação: 142 kN\nProfundidade: 6,4 m")
   pontosFortes String?   // argumentos prontos de venda (das minhas máquinas)

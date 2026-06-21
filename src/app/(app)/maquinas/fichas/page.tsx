@@ -18,6 +18,9 @@ export default async function FichasTecnicasPage() {
       especificacoes: true,
       pontosFortes: true,
       diferenciais: true,
+      valorInicial: true,
+      consumoLitrosHora: true,
+      argumentos: true,
     },
     orderBy: [{ proprio: "desc" }, { marca: "asc" }, { categoria: "asc" }, { modelo: "asc" }],
   });
