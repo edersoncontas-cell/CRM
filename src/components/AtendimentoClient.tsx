@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2,
+  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -17,6 +17,7 @@ export type ConvLista = {
   isGroup: boolean;
   groupName: string | null;
   ignored: boolean;
+  aiActive: boolean;
   category: string | null;
   contactPhotoUrl: string | null;
   clienteId: string | null;
@@ -76,9 +77,58 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  // Overlay local dos ajustes da conversa (Agnes/ignorar/categoria) p/ refletir na hora.
+  const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null }>>({});
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [cfgAberto, setCfgAberto] = useState(false);
+  const [auditMode, setAuditMode] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
+
+  // Carrega o modo da Agnes (rascunho x automático).
+  useEffect(() => {
+    fetch("/api/whatsapp/settings").then((r) => r.json()).then((d) => setAuditMode(d.auditMode)).catch(() => {});
+  }, []);
+
+  // Estado efetivo dos ajustes (overlay local sobre o que veio do servidor).
+  const curr = useCallback(
+    (c: ConvLista) => flags[c.id] ?? { aiActive: c.aiActive, ignored: c.ignored, category: c.category },
+    [flags],
+  );
+
+  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; category: string }>) {
+    const base = curr(c);
+    setFlags((f) => ({ ...f, [c.id]: { ...base, ...patch } }));
+    try {
+      await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    } catch {}
+    router.refresh();
+  }
+
+  async function setAudit(v: boolean) {
+    setAuditMode(v);
+    try {
+      await fetch("/api/whatsapp/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auditMode: v }) });
+    } catch {}
+  }
+
+  // Ação sobre rascunho da Agnes: enviar (aprovar) ou descartar.
+  async function draftAction(messageId: string, action: "send" | "discard") {
+    if (!selId) return;
+    const r = await fetch(`/api/conversations/${selId}/drafts`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId, action }),
+    }).then((res) => res.json()).catch(() => null);
+    if (!r?.ok) return;
+    if (action === "discard") setMensagens((p) => p.filter((m) => m.id !== messageId));
+    else if (r.message) setMensagens((p) => p.map((m) => (m.id === messageId ? r.message : m)));
+  }
+
+  // Editar rascunho: joga o texto no campo de digitação e remove o rascunho.
+  function editarDraft(m: Mensagem) {
+    setTexto(m.body);
+    draftAction(m.id, "discard");
+  }
 
   // Converte HTML (export em página) para texto, preservando quebras de linha.
   function htmlParaTexto(html: string): string {
@@ -227,7 +277,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   const filtradas = conversas
-    .filter((c) => (aba === "ignoradas" ? c.ignored : !c.ignored))
+    .filter((c) => (aba === "ignoradas" ? curr(c).ignored : !curr(c).ignored))
     .filter((c) => {
       if (!busca.trim()) return true;
       const q = busca.toLowerCase();
@@ -259,6 +309,30 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
               {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
               <span className="hidden sm:inline">{importMsg ?? "Importar"}</span>
             </button>
+            {/* Configuração da Agnes (IA) */}
+            <div className="relative">
+              <button onClick={() => setCfgAberto((v) => !v)} title="Configurar a Agnes (IA)"
+                className="flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-white hover:bg-white/25">
+                <Bot size={15} />
+              </button>
+              {cfgAberto && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setCfgAberto(false)} />
+                  <div className="absolute right-0 top-9 z-20 w-72 rounded-xl bg-white p-3 text-left shadow-xl" style={{ color: "#111b21" }}>
+                    <div className="mb-1 flex items-center gap-1.5 font-bold"><Sparkles size={15} className="text-amber-500" /> Agnes (IA)</div>
+                    <p className="mb-2 text-xs text-slate-500">Quando você ativa a Agnes numa conversa (botão 🤖 no topo do chat), ela responde sozinha. Escolha como:</p>
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-slate-50">
+                      <input type="radio" name="audit" checked={auditMode === true} onChange={() => setAudit(true)} className="mt-0.5" />
+                      <span className="text-sm"><b>Sugerir rascunho</b> para você revisar e enviar <span className="text-emerald-600">(recomendado)</span></span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-slate-50">
+                      <input type="radio" name="audit" checked={auditMode === false} onChange={() => setAudit(false)} className="mt-0.5" />
+                      <span className="text-sm"><b>Responder automático</b>, sem revisão</span>
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <div className="p-2">
@@ -321,12 +395,73 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   <User size={13} /> Ficha
                 </Link>
               )}
-              <MoreVertical size={18} className="text-white/80" />
+              {/* Liga/desliga a Agnes nesta conversa */}
+              <button
+                onClick={() => patchConv(sel, { aiActive: !curr(sel).aiActive })}
+                title={curr(sel).aiActive ? "Agnes ativa — clique para desligar" : "Ativar a Agnes nesta conversa"}
+                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
+                style={curr(sel).aiActive ? { background: "#fff", color: "#008069" } : { background: "rgba(255,255,255,0.15)", color: "#fff" }}
+              >
+                <Bot size={14} /> {curr(sel).aiActive ? "Agnes ON" : "Agnes"}
+              </button>
+              {/* Menu da conversa */}
+              <div className="relative">
+                <button onClick={() => setMenuAberto((v) => !v)} className="rounded-full p-1 text-white/80 hover:bg-white/10">
+                  <MoreVertical size={18} />
+                </button>
+                {menuAberto && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenuAberto(false)} />
+                    <div className="absolute right-0 top-9 z-20 w-56 rounded-xl bg-white p-1 text-sm shadow-xl" style={{ color: "#111b21" }}>
+                      <button onClick={() => { patchConv(sel, { ignored: !curr(sel).ignored }); setMenuAberto(false); }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
+                        {curr(sel).ignored ? <Bell size={15} /> : <BellOff size={15} />}
+                        {curr(sel).ignored ? "Reativar conversa" : "Ignorar conversa"}
+                      </button>
+                      <div className="px-2.5 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Categoria</div>
+                      {["CLIENTE", "LEAD", "OUTRO"].map((cat) => (
+                        <button key={cat} onClick={() => { patchConv(sel, { category: cat }); setMenuAberto(false); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 hover:bg-slate-100">
+                          <Tag size={14} /> {cat}
+                          {curr(sel).category === cat && <Check size={14} className="ml-auto text-emerald-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Mensagens */}
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-10" style={{ background: "#efeae2" }}>
               {mensagens.map((m) => {
+                // Rascunho da Agnes: bloco destacado com Enviar / Editar / Descartar.
+                if (m.isDraft) {
+                  return (
+                    <div key={m.id} className="mb-2 flex justify-end">
+                      <div className="max-w-[80%] rounded-lg border border-dashed border-amber-400 bg-amber-50 p-2.5 text-sm shadow-sm">
+                        <div className="mb-1 flex items-center gap-1 text-[11px] font-bold text-amber-700">
+                          <Sparkles size={12} /> Sugestão da Agnes — revise antes de enviar
+                        </div>
+                        <p className="whitespace-pre-wrap break-words" style={{ color: "#111b21" }}>{m.body}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button onClick={() => draftAction(m.id, "send")}
+                            className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-white" style={{ background: "#008069" }}>
+                            <Send size={12} /> Enviar
+                          </button>
+                          <button onClick={() => editarDraft(m)}
+                            className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50">
+                            Editar
+                          </button>
+                          <button onClick={() => draftAction(m.id, "discard")}
+                            className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-red-600 ring-1 ring-red-200 hover:bg-red-50">
+                            Descartar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 const meu = m.direction === "OUT";
                 return (
                   <div key={m.id} className={`mb-1.5 flex ${meu ? "justify-end" : "justify-start"}`}>

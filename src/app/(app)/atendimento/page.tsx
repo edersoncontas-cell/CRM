@@ -20,6 +20,7 @@ export default async function AtendimentoPage() {
       isGroup: c.isGroup,
       groupName: c.groupName,
       ignored: c.ignored,
+      aiActive: c.aiActive,
       category: c.category,
       contactPhotoUrl: c.contactPhotoUrl,
       clienteId: c.clienteId,
