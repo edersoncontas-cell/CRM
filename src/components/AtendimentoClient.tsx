@@ -7,6 +7,8 @@ import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
   DownloadCloud, Loader2,
 } from "lucide-react";
+import { unzipSync, strFromU8 } from "fflate";
+import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
 
 export type ConvLista = {
   id: string;
@@ -74,29 +76,93 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
 
-  // Importa as conversas recentes do WhatsApp (Z-API) em lotes, direto desta tela.
-  async function importar() {
+  // Converte HTML (export em página) para texto, preservando quebras de linha.
+  function htmlParaTexto(html: string): string {
+    const comQuebras = html
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n");
+    const doc = new DOMParser().parseFromString(comQuebras, "text/html");
+    return doc.body?.textContent ?? "";
+  }
+
+  // Clique em "Importar" → abre o seletor de arquivos (.zip exportado do WhatsApp).
+  function abrirSeletor() {
     if (importando) return;
-    if (!confirm("Importar suas conversas recentes do WhatsApp? Pode levar 1-2 minutos.")) return;
+    fileRef.current?.click();
+  }
+
+  // Lê os .zip escolhidos, descompacta e parseia no navegador, depois envia o texto.
+  async function arquivosEscolhidos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // permite re-selecionar os mesmos arquivos depois
+    if (!files.length) return;
+
     setImportando(true);
-    setImportMsg("Importando…");
-    let page = 1, chats = 0, msgs = 0, more = true, guard = 0;
-    while (more && guard < 40) {
-      guard++;
-      const r = await fetch("/api/whatsapp/import-history", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page, pageSize: 5, messagesPerChat: 150 }),
-      }).then((res) => res.json()).catch(() => null);
-      if (!r?.ok) { setImportMsg("Falha (Z-API desconectada?)"); setImportando(false); setTimeout(() => setImportMsg(null), 4000); return; }
-      chats += r.chatsProcessed; msgs += r.messagesImported; more = r.hasMore; page = r.nextPage;
-      setImportMsg(more ? `${chats} conversas…` : `✅ ${chats} conversas, ${msgs} msgs`);
+    setImportMsg("Lendo arquivos…");
+    const porNome = new Map<string, ParsedChat>();
+
+    try {
+      for (const file of files) {
+        const baseZip = nomeDoArquivo(file.name);
+        let textos: Array<{ path: string; texto: string }> = [];
+
+        if (/\.zip$/i.test(file.name)) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const entradas = unzipSync(bytes, { filter: (f) => /\.(txt|html?)$/i.test(f.name) });
+          textos = Object.entries(entradas).map(([path, data]) => {
+            const cru = strFromU8(data);
+            return { path, texto: /\.html?$/i.test(path) ? htmlParaTexto(cru) : cru };
+          });
+        } else if (/\.html?$/i.test(file.name)) {
+          textos = [{ path: file.name, texto: htmlParaTexto(await file.text()) }];
+        } else if (/\.txt$/i.test(file.name)) {
+          textos = [{ path: file.name, texto: await file.text() }];
+        }
+
+        for (const { path, texto } of textos) {
+          const raw = parseWhatsAppLines(texto);
+          if (!raw.length) continue;
+          let nome = nomeDoArquivo(path);
+          if (!nome || /^_chat$/i.test(nome)) nome = baseZip;
+          const chat = montarChat(nome, raw);
+          const ja = porNome.get(nome.toLowerCase());
+          if (ja) ja.messages.push(...chat.messages);
+          else porNome.set(nome.toLowerCase(), chat);
+        }
+      }
+
+      const chats = Array.from(porNome.values()).filter((c) => c.messages.length);
+      if (!chats.length) {
+        setImportMsg("Nenhuma mensagem reconhecida nos arquivos.");
+        setImportando(false);
+        setTimeout(() => setImportMsg(null), 5000);
+        return;
+      }
+
+      // Envia uma conversa por vez para mostrar progresso e evitar payload gigante.
+      let convOk = 0, msgsOk = 0, i = 0;
+      for (const chat of chats) {
+        i++;
+        setImportMsg(`Importando ${i}/${chats.length}…`);
+        const r = await fetch("/api/whatsapp/import-file", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chats: [chat] }),
+        }).then((res) => res.json()).catch(() => null);
+        if (r?.ok) { convOk += r.conversas; msgsOk += r.mensagens; }
+      }
+      setImportMsg(`✅ ${convOk} conversas, ${msgsOk} msgs`);
+    } catch (err) {
+      console.error(err);
+      setImportMsg("Falha ao ler os arquivos (zip inválido?)");
+    } finally {
+      setImportando(false);
+      setTimeout(() => setImportMsg(null), 6000);
+      router.refresh();
     }
-    setImportando(false);
-    setTimeout(() => setImportMsg(null), 5000);
-    router.refresh();
   }
 
   // Re-sincroniza a lista lateral a cada 15s (leve).
@@ -176,10 +242,18 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
           <span className="flex items-center gap-2 font-semibold text-white"><MessageCircle size={18} /> Atendimento</span>
           <div className="flex items-center gap-2">
             {!zapiAtiva && <span className="rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold text-black">offline</span>}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip,.txt,.html,.htm"
+              multiple
+              onChange={arquivosEscolhidos}
+              className="hidden"
+            />
             <button
-              onClick={importar}
+              onClick={abrirSeletor}
               disabled={importando}
-              title="Importar conversas do WhatsApp"
+              title="Importar conversas exportadas do WhatsApp (.zip)"
               className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
             >
               {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}

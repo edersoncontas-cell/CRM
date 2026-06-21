@@ -47,6 +47,67 @@ export async function acharOuCriarConversa(args: {
   return { conv, criada: true };
 }
 
+// Para importação de arquivo (export do WhatsApp): casa pelo NOME, pois o
+// arquivo não traz telefone. Se não existir, cria uma conversa "só histórico"
+// com um telefone sintético (envio fica desabilitado até casar com o número real).
+export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean) {
+  const existente = await db.whatsAppConversation.findFirst({
+    where: isGroup
+      ? { isGroup: true, groupName: { equals: name, mode: "insensitive" } }
+      : { isGroup: false, contactName: { equals: name, mode: "insensitive" } },
+    orderBy: { lastMessageAt: "desc" },
+  });
+  if (existente) return existente;
+
+  const sintetico = "imp:" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+  const clienteId = !isGroup ? await acharClienteId(name) : null; // raramente casa, mas tenta
+  return db.whatsAppConversation.create({
+    data: {
+      externalPhone: sintetico,
+      isGroup,
+      contactName: isGroup ? null : name,
+      groupName: isGroup ? name : null,
+      clienteId,
+      lastMessageAt: new Date(0), // será corrigido para a última msg importada
+    },
+  });
+}
+
+// Insere mensagens importadas, sem duplicar (chave = timestamp|primeiros 60 chars).
+export async function importarMensagens(
+  conversationId: string,
+  msgs: Array<{ fromMe: boolean; sender: string | null; body: string; sentAt: string }>,
+  isGroup: boolean,
+): Promise<number> {
+  if (!msgs.length) return 0;
+  const existentes = await db.whatsAppMessage.findMany({ where: { conversationId }, select: { sentAt: true, body: true } });
+  const chaves = new Set(existentes.map((e) => `${e.sentAt.getTime()}|${e.body.slice(0, 60)}`));
+
+  const novas = msgs.filter((m) => {
+    const corpo = isGroup && m.sender && !m.fromMe ? `${m.sender}: ${m.body}` : m.body;
+    return !chaves.has(`${new Date(m.sentAt).getTime()}|${corpo.slice(0, 60)}`);
+  });
+  if (!novas.length) return 0;
+
+  await db.whatsAppMessage.createMany({
+    data: novas.map((m) => ({
+      conversationId,
+      direction: m.fromMe ? "OUT" : "IN",
+      body: isGroup && m.sender && !m.fromMe ? `${m.sender}: ${m.body}` : m.body,
+      senderName: isGroup ? m.sender : null,
+      sentAt: new Date(m.sentAt),
+      origin: m.fromMe ? "EXTERNAL" : null,
+    })),
+  });
+
+  const ultima = new Date(msgs.reduce((a, b) => (new Date(b.sentAt) > new Date(a.sentAt) ? b : a)).sentAt);
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { lastMessageAt: true } });
+  if (conv && ultima > conv.lastMessageAt) {
+    await db.whatsAppConversation.update({ where: { id: conversationId }, data: { lastMessageAt: ultima } });
+  }
+  return novas.length;
+}
+
 // Atualiza a foto de perfil de uma conversa (quando ainda não temos uma).
 export async function definirFotoSeVazia(conversationId: string, photoUrl: string | null) {
   if (!photoUrl) return;
