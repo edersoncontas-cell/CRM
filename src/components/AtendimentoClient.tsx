@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles, Trash2,
+  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles, Trash2, FileJson2,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -83,6 +83,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [cfgAberto, setCfgAberto] = useState(false);
   const [auditMode, setAuditMode] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const jsonRef = useRef<HTMLInputElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
 
@@ -231,6 +232,46 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     }
   }
 
+  // Importa um arquivo JSON (index_clientes.json ou conversas_por_cliente.json)
+  // Envia em lotes de 50 para não estourar o timeout do servidor.
+  async function importarJSON(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportando(true);
+    setImportMsg("Lendo arquivo…");
+    try {
+      const texto = await file.text();
+      const dados = JSON.parse(texto);
+      const lista: unknown[] = Array.isArray(dados) ? dados : Array.isArray(dados?.clientes) ? dados.clientes : [];
+      if (!lista.length) { setImportMsg("Arquivo vazio ou formato inválido."); return; }
+      const LOTE = 50;
+      let criados = 0, atualizados = 0, mensagens = 0, erros = 0;
+      for (let i = 0; i < lista.length; i += LOTE) {
+        const lote = lista.slice(i, i + LOTE);
+        setImportMsg(`Importando ${Math.min(i + LOTE, lista.length)}/${lista.length}…`);
+        const r = await fetch("/api/whatsapp/import-json", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(lote),
+        }).then((res) => res.json()).catch(() => null);
+        if (r?.ok) {
+          criados += r.criados ?? 0;
+          atualizados += r.atualizados ?? 0;
+          mensagens += r.mensagens ?? 0;
+          erros += r.erros ?? 0;
+        }
+      }
+      setImportMsg(`✅ ${criados} criados · ${atualizados} atualizados · ${mensagens} msgs${erros ? ` · ${erros} erros` : ""}`);
+    } catch {
+      setImportMsg("Arquivo inválido (não é JSON).");
+    } finally {
+      setImportando(false);
+      setTimeout(() => setImportMsg(null), 8000);
+      router.refresh();
+    }
+  }
+
   // Re-sincroniza a lista lateral a cada 15s (leve).
   useEffect(() => {
     const iv = setInterval(() => router.refresh(), 15000);
@@ -308,14 +349,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
           <span className="flex items-center gap-2 font-semibold text-white"><MessageCircle size={18} /> Atendimento</span>
           <div className="flex items-center gap-2">
             {!zapiAtiva && <span className="rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold text-black">offline</span>}
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".zip,.txt,.html,.htm"
-              multiple
-              onChange={arquivosEscolhidos}
-              className="hidden"
-            />
+            <input ref={fileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidos} className="hidden" />
+            <input ref={jsonRef} type="file" accept=".json" onChange={importarJSON} className="hidden" />
+            {/* Importar .zip do WhatsApp */}
             <button
               onClick={abrirSeletor}
               disabled={importando}
@@ -324,6 +360,16 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             >
               {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
               <span className="hidden sm:inline">{importMsg ?? "Importar"}</span>
+            </button>
+            {/* Importar JSON (index_clientes / conversas_por_cliente) */}
+            <button
+              onClick={() => jsonRef.current?.click()}
+              disabled={importando}
+              title="Importar contatos do WhatsApp via JSON (index_clientes.json / conversas_por_cliente.json)"
+              className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+            >
+              <FileJson2 size={13} />
+              <span className="hidden sm:inline">JSON</span>
             </button>
             {/* Configuração da Agnes (IA) */}
             <div className="relative">
