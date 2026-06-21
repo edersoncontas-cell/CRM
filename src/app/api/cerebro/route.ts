@@ -3,6 +3,9 @@ import { db } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
 import { registrarAudit } from "@/lib/audit";
 
+const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type ImageMediaType = (typeof MEDIA_TYPES)[number];
+
 function anthropicClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
@@ -14,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const ct = req.headers.get("content-type") ?? "";
     let mensagem = "";
-    let arquivos: { base64: string; mediaType: string; nome: string }[] = [];
+    const arquivos: { base64: string; mediaType: string; nome: string }[] = [];
 
     if (ct.includes("multipart/form-data")) {
       const fd = await req.formData();
@@ -34,17 +37,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Contexto do CRM: métricas e dados recentes
-    const [totalClientes, totalNegs, negsGanhas, negsPerdidas, proximasVisitas, audits] = await Promise.all([
+    const [totalClientes, totalNegs, negsGanhas, negsPerdidas, audits] = await Promise.all([
       db.cliente.count(),
       db.negociacao.count({ where: { status: "aberta" } }),
       db.negociacao.count({ where: { status: "ganha" } }),
       db.negociacao.count({ where: { status: "perdida" } }),
-      db.cliente.findMany({
-        where: { proximaVisita: { gte: new Date() } } as object,
-        select: { nome: true, proximaVisita: true, proximaVisitaNota: true } as object,
-        take: 5,
-        orderBy: { proximaVisita: "asc" } as object,
-      }).catch(() => []),
       db.auditLog.findMany({ orderBy: { criadoEm: "desc" }, take: 20, select: { acao: true, descricao: true, criadoEm: true, origem: true } }),
     ]);
 
@@ -56,25 +53,29 @@ Comporte-se como um sócio estratégico que quer vencer a todo custo e potencial
 - **Clientes:** ${totalClientes}
 - **Negociações abertas:** ${totalNegs}
 - **Vendas ganhas:** ${negsGanhas} | **Perdidas:** ${negsPerdidas}
-${proximasVisitas.length > 0 ? `- **Próximas visitas:** ${(proximasVisitas as { nome: string; proximaVisita?: Date | null }[]).map((v) => `${v.nome} (${v.proximaVisita ? new Date(v.proximaVisita).toLocaleDateString("pt-BR") : "sem data"})`).join(", ")}` : ""}
 
 ## Últimas ações no CRM:
 ${audits.map((a) => `- [${a.origem}] ${a.descricao}`).join("\n")}
 
 Responda sempre em português. Seja direto, prático e estratégico. Se precisar executar uma ação real no CRM (criar/editar/excluir), descreva exatamente o que faria e peça confirmação se for destrutivo.`;
 
-    // Monta o conteúdo da mensagem (texto + arquivos)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const content: any[] = [];
+    // Monta o conteúdo da mensagem (texto + imagens)
+    const content: Anthropic.MessageParam["content"] = [];
     for (const arq of arquivos) {
-      if (arq.mediaType.startsWith("image/")) {
-        content.push({ type: "image", source: { type: "base64", media_type: arq.mediaType, data: arq.base64 } });
-      } else if (arq.mediaType === "application/pdf") {
-        content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: arq.base64 } });
+      if ((MEDIA_TYPES as readonly string[]).includes(arq.mediaType)) {
+        content.push({
+          type: "image",
+          source: { type: "base64", media_type: arq.mediaType as ImageMediaType, data: arq.base64 },
+        });
       }
+      // PDFs e textos: incluímos como nota no texto (o Cérebro descreve o que recebeu)
     }
-    if (mensagem) content.push({ type: "text", text: mensagem });
-    if (content.length === 0) content.push({ type: "text", text: "(sem texto)" });
+    const nomesArqs = arquivos.filter((a) => !(MEDIA_TYPES as readonly string[]).includes(a.mediaType)).map((a) => a.nome);
+    const textoFinal = [
+      nomesArqs.length ? `[Arquivos recebidos: ${nomesArqs.join(", ")}]\n` : "",
+      mensagem,
+    ].filter(Boolean).join("") || "(sem texto)";
+    content.push({ type: "text", text: textoFinal });
 
     // Chama Claude via streaming
     const stream = await anthropicClient().messages.stream({
@@ -84,8 +85,8 @@ Responda sempre em português. Seja direto, prático e estratégico. Se precisar
       messages: [{ role: "user", content }],
     });
 
-    // Registra auditoria
-    await registrarAudit({
+    // Registra auditoria (sem bloquear o stream)
+    registrarAudit({
       acao: "perfil_atualizado",
       origem: "usuario",
       descricao: `Cérebro: "${mensagem.slice(0, 80)}${mensagem.length > 80 ? "…" : ""}"`,
