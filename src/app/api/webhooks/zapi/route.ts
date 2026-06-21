@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
   const fromMe = body?.fromMe === true;
   const isGroup = body?.isGroup === true || (phoneRaw ? isGroupChatId(phoneRaw) : false);
   const nome = (body?.senderName as string) ?? (body?.chatName as string) ?? null;
+  // A Z-API manda a foto do contato/grupo direto no payload — aproveitamos sem custo.
+  const foto = (body?.photo as string) ?? (body?.senderPhoto as string) ?? (body?.chatImage as string) ?? null;
 
   let diag = { dir: fromMe ? "out" as const : "in" as const, phone: phoneRaw, nome, texto: "", status: "?" };
 
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
     if (fromMe) {
       // ── Ramo fromMe (anti-eco em 2 camadas) ──
       if (await existeZapiId(zapiMessageId)) { diag.status = "eco"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
-      const { conv } = await acharOuCriarConversa({ phone, lid, isGroup, contactName: nome, groupName: isGroup ? nome : null });
+      const { conv } = await acharOuCriarConversa({ phone, lid, isGroup, contactName: nome, groupName: isGroup ? nome : null, photoUrl: foto });
       const eco = await acharEcoRecente(conv.id, c.text);
       if (eco) {
         if (zapiMessageId && !eco.zapiMessageId) await curarZapiId(eco.id, zapiMessageId);
@@ -86,7 +88,7 @@ export async function POST(req: NextRequest) {
       diag.status = "enviada";
     } else {
       // ── Ramo recebido ──
-      const { conv } = await acharOuCriarConversa({ phone, lid, isGroup, contactName: nome, groupName: isGroup ? nome : null });
+      const { conv } = await acharOuCriarConversa({ phone, lid, isGroup, contactName: nome, groupName: isGroup ? nome : null, photoUrl: foto });
       await inserirMensagem(conv.id, {
         direction: "IN", body: c.text, senderName: isGroup ? nome : null,
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,

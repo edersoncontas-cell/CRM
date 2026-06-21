@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { listarChats, mensagensDoChat } from "@/lib/zapi";
-import { acharOuCriarConversa } from "@/lib/whatsapp-store";
+import { listarChats, mensagensDoChat, fotoPerfil } from "@/lib/zapi";
+import { acharOuCriarConversa, definirFotoSeVazia } from "@/lib/whatsapp-store";
 import { isGroupChatId } from "@/lib/whatsapp-routing";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +41,15 @@ export async function POST(req: NextRequest) {
 
     const { conv, criada } = await acharOuCriarConversa({
       phone, lid: null, isGroup, contactName: chat.name ?? null, groupName: isGroup ? chat.name ?? null : null,
+      photoUrl: chat.photo ?? null,
     });
     if (criada) conversationsCreated++;
+
+    // Se ainda não temos foto, busca a foto de perfil na Z-API (1 chamada extra).
+    if (!conv.contactPhotoUrl && !chat.photo) {
+      const f = await fotoPerfil(chat.phone).catch(() => null);
+      if (f) await definirFotoSeVazia(conv.id, f);
+    }
 
     const raw = await mensagensDoChat(chat.phone, messagesPerChat);
     const parsed = raw.map(parseHist).filter((m) => m.body).sort((a, b) => +a.sentAt - +b.sentAt);

@@ -120,13 +120,14 @@ export function expectedZApiInstanceId(): string | null {
 
 // ---------- Histórico / contato ----------
 
-export async function listarChats(page = 1, pageSize = 5): Promise<Array<{ phone: string; name?: string; isGroup?: boolean }>> {
+export async function listarChats(page = 1, pageSize = 5): Promise<Array<{ phone: string; name?: string; isGroup?: boolean; photo?: string | null }>> {
   const data = await zapiGet(`chats?page=${page}&pageSize=${pageSize}`).catch(() => []);
   if (!Array.isArray(data)) return [];
   return data.map((c: Record<string, unknown>) => ({
     phone: String(c.phone ?? c.id ?? ""),
     name: (c.name as string) ?? (c.chatName as string) ?? undefined,
     isGroup: c.isGroup === true || String(c.phone ?? "").includes("@g.us"),
+    photo: (c.imagePreview as string) ?? (c.profileThumbnail as string) ?? (c.image as string) ?? null,
   })).filter((c) => c.phone);
 }
 

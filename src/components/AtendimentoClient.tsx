@@ -46,6 +46,24 @@ function nomeConv(c: { contactName: string | null; groupName: string | null; isG
   return (c.isGroup ? c.groupName : c.contactName) || c.contactName || c.externalPhone;
 }
 
+// Avatar com foto do WhatsApp; cai para iniciais/ícone se não houver foto ou se falhar.
+function Avatar({ nome, isGroup, photo, size }: { nome: string; isGroup: boolean; photo: string | null; size: number }) {
+  const [erro, setErro] = useState(false);
+  if (photo && !erro) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={photo} alt="" onError={() => setErro(true)} referrerPolicy="no-referrer"
+        className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+    );
+  }
+  return (
+    <div className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, background: isGroup ? "#667781" : "#00a884", fontSize: Math.round(size * 0.34) }}>
+      {isGroup ? <Users size={Math.round(size * 0.45)} /> : iniciais(nome)}
+    </div>
+  );
+}
+
 export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLista[]; zapiAtiva: boolean }) {
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(null);
@@ -191,9 +209,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             <button key={c.id} onClick={() => setSelId(c.id)}
               className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left ${selId === c.id ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]"}`}
               style={{ borderColor: "#f0f2f5" }}>
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: c.isGroup ? "#667781" : "#00a884" }}>
-                {c.isGroup ? <Users size={20} /> : iniciais(nomeConv(c))}
-              </div>
+              <Avatar nome={nomeConv(c)} isGroup={c.isGroup} photo={c.contactPhotoUrl} size={48} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                   <span className="truncate text-sm font-semibold" style={{ color: "#111b21" }}>{nomeConv(c)}</span>
@@ -221,9 +237,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: "#008069" }}>
               <button onClick={() => setSelId(null)} className="rounded-full p-1 text-white/90 hover:bg-white/10 lg:hidden"><ArrowLeft size={20} /></button>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: "#00a884" }}>
-                {sel.isGroup ? <Users size={16} /> : iniciais(nomeConv(sel))}
-              </div>
+              <Avatar nome={nomeConv(sel)} isGroup={sel.isGroup} photo={sel.contactPhotoUrl} size={36} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-bold text-white">{nomeConv(sel)}</div>
                 <div className="text-[11px] text-white/70">{sel.isGroup ? "Grupo" : sel.externalPhone}</div>

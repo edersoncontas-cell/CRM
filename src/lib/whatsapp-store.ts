@@ -19,12 +19,15 @@ export async function acharConversa(phone: string, lid: string | null, isGroup: 
 }
 
 export async function acharOuCriarConversa(args: {
-  phone: string; lid: string | null; isGroup: boolean; contactName?: string | null; groupName?: string | null;
+  phone: string; lid: string | null; isGroup: boolean; contactName?: string | null; groupName?: string | null; photoUrl?: string | null;
 }) {
   let conv = await acharConversa(args.phone, args.lid, args.isGroup);
   if (conv) {
-    if (!args.isGroup && args.lid && !conv.lid) {
-      conv = await db.whatsAppConversation.update({ where: { id: conv.id }, data: { lid: args.lid } });
+    const patch: Prisma.WhatsAppConversationUpdateInput = {};
+    if (!args.isGroup && args.lid && !conv.lid) patch.lid = args.lid;
+    if (args.photoUrl && !conv.contactPhotoUrl) patch.contactPhotoUrl = args.photoUrl;
+    if (Object.keys(patch).length) {
+      conv = await db.whatsAppConversation.update({ where: { id: conv.id }, data: patch });
     }
     return { conv, criada: false };
   }
@@ -36,11 +39,21 @@ export async function acharOuCriarConversa(args: {
       isGroup: args.isGroup,
       contactName: args.contactName ?? null,
       groupName: args.groupName ?? null,
+      contactPhotoUrl: args.photoUrl ?? null,
       clienteId,
       lastMessageAt: new Date(),
     },
   });
   return { conv, criada: true };
+}
+
+// Atualiza a foto de perfil de uma conversa (quando ainda não temos uma).
+export async function definirFotoSeVazia(conversationId: string, photoUrl: string | null) {
+  if (!photoUrl) return;
+  await db.whatsAppConversation.updateMany({
+    where: { id: conversationId, contactPhotoUrl: null },
+    data: { contactPhotoUrl: photoUrl },
+  });
 }
 
 export type NovaMensagem = {
