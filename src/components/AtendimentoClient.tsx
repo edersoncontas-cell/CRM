@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
+  DownloadCloud, Loader2,
 } from "lucide-react";
 
 export type ConvLista = {
@@ -53,8 +54,32 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
+
+  // Importa as conversas recentes do WhatsApp (Z-API) em lotes, direto desta tela.
+  async function importar() {
+    if (importando) return;
+    if (!confirm("Importar suas conversas recentes do WhatsApp? Pode levar 1-2 minutos.")) return;
+    setImportando(true);
+    setImportMsg("Importando…");
+    let page = 1, chats = 0, msgs = 0, more = true, guard = 0;
+    while (more && guard < 40) {
+      guard++;
+      const r = await fetch("/api/whatsapp/import-history", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page, pageSize: 5, messagesPerChat: 150 }),
+      }).then((res) => res.json()).catch(() => null);
+      if (!r?.ok) { setImportMsg("Falha (Z-API desconectada?)"); setImportando(false); setTimeout(() => setImportMsg(null), 4000); return; }
+      chats += r.chatsProcessed; msgs += r.messagesImported; more = r.hasMore; page = r.nextPage;
+      setImportMsg(more ? `${chats} conversas…` : `✅ ${chats} conversas, ${msgs} msgs`);
+    }
+    setImportando(false);
+    setTimeout(() => setImportMsg(null), 5000);
+    router.refresh();
+  }
 
   // Re-sincroniza a lista lateral a cada 15s (leve).
   useEffect(() => {
@@ -131,7 +156,18 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#d1d7db", background: "#fff" }}>
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "#008069" }}>
           <span className="flex items-center gap-2 font-semibold text-white"><MessageCircle size={18} /> Atendimento</span>
-          {!zapiAtiva && <span className="rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold text-black">offline</span>}
+          <div className="flex items-center gap-2">
+            {!zapiAtiva && <span className="rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold text-black">offline</span>}
+            <button
+              onClick={importar}
+              disabled={importando}
+              title="Importar conversas do WhatsApp"
+              className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+            >
+              {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
+              <span className="hidden sm:inline">{importMsg ?? "Importar"}</span>
+            </button>
+          </div>
         </div>
         <div className="p-2">
           <div className="relative">

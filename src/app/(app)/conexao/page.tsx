@@ -68,7 +68,7 @@ export default async function ConexaoPage() {
               <b>A Z-API ainda não chamou o CRM nenhuma vez.</b> Isso significa que o webhook não está
               configurado/apontando certo. No painel da Z-API, em <b>Webhooks → Ao receber</b>, a URL precisa ser:
               <code className="mt-1 block break-all rounded bg-red-100 px-2 py-1 text-xs">
-                https://crm-lyart-ten.vercel.app/api/zapi/webhook
+                https://crm-lyart-ten.vercel.app/api/webhooks/zapi
               </code>
               e ligue <b>&quot;Notificar as enviadas por mim também&quot;</b>.
             </div>
