@@ -9,7 +9,16 @@ function normalizar(s: string): string {
 // Abreviações conhecidas: chave = sigla normalizada, valor = nome do município (normalizado)
 const ABREVIACOES: Record<string, string> = {
   smj: "santa maria de jetiba",
+  afc: "afonso claudio",
 };
+
+// Termos que identificam cadastros que NÃO são clientes compradores de máquinas.
+// Qualquer cliente cujo nome contenha um desses termos terá status = "nao_cliente".
+const TERMOS_NAO_CLIENTE = [
+  "pme", "sicoob", "sicredi", "banestes", "pousada",
+  "contabilidade", "cresol", "sonhagro", "contador",
+  "consultoria", "bcnh", "hotel",
+];
 
 // Regiões de outros vendedores — com os novos nomes solicitados pelo Ederson.
 export const REGIOES_FORA_AREA = ["Cliente Cristiano", "Cliente Welligton"];
@@ -91,6 +100,9 @@ export async function garantirRegioes(): Promise<void> {
   // Vincula município automaticamente para clientes cujo nome contém o nome da cidade
   await vincularMunicipiosPorNome();
 
+  // Classifica como "nao_cliente" todos os cadastros com termos institucionais
+  await classificarNaoClientes();
+
   garantido = true;
 }
 
@@ -147,19 +159,26 @@ async function vincularMunicipiosPorNome(): Promise<void> {
   } catch {}
 }
 
-const TERMOS_DESCARTE = ["POUSADA", "HOTEL", "PME"];
+// Classifica cadastros com termos institucionais como "nao_cliente" (não deleta).
+async function classificarNaoClientes(): Promise<void> {
+  try {
+    for (const termo of TERMOS_NAO_CLIENTE) {
+      await db.cliente.updateMany({
+        where: {
+          nome: { contains: termo, mode: "insensitive" },
+          status: { not: "nao_cliente" },
+        },
+        data: { status: "nao_cliente", jaComprou: false },
+      });
+    }
+  } catch {}
+}
+
 let limpezaFeita = false;
 
 export async function limparContatosDescartados(): Promise<void> {
   if (limpezaFeita) return;
-  try {
-    await db.cliente.deleteMany({
-      where: {
-        OR: TERMOS_DESCARTE.map((t) => ({
-          nome: { contains: t, mode: "insensitive" as const },
-        })),
-      },
-    });
-  } catch {}
   limpezaFeita = true;
+  // A limpeza agora é feita por classificarNaoClientes() dentro de garantirRegioes().
+  // Esta função é mantida para compatibilidade com chamadas existentes.
 }
