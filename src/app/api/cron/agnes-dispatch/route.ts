@@ -4,6 +4,7 @@ import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 import Anthropic from "@anthropic-ai/sdk";
+import { resumoAcademia } from "@/lib/academia";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,12 +35,18 @@ async function gerarRespostaCerebro(args: {
         .join("\n")
     : "Cliente não identificado no CRM.";
 
+  const academiaSummary = resumoAcademia();
+
   const system = `Você é o **Cérebro** — assistente de vendas do Ederson, vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
 
 Seu papel no WhatsApp: responder mensagens de clientes de forma natural, cordial e estratégica, no estilo do Ederson. Você tem acesso ao histórico da conversa e ao perfil do cliente no CRM.
 
 ## Contexto do cliente
 ${contextoCliente}
+
+## Base de conhecimento em vendas (Academia)
+${academiaSummary}
+Use esse conhecimento para responder de forma estratégica — mas sem usar jargão técnico com o cliente.
 
 ## Regras importantes
 - Responda APENAS a última mensagem do cliente

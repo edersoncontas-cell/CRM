@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/agnes-dispatch", "schedule": "* * * * *" },
-    { "path": "/api/cron/whatsapp-retry", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/whatsapp-retry", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/academia-atualizar", "schedule": "0 8 * * 1" }
   ]
 }

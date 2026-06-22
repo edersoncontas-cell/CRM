@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
 import { registrarAudit } from "@/lib/audit";
+import { resumoAcademia } from "@/lib/academia";
 
 const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof MEDIA_TYPES)[number];
@@ -61,17 +62,26 @@ export async function POST(req: NextRequest) {
       db.auditLog.findMany({ orderBy: { criadoEm: "desc" }, take: 20, select: { acao: true, descricao: true, criadoEm: true, origem: true } }),
     ]);
 
+    const academiaSummary = resumoAcademia();
+
     const contexto = `Você é o **Cérebro** do CRM do Ederson — vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
 Você tem acesso total ao CRM e pode analisar, sugerir, criar, editar e excluir qualquer coisa.
 Comporte-se como um sócio estratégico que quer vencer a todo custo e potencializar as vendas.
 Quando receber arquivos de texto (TXT, CSV, MD etc.), leia e analise o conteúdo integralmente.
 Quando receber imagens, descreva e analise o que vê.
+
 ## Estado atual do CRM (${new Date().toLocaleDateString("pt-BR")}):
 - **Clientes:** ${totalClientes}
 - **Negociações abertas:** ${totalNegs}
 - **Vendas ganhas:** ${negsGanhas} | **Perdidas:** ${negsPerdidas}
+
 ## Últimas ações no CRM:
 ${audits.map((a) => `- [${a.origem}] ${a.descricao}`).join("\n")}
+
+## Academia de Vendas — conhecimento disponível:
+${academiaSummary}
+Use esse conhecimento para dar sugestões estratégicas avançadas ao Ederson sempre que relevante.
+
 Responda sempre em português. Seja direto, prático e estratégico.`;
 
     // Monta o conteúdo da mensagem

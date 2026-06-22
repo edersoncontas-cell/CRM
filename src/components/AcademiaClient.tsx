@@ -3,13 +3,15 @@
 import { useState, useTransition } from "react";
 import {
   METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS,
+  PSICOLOGIA_PERSUASAO, NEUROCIENCIA_VENDAS, NEGOCIACAO_AVANCADA,
   type Metodologia, type PerfilCliente, type Objecao, type Fechamento,
+  type PsicologiaTopico, type NeurocienciaTopico, type TecnicaNegociacao,
 } from "@/lib/academia";
 import { gerarEstrategiaAction, toggleFavoritoEstrategia, excluirEstrategia } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import {
   BookOpen, Users, MessageSquareWarning, Handshake, Sparkles, Star,
-  Trash2, ChevronDown, ChevronRight, Lightbulb, Copy, Check,
+  Trash2, ChevronDown, ChevronRight, Lightbulb, Copy, Check, Brain, Zap, Trophy,
 } from "lucide-react";
 
 type EstrategiaRow = {
@@ -23,15 +25,34 @@ type EstrategiaRow = {
   criadoEm: string;
 };
 
-type Tab = "metodologias" | "disc" | "objecoes" | "fechamentos" | "estrategias";
+type Tab = "metodologias" | "disc" | "objecoes" | "fechamentos" | "psicologia" | "neurociencia" | "negociacao" | "estrategias";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "metodologias", label: "Metodologias", icon: BookOpen },
   { id: "disc", label: "Perfis DISC", icon: Users },
   { id: "objecoes", label: "Objeções", icon: MessageSquareWarning },
   { id: "fechamentos", label: "Fechamentos", icon: Handshake },
+  { id: "psicologia", label: "Psicologia", icon: Brain },
+  { id: "neurociencia", label: "Neurociência", icon: Zap },
+  { id: "negociacao", label: "Negociação Elite", icon: Trophy },
   { id: "estrategias", label: "Gerador IA", icon: Sparkles },
 ];
+
+const NIVEL_COR: Record<string, string> = {
+  "Graduação":    "bg-slate-100 text-slate-600",
+  "Pós-Graduação":"bg-blue-100 text-blue-700",
+  "Mestrado":     "bg-purple-100 text-purple-700",
+  "Doutorado":    "bg-amber-100 text-amber-700",
+  "PHD":          "bg-red-100 text-red-700",
+};
+
+function NivelBadge({ nivel }: { nivel: string }) {
+  return (
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide", NIVEL_COR[nivel] ?? "bg-slate-100 text-slate-600")}>
+      {nivel}
+    </span>
+  );
+}
 
 const DISC_COR: Record<string, string> = {
   D: "bg-red-500",
@@ -99,6 +120,9 @@ export function AcademiaClient({
       {aba === "disc" && <TabDisc />}
       {aba === "objecoes" && <TabObjecoes />}
       {aba === "fechamentos" && <TabFechamentos />}
+      {aba === "psicologia" && <TabPsicologia />}
+      {aba === "neurociencia" && <TabNeurociencia />}
+      {aba === "negociacao" && <TabNegociacao />}
       {aba === "estrategias" && (
         <TabEstategias
           estrategias={estrategias}
@@ -137,8 +161,11 @@ function MetodologiaCard({ m, aberta, onToggle }: { m: Metodologia; aberta: bool
         className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50"
       >
         <div>
-          <div className="font-bold text-slate-800">{m.nome}</div>
-          <div className="text-xs text-slate-500">{m.origem}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800">{m.nome}</span>
+            <NivelBadge nivel={m.nivel} />
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">{m.origem}</div>
         </div>
         {aberta ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
       </button>
@@ -228,6 +255,21 @@ function TabDisc() {
           </div>
           <p className="text-sm font-medium text-slate-700 italic">&ldquo;{perfil.fechamento}&rdquo;</p>
         </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl bg-white border border-slate-200 px-4 py-3">
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">💬 WhatsApp ideal</div>
+            <p className="text-sm text-slate-700 leading-relaxed">{perfil.abordagemWhatsApp}</p>
+          </div>
+          <div className="rounded-xl bg-white border border-slate-200 px-4 py-3">
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">🔑 Palavras-chave</div>
+            <div className="flex flex-wrap gap-1.5">
+              {perfil.palavrasChave.map((p) => (
+                <span key={p} className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", DISC_BG[perfil.letra], DISC_TEXT[perfil.letra])}>{p}</span>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -267,8 +309,11 @@ function TabObjecoes() {
           <div className="mb-2 flex items-start justify-between gap-2">
             <div>
               <div className="text-sm font-bold text-slate-800">&ldquo;{o.objecao}&rdquo;</div>
-              <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                {o.tecnica}
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                  {o.tecnica}
+                </span>
+                {o.nivel && <NivelBadge nivel={o.nivel} />}
               </div>
             </div>
           </div>
@@ -303,13 +348,17 @@ function TabFechamentos() {
     <div className="grid gap-4 md:grid-cols-2">
       {FECHAMENTOS.map((f, i) => (
         <div key={i} className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
               {i + 1}
             </span>
             <span className="font-bold text-slate-800">{f.nome}</span>
+            <NivelBadge nivel={f.nivel} />
           </div>
-          <p className="mb-3 flex-1 text-sm text-slate-600">{f.descricao}</p>
+          <p className="mb-2 flex-1 text-sm text-slate-600">{f.descricao}</p>
+          {f.quandoUsar && (
+            <p className="mb-2 text-xs text-slate-400 italic">Usar quando: {f.quandoUsar}</p>
+          )}
           <div className="relative rounded-lg bg-brand-50 px-4 py-3">
             <p className="pr-8 text-sm italic text-brand-800 font-medium">&ldquo;{f.exemplo}&rdquo;</p>
             <button
@@ -322,6 +371,211 @@ function TabFechamentos() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Tab Psicologia da Persuasão ─────────────────────────────────────────────
+
+function TabPsicologia() {
+  const [aberta, setAberta] = useState<string | null>(PSICOLOGIA_PERSUASAO[0]?.nome ?? null);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500 leading-relaxed">
+        A ciência da persuasão aplicada a vendas de alto valor. Entenda como o cérebro do cliente toma decisões e use esse conhecimento com ética para aumentar suas conversões.
+      </p>
+      {PSICOLOGIA_PERSUASAO.map((p) => (
+        <PsicologiaCard key={p.nome} p={p} aberta={aberta === p.nome} onToggle={() => setAberta(aberta === p.nome ? null : p.nome)} />
+      ))}
+    </div>
+  );
+}
+
+function PsicologiaCard({ p, aberta, onToggle }: { p: PsicologiaTopico; aberta: boolean; onToggle: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <button onClick={onToggle} className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
+        <div className="flex items-center gap-3">
+          <Brain size={18} className="shrink-0 text-purple-500" />
+          <div>
+            <div className="font-bold text-slate-800">{p.nome}</div>
+            <NivelBadge nivel={p.nivel} />
+          </div>
+        </div>
+        {aberta ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
+      </button>
+      {aberta && (
+        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+          <p className="text-sm text-slate-600 leading-relaxed">{p.principio}</p>
+          <div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Como aplicar</div>
+            <ul className="space-y-2">
+              {p.comoAplicar.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-[10px] font-bold text-purple-700">{i + 1}</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl bg-purple-50 border border-purple-200 px-4 py-3">
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-purple-700">Exemplo prático</div>
+            <p className="text-sm text-slate-700 leading-relaxed italic">&ldquo;{p.exemplo}&rdquo;</p>
+          </div>
+          {p.atencao && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <div className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">⚠️ Atenção</div>
+              <p className="text-sm text-slate-700 leading-relaxed">{p.atencao}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab Neurociência ─────────────────────────────────────────────────────────
+
+function TabNeurociencia() {
+  const [aberta, setAberta] = useState<string | null>(NEUROCIENCIA_VENDAS[0]?.vies ?? null);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500 leading-relaxed">
+        Como os vieses cognitivos do cliente influenciam a decisão de comprar uma escavadeira ou compactador — e como usar isso a seu favor eticamente.
+      </p>
+      {NEUROCIENCIA_VENDAS.map((n) => (
+        <NeurocienciaCard key={n.vies} n={n} aberta={aberta === n.vies} onToggle={() => setAberta(aberta === n.vies ? null : n.vies)} />
+      ))}
+    </div>
+  );
+}
+
+function NeurocienciaCard({ n, aberta, onToggle }: { n: NeurocienciaTopico; aberta: boolean; onToggle: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <button onClick={onToggle} className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
+        <div className="flex items-center gap-3">
+          <Zap size={18} className="shrink-0 text-amber-500" />
+          <div>
+            <div className="font-bold text-slate-800">{n.vies}</div>
+            <NivelBadge nivel={n.nivel} />
+          </div>
+        </div>
+        {aberta ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
+      </button>
+      {aberta && (
+        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+          <p className="text-sm text-slate-600 leading-relaxed">{n.comoFunciona}</p>
+          <div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Aplicação prática</div>
+            <ul className="space-y-2">
+              {n.aplicacao.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">{i + 1}</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">Exemplo real</div>
+            <p className="text-sm text-slate-700 leading-relaxed italic">&ldquo;{n.exemplo}&rdquo;</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab Negociação Elite ─────────────────────────────────────────────────────
+
+function TabNegociacao() {
+  const [aberta, setAberta] = useState<string | null>(NEGOCIACAO_AVANCADA[0]?.nome ?? null);
+  const [copiado, setCopiado] = useState<string | null>(null);
+
+  function copiar(texto: string, id: string) {
+    navigator.clipboard.writeText(texto);
+    setCopiado(id);
+    setTimeout(() => setCopiado(null), 2000);
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500 leading-relaxed">
+        Técnicas de negociação de elite — do FBI (Chris Voss) e Harvard. PHD em fechar negócio e defender seu preço com inteligência.
+      </p>
+      {NEGOCIACAO_AVANCADA.map((n, i) => (
+        <NegociacaoCard
+          key={n.nome}
+          n={n}
+          idx={i}
+          aberta={aberta === n.nome}
+          onToggle={() => setAberta(aberta === n.nome ? null : n.nome)}
+          copiado={copiado}
+          onCopiar={(txt) => copiar(txt, `neg-${i}`)}
+          copiadoId={`neg-${i}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NegociacaoCard({
+  n, idx, aberta, onToggle, copiado, onCopiar, copiadoId,
+}: {
+  n: TecnicaNegociacao; idx: number; aberta: boolean; onToggle: () => void;
+  copiado: string | null; onCopiar: (txt: string) => void; copiadoId: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <button onClick={onToggle} className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-slate-50">
+        <div className="flex items-center gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">{idx + 1}</span>
+          <div>
+            <div className="font-bold text-slate-800">{n.nome}</div>
+            <div className="text-xs text-slate-400">{n.autor}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <NivelBadge nivel={n.nivel} />
+          {aberta ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
+        </div>
+      </button>
+      {aberta && (
+        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+          <p className="text-sm text-slate-600 leading-relaxed">{n.principio}</p>
+          <div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Passo a passo</div>
+            <div className="space-y-2">
+              {n.passos.map((passo, i) => (
+                <div key={i} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">{i + 1}</span>
+                  <p className="text-sm text-slate-700">{passo}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-red-700">Exemplo em máquinas pesadas</div>
+            <p className="text-sm text-slate-700 leading-relaxed italic">&ldquo;{n.exemplo}&rdquo;</p>
+          </div>
+          {n.frasePoder && (
+            <div className="relative rounded-xl bg-slate-900 px-4 py-3">
+              <div className="mb-1 text-xs font-bold uppercase tracking-wide text-agro-400">⚡ Frase-poder</div>
+              <p className="pr-8 text-sm font-medium text-white">{n.frasePoder}</p>
+              <button
+                onClick={() => onCopiar(n.frasePoder!)}
+                className="absolute right-2 top-2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-700 hover:text-agro-400"
+                title="Copiar frase"
+              >
+                {copiado === copiadoId ? <Check size={14} className="text-agro-400" /> : <Copy size={14} />}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
