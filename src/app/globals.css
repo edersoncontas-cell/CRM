@@ -6,10 +6,37 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* ── Performance mobile: remove delay de 300ms em taps ── */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 /* Base */
+html {
+  /* Scroll suave em iOS (momentum scrolling) */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Evita render extra ao rolar */
+  overscroll-behavior: none;
+}
+
+/* ── Contêineres de scroll: GPU-accelerated ── */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+[style*="overflow-y: auto"],
+[style*="overflow-y:auto"] {
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  transform: translateZ(0);
 }
 
 /* Seleção de texto */
@@ -19,8 +46,8 @@ body {
 
 /* Scrollbar elegante */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   @apply bg-transparent;
@@ -42,6 +69,8 @@ input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   @apply rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-shadow;
+  /* Evitar zoom automático no iOS ao focar em inputs */
+  font-size: max(16px, 1rem);
 }
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
@@ -49,9 +78,59 @@ textarea:focus {
   @apply border-brand-400 outline-none ring-2 ring-brand-100;
 }
 
-/* Transições padrão em links e botões */
+/* ── Botões e links: resposta mais rápida ── */
 a, button {
   @apply transition-all duration-150;
+  cursor: pointer;
+  /* Feedback visual imediato no toque */
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* ── Layout responsivo: prevenir overflow horizontal ── */
+main, section, article, aside, header, footer, nav {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+img, video, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── Kanban e painéis horizontais: scroll suave ── */
+.kanban-scroll,
+[class*="overflow-x"] {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Sidebar: fixa sem flicker ── */
+aside {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* ── Cards e modais: renderização GPU ── */
+.rounded-xl,
+.rounded-2xl,
+.shadow-xl,
+.shadow-lg {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ── Animações suaves ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fadeIn 0.15s ease-out;
 }
 
 /* Impressão de propostas */
@@ -64,5 +143,37 @@ a, button {
   }
   aside {
     display: none !important;
+  }
+}
+
+/* ── Mobile: ajustes específicos ── */
+@media (max-width: 640px) {
+  /* Texto mínimo legível */
+  body {
+    font-size: 15px;
+  }
+  
+  /* Evitar overflow horizontal */
+  .container, main {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Padding inferior para iOS home bar */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+  
+  /* Botões maiores para toque fácil */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Tabelas: scroll horizontal */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
