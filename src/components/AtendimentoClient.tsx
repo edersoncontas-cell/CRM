@@ -83,6 +83,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [cfgAberto, setCfgAberto] = useState(false);
   const [auditMode, setAuditMode] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const convFileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -156,16 +157,16 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     return doc.body?.textContent ?? "";
   }
 
-  // Clique em "Importar" → abre o seletor de arquivos (.zip exportado do WhatsApp).
-  function PLACEHOLDER_TEST_123() {
-    if (importando) return;
-    fileRef.current?.click();
+  // Abre o seletor de arquivo vinculado à conversa atual (Paperclip dentro da conversa).
+  function abrirSeletorConversa() {
+    if (importando || !selId) return;
+    convFileRef.current?.click();
   }
 
-  // Lê os .zip escolhidos, descompacta e parseia no navegador, depois envia o texto.
-  async function arquivosEscolhidos(e: React.ChangeEvent<HTMLInputElement>) {
+  // Importa arquivo .zip/.txt/.html vinculando à conversa já aberta (selId).
+  async function arquivosEscolhidosConversa(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    e.target.value = ""; // permite re-selecionar os mesmos arquivos depois
+    e.target.value = "";
     if (!files.length) return;
 
     setImportando(true);
@@ -210,18 +211,18 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
         return;
       }
 
-      // Envia uma conversa por vez para mostrar progresso e evitar payload gigante.
+      // Envia vinculando à conversa atual (conversaId) para não criar nova conversa.
       let convOk = 0, msgsOk = 0, i = 0;
       for (const chat of chats) {
         i++;
         setImportMsg(`Importando ${i}/${chats.length}…`);
         const r = await fetch("/api/whatsapp/import-file", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chats: [chat] }),
+          body: JSON.stringify({ chats: [chat], conversaId: selId }),
         }).then((res) => res.json()).catch(() => null);
         if (r?.ok) { convOk += r.conversas; msgsOk += r.mensagens; }
       }
-      setImportMsg(`✅ ${convOk} conversas, ${msgsOk} msgs`);
+      setImportMsg(`✅ ${convOk} conversas, ${msgsOk} msgs importadas`);
     } catch (err) {
       console.error(err);
       setImportMsg("Falha ao ler os arquivos (zip inválido?)");
@@ -233,7 +234,6 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   // Importa um arquivo JSON (index_clientes.json ou conversas_por_cliente.json)
-  // Envia em lotes de 50 para não estourar o timeout do servidor.
   async function importarJSON(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -349,18 +349,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
           <span className="flex items-center gap-2 font-semibold text-white"><MessageCircle size={18} /> Atendimento</span>
           <div className="flex items-center gap-2">
             {!zapiAtiva && <span className="rounded-full bg-yellow-400/90 px-2 py-0.5 text-[10px] font-bold text-black">offline</span>}
-            <input ref={fileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidos} className="hidden" />
+            <input ref={fileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidosConversa} className="hidden" />
+            <input ref={convFileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidosConversa} className="hidden" />
             <input ref={jsonRef} type="file" accept=".json" onChange={importarJSON} className="hidden" />
-            {/* Importar .zip do WhatsApp */}
-            <button
-              onClick={PLACEHOLDER_TEST_123}
-              disabled={importando}
-              title="Importar conversas exportadas do WhatsApp (.zip)"
-              className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
-            >
-              {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
-              <span className="hidden sm:inline">{importMsg ?? "Importar"}</span>
-            </button>
             {/* Importar JSON (index_clientes / conversas_por_cliente) */}
             <button
               onClick={() => jsonRef.current?.click()}
@@ -559,14 +550,24 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             {/* Input */}
             <div className="flex items-end gap-2 px-3 py-2.5" style={{ background: "#f0f2f5" }}>
               <Smile size={22} className="mb-1.5 shrink-0" style={{ color: "#667781" }} />
-              <Paperclip size={20} className="mb-1.5 shrink-0" style={{ color: "#667781" }} />
+              {/* Paperclip: importa arquivo exportado do WhatsApp para esta conversa */}
+              <button
+                onClick={abrirSeletorConversa}
+                disabled={importando}
+                title="Importar conversa exportada do WhatsApp (.zip/.txt) para esta conversa"
+                className="mb-1.5 shrink-0 disabled:opacity-50"
+              >
+                {importando
+                  ? <Loader2 size={20} className="animate-spin" style={{ color: "#667781" }} />
+                  : <Paperclip size={20} style={{ color: "#667781" }} />}
+              </button>
               <textarea
                 value={texto}
                 onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
                 rows={1}
-                placeholder={zapiAtiva ? "Digite uma mensagem" : "WhatsApp desconectado"}
-                className="max-h-28 flex-1 resizhe-none rounded-lg px-3 py-2 text-sm outline-none"
+                placeholder={importMsg ?? (zapiAtiva ? "Digite uma mensagem" : "WhatsApp desconectado")}
+                className="max-h-28 flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
                 style={{ background: "#fff" }}
               />
               <button onClick={enviar} disabled={enviando || !texto.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50" style={{ background: "#008069" }}>
@@ -578,4 +579,4 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       </section>
     </div>
   );
-}
+      }
