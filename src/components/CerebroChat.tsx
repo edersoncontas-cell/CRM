@@ -29,21 +29,20 @@ export function CerebroChat() {
     const nomesArqs = arquivos.map((f) => f.name);
     setMsgs((prev) => [...prev, { role: "user", content: texto, arquivos: nomesArqs.length ? nomesArqs : undefined }]);
     setInput("");
+    const arquivosParaEnviar = [...arquivos];
     setArquivos([]);
     scrollBottom();
 
-    // Prepara FormData
     const fd = new FormData();
     fd.set("mensagem", texto);
-    for (const f of arquivos) fd.append("arquivo", f);
+    for (const f of arquivosParaEnviar) fd.append("arquivo", f);
 
-    // Streaming SSE
     let resposta = "";
     setMsgs((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
       const res = await fetch("/api/cerebro", { method: "POST", body: fd });
-      if (!res.body) throw new Error("Sem resposta");
+      if (!res.body) throw new Error("Sem resposta do servidor");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -58,9 +57,9 @@ export function CerebroChat() {
           const data = line.slice(6).trim();
           if (data === "[DONE]") break;
           try {
-            const { text } = JSON.parse(data);
-            if (text) {
-              resposta += text;
+            const parsed = JSON.parse(data);
+            if (parsed.text) {
+              resposta += parsed.text;
               setMsgs((prev) => {
                 const copia = [...prev];
                 copia[copia.length - 1] = { role: "assistant", content: resposta };
@@ -68,13 +67,40 @@ export function CerebroChat() {
               });
               scrollBottom();
             }
-          } catch {}
+            if (parsed.erro) {
+              let msgErro = String(parsed.erro);
+              if (msgErro.includes("credit balance is too low")) {
+                msgErro = "⚠️ Saldo de créditos Anthropic insuficiente. Acesse console.anthropic.com e adicione créditos para continuar.";
+              } else if (msgErro.includes("invalid_api_key") || msgErro.includes("authentication")) {
+                msgErro = "⚠️ Chave Anthropic inválida. Verifique a variável ANTHROPIC_API_KEY no Vercel.";
+              } else if (msgErro.includes("rate_limit")) {
+                msgErro = "⚠️ Limite de requisições atingido. Aguarde e tente novamente.";
+              } else {
+                msgErro = "❌ Erro da IA: " + msgErro;
+              }
+              setMsgs((prev) => {
+                const copia = [...prev];
+                copia[copia.length - 1] = { role: "assistant", content: msgErro };
+                return copia;
+              });
+              scrollBottom();
+            }
+          } catch { /* linha malformada */ }
         }
+      }
+      if (!resposta) {
+        setMsgs((prev) => {
+          const copia = [...prev];
+          if (copia[copia.length - 1].content === "") {
+            copia[copia.length - 1] = { role: "assistant", content: "⚠️ Nenhuma resposta recebida. Verifique a configuração da API Anthropic." };
+          }
+          return copia;
+        });
       }
     } catch (e) {
       setMsgs((prev) => {
         const copia = [...prev];
-        copia[copia.length - 1] = { role: "assistant", content: `❌ Erro: ${String(e)}` };
+        copia[copia.length - 1] = { role: "assistant", content: "❌ Erro de conexão: " + String(e) };
         return copia;
       });
     } finally {
@@ -92,14 +118,11 @@ export function CerebroChat() {
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); addArquivos(e.dataTransfer.files); }}
     >
-      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
         <Brain size={18} style={{ color: "#BFDE4D" }} />
         <span className="text-sm font-bold text-white">Chat com o Cérebro</span>
         <span className="ml-auto text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
       </div>
-
-      {/* Mensagens */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {msgs.length === 0 && !dragOver && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -150,8 +173,6 @@ export function CerebroChat() {
         ))}
         <div ref={bottomRef} />
       </div>
-
-      {/* Arquivos selecionados */}
       {arquivos.length > 0 && (
         <div className="px-4 py-2 flex flex-wrap gap-2 border-t border-zinc-800">
           {arquivos.map((f, i) => (
@@ -164,18 +185,12 @@ export function CerebroChat() {
           ))}
         </div>
       )}
-
-      {/* Input */}
       <div className="border-t border-zinc-800 p-3 flex items-end gap-2">
         <input ref={fileRef} type="file" multiple className="hidden"
           accept="application/pdf,image/*,text/*,.txt,.html,.md,.csv,.doc,.docx,.xls,.xlsx"
           onChange={(e) => addArquivos(e.target.files)}
         />
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="shrink-0 rounded-xl p-2.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition"
-          title="Anexar arquivo"
-        >
+        <button onClick={() => fileRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition" title="Anexar arquivo">
           <Paperclip size={18} />
         </button>
         <textarea
