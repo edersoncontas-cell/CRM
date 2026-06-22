@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
           // Não atualizamos o nome do contato quando fromMe=true (seria o nome do operador)
           if (await existeZapiId(zapiMessageId)) { diag.status = "eco"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
                 const { conv } = await acharOuCriarConversa({
-                          telefone, tampa, isGroup,
+                          phone: telefone, lid: tampa, isGroup,
                           // fromMe: não passar nome de contato (seria o nome do operador, não do cliente)
                           contactName: null,
                           groupName: isGroup ? nomeGrupo : null,
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
                 // ── Ramo recebido ──
           // Aqui sim: usamos o nome do remetente para identificar/criar o contato
           const { conv } = await acharOuCriarConversa({
-                    telefone, tampa, isGroup,
+                    phone: telefone, lid: tampa, isGroup,
                     contactName: nomeRecebido,
                     groupName: isGroup ? nomeRecebido : null,
                     photoUrl: foto,
