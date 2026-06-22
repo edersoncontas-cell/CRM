@@ -135,12 +135,13 @@ export function AssistenteIA() {
     if (!t) return;
     setFeedback(null);
     setFase("interpretando");
+    setTexto("");
     startT(async () => {
       const r = await interpretarComando(t);
       setResposta(r.resposta ?? "");
       if (!r.ok) { setFeedback(r.erro ?? "Erro."); setFase("idle"); return; }
       setPlano(r.plano ?? []);
-      setFase("confirmando");
+      setFase((r.plano ?? []).length > 0 ? "confirmando" : "idle");
     });
   }
 
@@ -152,6 +153,7 @@ export function AssistenteIA() {
       const r = await executarPlano(validas);
       setFeedback(r.mensagem);
       setFase("feito");
+      setTimeout(() => { setFase("idle"); setPlano([]); setResposta(""); }, 4000);
     });
   }
 
@@ -217,10 +219,10 @@ export function AssistenteIA() {
               <div className="flex items-center gap-2 text-sm text-slate-300"><Loader2 size={16} className="animate-spin" /> Entendendo seu comando…</div>
             )}
 
-            {(fase === "confirmando" || fase === "executando") && (
+            {(fase === "confirmando" || fase === "executando" || (fase === "idle" && resposta)) && (
               <div className="space-y-3">
                 {resposta && <p className="text-sm text-slate-200">🤖 {resposta}</p>}
-                {plano.length === 0 ? (
+                {fase !== "idle" && plano.length === 0 ? (
                   <p className="text-sm text-amber-300">Não identifiquei nenhuma ação. Tente reformular.</p>
                 ) : (
                   <ul className="space-y-2">
