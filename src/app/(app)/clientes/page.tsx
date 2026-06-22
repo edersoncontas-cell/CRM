@@ -27,7 +27,7 @@ export default async function ClientesPage({
   const corteEsquecido = new Date();
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [clientes, municipios, totalNaoVisitados, totalClientes] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalClientes] = await Promise.all([
     db.cliente.findMany({
       where: {
         ...(filtro ? { municipioId: filtro } : {}),
@@ -47,6 +47,10 @@ export default async function ClientesPage({
     db.municipio.findMany({
       include: { _count: { select: { clientes: true } } },
       orderBy: { nome: "asc" },
+    }),
+    db.maquina.findMany({
+      select: { id: true, marca: true, modelo: true, categoria: true },
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
     db.cliente.count({ where: { visitado: false } }),
     db.cliente.count(),
@@ -225,6 +229,7 @@ export default async function ClientesPage({
                           interesseFuturoNota: c.interesseFuturoNota,
                         }}
                         municipios={municipios}
+                        maquinas={maquinas}
                       />
                     </div>
                   </div>

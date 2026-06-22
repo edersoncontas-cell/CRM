@@ -172,21 +172,30 @@ export function EditarClienteForm({
                     >
                       {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
-                    <select
-                      value={modeloSel}
-                      onChange={(e) => setModeloSel(e.target.value)}
-                      className="campo flex-1"
-                    >
-                      <option value="">Modelo…</option>
-                      {modelosPorMarca.map((m) => <option key={m} value={m}>{m}</option>)}
-                      <option value="__outro__">Outro (digitar)</option>
-                    </select>
-                    <button type="button" onClick={addFrota} disabled={!modeloSel}
+                    {modelosPorMarca.length > 0 ? (
+                      <select
+                        value={modeloSel}
+                        onChange={(e) => setModeloSel(e.target.value)}
+                        className="campo flex-1"
+                      >
+                        <option value="">Modelo…</option>
+                        {modelosPorMarca.map((m) => <option key={m} value={m}>{m}</option>)}
+                        <option value="__outro__">Outro (digitar)</option>
+                      </select>
+                    ) : (
+                      <input
+                        value={modeloSel === "__outro__" ? "" : modeloSel}
+                        onChange={(e) => setModeloSel(e.target.value)}
+                        placeholder="Digite o modelo…"
+                        className="campo flex-1"
+                      />
+                    )}
+                    <button type="button" onClick={addFrota} disabled={!modeloSel || modeloSel === "__outro__"}
                       className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-white disabled:opacity-40 hover:bg-blue-700">
                       <Plus size={16} />
                     </button>
                   </div>
-                  {modeloSel === "__outro__" && (
+                  {modeloSel === "__outro__" && modelosPorMarca.length > 0 && (
                     <input
                       placeholder="Digite o modelo"
                       className="campo"

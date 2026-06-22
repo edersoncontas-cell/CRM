@@ -1,6 +1,16 @@
 import { db } from "@/lib/db";
 import { aplicarMigracoes } from "@/lib/migrations";
 
+// Remove acentos e converte para minúsculas para comparação fuzzy
+function normalizar(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+// Abreviações conhecidas: chave = sigla normalizada, valor = nome do município (normalizado)
+const ABREVIACOES: Record<string, string> = {
+  smj: "santa maria de jetiba",
+};
+
 // Regiões de outros vendedores — com os novos nomes solicitados pelo Ederson.
 export const REGIOES_FORA_AREA = ["Cliente Cristiano", "Cliente Welligton"];
 
@@ -78,7 +88,63 @@ export async function garantirRegioes(): Promise<void> {
     `);
   } catch {}
 
+  // Vincula município automaticamente para clientes cujo nome contém o nome da cidade
+  await vincularMunicipiosPorNome();
+
   garantido = true;
+}
+
+// Detecta nome de município dentro do nome do cliente e vincula automaticamente.
+// Só age em clientes sem município definido e só usa municípios da área de atendimento.
+async function vincularMunicipiosPorNome(): Promise<void> {
+  try {
+    const [semMunicipio, todosServidos] = await Promise.all([
+      db.cliente.findMany({
+        where: { municipioId: null },
+        select: { id: true, nome: true },
+      }),
+      db.municipio.findMany({
+        where: { foraDeArea: false },
+        select: { id: true, nome: true },
+      }),
+    ]);
+
+    if (!semMunicipio.length || !todosServidos.length) return;
+
+    // Pré-normaliza os municípios (mínimo 5 chars para evitar falsos positivos)
+    const candidatos = todosServidos
+      .map((m) => ({ id: m.id, norm: normalizar(m.nome) }))
+      .filter((m) => m.norm.length >= 5)
+      .sort((a, b) => b.norm.length - a.norm.length); // mais específico primeiro
+
+    for (const cliente of semMunicipio) {
+      const nomeNorm = normalizar(cliente.nome);
+
+      // Verifica abreviações (ex: SMJ → santa maria de jetiba)
+      let municipioId: string | null = null;
+      const palavras = nomeNorm.split(/\s+/);
+      for (const palavra of palavras) {
+        if (ABREVIACOES[palavra]) {
+          const alvo = candidatos.find((c) => c.norm === ABREVIACOES[palavra]);
+          if (alvo) { municipioId = alvo.id; break; }
+        }
+      }
+
+      // Verifica se o nome do município aparece no nome do cliente
+      if (!municipioId) {
+        for (const cand of candidatos) {
+          if (nomeNorm.includes(cand.norm)) {
+            municipioId = cand.id;
+            break;
+          }
+        }
+      }
+
+      if (municipioId) {
+        await db.cliente.update({ where: { id: cliente.id }, data: { municipioId } });
+      }
+    }
+  } catch {}
 }
 
 const TERMOS_DESCARTE = ["POUSADA", "HOTEL", "PME"];
