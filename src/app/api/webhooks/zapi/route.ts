@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   // A Z-API manda a foto do contato/grupo direto no payload — aproveitamos sem custo.
   const foto = (body?.photo as string) ?? (body?.senderPhoto as string) ?? (body?.chatImage as string) ?? null;
 
-  let diag = { dir: fromMe ? "out" as const : "in" as const, phone: phoneRaw, nome: nomeRecebido, text: "", status: "?" };
+  let diag = { dir: fromMe ? "out" as const : "in" as const, phone: phoneRaw, nome: nomeRecebido, texto: "", status: "?" };
 
   console.log("[webhook wa]", JSON.stringify({ type: body?.type, fromMe, phone: phoneRaw, isGroup }));
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   // 7/8. conteúdo (texto + mídia)
   const c = extractContent(body);
-    diag.text = c.text;
+    diag.texto = c.text;
     if (!c.text) { diag.status = "sem-texto"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
 
   // 9. telefone + tampa
