@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Bot, Bell, BellOff, Tag, Sparkles, Trash2, FileJson2,
+  DownloadCloud, Loader2, Brain, Bell, BellOff, Tag, Trash2, FileJson2,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -371,18 +371,18 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
               <FileJson2 size={13} />
               <span className="hidden sm:inline">JSON</span>
             </button>
-            {/* Configuração da Agnes (IA) */}
+            {/* Configuração do Cérebro (IA) */}
             <div className="relative">
-              <button onClick={() => setCfgAberto((v) => !v)} title="Configurar a Agnes (IA)"
+              <button onClick={() => setCfgAberto((v) => !v)} title="Configurar o Cérebro (IA)"
                 className="flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-white hover:bg-white/25">
-                <Bot size={15} />
+                <Brain size={15} />
               </button>
               {cfgAberto && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setCfgAberto(false)} />
                   <div className="absolute right-0 top-9 z-20 w-72 rounded-xl bg-white p-3 text-left shadow-xl" style={{ color: "#111b21" }}>
-                    <div className="mb-1 flex items-center gap-1.5 font-bold"><Sparkles size={15} className="text-amber-500" /> Agnes (IA)</div>
-                    <p className="mb-2 text-xs text-slate-500">Quando você ativa a Agnes numa conversa (botão 🤖 no topo do chat), ela responde sozinha. Escolha como:</p>
+                    <div className="mb-1 flex items-center gap-1.5 font-bold"><Brain size={15} style={{ color: "#BFDE4D" }} /> Cérebro (IA)</div>
+                    <p className="mb-2 text-xs text-slate-500">Quando você ativa o Cérebro numa conversa, ele responde sozinha com contexto completo do CRM. Escolha como:</p>
                     <label className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-slate-50">
                       <input type="radio" name="audit" checked={auditMode === true} onChange={() => setAudit(true)} className="mt-0.5" />
                       <span className="text-sm"><b>Sugerir rascunho</b> para você revisar e enviar <span className="text-emerald-600">(recomendado)</span></span>
@@ -457,14 +457,14 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   <User size={13} /> Ficha
                 </Link>
               )}
-              {/* Liga/desliga a Agnes nesta conversa */}
+              {/* Liga/desliga o Cérebro nesta conversa */}
               <button
                 onClick={() => patchConv(sel, { aiActive: !curr(sel).aiActive })}
-                title={curr(sel).aiActive ? "Agnes ativa — clique para desligar" : "Ativar a Agnes nesta conversa"}
+                title={curr(sel).aiActive ? "Cérebro ativo — clique para desligar" : "Ativar o Cérebro nesta conversa"}
                 className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
-                style={curr(sel).aiActive ? { background: "#fff", color: "#008069" } : { background: "rgba(255,255,255,0.15)", color: "#fff" }}
+                style={curr(sel).aiActive ? { background: "#BFDE4D", color: "#111" } : { background: "rgba(255,255,255,0.15)", color: "#fff" }}
               >
-                <Bot size={14} /> {curr(sel).aiActive ? "Agnes ON" : "Agnes"}
+                <Brain size={14} /> {curr(sel).aiActive ? "Cérebro ON" : "Cérebro"}
               </button>
               {/* Menu da conversa */}
               <div className="relative">
@@ -507,8 +507,8 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   return (
                     <div key={m.id} className="mb-2 flex justify-end">
                       <div className="max-w-[80%] rounded-lg border border-dashed border-amber-400 bg-amber-50 p-2.5 text-sm shadow-sm">
-                        <div className="mb-1 flex items-center gap-1 text-[11px] font-bold text-amber-700">
-                          <Sparkles size={12} /> Sugestão da Agnes — revise antes de enviar
+                        <div className="mb-1 flex items-center gap-1 text-[11px] font-bold" style={{ color: "#7a8a00" }}>
+                          <Brain size={12} /> Sugestão do Cérebro — revise antes de enviar
                         </div>
                         <p className="whitespace-pre-wrap break-words" style={{ color: "#111b21" }}>{m.body}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
