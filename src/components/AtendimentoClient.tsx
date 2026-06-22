@@ -157,7 +157,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   // Clique em "Importar" → abre o seletor de arquivos (.zip exportado do WhatsApp).
-  function abrirSeletor() {
+  function PLACEHOLDER_TEST_123() {
     if (importando) return;
     fileRef.current?.click();
   }
@@ -353,7 +353,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             <input ref={jsonRef} type="file" accept=".json" onChange={importarJSON} className="hidden" />
             {/* Importar .zip do WhatsApp */}
             <button
-              onClick={abrirSeletor}
+              onClick={PLACEHOLDER_TEST_123}
               disabled={importando}
               title="Importar conversas exportadas do WhatsApp (.zip)"
               className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
@@ -566,7 +566,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
                 rows={1}
                 placeholder={zapiAtiva ? "Digite uma mensagem" : "WhatsApp desconectado"}
-                className="max-h-28 flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
+                className="max-h-28 flex-1 resizhe-none rounded-lg px-3 py-2 text-sm outline-none"
                 style={{ background: "#fff" }}
               />
               <button onClick={enviar} disabled={enviando || !texto.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50" style={{ background: "#008069" }}>
