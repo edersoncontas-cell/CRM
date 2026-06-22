@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED") // necessário para migrations no Neon
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model Municipio {
@@ -44,9 +44,20 @@ model Cliente {
   abordagemIA String?   // abordagem sugerida pela IA conforme o perfil
   dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
   maquinaComprada String?
-  interesseFuturo     Boolean   @default(false) // aguarda momento futuro (ex: Plano Safra)
-  interesseFuturoData DateTime? // quando retomar o contato
-  interesseFuturoNota String?   // o que está aguardando (ex: "saída do Plano Safra 25/26")
+  interesseFuturo     Boolean   @default(false)
+  interesseFuturoData DateTime?
+  interesseFuturoNota String?
+  // Status do cliente
+  status        String    @default("potencial") // cliente | potencial | nao_cliente
+  // Próxima visita agendada
+  proximaVisita     DateTime?
+  proximaVisitaNota String?
+  // Resumo do cliente (substitui "Negociações" no cadastro)
+  resumoMaquinas String?  // máquinas de interesse separadas por ;
+  resumoValor    Float?   // valor negociado
+  resumoEntrada  Float?   // entrada
+  resumoCondicao String?  // avista | financiamento | consorcio | pesquisando | interesse_futuro
+  resumoTexto    String?  // resumo livre gerado pela IA / editável
   indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId String?
   indicados     Cliente[] @relation("Indicacoes")
@@ -59,6 +70,16 @@ model Cliente {
   sugestoes   SugestaoVinculo[]
   tarefas     TarefaKanban[]
   visitas     Visita[]
+  frota       ClienteMaquina[]
+}
+
+model ClienteMaquina {
+  id        String   @id @default(cuid())
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId String
+  marca     String   // New Holland | Dynapac
+  modelo    String
+  criadoEm  DateTime @default(now())
 }
 
 model Visita {

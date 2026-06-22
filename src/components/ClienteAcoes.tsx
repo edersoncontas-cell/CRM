@@ -6,6 +6,7 @@ import { excluirCliente, adicionarVisita } from "@/lib/actions";
 import { EditarClienteForm } from "@/components/EditarClienteForm";
 
 type Municipio = { id: string; nome: string; foraDeArea?: boolean };
+type MaquinaOpt = { id: string; marca: string; modelo: string; categoria: string };
 
 type ClienteData = {
   id: string;
@@ -25,9 +26,11 @@ type ClienteData = {
 export function ClienteAcoes({
   cliente,
   municipios,
+  maquinas = [],
 }: {
   cliente: ClienteData;
   municipios: Municipio[];
+  maquinas?: MaquinaOpt[];
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [editando, setEditando] = useState(false);
@@ -120,6 +123,7 @@ export function ClienteAcoes({
       <EditarClienteForm
         cliente={cliente}
         municipios={municipios}
+        maquinas={maquinas}
         hideTrigger
         open={editando}
         onClose={() => setEditando(false)}

@@ -69,8 +69,9 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 w-64 flex-col bg-gradient-to-b from-brand-900 to-brand-950 text-brand-100 md:sticky md:top-0 md:flex md:min-h-screen",
-          aberto ? "flex" : "hidden"
+          "fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-gradient-to-b from-brand-900 to-brand-950 text-brand-100 md:sticky md:top-0 md:flex md:min-h-screen",
+          "transition-transform duration-300 ease-in-out md:translate-x-0",
+          aberto ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
         {/* Logo — desktop */}

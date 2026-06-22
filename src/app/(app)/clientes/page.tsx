@@ -16,11 +16,10 @@ const DIAS_ESQUECIDO = 15;
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; q?: string; esquecidos?: string; naoVisitado?: string };
+  searchParams: { municipio?: string; q?: string; naoVisitado?: string };
 }) {
   const filtro = searchParams.municipio;
   const busca = (searchParams.q ?? "").trim();
-  const apenasEsquecidos = searchParams.esquecidos === "1";
   const apenasNaoVisitados = searchParams.naoVisitado === "1";
   await garantirRegioes();
   await limparContatosDescartados();
@@ -28,7 +27,7 @@ export default async function ClientesPage({
   const corteEsquecido = new Date();
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [clientes, municipios, totalEsquecidos, totalNaoVisitados] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalClientes] = await Promise.all([
     db.cliente.findMany({
       where: {
         ...(filtro ? { municipioId: filtro } : {}),
@@ -40,24 +39,21 @@ export default async function ClientesPage({
               ],
             }
           : {}),
-        ...(apenasEsquecidos
-          ? { negociacoes: { some: { status: "aberta", ultimoContato: { lt: corteEsquecido } } } }
-          : {}),
         ...(apenasNaoVisitados ? { visitado: false } : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
-      orderBy: apenasEsquecidos
-        ? { negociacoes: { _count: "desc" } }
-        : { atualizadoEm: "desc" },
+      orderBy: { nome: "asc" },
     }),
     db.municipio.findMany({
       include: { _count: { select: { clientes: true } } },
       orderBy: { nome: "asc" },
     }),
-    db.cliente.count({
-      where: { negociacoes: { some: { status: "aberta", ultimoContato: { lt: corteEsquecido } } } },
+    db.maquina.findMany({
+      select: { id: true, marca: true, modelo: true, categoria: true },
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
     db.cliente.count({ where: { visitado: false } }),
+    db.cliente.count(),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -66,7 +62,7 @@ export default async function ClientesPage({
     <div>
       <PageHeader
         titulo="Clientes"
-        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}${busca ? ` para “${busca}”` : ""}`}
+        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}${busca ? ` para "${busca}"` : ""}`}
         acao={
           <div className="flex gap-2">
             <BotaoAtualizar />
@@ -76,24 +72,16 @@ export default async function ClientesPage({
         }
       />
 
-      {/* Abas: todos / esquecidos / nunca visitados */}
+      {/* Abas */}
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasEsquecidos && !apenasNaoVisitados ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
         >
           Todos
-        </Link>
-        <Link
-          href={filtro ? `/clientes?municipio=${filtro}&esquecidos=1` : "/clientes?esquecidos=1"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasEsquecidos ? "bg-red-600 text-white" : "border border-red-200 text-red-600 hover:bg-red-50"}`}
-        >
-          ⏰ Esquecidos
-          {totalEsquecidos > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasEsquecidos ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>
-              {totalEsquecidos}
-            </span>
-          )}
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+            {totalClientes}
+          </span>
         </Link>
         <Link
           href={filtro ? `/clientes?municipio=${filtro}&naoVisitado=1` : "/clientes?naoVisitado=1"}
@@ -108,10 +96,9 @@ export default async function ClientesPage({
         </Link>
       </div>
 
-      {/* Busca por nome ou telefone */}
+      {/* Busca */}
       <form method="GET" className="mb-5 flex gap-2">
         {filtro && <input type="hidden" name="municipio" value={filtro} />}
-        {apenasEsquecidos && <input type="hidden" name="esquecidos" value="1" />}
         {apenasNaoVisitados && <input type="hidden" name="naoVisitado" value="1" />}
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -137,10 +124,10 @@ export default async function ClientesPage({
       </form>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        {/* Mapa de calor por município */}
+        {/* Mapeamento por município */}
         <Card className="lg:col-span-1">
           <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
-            <MapPin size={18} className="text-brand-600" /> Mapa de calor
+            <MapPin size={18} className="text-brand-600" /> Mapeamento
           </div>
           <Link
             href="/clientes"
@@ -169,7 +156,7 @@ export default async function ClientesPage({
           </div>
         </Card>
 
-        {/* Lista de clientes */}
+        {/* Lista de clientes em ordem alfabética */}
         <div className="lg:col-span-3">
           {clientes.length === 0 ? (
             <Card>
@@ -182,6 +169,16 @@ export default async function ClientesPage({
               {clientes.map((c) => {
                 const neg = c.negociacoes[0];
                 const dias = neg ? diasDesde(neg.ultimoContato) : null;
+                const statusColor = (c as { status?: string }).status === "cliente"
+                  ? "text-green-600 bg-green-50"
+                  : (c as { status?: string }).status === "nao_cliente"
+                  ? "text-red-500 bg-red-50"
+                  : "text-amber-600 bg-amber-50";
+                const statusLabel = (c as { status?: string }).status === "cliente"
+                  ? "✓ cliente"
+                  : (c as { status?: string }).status === "nao_cliente"
+                  ? "não é cliente"
+                  : "potencial";
                 return (
                   <div key={c.id} className="relative">
                     <Card className="transition-all hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5">
@@ -192,18 +189,15 @@ export default async function ClientesPage({
                         <div className="min-w-0 flex-1 pr-6">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-base font-bold text-slate-900">{c.nome}</span>
-                            {c.jaComprou && <Badge tom="green">✓ cliente</Badge>}
+                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusColor}`}>
+                              {statusLabel}
+                            </span>
                           </div>
                           <p className="mt-0.5 text-xs text-slate-400">
                             {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
                             {neg?.maquinaModelo && <Badge tom="blue">{neg.maquinaModelo}</Badge>}
-                            {c.visitado ? (
-                              <Badge tom="emerald">visitado</Badge>
-                            ) : (
-                              <Badge tom="slate">não visitado</Badge>
-                            )}
                             {dias != null && dias >= 7 && (
                               <Badge tom="red">{dias}d sem contato</Badge>
                             )}
@@ -211,13 +205,11 @@ export default async function ClientesPage({
                         </div>
                       </div>
                     </Card>
-                    {/* Link sobreposto para abrir a ficha (não cobre o menu) */}
                     <Link
                       href={`/clientes/${c.id}`}
                       aria-label={`Abrir ${c.nome}`}
                       className="absolute inset-0 z-10 rounded-2xl"
                     />
-                    {/* Menu de ações (acima do link) */}
                     <div className="absolute right-3 top-3 z-20">
                       <ClienteAcoes
                         cliente={{
@@ -237,6 +229,7 @@ export default async function ClientesPage({
                           interesseFuturoNota: c.interesseFuturoNota,
                         }}
                         municipios={municipios}
+                        maquinas={maquinas}
                       />
                     </div>
                   </div>

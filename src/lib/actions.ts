@@ -43,17 +43,17 @@ function parseDataBR(raw: string): Date | null {
 }
 
 export async function atualizarCliente(id: string, formData: FormData) {
+  const status = String(formData.get("status") ?? "potencial") || "potencial";
+  const tel = String(formData.get("telefone") ?? "").replace(/^(\+55|55)(?=\d{10,11}$)/, "");
   await db.cliente.update({
     where: { id },
     data: {
       nome: String(formData.get("nome") ?? "").trim(),
-      telefone: String(formData.get("telefone") ?? "") || null,
+      telefone: tel || null,
       email: String(formData.get("email") ?? "") || null,
-      endereco: String(formData.get("endereco") ?? "") || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
-      jaComprou: formData.get("jaComprou") === "on",
-      visitado: formData.get("visitado") === "on",
-      observacoes: String(formData.get("observacoes") ?? "") || null,
+      status,
+      jaComprou: status === "cliente",
       interesseFuturo: formData.get("interesseFuturo") === "on",
       interesseFuturoData: parseDataBR(String(formData.get("interesseFuturoData") ?? "")),
       interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
@@ -62,6 +62,70 @@ export async function atualizarCliente(id: string, formData: FormData) {
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
+}
+
+// Sincroniza a frota de máquinas do cliente (substitui a lista inteira).
+export async function gerenciarFrotaCliente(
+  clienteId: string,
+  frota: { marca: string; modelo: string }[]
+): Promise<void> {
+  "use server";
+  try {
+    await db.$executeRawUnsafe(`DELETE FROM "ClienteMaquina" WHERE "clienteId" = $1`, clienteId);
+    for (const f of frota) {
+      if (!f.modelo || f.modelo === "__outro__") continue;
+      const id = `cm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      await db.$executeRawUnsafe(
+        `INSERT INTO "ClienteMaquina" ("id","clienteId","marca","modelo","criadoEm") VALUES ($1,$2,$3,$4,NOW())`,
+        id, clienteId, f.marca, f.modelo
+      );
+    }
+  } catch (e) {
+    console.error("[frota] erro:", e);
+  }
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+// Atualiza o Resumo do Cliente (campos de negociação + texto da IA).
+export async function atualizarResumoCliente(
+  clienteId: string,
+  dados: {
+    resumoMaquinas?: string;
+    resumoValor?: number | null;
+    resumoEntrada?: number | null;
+    resumoCondicao?: string;
+    resumoTexto?: string;
+    proximaVisita?: string | null;
+    proximaVisitaNota?: string;
+  }
+): Promise<void> {
+  "use server";
+  try {
+    await db.$executeRawUnsafe(`
+      UPDATE "Cliente" SET
+        "resumoMaquinas"  = $2,
+        "resumoValor"     = $3,
+        "resumoEntrada"   = $4,
+        "resumoCondicao"  = $5,
+        "resumoTexto"     = $6,
+        "proximaVisita"   = $7,
+        "proximaVisitaNota" = $8,
+        "atualizadoEm"    = NOW()
+      WHERE id = $1
+    `,
+      clienteId,
+      dados.resumoMaquinas ?? null,
+      dados.resumoValor ?? null,
+      dados.resumoEntrada ?? null,
+      dados.resumoCondicao ?? null,
+      dados.resumoTexto ?? null,
+      dados.proximaVisita ? new Date(dados.proximaVisita) : null,
+      dados.proximaVisitaNota ?? null,
+    );
+  } catch (e) {
+    console.error("[resumo] erro:", e);
+  }
+  revalidatePath(`/clientes/${clienteId}`);
 }
 
 export async function excluirCliente(id: string): Promise<{ ok: boolean }> {

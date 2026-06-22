@@ -25,6 +25,8 @@ export default async function FichasTecnicasPage() {
     orderBy: [{ proprio: "desc" }, { marca: "asc" }, { categoria: "asc" }, { modelo: "asc" }],
   });
 
+  const temChaveIA = !!process.env.ANTHROPIC_API_KEY;
+
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
       <div className="mb-7">
@@ -41,7 +43,7 @@ export default async function FichasTecnicasPage() {
         </p>
       </div>
 
-      <FichasTecnicasClient maquinas={maquinas} />
+      <FichasTecnicasClient maquinas={maquinas} temChaveIA={temChaveIA} />
     </div>
   );
 }
