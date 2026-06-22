@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const ct = req.headers.get("content-type") ?? "";
     let mensagem = "";
-    const arquivos: { base64: string; mediaType: string; nome: string }[] = [];
+    const arquivos: { base64: string; mediaType: string; nome: string; texto?: string }[] = [];
 
     if (ct.includes("multipart/form-data")) {
       const fd = await req.formData();
@@ -25,7 +25,23 @@ export async function POST(req: NextRequest) {
       const files = fd.getAll("arquivo") as File[];
       for (const f of files) {
         const buf = Buffer.from(await f.arrayBuffer());
-        arquivos.push({ base64: buf.toString("base64"), mediaType: f.type || "application/octet-stream", nome: f.name });
+        const isImage = (MEDIA_TYPES as readonly string[]).includes(f.type);
+        const isText = f.type.startsWith("text/") || f.name.match(/\.(txt|md|csv|html|json|xml|js|ts|tsx|jsx|py|java|cs|php|rb|go|rs|swift|kt|dart)$/i);
+        const isPdf = f.type === "application/pdf";
+        const isDoc = f.name.match(/\.(doc|docx|xls|xlsx)$/i);
+
+        if (isImage) {
+          arquivos.push({ base64: buf.toString("base64"), mediaType: f.type as ImageMediaType, nome: f.name });
+        } else if (isText) {
+          // Textos: extrair conteúdo como texto
+          const texto = buf.toString("utf-8").substring(0, 8000); // max 8k chars
+          arquivos.push({ base64: "", mediaType: f.type, nome: f.name, texto });
+        } else if (isPdf || isDoc) {
+          // PDFs e Docs: informar nome e tamanho, a IA saberá que recebeu
+          arquivos.push({ base64: "", mediaType: f.type, nome: f.name, texto: `[Arquivo ${f.name} — ${Math.round(buf.length/1024)}KB — conteúdo binário não extraído automaticamente]` });
+        } else {
+          arquivos.push({ base64: "", mediaType: f.type, nome: f.name });
+        }
       }
     } else {
       const body = await req.json();
@@ -36,7 +52,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, erro: "Mensagem vazia." }, { status: 400 });
     }
 
-    // Contexto do CRM: métricas e dados recentes
+    // Contexto do CRM
     const [totalClientes, totalNegs, negsGanhas, negsPerdidas, audits] = await Promise.all([
       db.cliente.count(),
       db.negociacao.count({ where: { status: "aberta" } }),
@@ -48,44 +64,56 @@ export async function POST(req: NextRequest) {
     const contexto = `Você é o **Cérebro** do CRM do Ederson — vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
 Você tem acesso total ao CRM e pode analisar, sugerir, criar, editar e excluir qualquer coisa.
 Comporte-se como um sócio estratégico que quer vencer a todo custo e potencializar as vendas.
-
+Quando receber arquivos de texto (TXT, CSV, MD etc.), leia e analise o conteúdo integralmente.
+Quando receber imagens, descreva e analise o que vê.
 ## Estado atual do CRM (${new Date().toLocaleDateString("pt-BR")}):
 - **Clientes:** ${totalClientes}
 - **Negociações abertas:** ${totalNegs}
 - **Vendas ganhas:** ${negsGanhas} | **Perdidas:** ${negsPerdidas}
-
 ## Últimas ações no CRM:
 ${audits.map((a) => `- [${a.origem}] ${a.descricao}`).join("\n")}
+Responda sempre em português. Seja direto, prático e estratégico.`;
 
-Responda sempre em português. Seja direto, prático e estratégico. Se precisar executar uma ação real no CRM (criar/editar/excluir), descreva exatamente o que faria e peça confirmação se for destrutivo.`;
-
-    // Monta o conteúdo da mensagem (texto + imagens)
+    // Monta o conteúdo da mensagem
     const content: Anthropic.MessageParam["content"] = [];
+
+    // Imagens
     for (const arq of arquivos) {
-      if ((MEDIA_TYPES as readonly string[]).includes(arq.mediaType)) {
+      if ((MEDIA_TYPES as readonly string[]).includes(arq.mediaType) && arq.base64) {
         content.push({
           type: "image",
           source: { type: "base64", media_type: arq.mediaType as ImageMediaType, data: arq.base64 },
         });
       }
-      // PDFs e textos: incluímos como nota no texto (o Cérebro descreve o que recebeu)
     }
-    const nomesArqs = arquivos.filter((a) => !(MEDIA_TYPES as readonly string[]).includes(a.mediaType)).map((a) => a.nome);
+
+    // Textos de arquivos
+    const textoArqs = arquivos
+      .filter((a) => a.texto)
+      .map((a) => `=== Arquivo: ${a.nome} ===\n${a.texto}`)
+      .join("\n\n");
+
+    const nomesNaoProcessados = arquivos
+      .filter((a) => !(MEDIA_TYPES as readonly string[]).includes(a.mediaType) && !a.texto)
+      .map((a) => a.nome);
+
     const textoFinal = [
-      nomesArqs.length ? `[Arquivos recebidos: ${nomesArqs.join(", ")}]\n` : "",
+      nomesNaoProcessados.length ? `[Arquivos recebidos mas não processados: ${nomesNaoProcessados.join(", ")}]\n` : "",
+      textoArqs ? textoArqs + "\n\n" : "",
       mensagem,
     ].filter(Boolean).join("") || "(sem texto)";
+
     content.push({ type: "text", text: textoFinal });
 
     // Chama Claude via streaming
     const stream = await anthropicClient().messages.stream({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-4-5",
       max_tokens: 4096,
       system: contexto,
       messages: [{ role: "user", content }],
     });
 
-    // Registra auditoria (sem bloquear o stream)
+    // Registra auditoria
     registrarAudit({
       acao: "perfil_atualizado",
       origem: "usuario",
