@@ -14,8 +14,25 @@ export function CerebroChat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
 
-  const scrollBottom = () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  function onScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  const scrollBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (el && autoScrollRef.current) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  function scrollBottomForced() {
+    autoScrollRef.current = true;
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
 
   function addArquivos(files: FileList | null) {
     if (!files) return;
@@ -27,15 +44,26 @@ export function CerebroChat() {
     if (!texto && arquivos.length === 0) return;
     setCarregando(true);
     const nomesArqs = arquivos.map((f) => f.name);
-    setMsgs((prev) => [...prev, { role: "user", content: texto, arquivos: nomesArqs.length ? nomesArqs : undefined }]);
+
+    // Captura histórico ANTES de adicionar a nova mensagem
+    let historicoJSON = "[]";
+    setMsgs((prev) => {
+      historicoJSON = JSON.stringify(prev.filter((m) => m.content).map((m) => ({ role: m.role, content: m.content })));
+      return [...prev, { role: "user", content: texto, arquivos: nomesArqs.length ? nomesArqs : undefined }];
+    });
+
     setInput("");
     const arquivosParaEnviar = [...arquivos];
     setArquivos([]);
-    scrollBottom();
+    scrollBottomForced();
 
     const fd = new FormData();
     fd.set("mensagem", texto);
+    fd.set("historico", historicoJSON);
     for (const f of arquivosParaEnviar) fd.append("arquivo", f);
+
+    // Pequeno delay para o setState do histórico ser processado
+    await new Promise((r) => setTimeout(r, 0));
 
     let resposta = "";
     setMsgs((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -108,7 +136,7 @@ export function CerebroChat() {
       scrollBottom();
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [input, arquivos]);
+  }, [input, arquivos, scrollBottom]);
 
   return (
     <div
@@ -123,7 +151,7 @@ export function CerebroChat() {
         <span className="text-sm font-bold text-white">Chat com o Cérebro</span>
         <span className="ml-auto text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={containerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
         {msgs.length === 0 && !dragOver && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Brain size={40} className="mb-4" style={{ color: "rgba(191,222,77,0.3)" }} />

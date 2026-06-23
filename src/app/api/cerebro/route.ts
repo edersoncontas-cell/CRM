@@ -20,9 +20,16 @@ export async function POST(req: NextRequest) {
     let mensagem = "";
     const arquivos: { base64: string; mediaType: string; nome: string; texto?: string }[] = [];
 
+    let historico: { role: "user" | "assistant"; content: string }[] = [];
+
     if (ct.includes("multipart/form-data")) {
       const fd = await req.formData();
       mensagem = String(fd.get("mensagem") ?? "").trim();
+      try {
+        const h = String(fd.get("historico") ?? "[]");
+        historico = JSON.parse(h);
+        if (!Array.isArray(historico)) historico = [];
+      } catch { historico = []; }
       const files = fd.getAll("arquivo") as File[];
       for (const f of files) {
         const buf = Buffer.from(await f.arrayBuffer());
@@ -115,12 +122,22 @@ Responda sempre em português. Seja direto, prático e estratégico.`;
 
     content.push({ type: "text", text: textoFinal });
 
+    // Monta as mensagens com histórico para contexto multi-turn
+    const mensagensHistorico: Anthropic.MessageParam[] = historico
+      .filter((h) => h.content?.trim())
+      .map((h) => ({ role: h.role, content: h.content }));
+
+    const mensagensCompletas: Anthropic.MessageParam[] = [
+      ...mensagensHistorico,
+      { role: "user", content },
+    ];
+
     // Chama Claude via streaming
     const stream = await anthropicClient().messages.stream({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 4096,
       system: contexto,
-      messages: [{ role: "user", content }],
+      messages: mensagensCompletas,
     });
 
     // Registra auditoria

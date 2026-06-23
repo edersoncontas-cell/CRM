@@ -1189,9 +1189,39 @@ const norm = (s: string) =>
 async function acharClientePorNomeAprox(nome: string) {
   const n = nome.trim();
   if (!n) return null;
+
+  // 1. Exato (case insensitive)
   const exato = await db.cliente.findFirst({ where: { nome: { equals: n, mode: "insensitive" } } });
   if (exato) return exato;
-  return db.cliente.findFirst({ where: { nome: { contains: n, mode: "insensitive" } } });
+
+  // 2. Contém o nome inteiro
+  const contains = await db.cliente.findFirst({ where: { nome: { contains: n, mode: "insensitive" } } });
+  if (contains) return contains;
+
+  // 3. Busca fuzzy por palavras normalizadas (tolera erros de grafia como Cezar/Cesar)
+  const palavrasBusca = norm(n).split(/\s+/).filter((w) => w.length >= 3);
+  if (!palavrasBusca.length) return null;
+
+  const todos = await db.cliente.findMany({ select: { id: true, nome: true } });
+
+  // 3a. Todas as palavras da busca aparecem no nome (ordem irrelevante)
+  const todoMatch = todos.find((c) => {
+    const nNorm = norm(c.nome);
+    return palavrasBusca.every((p) => nNorm.includes(p));
+  });
+  if (todoMatch) return db.cliente.findUnique({ where: { id: todoMatch.id } });
+
+  // 3b. Primeira palavra + maioria das outras (para nomes com typo)
+  const primeira = palavrasBusca[0];
+  const parciais = todos.filter((c) => {
+    const nNorm = norm(c.nome);
+    if (!nNorm.includes(primeira)) return false;
+    const acertos = palavrasBusca.filter((p) => nNorm.includes(p)).length;
+    return acertos >= Math.ceil(palavrasBusca.length * 0.6);
+  });
+  if (parciais.length === 1) return db.cliente.findUnique({ where: { id: parciais[0].id } });
+
+  return null;
 }
 
 async function acharOuCriarMunicipioAssist(nome: string) {
@@ -1281,6 +1311,28 @@ export async function interpretarComando(
           interesseFuturoNota: g("interesseFuturoNota") != null ? str("interesseFuturoNota") : undefined,
         },
       });
+    } else if (tipo === "editar_resumo") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "editar_resumo", descricao: `Resumo de "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const partes: string[] = [];
+      if (str("resumoMaquinas")) partes.push(`máquina ${str("resumoMaquinas")}`);
+      if (g("resumoValor")) partes.push(`valor R$ ${Number(g("resumoValor")).toLocaleString("pt-BR")}`);
+      if (str("resumoCondicao")) partes.push(str("resumoCondicao"));
+      if (str("resumoTexto")) partes.push("histórico/resumo");
+      if (str("proximaVisita")) partes.push(`próxima visita ${dataBR(str("proximaVisita"))}`);
+      plano.push({
+        tipo: "editar_resumo",
+        descricao: `Atualizar resumo de ${c.nome}: ${partes.join(", ") || "sem mudanças"}`,
+        dados: {
+          clienteId: c.id,
+          resumoMaquinas: str("resumoMaquinas") || undefined,
+          resumoTexto: str("resumoTexto") || undefined,
+          resumoValor: g("resumoValor") != null ? Number(g("resumoValor")) : undefined,
+          resumoCondicao: str("resumoCondicao") || undefined,
+          proximaVisita: str("proximaVisita") || undefined,
+          proximaVisitaNota: str("proximaVisitaNota") || undefined,
+        },
+      });
     } else if (tipo === "criar_card") {
       const c = await acharClientePorNomeAprox(str("cliente"));
       if (!c) { plano.push({ tipo: "criar_card", descricao: `Card para "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
@@ -1353,6 +1405,15 @@ export async function executarPlano(
         if (d.interesseFuturoData !== undefined) data.interesseFuturoData = parseDataBR(s("interesseFuturoData"));
         if (d.interesseFuturoNota !== undefined) data.interesseFuturoNota = s("interesseFuturoNota") || null;
         if (s("municipio")) { const m = await acharOuCriarMunicipioAssist(s("municipio")); if (m) data.municipioId = m.id; }
+        await db.cliente.update({ where: { id: s("clienteId") }, data });
+      } else if (a.tipo === "editar_resumo") {
+        const data: Record<string, unknown> = {};
+        if (d.resumoMaquinas !== undefined) data.resumoMaquinas = s("resumoMaquinas") || null;
+        if (d.resumoTexto !== undefined) data.resumoTexto = s("resumoTexto") || null;
+        if (d.resumoValor !== undefined) data.resumoValor = d.resumoValor != null ? Number(d.resumoValor) : null;
+        if (d.resumoCondicao !== undefined) data.resumoCondicao = s("resumoCondicao") || null;
+        if (d.proximaVisita !== undefined) data.proximaVisita = parseDataBR(s("proximaVisita"));
+        if (d.proximaVisitaNota !== undefined) data.proximaVisitaNota = s("proximaVisitaNota") || null;
         await db.cliente.update({ where: { id: s("clienteId") }, data });
       } else if (a.tipo === "criar_card") {
         await db.negociacao.create({

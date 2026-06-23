@@ -228,11 +228,13 @@ Converta o COMANDO do vendedor em ações estruturadas. Responda SOMENTE com JSO
 Tipos de ação válidos (use exatamente estes valores em "tipo"):
 - {"tipo":"criar_cliente","nome":string,"telefone"?:string,"municipio"?:string,"observacoes"?:string,"interesseFuturo"?:boolean,"interesseFuturoData"?:"YYYY-MM-DD","interesseFuturoNota"?:string}
 - {"tipo":"editar_cliente","cliente":string,"telefone"?:string,"municipio"?:string,"observacoes"?:string,"jaComprou"?:boolean,"visitado"?:boolean,"interesseFuturo"?:boolean,"interesseFuturoData"?:"YYYY-MM-DD","interesseFuturoNota"?:string}
+- {"tipo":"editar_resumo","cliente":string,"resumoMaquinas"?:string,"resumoTexto"?:string,"resumoValor"?:number,"resumoCondicao"?:"pesquisando"|"interesse_futuro"|"avista"|"financiamento"|"consorcio","proximaVisita"?:"YYYY-MM-DD","proximaVisitaNota"?:string}
 - {"tipo":"criar_card","cliente":string,"estagio"?:string,"maquina"?:string,"valor"?:number}
 - {"tipo":"criar_tarefa","titulo":string,"descricao"?:string,"coluna"?:string}
 - {"tipo":"agendar_visita","cliente":string,"data":"YYYY-MM-DD","observacao"?:string}
 Regras:
-- "cliente" = nome do cliente como o vendedor falou (o sistema buscará no cadastro).
+- "cliente" = nome APROXIMADO do cliente como o vendedor falou (o sistema buscará por nome similar no cadastro, tolerando erros de digitação).
+- Use "editar_resumo" quando o vendedor mencionar: histórico, compra, valor pago, máquina que o cliente tem, resumo do atendimento, situação do cliente, o que foi conversado, intenção de compra, próxima visita.
 - "criar_card" = card no funil de negociação. Estágios válidos: "primeiro_contato","visita_pendente","visita_realizada","proposta_bcnh","proposta_aprovada". Se não souber, omita.
 - "criar_tarefa" = demanda/lembrete estilo Trello. "coluna" é opcional (ex: "Demandas").
 - Interprete datas relativas ("amanhã","sexta","semana que vem") a partir da DATA ATUAL: ${agoraBrasiliaExtenso(agora)}.
@@ -797,7 +799,8 @@ export async function gerarRespostaWhatsAppIA(historico: string, estilo?: string
     return (await llmTexto(
       `Você é o assistente de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES).
 Responda a ÚLTIMA mensagem do cliente de forma curta, cordial e útil, no tom do vendedor.
-NUNCA invente preços ou prazos. Se faltar info, peça educadamente.${estilo ? `\nEstilo do vendedor: ${estilo}` : ""}`,
+NUNCA invente preços ou prazos. Se faltar info, peça educadamente.
+REGRA OBRIGATÓRIA: NÃO use emojis de nenhum tipo. A resposta deve ser texto puro, natural e humano.${estilo ? `\nEstilo do vendedor: ${estilo}` : ""}`,
       historico.slice(-4000),
       { maxTokens: 400 }
     )).trim();

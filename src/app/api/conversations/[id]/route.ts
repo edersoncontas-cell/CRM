@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const CATEGORIAS = ["CLIENTE", "LEAD", "GRUPO", "OUTRO"];
 
-// Atualiza ajustes da conversa: Agnes (IA) ligada, ignorar, categoria, status.
+// Atualiza ajustes da conversa: IA ligada, ignorar, categoria, status, nome do contato.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
@@ -17,10 +17,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data.categoryConfirmed = true;
   }
   if (typeof body.status === "string") data.status = body.status;
+  if (typeof body.contactName === "string" && body.contactName.trim()) {
+    data.contactName = body.contactName.trim();
+  }
 
   if (!Object.keys(data).length) return NextResponse.json({ ok: false, erro: "nada a atualizar" }, { status: 400 });
 
   const conv = await db.whatsAppConversation.update({ where: { id: params.id }, data });
+
+  // Sincroniza o nome no cadastro do cliente vinculado
+  if (data.contactName && conv.clienteId) {
+    await db.cliente.update({ where: { id: conv.clienteId }, data: { nome: data.contactName as string } }).catch(() => {});
+  }
+
   return NextResponse.json({ ok: true, conversation: conv });
 }
 
