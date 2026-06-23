@@ -595,7 +595,6 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   </div>
                 </>
               )}
-                )}
               </div>
             </div>
 
@@ -684,3 +683,4 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     </div>
   );
 }
+
