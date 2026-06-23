@@ -672,7 +672,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
 
 
   return (
-    <div className="flex h-screen w-full overflow-hidden" style={{ background: "#f0f2f5" }}>
+    <div className="-m-4 flex h-[calc(100dvh)] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#f0f2f5" }}>
       {/* ── Lista ── */}
       <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#d1d7db", background: "#fff" }}>
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "#008069" }}>
