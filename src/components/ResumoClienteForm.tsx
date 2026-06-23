@@ -101,20 +101,20 @@ export function ResumoClienteForm({
   const temResumo = maquinas || valor || condicao || texto;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-2xl shadow-sm" style={{ background: "#18181b", border: "1px solid #27272a" }}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-        <h2 className="font-semibold text-slate-700">Resumo do Cliente</h2>
+      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid #27272a" }}>
+        <h2 className="font-semibold text-zinc-100">Resumo do Cliente</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={gerarIA}
             disabled={gerando}
-            title="Gerar resumo automático com o Cérebro (IA), baseado nas conversas e negociações"
+            title="O Cérebro lê toda a conversa, audios transcritos e atualizações do cliente, gerando um resumo completo"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: gerando ? "#666" : "#BFDE4D", color: "#111" }}
           >
             {gerando ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
-            {gerando ? "Gerando…" : "Gerar com IA"}
+            {gerando ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
           </button>
           <button
             onClick={() => setEditando((v) => !v)}
