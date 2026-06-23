@@ -323,8 +323,53 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       return nomeConv(c).toLowerCase().includes(q) || c.externalPhone.includes(q) || c.previa.toLowerCase().includes(q);
     });
 
+  // ── Importar histórico de conversa do WhatsApp ──
+  async function importarHistoricoConversa(conv: ConvLista) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip,.txt,.html,.htm';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        let chatText = '';
+        if (file.name.endsWith('.zip')) {
+          const buf = await file.arrayBuffer();
+          const unzipped = unzipSync(new Uint8Array(buf));
+          const txtKey = Object.keys(unzipped).find(k => k.endsWith('.txt'));
+          if (!txtKey) { alert('Arquivo .txt não encontrado no .zip'); return; }
+          chatText = strFromU8(unzipped[txtKey]);
+        } else {
+          chatText = await file.text();
+        }
+        const parsed = parseWhatsAppLines(chatText);
+        const chatMontado = montarChat(parsed);
+        // Enviar para o Cérebro processar e atualizar cliente
+        const res = await fetch('/api/cerebro/processar-historico', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: conv.id,
+            externalPhone: conv.externalPhone,
+            clienteId: conv.clienteId,
+            historico: chatMontado,
+            linhas: parsed,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const result = await res.json();
+        alert(`✅ Histórico importado e processado!\n${result.resumo || 'Cérebro atualizou os dados do cliente.'}`);
+        router.refresh();
+      } catch (err: unknown) {
+        alert('Erro ao importar: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    };
+    input.click();
+  }
+
+
   return (
-    <div className="-m-4 flex h-[calc(100vh-1px)] sm:-m-6 md:-m-8" style={{ background: "#f0f2f5" }}>
+    <div className="flex h-screen w-full overflow-hidden" style={{ background: "#f0f2f5" }}>
       {/* ── Lista ── */}
       <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#d1d7db", background: "#fff" }}>
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "#008069" }}>
@@ -472,6 +517,11 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                         {curr(sel).ignored ? <Bell size={15} /> : <BellOff size={15} />}
                         {curr(sel).ignored ? "Reativar conversa" : "Ignorar conversa"}
                       </button>
+                      <div className="my-1 border-t border-slate-100" />
+                      <button onClick={() => importarHistoricoConversa(sel)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
+                        <DownloadCloud size={15} /> Importar histórico de conversa
+                      </button>
                       <div className="px-2.5 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Categoria</div>
                       {["CLIENTE", "LEAD", "OUTRO"].map((cat) => (
                         <button key={cat} onClick={() => { patchConv(sel, { category: cat }); setMenuAberto(false); }}
@@ -557,8 +607,6 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
 
             {/* Input */}
             <div className="flex items-end gap-2 px-3 py-2.5" style={{ background: "#f0f2f5" }}>
-              <Smile size={22} className="mb-1.5 shrink-0" style={{ color: "#667781" }} />
-              <Paperclip size={20} className="mb-1.5 shrink-0" style={{ color: "#667781" }} />
               <textarea
                 value={texto}
                 onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
