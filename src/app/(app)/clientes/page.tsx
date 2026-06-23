@@ -62,7 +62,7 @@ export default async function ClientesPage({
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
 
   return (
-    <div>
+    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
       <PageHeader
         titulo="Clientes"
         subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}${busca ? ` para "${busca}"` : ""}`}
@@ -79,7 +79,7 @@ export default async function ClientesPage({
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados ? "bg-[#BFDE4D] text-black font-bold" : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`}
         >
           Todos
           <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados && !apenasVisitados ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
@@ -88,7 +88,7 @@ export default async function ClientesPage({
         </Link>
         <Link
           href={filtro ? `/clientes?municipio=${filtro}&naoVisitado=1` : "/clientes?naoVisitado=1"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasNaoVisitados ? "bg-amber-500 text-white" : "border border-amber-200 text-amber-600 hover:bg-amber-50"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasNaoVisitados ? "bg-amber-500 text-white" : "border border-amber-800/50 text-amber-400 hover:bg-amber-900/20"}`}
         >
           📍 Nunca visitados
           {totalNaoVisitados > 0 && (
@@ -99,7 +99,7 @@ export default async function ClientesPage({
         </Link>
         <Link
           href={filtro ? `/clientes?municipio=${filtro}&visitado=1` : "/clientes?visitado=1"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasVisitados ? "bg-green-600 text-white" : "border border-green-200 text-green-700 hover:bg-green-50"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasVisitados ? "bg-green-600 text-white" : "border border-green-800/50 text-green-400 hover:bg-green-900/20"}`}
         >
           ✅ Visitados
           {totalVisitados > 0 && (
@@ -122,10 +122,10 @@ export default async function ClientesPage({
             name="q"
             defaultValue={busca}
             placeholder="Buscar cliente por nome ou telefone..."
-            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+            className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]" style={{ background: "#18181b", borderColor: "#27272a", color: "#fafafa" }}
           />
         </div>
-        <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
+        <button className="rounded-lg px-4 py-2 text-sm font-semibold text-black transition" style={{ background: "#BFDE4D" }}>
           Buscar
         </button>
         {busca && (
@@ -140,13 +140,13 @@ export default async function ClientesPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Mapeamento por município */}
-        <Card className="lg:col-span-1">
-          <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
+        <Card className="lg:col-span-1" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+          <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
             <MapPin size={18} className="text-brand-600" /> Mapeamento
           </div>
           <Link
             href="/clientes"
-            className={`mb-2 block rounded px-2 py-1 text-sm ${!filtro ? "bg-brand-50 font-medium text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
+            className={`mb-2 block rounded px-2 py-1 text-sm ${!filtro ? "bg-[#BFDE4D]/20 font-medium text-[#BFDE4D]" : "text-zinc-400 hover:bg-zinc-800"}`}
           >
             Todos os municípios
           </Link>
@@ -175,7 +175,7 @@ export default async function ClientesPage({
         <div className="lg:col-span-3">
           {clientes.length === 0 ? (
             <Card>
-              <p className="text-center text-sm text-slate-400">
+              <p className="text-center text-sm text-zinc-500">
                 Nenhum cliente ainda. Cadastre o primeiro! 🚜
               </p>
             </Card>
@@ -196,19 +196,19 @@ export default async function ClientesPage({
                   : "potencial";
                 return (
                   <div key={c.id} className="relative">
-                    <Card className="transition-all hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5">
+                    <Card className="transition-all hover:-translate-y-0.5" style={{ background: "#18181b", border: "1px solid #27272a" }}>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-sm font-bold text-brand-700">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold" style={{ background: "#BFDE4D22", color: "#BFDE4D" }}>
                           {iniciais(c.nome)}
                         </div>
                         <div className="min-w-0 flex-1 pr-6">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-base font-bold text-slate-900">{c.nome}</span>
+                            <span className="truncate text-base font-bold text-white">{c.nome}</span>
                             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusColor}`}>
                               {statusLabel}
                             </span>
                           </div>
-                          <p className="mt-0.5 text-xs text-slate-400">
+                          <p className="mt-0.5 text-xs text-zinc-500">
                             {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
