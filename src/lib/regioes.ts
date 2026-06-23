@@ -23,7 +23,7 @@ const TERMOS_NAO_CLIENTE = [
 // Regiões de outros vendedores — com os novos nomes solicitados pelo Ederson.
 export const REGIOES_FORA_AREA = ["Cliente Cristiano", "Cliente Welligton"];
 
-const MUNICIPIOS_REMOVER = ["Palantino", "TINAPÁ", "Tinapá", "Interior de Goias", "Interior de Goiás"];
+const MUNICIPIOS_REMOVER = ["Palantino", "Palatino", "TINAPÁ", "Tinapá", "Interior de Goias", "Interior de Goiás", "Patrocínio", "Patrocinio"];
 
 // Renomeia municípios antigos para os novos nomes.
 const RENOMEAR: { de: string; para: string }[] = [

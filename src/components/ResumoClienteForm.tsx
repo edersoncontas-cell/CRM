@@ -144,25 +144,23 @@ export function ResumoClienteForm({
                 {CONDICAO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-600">Próxima visita</label>
-                <input
-                  type="date"
-                  value={proximaVisita}
-                  onChange={(e) => setProximaVisita(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-600">Horário / nota</label>
-                <input
-                  value={proximaVisitaNota}
-                  onChange={(e) => setProximaVisitaNota(e.target.value)}
-                  placeholder="O dia todo / 14h"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-                />
-              </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Próxima visita</label>
+              <input
+                type="date"
+                value={proximaVisita}
+                onChange={(e) => setProximaVisita(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Horário / nota</label>
+              <input
+                value={proximaVisitaNota}
+                onChange={(e) => setProximaVisitaNota(e.target.value)}
+                placeholder="O dia todo / 14h"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Resumo geral (IA ou livre)</label>

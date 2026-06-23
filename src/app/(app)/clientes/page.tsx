@@ -16,18 +16,19 @@ const DIAS_ESQUECIDO = 15;
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; q?: string; naoVisitado?: string };
+  searchParams: { municipio?: string; q?: string; naoVisitado?: string; visitado?: string };
 }) {
   const filtro = searchParams.municipio;
   const busca = (searchParams.q ?? "").trim();
   const apenasNaoVisitados = searchParams.naoVisitado === "1";
+  const apenasVisitados = searchParams.visitado === "1";
   await garantirRegioes();
   await limparContatosDescartados();
 
   const corteEsquecido = new Date();
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalClientes] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes] = await Promise.all([
     db.cliente.findMany({
       where: {
         ...(filtro ? { municipioId: filtro } : {}),
@@ -40,6 +41,7 @@ export default async function ClientesPage({
             }
           : {}),
         ...(apenasNaoVisitados ? { visitado: false } : {}),
+        ...(apenasVisitados ? { visitado: true } : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
@@ -53,6 +55,7 @@ export default async function ClientesPage({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
     db.cliente.count({ where: { visitado: false } }),
+    db.cliente.count({ where: { visitado: true } }),
     db.cliente.count(),
   ]);
 
@@ -76,10 +79,10 @@ export default async function ClientesPage({
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados ? "bg-brand-600 text-white" : "border border-slate-200 text-slate-500 hover:bg-slate-50"}`}
         >
           Todos
-          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados && !apenasVisitados ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
             {totalClientes}
           </span>
         </Link>
@@ -94,12 +97,24 @@ export default async function ClientesPage({
             </span>
           )}
         </Link>
+        <Link
+          href={filtro ? `/clientes?municipio=${filtro}&visitado=1` : "/clientes?visitado=1"}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasVisitados ? "bg-green-600 text-white" : "border border-green-200 text-green-700 hover:bg-green-50"}`}
+        >
+          ✅ Visitados
+          {totalVisitados > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasVisitados ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>
+              {totalVisitados}
+            </span>
+          )}
+        </Link>
       </div>
 
       {/* Busca */}
       <form method="GET" className="mb-5 flex gap-2">
         {filtro && <input type="hidden" name="municipio" value={filtro} />}
         {apenasNaoVisitados && <input type="hidden" name="naoVisitado" value="1" />}
+        {apenasVisitados && <input type="hidden" name="visitado" value="1" />}
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input

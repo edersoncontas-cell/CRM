@@ -211,7 +211,7 @@ export function EditarClienteForm({
                   <input type="checkbox" name="interesseFuturo" defaultChecked={cliente.interesseFuturo} />
                   ⏳ Interesse futuro (aguardando o momento certo)
                 </label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 space-y-2">
                   <Campo label="Lembrar em">
                     <input type="date" name="interesseFuturoData" defaultValue={cliente.interesseFuturoData ?? ""} className="campo" />
                   </Campo>
