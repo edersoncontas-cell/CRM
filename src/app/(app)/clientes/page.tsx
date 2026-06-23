@@ -140,7 +140,7 @@ export default async function ClientesPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Mapeamento por município */}
-        <Card className="lg:col-span-1" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+        <div className="rounded-2xl p-5 lg:col-span-1" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
           <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
             <MapPin size={18} className="text-brand-600" /> Mapeamento
           </div>
@@ -169,7 +169,7 @@ export default async function ClientesPage({
               );
             })}
           </div>
-        </Card>
+        </div>
 
         {/* Lista de clientes em ordem alfabética */}
         <div className="lg:col-span-3">
@@ -196,7 +196,7 @@ export default async function ClientesPage({
                   : "potencial";
                 return (
                   <div key={c.id} className="relative">
-                    <Card className="transition-all hover:-translate-y-0.5" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                    <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5" style={{ background: "#18181b", border: "1px solid #27272a" }}>
                       <div className="flex items-start gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold" style={{ background: "#BFDE4D22", color: "#BFDE4D" }}>
                           {iniciais(c.nome)}
@@ -219,7 +219,7 @@ export default async function ClientesPage({
                           </div>
                         </div>
                       </div>
-                    </Card>
+                    </div>
                     <Link
                       href={`/clientes/${c.id}`}
                       aria-label={`Abrir ${c.nome}`}
