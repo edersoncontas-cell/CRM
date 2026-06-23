@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Brain, Bell, BellOff, Tag, Trash2, Pencil, X,
+  DownloadCloud, Loader2, Brain, Bell, Trash2, Pencil, X, FileText, KanbanSquare,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -76,6 +76,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [gerandoResumo, setGerandoResumo] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null }>>({});
   const [menuAberto, setMenuAberto] = useState(false);
@@ -323,6 +324,59 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       return nomeConv(c).toLowerCase().includes(q) || c.externalPhone.includes(q) || c.previa.toLowerCase().includes(q);
     });
 
+
+  // ── Gerar resumo pelo Cérebro ──
+  async function gerarResumoCerebro(conv: ConvLista) {
+    if (gerandoResumo) return;
+    setGerandoResumo(true);
+    setMenuAberto(false);
+    try {
+      // Se não tem clienteId vinculado, abre o cadastro para criar vínculo
+      if (!conv.clienteId) {
+        router.push(`/clientes?q=${encodeURIComponent(conv.externalPhone)}`);
+        return;
+      }
+      // Chama a API do Cérebro para gerar e salvar o resumo
+      const r = await fetch(`/api/cerebro/resumo/${conv.clienteId}`, { method: 'POST' });
+      const d = await r.json();
+      if (d?.ok && d?.resumo) {
+        window.alert(`✅ Resumo gerado pelo Cérebro!\n\n${d.resumo.slice(0, 400)}${d.resumo.length > 400 ? '...' : ''}`);
+        router.refresh();
+      } else {
+        window.alert('Sem histórico suficiente para gerar resumo. Importe conversas primeiro.');
+      }
+    } catch (e) {
+      window.alert('Erro ao gerar resumo: ' + String(e));
+    } finally {
+      setGerandoResumo(false);
+    }
+  }
+
+  // ── Gerar Card no Pipeline ──
+  async function gerarCardPipeline(conv: ConvLista) {
+    setMenuAberto(false);
+    if (!conv.clienteId) {
+      window.alert('Esta conversa ainda não está vinculada a um cliente no CRM. Acesse o cadastro para criar o vínculo.');
+      return;
+    }
+    try {
+      const r = await fetch('/api/pipeline/criar-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId: conv.clienteId, estagio: 'primeiro_contato' }),
+      });
+      const d = await r.json();
+      if (d?.ok) {
+        window.alert('✅ Card criado no Pipeline! Acesse o Pipeline para ver.');
+        router.refresh();
+      } else {
+        window.alert('Erro ao criar card: ' + (d?.erro || 'Tente novamente'));
+      }
+    } catch (e) {
+      window.alert('Erro ao criar card: ' + String(e));
+    }
+  }
+
   // ── Importar histórico de conversa do WhatsApp ──
   async function importarHistoricoConversa(conv: ConvLista) {
     const input = document.createElement('input');
@@ -369,9 +423,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
 
 
   return (
-    <div className="-m-4 flex h-[calc(100dvh)] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#f0f2f5" }}>
+    <div className="-m-4 flex h-[calc(100dvh)] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#111b21" }}>
       {/* ── Lista ── */}
-      <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#d1d7db", background: "#fff" }}>
+      <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#2a3942", background: "#111b21" }}>
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "#008069" }}>
           <span className="flex items-center gap-2 font-semibold text-white"><MessageCircle size={18} /> Atendimento</span>
           <div className="flex items-center gap-2">
@@ -415,9 +469,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
         </div>
         <div className="p-2">
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#667781" }} />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#8696a0" }} />
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pesquisar"
-              className="w-full rounded-lg py-2 pl-9 pr-3 text-sm outline-none" style={{ background: "#f0f2f5" }} />
+              className="w-full rounded-lg py-2 pl-9 pr-3 text-sm outline-none" style={{ background: "#1e2a2a", color: "#e9edef" }} />
           </div>
           <div className="mt-2 flex gap-1 text-xs">
             {(["tudo", "ignoradas"] as const).map((a) => (
@@ -430,15 +484,15 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
         </div>
         <div className="flex-1 overflow-y-auto">
           {filtradas.length === 0 ? (
-            <p className="p-6 text-center text-sm" style={{ color: "#667781" }}>Nenhuma conversa.</p>
+            <p className="p-6 text-center text-sm" style={{ color: "#8696a0" }}>Nenhuma conversa.</p>
           ) : filtradas.map((c) => (
             <button key={c.id} onClick={() => setSelId(c.id)}
-              className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left ${selId === c.id ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]"}`}
-              style={{ borderColor: "#f0f2f5" }}>
+              className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left ${selId === c.id ? "bg-[#1e2a2a]" : "hover:bg-[#1e2a2a]/80"}`}
+              style={{ borderColor: "#2a3942" }}>
               <Avatar nome={nomeConv(c)} isGroup={c.isGroup} photo={c.contactPhotoUrl} size={48} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="truncate text-sm font-semibold" style={{ color: "#111b21" }}>{nomeConv(c)}</span>
+                  <span className="truncate text-sm font-semibold" style={{ color: "#e9edef" }}>{nomeConv(c)}</span>
                   <span className="shrink-0 text-[11px]" style={{ color: c.naoLida ? "#00a884" : "#667781" }}>{hora(c.lastMessageAt)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-1">
@@ -454,7 +508,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       {/* ── Painel ── */}
       <section className={`flex flex-1 flex-col ${sel ? "flex" : "hidden lg:flex"}`}>
         {!sel ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3" style={{ background: "#f0f2f5", color: "#667781" }}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3" style={{ background: "#111b21", color: "#8696a0" }}>
             <MessageCircle size={56} strokeWidth={1} />
             <p className="text-sm">Selecione uma conversa</p>
           </div>
@@ -498,45 +552,49 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   <MoreVertical size={18} />
                 </button>
                 {menuAberto && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMenuAberto(false)} />
-                    <div className="absolute right-0 top-9 z-20 w-56 rounded-xl bg-white p-1 text-sm shadow-xl" style={{ color: "#111b21" }}>
-                      {sel.clienteId && (
-                        <Link href={`/clientes/${sel.clienteId}`} onClick={() => setMenuAberto(false)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
-                          <User size={15} /> Abrir ficha do cliente
-                        </Link>
-                      )}
-                      <button onClick={() => abrirRenomear(sel)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
-                        <Pencil size={15} /> Editar nome do contato
-                      </button>
-                      <div className="my-1 border-t border-slate-100" />
-                      <button onClick={() => { patchConv(sel, { ignored: !curr(sel).ignored }); setMenuAberto(false); }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
-                        {curr(sel).ignored ? <Bell size={15} /> : <BellOff size={15} />}
-                        {curr(sel).ignored ? "Reativar conversa" : "Ignorar conversa"}
-                      </button>
-                      <div className="my-1 border-t border-slate-100" />
-                      <button onClick={() => importarHistoricoConversa(sel)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-slate-100">
-                        <DownloadCloud size={15} /> Importar histórico de conversa
-                      </button>
-                      <div className="px-2.5 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Categoria</div>
-                      {["CLIENTE", "LEAD", "OUTRO"].map((cat) => (
-                        <button key={cat} onClick={() => { patchConv(sel, { category: cat }); setMenuAberto(false); }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 hover:bg-slate-100">
-                          <Tag size={14} /> {cat}
-                          {curr(sel).category === cat && <Check size={14} className="ml-auto text-emerald-600" />}
-                        </button>
-                      ))}
-                      <div className="my-1 border-t border-slate-100" />
-                      <button onClick={() => excluirConversa(sel)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-red-600 hover:bg-red-50">
-                        <Trash2 size={15} /> Excluir conversa
-                      </button>
-                    </div>
-                  </>
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuAberto(false)} />
+                  <div className="absolute right-0 top-9 z-20 w-60 rounded-xl p-1 text-sm shadow-xl"
+                    style={{ background: "#1e2a2a", color: "#e9edef", border: "1px solid #2a3942" }}>
+                    {/* Acessar cadastro */}
+                    <Link
+                      href={sel.clienteId ? `/clientes/${sel.clienteId}` : `/clientes?q=${encodeURIComponent(sel.externalPhone)}`}
+                      onClick={() => setMenuAberto(false)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10"
+                    >
+                      <User size={15} style={{ color: "#00a884" }} /> Acessar cadastro do cliente
+                    </Link>
+                    {/* Editar nome */}
+                    <button onClick={() => abrirRenomear(sel)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
+                      <Pencil size={15} style={{ color: "#aebac1" }} /> Editar nome do contato
+                    </button>
+                    <div className="my-1 border-t" style={{ borderColor: "#2a3942" }} />
+                    {/* Importar histórico */}
+                    <button onClick={() => importarHistoricoConversa(sel)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
+                      <DownloadCloud size={15} style={{ color: "#aebac1" }} /> Importar histórico de conversa
+                    </button>
+                    {/* Gerar resumo pelo Cérebro */}
+                    <button onClick={() => gerarResumoCerebro(sel)} disabled={gerandoResumo}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10 disabled:opacity-60">
+                      <FileText size={15} style={{ color: "#BFDE4D" }} />
+                      {gerandoResumo ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
+                    </button>
+                    {/* Gerar Card no Pipeline */}
+                    <button onClick={() => gerarCardPipeline(sel)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
+                      <KanbanSquare size={15} style={{ color: "#60a5fa" }} /> Gerar Card no Pipeline
+                    </button>
+                    <div className="my-1 border-t" style={{ borderColor: "#2a3942" }} />
+                    {/* Excluir conversa */}
+                    <button onClick={() => excluirConversa(sel)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-red-400 hover:bg-red-500/10">
+                      <Trash2 size={15} /> Excluir conversa
+                    </button>
+                  </div>
+                </>
+              )}
                 )}
               </div>
             </div>
@@ -549,7 +607,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                 if (!el) return;
                 autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
               }}
-              className="flex-1 overflow-y-auto px-4 py-4 sm:px-10" style={{ background: "#efeae2" }}>
+              className="flex-1 overflow-y-auto px-4 py-4 sm:px-10" style={{ background: "#0b1014" }}>
               {mensagens.map((m) => {
                 // Rascunho da Agnes: bloco destacado com Enviar / Editar / Descartar.
                 if (m.isDraft) {
@@ -581,14 +639,14 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                 const meu = m.direction === "OUT";
                 return (
                   <div key={m.id} className={`mb-1.5 flex ${meu ? "justify-end" : "justify-start"}`}>
-                    <div className="max-w-[75%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm" style={{ background: meu ? "#d9fdd3" : "#ffffff", color: "#111b21" }}>
+                    <div className="max-w-[75%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm" style={{ background: meu ? "#005c4b" : "#1e2a2a", color: "#e9edef" }}>
                       {!meu && sel.isGroup && m.senderName && <div className="text-[11px] font-bold" style={{ color: "#00a884" }}>{m.senderName}</div>}
                       {m.mediaType === "image" && m.mediaUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={m.mediaUrl} alt="" className="mb-1 max-h-60 rounded-md" />
                       )}
                       <span className="whitespace-pre-wrap break-words">{m.body}</span>
-                      <span className="ml-2 inline-flex items-center gap-0.5 align-bottom text-[10px]" style={{ color: "#667781" }}>
+                      <span className="ml-2 inline-flex items-center gap-0.5 align-bottom text-[10px]" style={{ color: "#8696a0" }}>
                         {hora(m.sentAt)}
                         {meu && (m.sendStatus === "READ"
                           ? <CheckCheck size={13} className="text-[#53bdeb]" />
@@ -606,7 +664,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             </div>
 
             {/* Input */}
-            <div className="flex items-end gap-2 px-3 py-2.5" style={{ background: "#f0f2f5" }}>
+            <div className="flex items-end gap-2 px-3 py-2.5" style={{ background: "#1e2a2a" }}>
               <textarea
                 value={texto}
                 onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
@@ -614,7 +672,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                 rows={1}
                 placeholder={zapiAtiva ? "Digite uma mensagem" : "WhatsApp desconectado"}
                 className="max-h-28 flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ background: "#fff" }}
+                style={{ background: "#2a3942", color: "#e9edef" }}
               />
               <button onClick={enviar} disabled={enviando || !texto.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50" style={{ background: "#008069" }}>
                 <Send size={18} />
