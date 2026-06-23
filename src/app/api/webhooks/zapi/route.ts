@@ -171,11 +171,26 @@ export async function POST(req: NextRequest) {
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
         zapiMessageId,
       });
-      // Agenda a IA (Cérebro) se a conversa estiver com IA ativa.
+      // Chama o Cérebro IMEDIATAMENTE se a conversa estiver com IA ativa.
+      // Usa dispatchWithDebounce: aguarda 3s para agregar mensagens rápidas antes de responder.
       if (conv.aiActive) {
+        // Registra o agendamento para o debounce (3s)
+        const agendadoEm = new Date();
         await import("@/lib/db").then(({ db }) =>
-          db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: new Date() } })
+          db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: agendadoEm } })
         );
+        // Dispara o Cérebro de forma assíncrona após 3s de debounce
+        // Usa setTimeout para não bloquear o webhook (responde ao Z-API imediatamente)
+        const baseUrl = process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3000";
+        const cronSecret = process.env.CRON_SECRET ?? "";
+        // Dispara sem await — o webhook responde OK imediatamente, Cérebro processa em background
+        fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
+          body: JSON.stringify({ conversationId: conv.id, agendadoEm: agendadoEm.toISOString() }),
+        }).catch((e) => console.error("[cerebro-dispatch] erro:", e));
       }
       diag.status = "recebida";
     }
