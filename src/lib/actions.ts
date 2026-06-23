@@ -1099,25 +1099,102 @@ export async function reordenarColunasDemanda(ids: string[]) {
 
 // ---------- Resumos de conversa (página /resumos) ----------
 
-// Gera um resumo de IA da conversa de WhatsApp de um cliente.
-export async function gerarResumoConversa(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
+// Gera um resumo completo do cliente via IA, baseado nas conversas de WhatsApp,
+// negociações e visitas registradas. Salva o resultado em resumoTexto no banco.
+export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
   "use server";
-  const conversas = await db.conversa.findMany({
-    where: { clienteId },
-    orderBy: { criadoEm: "asc" },
-    take: 60,
-    select: { conteudo: true, remetente: true },
-  });
-  if (conversas.length === 0) return { ok: false, erro: "Sem conversas para resumir." };
-  const thread = conversas
-    .map((c) => `${c.remetente === "cliente" ? "Cliente" : "Eu"}: ${c.conteudo}`)
-    .join("\n");
+
+  const [cliente, conversas, negociacoes, visitas] = await Promise.all([
+    db.cliente.findUnique({
+      where: { id: clienteId },
+      select: { nome: true, telefone: true, municipio: { select: { nome: true } } },
+    }),
+    db.whatsAppConversation.findFirst({
+      where: { clienteId },
+      include: {
+        messages: {
+          orderBy: { sentAt: "asc" },
+          take: 80,
+          select: { body: true, direction: true, sentAt: true, isDraft: true },
+        },
+      },
+    }),
+    db.negociacao.findMany({
+      where: { clienteId },
+      orderBy: { criadoEm: "desc" },
+      take: 10,
+      select: { maquinaModelo: true, valor: true, estagio: true, status: true, condicaoPagamento: true, concorrenteMencionado: true, ultimoContato: true },
+    }),
+    db.visita.findMany({
+      where: { clienteId },
+      orderBy: { data: "desc" },
+      take: 5,
+      select: { data: true, observacao: true },
+    }),
+  ]);
+
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+
+  const mensagens = conversas?.messages?.filter((m) => !m.isDraft && m.body?.trim()) ?? [];
+
+  // Monta o contexto para a IA
+  const partes: string[] = [];
+
+  partes.push(`## Cliente: ${cliente.nome}`);
+  if (cliente.municipio) partes.push(`Município: ${cliente.municipio.nome}`);
+  if (cliente.telefone) partes.push(`Telefone: ${cliente.telefone}`);
+
+  if (negociacoes.length > 0) {
+    partes.push("\n## Negociações registradas:");
+    for (const n of negociacoes) {
+      const partes2 = [n.maquinaModelo ?? "máquina a definir"];
+      if (n.valor) partes2.push(`R$ ${n.valor.toLocaleString("pt-BR")}`);
+      if (n.condicaoPagamento) partes2.push(n.condicaoPagamento);
+      if (n.concorrenteMencionado) partes2.push(`concorrente: ${n.concorrenteMencionado}`);
+      partes2.push(`status: ${n.status} / estagio: ${n.estagio}`);
+      partes.push(`- ${partes2.join(" · ")}`);
+    }
+  }
+
+  if (visitas.length > 0) {
+    partes.push("\n## Visitas realizadas:");
+    for (const v of visitas) {
+      const data = new Date(v.data).toLocaleDateString("pt-BR");
+      partes.push(`- ${data}${v.observacao ? ` — ${v.observacao}` : ""}`);
+    }
+  }
+
+  if (mensagens.length > 0) {
+    partes.push("\n## Histórico de mensagens WhatsApp (recentes):");
+    const thread = mensagens
+      .map((m) => `[${m.direction === "IN" ? "Cliente" : "Eu"}]: ${m.body}`)
+      .join("\n");
+    partes.push(thread.slice(0, 6000));
+  }
+
+  if (partes.length <= 3) return { ok: false, erro: "Sem histórico suficiente para gerar resumo." };
+
   try {
-    const resumo = await resumirConversaIA(thread);
+    const { resumirConversaIA } = await import("@/lib/ai");
+    const resumo = await resumirConversaIA(partes.join("\n"));
+    if (!resumo) return { ok: false, erro: "IA não retornou conteúdo." };
+
+    // Salva no banco
+    await db.cliente.update({
+      where: { id: clienteId },
+      data: { resumoTexto: resumo } as Record<string, unknown>,
+    });
+    revalidatePath(`/clientes/${clienteId}`);
     return { ok: true, resumo };
   } catch (e) {
     return { ok: false, erro: String(e) };
   }
+}
+
+// Versão legada mantida por compatibilidade com chamadas existentes.
+export async function gerarResumoConversa(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
+  "use server";
+  return gerarResumoClienteIA(clienteId);
 }
 
 // Cria um card a partir do resumo: se a coluna for do funil de negociação,
