@@ -302,6 +302,309 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     autoScrollRef.current = true;
     const temp: Mensagem = { id: `tmp-${Date.now()}`, direction: "OUT", body: t, senderName: null, operatorDisplayName: "Você", mediaType: null, mediaUrl: null, sentAt: new Date().toISOString(), sendStatus: "QUEUED", isDraft: false };
     setMensagens((p) => [...p, temp]);
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
+  DownloadCloud, Loader2, Brain, Bell, BellOff, Tag, Trash2, Pencil, X,
+} from "lucide-react";
+import { unzipSync, strFromU8 } from "fflate";
+import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
+
+export type ConvLista = {
+  id: string;
+  externalPhone: string;
+  contactName: string | null;
+  isGroup: boolean;
+  groupName: string | null;
+  ignored: boolean;
+  aiActive: boolean;
+  category: string | null;
+  contactPhotoUrl: string | null;
+  clienteId: string | null;
+  lastMessageAt: string;
+  naoLida: boolean;
+  previa: string;
+};
+
+type Mensagem = {
+  id: string;
+  direction: "IN" | "OUT";
+  body: string;
+  senderName: string | null;
+  operatorDisplayName: string | null;
+  mediaType: string | null;
+  mediaUrl: string | null;
+  sentAt: string;
+  sendStatus: string | null;
+  isDraft: boolean;
+};
+
+function iniciais(s: string) {
+  return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+}
+function hora(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+}
+function nomeConv(c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string }) {
+  return (c.isGroup ? c.groupName : c.contactName) || c.contactName || c.externalPhone;
+}
+
+// Avatar com foto do WhatsApp; cai para iniciais/ícone se não houver foto ou se falhar.
+function Avatar({ nome, isGroup, photo, size }: { nome: string; isGroup: boolean; photo: string | null; size: number }) {
+  const [erro, setErro] = useState(false);
+  if (photo && !erro) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={photo} alt="" onError={() => setErro(true)} referrerPolicy="no-referrer"
+        className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+    );
+  }
+  return (
+    <div className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, background: isGroup ? "#667781" : "#00a884", fontSize: Math.round(size * 0.34) }}>
+      {isGroup ? <Users size={Math.round(size * 0.45)} /> : iniciais(nome)}
+    </div>
+  );
+}
+
+export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLista[]; zapiAtiva: boolean }) {
+  const router = useRouter();
+  const [selId, setSelId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
+  const [aba, setAba] = useState<"tudo" | "ignoradas">("tudo");
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null }>>({});
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [cfgAberto, setCfgAberto] = useState(false);
+  const [auditMode, setAuditMode] = useState<boolean | null>(null);
+  const [renomeandoId, setRenomeandoId] = useState<string | null>(null);
+  const [novoNome, setNovoNome] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fimRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
+  const esRef = useRef<EventSource | null>(null);
+
+  // Carrega o modo da Agnes (rascunho x automático).
+  useEffect(() => {
+    fetch("/api/whatsapp/settings").then((r) => r.json()).then((d) => setAuditMode(d.auditMode)).catch(() => {});
+  }, []);
+
+  // Estado efetivo dos ajustes (overlay local sobre o que veio do servidor).
+  const curr = useCallback(
+    (c: ConvLista) => flags[c.id] ?? { aiActive: c.aiActive, ignored: c.ignored, category: c.category },
+    [flags],
+  );
+
+  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; category: string; contactName: string }>) {
+    const base = curr(c);
+    setFlags((f) => ({ ...f, [c.id]: { ...base, ...patch } }));
+    try {
+      await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    } catch {}
+    router.refresh();
+  }
+
+  function abrirRenomear(c: ConvLista) {
+    setNovoNome(nomeConv(c));
+    setRenomeandoId(c.id);
+    setMenuAberto(false);
+  }
+
+  async function salvarNome(c: ConvLista) {
+    const nome = novoNome.trim();
+    if (!nome || nome === nomeConv(c)) { setRenomeandoId(null); return; }
+    await patchConv(c, { contactName: nome });
+    setRenomeandoId(null);
+  }
+
+  // Exclui a conversa (e suas mensagens). Pede confirmação antes.
+  async function excluirConversa(c: ConvLista) {
+    const nome = c.contactName || c.groupName || c.externalPhone || "esta conversa";
+    if (!window.confirm(`Excluir a conversa com "${nome}"?\n\nTodas as mensagens serão apagadas. Esta ação não pode ser desfeita.`)) return;
+    setMenuAberto(false);
+    try {
+      const r = await fetch(`/api/conversations/${c.id}`, { method: "DELETE" }).then((res) => res.json()).catch(() => null);
+      if (!r?.ok) { window.alert("Não foi possível excluir a conversa."); return; }
+    } catch {
+      window.alert("Não foi possível excluir a conversa.");
+      return;
+    }
+    if (selId === c.id) { setSelId(null); setMensagens([]); }
+    router.refresh();
+  }
+
+  async function setAudit(v: boolean) {
+    setAuditMode(v);
+    try {
+      await fetch("/api/whatsapp/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auditMode: v }) });
+    } catch {}
+  }
+
+  // Ação sobre rascunho da Agnes: enviar (aprovar) ou descartar.
+  async function draftAction(messageId: string, action: "send" | "discard") {
+    if (!selId) return;
+    const r = await fetch(`/api/conversations/${selId}/drafts`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId, action }),
+    }).then((res) => res.json()).catch(() => null);
+    if (!r?.ok) return;
+    if (action === "discard") setMensagens((p) => p.filter((m) => m.id !== messageId));
+    else if (r.message) setMensagens((p) => p.map((m) => (m.id === messageId ? r.message : m)));
+  }
+
+  // Editar rascunho: joga o texto no campo de digitação e remove o rascunho.
+  function editarDraft(m: Mensagem) {
+    setTexto(m.body);
+    draftAction(m.id, "discard");
+  }
+
+  // Converte HTML (export em página) para texto, preservando quebras de linha.
+  function htmlParaTexto(html: string): string {
+    const comQuebras = html
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n");
+    const doc = new DOMParser().parseFromString(comQuebras, "text/html");
+    return doc.body?.textContent ?? "";
+  }
+
+  // Clique em "Importar" → abre o seletor de arquivos (.zip exportado do WhatsApp).
+  function abrirSeletor() {
+    if (importando) return;
+    fileRef.current?.click();
+  }
+
+  // Lê os .zip escolhidos, descompacta e parseia no navegador, depois envia o texto.
+  async function arquivosEscolhidos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // permite re-selecionar os mesmos arquivos depois
+    if (!files.length) return;
+
+    setImportando(true);
+    setImportMsg("Lendo arquivos…");
+    const porNome = new Map<string, ParsedChat>();
+
+    try {
+      for (const file of files) {
+        const baseZip = nomeDoArquivo(file.name);
+        let textos: Array<{ path: string; texto: string }> = [];
+
+        if (/\.zip$/i.test(file.name)) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const entradas = unzipSync(bytes, { filter: (f) => /\.(txt|html?)$/i.test(f.name) });
+          textos = Object.entries(entradas).map(([path, data]) => {
+            const cru = strFromU8(data);
+            return { path, texto: /\.html?$/i.test(path) ? htmlParaTexto(cru) : cru };
+          });
+        } else if (/\.html?$/i.test(file.name)) {
+          textos = [{ path: file.name, texto: htmlParaTexto(await file.text()) }];
+        } else if (/\.txt$/i.test(file.name)) {
+          textos = [{ path: file.name, texto: await file.text() }];
+        }
+
+        for (const { path, texto } of textos) {
+          const raw = parseWhatsAppLines(texto);
+          if (!raw.length) continue;
+          let nome = nomeDoArquivo(path);
+          if (!nome || /^_chat$/i.test(nome)) nome = baseZip;
+          const chat = montarChat(nome, raw);
+          const ja = porNome.get(nome.toLowerCase());
+          if (ja) ja.messages.push(...chat.messages);
+          else porNome.set(nome.toLowerCase(), chat);
+        }
+      }
+
+      const chats = Array.from(porNome.values()).filter((c) => c.messages.length);
+      if (!chats.length) {
+        setImportMsg("Nenhuma mensagem reconhecida nos arquivos.");
+        setImportando(false);
+        setTimeout(() => setImportMsg(null), 5000);
+        return;
+      }
+
+      // Envia uma conversa por vez para mostrar progresso e evitar payload gigante.
+      let convOk = 0, msgsOk = 0, i = 0;
+      for (const chat of chats) {
+        i++;
+        setImportMsg(`Importando ${i}/${chats.length}…`);
+        const r = await fetch("/api/whatsapp/import-file", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chats: [chat] }),
+        }).then((res) => res.json()).catch(() => null);
+        if (r?.ok) { convOk += r.conversas; msgsOk += r.mensagens; }
+      }
+      setImportMsg(`✅ ${convOk} conversas, ${msgsOk} msgs`);
+    } catch (err) {
+      console.error(err);
+      setImportMsg("Falha ao ler os arquivos (zip inválido?)");
+    } finally {
+      setImportando(false);
+      setTimeout(() => setImportMsg(null), 6000);
+      router.refresh();
+    }
+  }
+
+  // Re-sincroniza a lista lateral a cada 15s (leve).
+  useEffect(() => {
+    const iv = setInterval(() => router.refresh(), 15000);
+    return () => clearInterval(iv);
+  }, [router]);
+
+  const sel = conversas.find((c) => c.id === selId) ?? null;
+
+  const mergeMsgs = useCallback((novas: Mensagem[]) => {
+    setMensagens((prev) => {
+      const ids = new Set(prev.map((m) => m.id));
+      const add = novas.filter((m) => !ids.has(m.id));
+      if (!add.length) return prev;
+      return [...prev, ...add].sort((a, b) => +new Date(a.sentAt) - +new Date(b.sentAt));
+    });
+  }, []);
+
+  // Ao abrir uma conversa: carrega mensagens + abre SSE.
+  useEffect(() => {
+    esRef.current?.close();
+    if (!selId) { setMensagens([]); return; }
+    let vivo = true;
+    fetch(`/api/conversations/${selId}/messages`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!vivo) return;
+        setMensagens(d.messages ?? []);
+        const ultimo = d.messages?.[d.messages.length - 1]?.id ?? "";
+        const es = new EventSource(`/api/conversations/${selId}/stream${ultimo ? `?after=${ultimo}` : ""}`);
+        es.addEventListener("messages", (e) => {
+          try { mergeMsgs(JSON.parse((e as MessageEvent).data)); } catch {}
+        });
+        esRef.current = es;
+      })
+      .catch(() => {});
+    return () => { vivo = false; esRef.current?.close(); };
+  }, [selId, mergeMsgs]);
+
+  // Scroll inteligente: só vai ao fim se o usuário já estiver próximo do fim
+  useEffect(() => {
+    const el = chatRef.current;
+    if (!el) return;
+    if (autoScrollRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [mensagens.length]);
+
+  async function enviar() {
+    const t = texto.trim();
+    if (!t || !selId) return;
+    setTexto("");
+    setEnviando(true);
+    autoScrollRef.current = true;
+    const temp: Mensagem = { id: `tmp-${Date.now()}`, direction: "OUT", body: t, senderName: null, operatorDisplayName: "Você", mediaType: null, mediaUrl: null, sentAt: new Date().toISOString(), sendStatus: "QUEUED", isDraft: false };
+    setMensagens((p) => [...p, temp]);
     try {
       const r = await fetch(`/api/conversations/${selId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t }) });
       const d = await r.json();
@@ -343,7 +646,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
           chatText = await file.text();
         }
         const parsed = parseWhatsAppLines(chatText);
-        const chatMontado = montarChat(parsed);
+        const chatMontado = montarChat(file.name, parsed);
         // Enviar para o Cérebro processar e atualizar cliente
         const res = await fetch('/api/cerebro/processar-historico', {
           method: 'POST',
