@@ -413,6 +413,25 @@ export async function moverNegociacao(id: string, estagio: string) {
       where: { id },
       data: { status: "perdida", estagio, ultimoContato: new Date() },
     });
+  } else if (estagio === "proposta_aprovada") {
+    // VENDAS CONFIRMADAS: marca como ganha e atualiza cliente + meta de vendas
+    const neg = await db.negociacao.update({
+      where: { id },
+      data: { status: "ganha", estagio, ultimoContato: new Date() },
+      include: { cliente: true },
+    });
+    await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
+    await registrarAudit({
+      acao: "negociacao_ganha",
+      origem: "usuario",
+      descricao: `Venda confirmada! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
+      entidade: "Negociacao",
+      entidadeId: id,
+      clienteId: neg.clienteId,
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/financeiro");
   } else {
     // Volta para aberta caso estivesse perdida e seja reposicionada.
     await db.negociacao.update({
@@ -1687,3 +1706,4 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
   revalidatePath("/dashboard");
   return { ok: true, conversas: novasConversas, clientes: novosClientes };
 }
+
