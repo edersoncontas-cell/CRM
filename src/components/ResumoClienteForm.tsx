@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { atualizarResumoCliente } from "@/lib/actions";
-import { Save, ChevronDown, ChevronUp, Pencil, Swords } from "lucide-react";
+import { atualizarResumoCliente, gerarResumoClienteIA } from "@/lib/actions";
+import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 const CONDICAO_OPTS = [
@@ -66,7 +66,22 @@ export function ResumoClienteForm({
   );
   const [proximaVisitaNota, setProximaVisitaNota] = useState(resumo.proximaVisitaNota ?? "");
   const [salvando, startSalvar] = useTransition();
+  const [gerando, startGerar] = useTransition();
+  const [erroIA, setErroIA] = useState<string | null>(null);
   const [negsExpand, setNegsExpand] = useState(false);
+
+  function gerarIA() {
+    setErroIA(null);
+    if (!editando) setEditando(true);
+    startGerar(async () => {
+      const r = await gerarResumoClienteIA(clienteId);
+      if (r.ok && r.resumo) {
+        setTexto(r.resumo);
+      } else {
+        setErroIA(r.erro ?? "Erro ao gerar resumo.");
+      }
+    });
+  }
 
   function salvar() {
     startSalvar(async () => {
@@ -90,12 +105,24 @@ export function ResumoClienteForm({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <h2 className="font-semibold text-slate-700">Resumo do Cliente</h2>
-        <button
-          onClick={() => setEditando((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-        >
-          <Pencil size={13} /> {editando ? "Cancelar" : "Editar"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={gerarIA}
+            disabled={gerando}
+            title="Gerar resumo automático com o Cérebro (IA), baseado nas conversas e negociações"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+            style={{ background: gerando ? "#666" : "#BFDE4D", color: "#111" }}
+          >
+            {gerando ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
+            {gerando ? "Gerando…" : "Gerar com IA"}
+          </button>
+          <button
+            onClick={() => setEditando((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+          >
+            <Pencil size={13} /> {editando ? "Cancelar" : "Editar"}
+          </button>
+        </div>
       </div>
 
       <div className="p-5 space-y-5">
@@ -172,6 +199,9 @@ export function ResumoClienteForm({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 resize-none"
               />
             </div>
+            {erroIA && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erroIA}</p>
+            )}
             <button
               onClick={salvar}
               disabled={salvando}
