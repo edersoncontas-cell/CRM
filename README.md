@@ -1,5 +1,6 @@
 # 🚜 CRM New Holland Construction + Dynapac — Vendas Inteligentes com IA
 
+
 CRM pessoal para vendedor da linha **New Holland Construction** (mini
 escavadeira E35D até motoniveladoras) e **Dynapac** (rolos de solo e asfalto) no
 **sul do Espírito Santo**. Tem um **cérebro de IA** que lê conversas, identifica
