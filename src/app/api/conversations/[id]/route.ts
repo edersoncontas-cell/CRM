@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { zapiPost, resolveZApiConfig } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // Exclui a conversa e todas as suas mensagens (cascade no schema).
+// Tambem remove o chat no Z-API para manter sincronizado com o WhatsApp.
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // 1. Busca os dados da conversa antes de excluir (precisa do phone para deletar no Z-API)
+    const conv = await db.whatsAppConversation.findUnique({
+      where: { id: params.id },
+      select: { id: true, externalPhone: true, lid: true, isGroup: true },
+    });
+
+    if (!conv) {
+      return NextResponse.json({ ok: false, erro: "conversa nao encontrada" }, { status: 404 });
+    }
+
+    // 2. Exclui do banco (cascade apaga as mensagens tambem)
     await db.whatsAppConversation.delete({ where: { id: params.id } });
+
+    // 3. Tenta deletar o chat no Z-API (best-effort, nao falha se der erro)
+    // O phone para o Z-API pode ser o externalPhone ou o lid
+    const zapiCfg = await resolveZApiConfig().catch(() => null);
+    if (zapiCfg) {
+      const phoneParaZapi = conv.isGroup
+        ? conv.externalPhone
+        : (conv.externalPhone.replace(/\D/g, "") || conv.externalPhone);
+
+      // Tenta com o phone principal
+      zapiPost("modify-chat", { phone: phoneParaZapi, action: "delete" }).catch(() => {
+        // Se falhar com phone, tenta com o LID (quando phone e um LID de 14-15 digitos)
+        if (conv.lid) {
+          zapiPost("modify-chat", { phone: conv.lid, action: "delete" }).catch(() => {});
+        }
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ ok: false, erro: "conversa não encontrada" }, { status: 404 });
+    return NextResponse.json({ ok: false, erro: "conversa nao encontrada" }, { status: 404 });
   }
 }
