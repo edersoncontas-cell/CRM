@@ -6,6 +6,28 @@ import { buildConvMatch, phoneLookupVariants } from "@/lib/whatsapp-routing";
 
 const STATUS_RANK: Record<string, number> = { QUEUED: 0, FAILED: 0, SENT: 1, UNCONFIRMED: 1, DELIVERED: 2, READ: 3 };
 
+/**
+ * Retorna true se a string parece ser um número de telefone (só dígitos, +, -, espaços, parênteses).
+ * Usada para evitar sobrescrever nomes reais com números vindos da Z-API.
+ */
+function pareceNumeroTelefone(s: string): boolean {
+  if (!s) return false;
+  // Remove espaços, +, -, (, ) e @... — se sobrar só dígitos com ≥6 chars, é telefone
+  const stripped = s.replace(/[\s+\-().@]/g, "").replace(/@.*$/, "");
+  return /^\d{6,}$/.test(stripped);
+}
+
+/**
+ * Retorna true se o novo nome é "melhor" que o atual.
+ * Melhor = nome atual é null/vazio/número e novo nome é texto real.
+ */
+function deveAtualizarNome(atual: string | null, novo: string | null): boolean {
+  if (!novo || !novo.trim()) return false;              // Novo nome vazio → não atualiza
+  if (!atual || !atual.trim()) return true;             // Atual vazio → atualiza
+  if (pareceNumeroTelefone(atual) && !pareceNumeroTelefone(novo)) return true; // Atual=número, novo=nome real → atualiza
+  return false;                                          // Atual já tem nome real → preserva
+}
+
 async function acharClienteId(phone: string): Promise<string | null> {
   const variants = phoneLookupVariants(phone);
   if (!variants.length) return null;
@@ -26,6 +48,17 @@ export async function acharOuCriarConversa(args: {
     const patch: Prisma.WhatsAppConversationUpdateInput = {};
     if (!args.isGroup && args.lid && !conv.lid) patch.lid = args.lid;
     if (args.photoUrl && !conv.contactPhotoUrl) patch.contactPhotoUrl = args.photoUrl;
+
+    // ✅ CORREÇÃO: atualiza contactName SOMENTE se o atual for null/vazio/número
+    // e o novo for um nome real de texto — jamais sobrescreve nome real com número
+    if (!args.isGroup && deveAtualizarNome(conv.contactName, args.contactName ?? null)) {
+      patch.contactName = args.contactName;
+    }
+    // Mesmo para groupName em grupos
+    if (args.isGroup && deveAtualizarNome(conv.groupName, args.groupName ?? null)) {
+      patch.groupName = args.groupName;
+    }
+
     if (Object.keys(patch).length) {
       conv = await db.whatsAppConversation.update({ where: { id: conv.id }, data: patch });
     }
