@@ -8,24 +8,29 @@ const STATUS_RANK: Record<string, number> = { QUEUED: 0, FAILED: 0, SENT: 1, UNC
 
 /**
  * Retorna true se a string parece ser um número de telefone (só dígitos, +, -, espaços, parênteses).
- * Usada para evitar sobrescrever nomes reais com números vindos da Z-API.
+ * Usada para proteger nomes reais de serem sobrescritos por números vindos da Z-API.
  */
 function pareceNumeroTelefone(s: string): boolean {
   if (!s) return false;
-  // Remove espaços, +, -, (, ) e @... — se sobrar só dígitos com ≥6 chars, é telefone
   const stripped = s.replace(/[\s+\-().@]/g, "").replace(/@.*$/, "");
   return /^\d{6,}$/.test(stripped);
 }
 
 /**
- * Retorna true se o novo nome é "melhor" que o atual.
- * Melhor = nome atual é null/vazio/número e novo nome é texto real.
+ * Decide se o nome novo é melhor que o atual.
+ * Regras:
+ *  - Novo vazio/null → nunca atualiza
+ *  - Novo parece número → nunca atualiza (mesmo se atual também for número)
+ *  - Atual null/vazio → sempre atualiza com nome real
+ *  - Atual parece número e novo é nome real → atualiza
+ *  - Atual já é nome real → preserva (não sobrescreve)
  */
 function deveAtualizarNome(atual: string | null, novo: string | null): boolean {
-  if (!novo || !novo.trim()) return false;              // Novo nome vazio → não atualiza
-  if (!atual || !atual.trim()) return true;             // Atual vazio → atualiza
-  if (pareceNumeroTelefone(atual) && !pareceNumeroTelefone(novo)) return true; // Atual=número, novo=nome real → atualiza
-  return false;                                          // Atual já tem nome real → preserva
+  if (!novo || !novo.trim()) return false;
+  if (pareceNumeroTelefone(novo)) return false;           // Novo é número → nunca usa
+  if (!atual || !atual.trim()) return true;               // Atual vazio → usa o novo
+  if (pareceNumeroTelefone(atual)) return true;           // Atual é número, novo é nome → atualiza
+  return false;                                            // Atual já é nome real → preserva
 }
 
 async function acharClienteId(phone: string): Promise<string | null> {
@@ -41,20 +46,26 @@ export async function acharConversa(phone: string, lid: string | null, isGroup: 
 }
 
 export async function acharOuCriarConversa(args: {
-  phone: string; lid: string | null; isGroup: boolean; contactName?: string | null; groupName?: string | null; photoUrl?: string | null;
+  phone: string; lid: string | null; isGroup: boolean;
+  contactName?: string | null; groupName?: string | null; photoUrl?: string | null;
 }) {
   let conv = await acharConversa(args.phone, args.lid, args.isGroup);
   if (conv) {
     const patch: Prisma.WhatsAppConversationUpdateInput = {};
+
+    // Atualiza lid se ainda não tem
     if (!args.isGroup && args.lid && !conv.lid) patch.lid = args.lid;
+
+    // Atualiza foto se ainda não tem
     if (args.photoUrl && !conv.contactPhotoUrl) patch.contactPhotoUrl = args.photoUrl;
 
-    // ✅ CORREÇÃO: atualiza contactName SOMENTE se o atual for null/vazio/número
-    // e o novo for um nome real de texto — jamais sobrescreve nome real com número
+    // ✅ CORREÇÃO PRINCIPAL: atualiza contactName se:
+    //   - Atual é null/vazio (nunca teve nome) → preenche com o nome recebido
+    //   - Atual parece número → substitui por nome real
+    //   NUNCA sobrescreve nome real com número ou com null
     if (!args.isGroup && deveAtualizarNome(conv.contactName, args.contactName ?? null)) {
       patch.contactName = args.contactName;
     }
-    // Mesmo para groupName em grupos
     if (args.isGroup && deveAtualizarNome(conv.groupName, args.groupName ?? null)) {
       patch.groupName = args.groupName;
     }
@@ -64,13 +75,15 @@ export async function acharOuCriarConversa(args: {
     }
     return { conv, criada: false };
   }
+
+  // Conversa nova: cria com os dados disponíveis
   const clienteId = !args.isGroup ? await acharClienteId(args.phone) : null;
   conv = await db.whatsAppConversation.create({
     data: {
       externalPhone: args.phone,
       lid: args.isGroup ? null : args.lid,
       isGroup: args.isGroup,
-      contactName: args.contactName ?? null,
+      contactName: args.contactName && !pareceNumeroTelefone(args.contactName) ? args.contactName : null,
       groupName: args.groupName ?? null,
       contactPhotoUrl: args.photoUrl ?? null,
       clienteId,
@@ -93,7 +106,7 @@ export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean
   if (existente) return existente;
 
   const sintetico = "imp:" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
-  const clienteId = !isGroup ? await acharClienteId(name) : null; // raramente casa, mas tenta
+  const clienteId = !isGroup ? await acharClienteId(name) : null;
   return db.whatsAppConversation.create({
     data: {
       externalPhone: sintetico,
@@ -101,7 +114,7 @@ export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean
       contactName: isGroup ? null : name,
       groupName: isGroup ? name : null,
       clienteId,
-      lastMessageAt: new Date(0), // será corrigido para a última msg importada
+      lastMessageAt: new Date(0),
     },
   });
 }
@@ -141,7 +154,6 @@ export async function importarMensagens(
   return novas.length;
 }
 
-// Atualiza a foto de perfil de uma conversa (quando ainda não temos uma).
 export async function definirFotoSeVazia(conversationId: string, photoUrl: string | null) {
   if (!photoUrl) return;
   await db.whatsAppConversation.updateMany({
@@ -196,7 +208,6 @@ export async function existeZapiId(zapiMessageId?: string | null): Promise<boole
   return !!(await db.whatsAppMessage.findFirst({ where: { zapiMessageId }, select: { id: true } }));
 }
 
-// Acha eco recente do CRM (mesmo corpo, com/sem prefixo *Operador:*) em ≤5 min.
 export async function acharEcoRecente(conversationId: string, body: string) {
   const desde = new Date(Date.now() - 5 * 60 * 1000);
   const cands = await db.whatsAppMessage.findMany({
