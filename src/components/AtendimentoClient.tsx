@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Brain, Bell, Trash2, Pencil, X, FileText, KanbanSquare,
+  DownloadCloud, Loader2, Brain, Bell, Trash2, Pencil, X, FileText, KanbanSquare, RefreshCw,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -76,6 +76,8 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [sincMsg, setSincMsg] = useState<string | null>(null);
   const [gerandoResumo, setGerandoResumo] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null }>>({});
@@ -137,6 +139,28 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     }
     if (selId === c.id) { setSelId(null); setMensagens([]); }
     router.refresh();
+  }
+
+
+  // Sincroniza conversas: remove do CRM as que foram apagadas no WhatsApp.
+  async function sincronizarConversas() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    setSincMsg("Sincronizando...");
+    try {
+      const r = await fetch("/api/whatsapp/sincronizar").then((res) => res.json()).catch(() => null);
+      if (r?.ok) {
+        setSincMsg(r.removidos > 0 ? `✅ ${r.removidos} removida(s)` : "✅ Sincronizado");
+      } else {
+        setSincMsg("❌ " + (r?.erro ?? "Erro"));
+      }
+      router.refresh();
+    } catch {
+      setSincMsg("❌ Erro");
+    } finally {
+      setSincronizando(false);
+      setTimeout(() => setSincMsg(null), 5000);
+    }
   }
 
   async function setAudit(v: boolean) {
@@ -440,6 +464,16 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             >
               {importando ? <Loader2 size={13} className="animate-spin" /> : <DownloadCloud size={13} />}
               <span className="hidden sm:inline">{importMsg ?? "Importar"}</span>
+            </button>
+            {/* Sincronizar conversas com WhatsApp */}
+            <button
+              onClick={sincronizarConversas}
+              disabled={sincronizando}
+              title="Sincronizar: remove conversas apagadas no WhatsApp"
+              className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25 disabled:opacity-60"
+            >
+              {sincronizando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              <span className="hidden sm:inline">{sincMsg ?? "Sincronizar"}</span>
             </button>
             {/* Configuração do Cérebro (IA) */}
             <div className="relative">
