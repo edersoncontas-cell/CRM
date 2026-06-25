@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
     db.whatsAppMessage.findMany({
       where: { conversationId: conv.id, isDraft: false },
       orderBy: { sentAt: "asc" },
-      take: 80, // histórico bem maior — o Cérebro precisa ver toda a conversa
+      take: 120, // histórico amplo — o Cérebro precisa ver toda a conversa
     }),
   ]);
 
@@ -290,7 +290,7 @@ export async function POST(req: NextRequest) {
   const contextoAcademia = montarContextoAcademia(historicoCompleto);
 
   const reply = await gerarRespostaCerebro({
-    historico: historicoCompleto.slice(-6000), // máximo 6000 chars de histórico
+    historico: historicoCompleto.slice(-9000), // mais histórico para 120 msgs // máximo 6000 chars de histórico
     ultimasMensagens,
     contextoCliente,
     contextoAcademia,
