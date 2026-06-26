@@ -1126,23 +1126,36 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
   const [cliente, conversas, negociacoes, visitas] = await Promise.all([
     db.cliente.findUnique({
       where: { id: clienteId },
-      select: { nome: true, telefone: true, municipio: { select: { nome: true } } },
-    }),
-    db.whatsAppConversation.findFirst({
-      where: { clienteId },
-      include: {
-        messages: {
-          orderBy: { sentAt: "asc" },
-          take: 80,
-          select: { body: true, direction: true, sentAt: true, isDraft: true },
-        },
+      select: {
+        id: true, nome: true, telefone: true, status: true,
+        municipio: { select: { nome: true } },
+        resumoTexto: true, perfilIA: true,
+        interesseFuturo: true, interesseFuturoNota: true,
       },
     }),
+    db.whatsAppConversation.findMany({
+      where: { clienteId },
+      select: {
+        id: true,
+        contactName: true,
+        lastMessageAt: true,
+        mensagens: {
+          orderBy: { sentAt: "asc" },
+          take: 80,
+          select: { direction: true, body: true, sentAt: true },
+        },
+      } as any,
+      take: 3,
+    } as any),
     db.negociacao.findMany({
       where: { clienteId },
       orderBy: { criadoEm: "desc" },
-      take: 10,
-      select: { maquinaModelo: true, valor: true, estagio: true, status: true, condicaoPagamento: true, concorrenteMencionado: true, ultimoContato: true },
+      take: 5,
+      select: {
+        maquinaModelo: true, valor: true, condicaoPagamento: true,
+        concorrenteMencionado: true, estagio: true, status: true,
+        motivoPerda: true, ultimoContato: true,
+      },
     }),
     db.visita.findMany({
       where: { clienteId },
@@ -1154,63 +1167,83 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
 
   if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
-  const mensagens = conversas?.messages?.filter((m) => !m.isDraft && m.body?.trim()) ?? [];
-
-  // Monta o contexto para a IA
-  const partes: string[] = [];
-
-  partes.push(`## Cliente: ${cliente.nome}`);
-  if (cliente.municipio) partes.push(`Município: ${cliente.municipio.nome}`);
-  if (cliente.telefone) partes.push(`Telefone: ${cliente.telefone}`);
-
-  if (negociacoes.length > 0) {
-    partes.push("\n## Negociações registradas:");
-    for (const n of negociacoes) {
-      const partes2 = [n.maquinaModelo ?? "máquina a definir"];
-      if (n.valor) partes2.push(`R$ ${n.valor.toLocaleString("pt-BR")}`);
-      if (n.condicaoPagamento) partes2.push(n.condicaoPagamento);
-      if (n.concorrenteMencionado) partes2.push(`concorrente: ${n.concorrenteMencionado}`);
-      partes2.push(`status: ${n.status} / estagio: ${n.estagio}`);
-      partes.push(`- ${partes2.join(" · ")}`);
+  // Monta o histórico de mensagens do WhatsApp
+  const mensagensWA: string[] = [];
+  for (const conv of (conversas as any[])) {
+    const msgs = (conv.mensagens ?? []) as { direction: string; body: string; sentAt: Date }[];
+    for (const m of msgs) {
+      const hora = new Date(m.sentAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const autor = m.direction === "OUT" ? "Ederson" : cliente.nome;
+      mensagensWA.push(`[${hora}] ${autor}: ${m.body}`);
     }
   }
 
-  if (visitas.length > 0) {
-    partes.push("\n## Visitas realizadas:");
-    for (const v of visitas) {
-      const data = new Date(v.data).toLocaleDateString("pt-BR");
-      partes.push(`- ${data}${v.observacao ? ` — ${v.observacao}` : ""}`);
-    }
+  const temHistoricoWA = mensagensWA.length > 0;
+  const temNegociacoes = negociacoes.length > 0;
+  const temVisitas = visitas.length > 0;
+
+  if (!temHistoricoWA && !temNegociacoes && !temVisitas) {
+    return { ok: false, erro: "Sem histórico suficiente para gerar resumo. Importe conversas do WhatsApp primeiro." };
   }
 
-  if (mensagens.length > 0) {
-    partes.push("\n## Histórico de mensagens WhatsApp (recentes):");
-    const thread = mensagens
-      .map((m) => `[${m.direction === "IN" ? "Cliente" : "Eu"}]: ${m.body}`)
-      .join("\n");
-    partes.push(thread.slice(0, 6000));
-  }
+  const prompt = `Você é o Cérebro de vendas do Ederson, vendedor New Holland e Dynapac no sul do Espírito Santo.
 
-  if (partes.length <= 3) return { ok: false, erro: "Sem histórico suficiente para gerar resumo." };
+Analise TODOS os dados abaixo do cliente e gere um resumo executivo completo e útil para o Ederson.
+
+# CLIENTE: ${cliente.nome}
+- Telefone: ${cliente.telefone ?? "não cadastrado"}
+- Município: ${(cliente as any).municipio?.nome ?? "não cadastrado"}
+- Status: ${cliente.status ?? "potencial"}
+${cliente.interesseFuturo ? `- ⏳ Interesse futuro: ${cliente.interesseFuturoNota ?? "sim"}` : ""}
+${(cliente as any).perfilIA ? `- Perfil IA anterior: ${(cliente as any).perfilIA}` : ""}
+
+${temNegociacoes ? `# NEGOCIAÇÕES:
+${negociacoes.map((n) => {
+  const diasStr = n.ultimoContato ? `${Math.floor((Date.now() - new Date(n.ultimoContato).getTime()) / 86400000)}d sem contato` : "";
+  return `- ${n.maquinaModelo ?? "?"}: R$ ${n.valor?.toLocaleString("pt-BR") ?? "?"} | ${n.estagio} | ${n.status} | ${n.condicaoPagamento ?? ""} | ${n.concorrenteMencionado ? `vs ${n.concorrenteMencionado}` : ""} ${diasStr} ${n.motivoPerda ? `| Perda: ${n.motivoPerda}` : ""}`;
+}).join("\n")}
+` : ""}
+
+${temVisitas ? `# VISITAS:
+${visitas.map((v) => `- ${new Date(v.data).toLocaleDateString("pt-BR")}: ${v.observacao ?? "sem observação"}`).join("\n")}
+` : ""}
+
+${temHistoricoWA ? `# CONVERSA NO WHATSAPP (${mensagensWA.length} mensagens):
+${mensagensWA.join("\n")}
+` : "# Sem histórico de WhatsApp disponível"}
+
+---
+Gere um resumo executivo em português brasileiro com:
+1. **Situação atual** do cliente (interesse, temperatura, momento de compra)
+2. **O que ele quer** (máquina, valor, condição)
+3. **Principais objeções ou pendências** se houver
+4. **Próximo passo recomendado** para Ederson
+5. Se houver dados da conversa, extraia insights estratégicos
+
+Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos pontos chave.`;
 
   try {
-    const { resumirConversaIA } = await import("@/lib/ai");
-    const resumo = await resumirConversaIA(partes.join("\n"));
-    if (!resumo) return { ok: false, erro: "IA não retornou conteúdo." };
+    const client = new (await import("@anthropic-ai/sdk")).default({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const res = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const resumo = (res.content[0] as any).text ?? "";
+    if (!resumo) return { ok: false, erro: "IA não retornou resumo." };
 
-    // Salva no banco
+    // Salva automaticamente no cadastro do cliente
     await db.cliente.update({
       where: { id: clienteId },
-      data: { resumoTexto: resumo } as Record<string, unknown>,
+      data: { resumoTexto: resumo } as any,
     });
-    revalidatePath(`/clientes/${clienteId}`);
+
     return { ok: true, resumo };
   } catch (e) {
     return { ok: false, erro: String(e) };
   }
 }
 
-// Versão legada mantida por compatibilidade com chamadas existentes.
 export async function gerarResumoConversa(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
   "use server";
   return gerarResumoClienteIA(clienteId);
