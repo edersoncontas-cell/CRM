@@ -44,18 +44,8 @@ async function buscarContextoCRM(mensagem: string) {
     }),
     db.negociacao.findMany({
       where: { status: "aberta" },
-      orderBy: { ultimoContato: "desc" },
       take: 10,
       include: { cliente: { select: { nome: true } } },
-      select: {
-        id: true,
-        maquinaModelo: true,
-        valor: true,
-        estagio: true,
-        termometro: true,
-        ultimoContato: true,
-        cliente: { select: { nome: true } },
-      } as any,
     }),
   ]);
 
