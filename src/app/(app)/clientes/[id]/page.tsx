@@ -42,16 +42,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
   }).catch(() => null as ConvRow | null),
   ]);
 
-  // Gerar resumo automaticamente se há conversa no WA e o cliente não tem resumo ainda
-const resumoExistente = (cliente as { resumoTexto?: string }).resumoTexto;
-if (waConv && !resumoExistente) {
-  // Importar e chamar em background (fire-and-forget) sem bloquear a página
-  import("@/lib/actions").then(({ gerarResumoClienteIA }) => {
-    gerarResumoClienteIA(cliente.id).catch(() => {});
-  }).catch(() => {});
-}
-
-const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
+  const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
   const diasSemContato = cliente.ultimoContato ? diasDesde(cliente.ultimoContato) : null;
 
   const statusBadge =
@@ -212,6 +203,7 @@ const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "
       <ResumoClienteForm
         clienteId={cliente.id}
         resumo={resumo}
+        temConversa={!!waConv}
         negociacoes={cliente.negociacoes.map((n) => ({
           id: n.id,
           maquinaModelo: n.maquinaModelo,
