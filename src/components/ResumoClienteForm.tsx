@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { atualizarResumoCliente, gerarResumoClienteIA } from "@/lib/actions";
 import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -54,6 +54,7 @@ export function ResumoClienteForm({
   clienteId: string;
   resumo: Resumo;
   negociacoes: Negociacao[];
+  temConversa?: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
@@ -69,6 +70,16 @@ export function ResumoClienteForm({
   const [gerando, startGerar] = useTransition();
   const [erroIA, setErroIA] = useState<string | null>(null);
   const [negsExpand, setNegsExpand] = useState(false);
+
+  // Auto-gera resumo ao montar se o cliente tem conversa no WA mas não tem resumo ainda
+  useEffect(() => {
+    if (temConversa && !resumo.texto && !resumo.maquinas) {
+      // Pequeno delay para não sobrecarregar no carregamento inicial
+      const t = setTimeout(() => gerarIA(), 1500);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function gerarIA() {
     setErroIA(null);
