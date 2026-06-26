@@ -251,6 +251,8 @@ export function EditarClienteForm({
           max-width: 100%;
           -webkit-appearance: none;
           appearance: none;
+          resize: none;
+          overflow: hidden;
         }
         .campo:focus {
           border-color: #ffb81c;
@@ -262,6 +264,12 @@ export function EditarClienteForm({
           box-sizing: border-box;
           -webkit-appearance: none;
           appearance: none;
+          padding-right: 2.5rem;
+          overflow: hidden;
+        }
+        select.campo {
+          background-image: none;
+          padding-right: .75rem;
         }
       `}</style>
     </>
