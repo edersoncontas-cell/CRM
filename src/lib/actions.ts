@@ -1,4 +1,5 @@
 "use server";
+import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
@@ -1223,7 +1224,7 @@ Gere um resumo executivo em português brasileiro com:
 Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos pontos chave.`;
 
   try {
-    const client = new (await import("@anthropic-ai/sdk")).default({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const res = await client.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 1024,
