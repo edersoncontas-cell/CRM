@@ -138,9 +138,9 @@ export default async function ClientesPage({
         )}
       </form>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 lg:items-start">
         {/* Mapeamento por município */}
-        <div className="rounded-2xl p-5 lg:col-span-1" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+        <div className="rounded-2xl p-4 lg:col-span-1 lg:sticky lg:top-4 lg:self-start" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
           <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
             <MapPin size={18} className="text-brand-600" /> Mapeamento
           </div>
@@ -150,7 +150,7 @@ export default async function ClientesPage({
           >
             Todos os municípios
           </Link>
-          <div className="max-h-[60vh] space-y-1 overflow-y-auto pr-1">
+          <div className="max-h-[40vh] space-y-1 overflow-y-auto pr-1 lg:max-h-[60vh]">
             {municipios.map((m) => {
               const intensidade = m._count.clientes / maxClientes;
               return (
