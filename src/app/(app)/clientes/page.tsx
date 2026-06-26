@@ -5,7 +5,7 @@ import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ClienteAcoes } from "@/components/ClienteAcoes";
-import { garantirRegioes, limparContatosDescartadhos } from "@/lib/regioes";
+import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
 import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
