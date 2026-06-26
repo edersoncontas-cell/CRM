@@ -447,7 +447,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
 
 
   return (
-    <div className="-m-4 flex h-[calc(100dvh)] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#111b21" }}>
+    <div className="-m-4 flex h-[100dvh] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#111b21" }}>
       {/* ── Lista ── */}
       <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#2a3942", background: "#111b21" }}>
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "#008069" }}>
@@ -540,7 +540,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
       </aside>
 
       {/* ── Painel ── */}
-      <section className={`flex flex-1 flex-col ${sel ? "flex" : "hidden lg:flex"}`}>
+      <section className={`flex flex-1 flex-col min-h-0 ${sel ? "flex" : "hidden lg:flex"}`}>
         {!sel ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3" style={{ background: "#111b21", color: "#8696a0" }}>
             <MessageCircle size={56} strokeWidth={1} />
@@ -549,7 +549,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: "#008069" }}>
+            <div className="flex items-center gap-3 px-4 py-2.5 sticky top-0 z-10 shrink-0" style={{ background: "#008069" }}>
               <button onClick={() => setSelId(null)} className="rounded-full p-1 text-white/90 hover:bg-white/10 lg:hidden"><ArrowLeft size={20} /></button>
               <Avatar nome={nomeConv(sel)} isGroup={sel.isGroup} photo={sel.contactPhotoUrl} size={36} />
               <div className="min-w-0 flex-1">
@@ -640,7 +640,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                 if (!el) return;
                 autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
               }}
-              className="flex-1 overflow-y-auto px-4 py-4 sm:px-10" style={{ background: "#0b1014" }}>
+              className="flex-1 overflow-y-auto px-4 py-4 sm:px-10 min-h-0" style={{ background: "#0b1014" }}>
               {mensagens.map((m) => {
                 // Rascunho da Agnes: bloco destacado com Enviar / Editar / Descartar.
                 if (m.isDraft) {
@@ -697,7 +697,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             </div>
 
             {/* Input */}
-            <div className="flex items-end gap-2 px-3 py-2.5" style={{ background: "#1e2a2a" }}>
+            <div className="flex items-end gap-2 px-3 py-2.5 shrink-0" style={{ background: "#1e2a2a" }}>
               <textarea
                 value={texto}
                 onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
