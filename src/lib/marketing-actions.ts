@@ -11,10 +11,12 @@ export async function gerarPostAction(formData: FormData) {
   const marca = (formData.get("marca") as string) || null;
   const categoria = (formData.get("categoria") as string) || null;
   const canal = (formData.get("canal") as string) || "ambos";
+    const modelo = (formData.get("modelo") as string) || null;
 
-  const where: { proprio: boolean; marca?: string; categoria?: string } = { proprio: true };
+  const where: { proprio: boolean; marca?: string; modelo?: string; categoria?: string } = { proprio: true };
   if (marca) where.marca = marca;
   if (categoria) where.categoria = categoria;
+    if (modelo) where.modelo = modelo;
 
   const maquinas = await db.maquina.findMany({ where });
   const maquina = maquinas.length
@@ -70,7 +72,7 @@ export async function pedirAlteracaoCampanha(id: string, feedback: string) {
   const campanha = await db.campanhaMarketing.findUnique({ where: { id } });
   if (!campanha) return;
 
-  const where: { proprio: boolean; marca?: string; categoria?: string } = { proprio: true };
+  const where: { proprio: boolean; marca?: string; modelo?: string; categoria?: string } = { proprio: true };
   if (campanha.marca) where.marca = campanha.marca;
   if (campanha.categoria) where.categoria = campanha.categoria;
 
