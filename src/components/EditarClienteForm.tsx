@@ -218,7 +218,7 @@ export function EditarClienteForm({
                       name="interesseFuturoData"
                       defaultValue={cliente.interesseFuturoData ?? ""}
                       className="campo"
-                      style={{ width: "100%", boxSizing: "border-box", minHeight: "38px" }}
+                      style={{ width: "100%", boxSizing: "border-box", minHeight: "38px", maxWidth: "100%" }}
                     />
                   </Campo>
                   <Campo label="Aguardando o quê?">
@@ -264,12 +264,10 @@ export function EditarClienteForm({
           box-sizing: border-box;
           -webkit-appearance: none;
           appearance: none;
-          padding-right: 2.5rem;
           overflow: hidden;
         }
         select.campo {
           background-image: none;
-          padding-right: .75rem;
         }
       `}</style>
     </>
