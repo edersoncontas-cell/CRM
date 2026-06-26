@@ -33,13 +33,10 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };
-  type ConvRow = { id: string; _count?: { mensagens: number } };
+  type ConvRow = { id: string };
   const [frotaRows, waConv] = await Promise.all([
     db.$queryRawUnsafe<FrotaRow[]>(`SELECT id, marca, modelo FROM "ClienteMaquina" WHERE "clienteId" = $1 ORDER BY "criadoEm" ASC`, cliente.id).catch(() => [] as FrotaRow[]),
-    db.whatsAppConversation.findFirst({
-    where: { clienteId: cliente.id },
-    select: { id: true, _count: { select: { mensagens: true } } },
-  }).catch(() => null as ConvRow | null),
+    db.whatsAppConversation.findFirst({ where: { clienteId: cliente.id }, select: { id: true } }).catch(() => null as ConvRow | null),
   ]);
 
   const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
