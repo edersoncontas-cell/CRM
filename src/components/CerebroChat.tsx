@@ -177,29 +177,29 @@ export function CerebroChat() {
               >
               <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
                       <Brain size={18} style={{ color: "#BFDE4D" }} />
-                      <span className="text-sm font-bold text-white">Chat com o Cérebro</span>span>
-                      <span className="ml-auto text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>span>
-              </div>div>
+                      <span className="text-sm font-bold text-white">Chat com o Cérebro</span>
+                      <span className="ml-auto text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
+              </div>
               <div ref={containerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {msgs.length === 0 && !dragOver && (
                           <div className="flex flex-col items-center justify-center py-16 text-center">
                                       <Brain size={40} className="mb-4" style={{ color: "rgba(191,222,77,0.3)" }} />
                                       <p className="text-sm text-zinc-500 max-w-xs">
                                                     Fale comigo. Posso analisar dados, criar/editar clientes, comparar negociações, ler arquivos e muito mais.
-                                      </p>p>
-                          </div>div>
+                                      </p>
+                          </div>
                       )}
                 {dragOver && (
                           <div className="flex items-center justify-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: "#BFDE4D" }}>
-                                      <p className="text-sm font-semibold" style={{ color: "#BFDE4D" }}>Solte os arquivos aqui</p>p>
-                          </div>div>
+                                      <p className="text-sm font-semibold" style={{ color: "#BFDE4D" }}>Solte os arquivos aqui</p>
+                          </div>
                       )}
                 {msgs.map((m, i) => (
                           <div key={i} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                             {m.role === "assistant" && (
                                           <div className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center" style={{ background: "rgba(191,222,77,0.15)", border: "1px solid rgba(191,222,77,0.3)" }}>
                                                           <Brain size={16} style={{ color: "#BFDE4D" }} />
-                                          </div>div>
+                                          </div>
                                       )}
                                       <div
                                                       className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${m.role === "user" ? "rounded-tr-sm whitespace-pre-wrap" : "rounded-tl-sm"}`}
@@ -213,9 +213,9 @@ export function CerebroChat() {
                                                                         {m.arquivos.map((nome) => (
                                                                                             <span key={nome} className="rounded px-2 py-0.5 text-[10px] font-mono" style={{ background: "rgba(191,222,77,0.1)", color: "#BFDE4D" }}>
                                                                                                                   📎 {nome}
-                                                                                              </span>span>
+                                                                                              </span>
                                                                                           ))}
-                                                                      </div>div>
+                                                                      </div>
                                                     )}
                                         {m.role === "assistant" && m.content ? (
                                                                       <div dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }} />
@@ -223,19 +223,19 @@ export function CerebroChat() {
                                                                       m.content
                                                                     ) : (
                                                                       m.role === "assistant" && carregando && i === msgs.length - 1
-                                                                        ? <span className="flex items-center gap-1 text-zinc-500"><Loader2 size={14} className="animate-spin" /> Pensando…</span>span>
+                                                                        ? <span className="flex items-center gap-1 text-zinc-500"><Loader2 size={14} className="animate-spin" /> Pensando…</span>
                                                                         : null
                                                                     )}
-                                      </div>div>
+                                      </div>
                             {m.role === "user" && (
                                           <div className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center bg-brand-800">
                                                           <User size={16} className="text-white" />
-                                          </div>div>
+                                          </div>
                                       )}
-                          </div>div>
+                          </div>
                         ))}
                       <div ref={bottomRef} />
-              </div>div>
+              </div>
           {arquivos.length > 0 && (
                         <div className="px-4 py-2 flex flex-wrap gap-2 border-t border-zinc-800">
                           {arquivos.map((f, i) => (
@@ -243,10 +243,10 @@ export function CerebroChat() {
                                                     <Paperclip size={11} /> {f.name}
                                                     <button onClick={() => setArquivos((prev) => prev.filter((_, j) => j !== i))} className="ml-1 text-zinc-500 hover:text-red-400">
                                                                     <X size={11} />
-                                                    </button>button>
-                                      </div>div>
+                                                    </button>
+                                      </div>
                                     ))}
-                        </div>div>
+                        </div>
               )}
               <div className="border-t border-zinc-800 p-3 flex items-end gap-2">
                       <input ref={fileRef} type="file" multiple className="hidden"
@@ -255,7 +255,7 @@ export function CerebroChat() {
                                 />
                       <button onClick={() => fileRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition" title="Anexar arquivo">
                                 <Paperclip size={18} />
-                      </button>button>
+                      </button>
                       <textarea
                                   ref={inputRef}
                                   value={input}
@@ -273,8 +273,8 @@ export function CerebroChat() {
                                   style={{ background: "rgba(191,222,77,0.15)", color: "#BFDE4D" }}
                                 >
                         {carregando ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                      </button>button>
-              </div>div>
-        </div>div>
+                      </button>
+              </div>
+        </div>
       );
 }</div>
