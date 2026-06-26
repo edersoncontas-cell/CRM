@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { useState, useTransition, useRef } from "react";
+import { Sparkles, Loader2, ImagePlus, X } from "lucide-react";
 import { gerarPostAction } from "@/lib/marketing-actions";
 
 const TIPOS = [
@@ -38,6 +38,10 @@ export function GerarPostForm({
   const [gerado, setGerado] = useState(false);
   const [marcaSelecionada, setMarcaSelecionada] = useState("");
   const [modeloSelecionado, setModeloSelecionado] = useState("");
+  const [imagemPreview, setImagemPreview] = useState<string | null>(null);
+  const [imagemBase64, setImagemBase64] = useState<string | null>(null);
+  const [imagemMime, setImagemMime] = useState<string>("image/jpeg");
+  const inputFileRef = useRef<HTMLInputElement>(null);
 
   const modelosFiltrados = marcaSelecionada
     ? [...new Set(
@@ -52,9 +56,34 @@ export function GerarPostForm({
     setModeloSelecionado("");
   };
 
+  const handleImagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const mime = file.type || "image/jpeg";
+    setImagemMime(mime);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setImagemPreview(dataUrl);
+      const base64 = dataUrl.split(",")[1] ?? "";
+      setImagemBase64(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removerImagem = () => {
+    setImagemPreview(null);
+    setImagemBase64(null);
+    if (inputFileRef.current) inputFileRef.current.value = "";
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    if (imagemBase64) {
+      fd.set("imagemBase64", imagemBase64);
+      fd.set("imagemMime", imagemMime);
+    }
     startTransition(async () => {
       await gerarPostAction(fd);
       setGerado(true);
@@ -139,6 +168,40 @@ export function GerarPostForm({
             <option key={c.valor} value={c.valor}>{c.label}</option>
           ))}
         </select>
+      </div>
+
+      <div className="w-full">
+        <label className="mb-1 block text-xs font-semibold text-slate-600">
+          📷 Foto da máquina <span className="font-normal text-slate-400">(opcional — a IA usará a imagem)</span>
+        </label>
+        {imagemPreview ? (
+          <div className="relative inline-block">
+            <img
+              src={imagemPreview}
+              alt="Preview"
+              className="h-28 w-auto rounded-xl border border-fuchsia-300 object-cover shadow"
+            />
+            <button
+              type="button"
+              onClick={removerImagem}
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow hover:bg-red-600"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-fuchsia-300 bg-white px-4 py-3 text-sm text-slate-500 transition hover:border-fuchsia-500 hover:text-fuchsia-600">
+            <ImagePlus size={18} />
+            <span>Clique para adicionar uma foto</span>
+            <input
+              ref={inputFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImagemChange}
+            />
+          </label>
+        )}
       </div>
 
       <button
