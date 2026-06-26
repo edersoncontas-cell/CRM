@@ -5,7 +5,7 @@ import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ClienteAcoes } from "@/components/ClienteAcoes";
-import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
+import { garantirRegioes, limparContatosDescartadhos } from "@/lib/regioes";
 import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -122,7 +122,7 @@ export default async function ClientesPage({
             name="q"
             defaultValue={busca}
             placeholder="Buscar cliente por nome ou telefone..."
-            className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]" style={{ background: "#18181b", borderColor: "#27272a", color: "#fafafa" }}
+            className="w-full rounded-lg border py-2 !pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]" style={{ background: "#18181b", borderColor: "#27272a", color: "#fafafa" }}
           />
         </div>
         <button className="rounded-lg px-4 py-2 text-sm font-semibold text-black transition" style={{ background: "#BFDE4D" }}>
