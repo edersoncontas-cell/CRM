@@ -11,19 +11,25 @@ export async function gerarPostAction(formData: FormData) {
   const marca = (formData.get("marca") as string) || null;
   const categoria = (formData.get("categoria") as string) || null;
   const canal = (formData.get("canal") as string) || "ambos";
-    const modelo = (formData.get("modelo") as string) || null;
+  const modelo = (formData.get("modelo") as string) || null;
+  const imagemBase64 = (formData.get("imagemBase64") as string) || null;
+  const imagemMime = (formData.get("imagemMime") as string) || "image/jpeg";
 
   const where: { proprio: boolean; marca?: string; modelo?: string; categoria?: string } = { proprio: true };
   if (marca) where.marca = marca;
   if (categoria) where.categoria = categoria;
-    if (modelo) where.modelo = modelo;
+  if (modelo) where.modelo = modelo;
 
   const maquinas = await db.maquina.findMany({ where });
   const maquina = maquinas.length
     ? maquinas[Math.floor(Math.random() * maquinas.length)]
     : null;
 
-  const post = await gerarPostMarketingIA(maquina, tipo);
+  const imagem = imagemBase64
+    ? { base64: imagemBase64, mediaType: imagemMime as "image/jpeg" | "image/png" | "image/webp" | "image/gif" }
+    : undefined;
+
+  const post = await gerarPostMarketingIA(maquina, tipo, undefined, undefined, imagem);
 
   const campanha = await db.campanhaMarketing.create({
     data: {
@@ -43,7 +49,7 @@ export async function gerarPostAction(formData: FormData) {
     descricao: `Post de marketing gerado: "${post.titulo}"`,
     entidade: "CampanhaMarketing",
     entidadeId: campanha.id,
-    extra: { tipo, canal, marca: campanha.marca, categoria: campanha.categoria },
+    extra: { tipo, canal, marca: campanha.marca, categoria: campanha.categoria, comImagem: !!imagemBase64 },
   });
 
   revalidatePath("/marketing");
@@ -111,7 +117,6 @@ export async function enviarCampanha(
     telefone: { not: null };
     municipioId?: string;
     negociacoes?: object;
-    // Exclui clientes de regiões fora da minha área (outros vendedores).
     NOT?: object;
   } = {
     telefone: { not: null },
