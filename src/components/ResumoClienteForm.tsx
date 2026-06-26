@@ -50,6 +50,7 @@ export function ResumoClienteForm({
   clienteId,
   resumo,
   negociacoes,
+  temConversa = false,
 }: {
   clienteId: string;
   resumo: Resumo;
