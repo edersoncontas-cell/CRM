@@ -3,177 +3,179 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* ── Performance mobile: remove delay de 300ms em taps ── */
-* {
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+/* IMPORTANTE: NÃO aplicar touch-action em * — bloqueia scroll no iOS */
+a, button, [role="button"], label, input[type="checkbox"], input[type="radio"], input[type="submit"], input[type="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 /* Base */
 html {
-  /* Scroll suave em iOS (momentum scrolling) */
+    /* Scroll suave em iOS (momentum scrolling) */
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-  text-size-adjust: 100%;
-  -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    /* Altura real no mobile (considera barra de endereços) */
+  height: -webkit-fill-available;
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  /* Evita render extra ao rolar */
-  overscroll-behavior: none;
+    @apply bg-slate-50 text-slate-800 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* Evita render extra ao rolar */
+    overscroll-behavior-y: none;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
 }
 
-/* ── Contêineres de scroll: GPU-accelerated ── */
+/* ── Scroll fluido no mobile — NÃO usar will-change em tudo ── */
 .overflow-y-auto,
 .overflow-x-auto,
-.overflow-auto,
-[style*="overflow-y: auto"],
-[style*="overflow-y:auto"] {
-  -webkit-overflow-scrolling: touch;
-  will-change: scroll-position;
-  transform: translateZ(0);
+.overflow-auto {
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Seleção de texto */
 ::selection {
-  @apply bg-brand-200 text-brand-900;
+    @apply bg-brand-200 text-brand-900;
 }
 
 /* Scrollbar elegante */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+    width: 4px;
+    height: 4px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+    @apply bg-transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-300;
+    @apply rounded-full bg-slate-300;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400;
+    @apply bg-slate-400;
 }
 
 /* Focus ring global */
 :focus-visible {
-  @apply outline-none ring-2 ring-brand-500 ring-offset-2;
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2;
 }
 
 /* Inputs e selects consistentes */
 input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
-  @apply rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-shadow;
-  /* Evitar zoom automático no iOS ao focar em inputs */
-  font-size: max(16px, 1rem);
+    @apply rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-shadow;
+    /* Evitar zoom automático no iOS ao focar em inputs */
+    font-size: max(16px, 1rem);
+    /* Garantir que não ultrapassem o container */
+    max-width: 100%;
+    box-sizing: border-box;
 }
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
-  @apply border-brand-400 outline-none ring-2 ring-brand-100;
+    @apply border-brand-400 outline-none ring-2 ring-brand-100;
+}
+
+/* ── Input type=date: normalizar em iOS ── */
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    width: 100%;
+    min-height: 38px;
 }
 
 /* ── Botões e links: resposta mais rápida ── */
 a, button {
-  @apply transition-all duration-150;
-  cursor: pointer;
-  /* Feedback visual imediato no toque */
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+    @apply transition-all duration-150;
+    cursor: pointer;
 }
 
 button:active {
-  transform: scale(0.98);
+    transform: scale(0.98);
 }
 
 /* ── Layout responsivo: prevenir overflow horizontal ── */
 main, section, article, aside, header, footer, nav {
-  max-width: 100%;
-  box-sizing: border-box;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 img, video, iframe {
-  max-width: 100%;
-  height: auto;
+    max-width: 100%;
+    height: auto;
 }
 
 /* ── Kanban e painéis horizontais: scroll suave ── */
 .kanban-scroll,
 [class*="overflow-x"] {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ── Sidebar: fixa sem flicker ── */
 aside {
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-/* ── Cards e modais: renderização GPU ── */
-.rounded-xl,
-.rounded-2xl,
-.shadow-xl,
-.shadow-lg {
-  transform: translateZ(0);
-  backface-visibility: hidden;
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
 /* ── Animações suaves ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {
-  animation: fadeIn 0.15s ease-out;
+    animation: fadeIn 0.15s ease-out;
 }
 
 /* Impressão de propostas */
 @media print {
-  body {
-    @apply bg-white;
-  }
-  .print\:hidden {
-    display: none !important;
-  }
-  aside {
-    display: none !important;
-  }
+    body {
+          @apply bg-white;
+    }
+    .print\:hidden {
+          display: none !important;
+    }
+    aside {
+          display: none !important;
+    }
 }
 
 /* ── Mobile: ajustes específicos ── */
 @media (max-width: 640px) {
-  /* Texto mínimo legível */
+    /* Texto mínimo legível */
   body {
-    font-size: 15px;
+        font-size: 15px;
   }
-  
+
   /* Evitar overflow horizontal */
   .container, main {
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
   }
 
   /* Padding inferior para iOS home bar */
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+        padding-bottom: env(safe-area-inset-bottom, 16px);
   }
-  
+
   /* Botões maiores para toque fácil */
   button {
-    min-height: 44px;
-    min-width: 44px;
+        min-height: 44px;
+        min-width: 44px;
   }
-  
+
   /* Tabelas: scroll horizontal */
   table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
   }
 }
