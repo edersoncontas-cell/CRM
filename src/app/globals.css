@@ -16,12 +16,12 @@ a, button, [role="button"], label, input[type="checkbox"], input[type="radio"], 
 /* Base */
 html {
     /* Scroll suave em iOS (momentum scrolling) */
-  -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
     /* Altura real no mobile (considera barra de endereços) */
-  height: -webkit-fill-available;
+    height: -webkit-fill-available;
 }
 
 body {
@@ -75,6 +75,11 @@ textarea {
     /* Garantir que não ultrapassem o container */
     max-width: 100%;
     box-sizing: border-box;
+    /* Remover resize handle nos textareas */
+    resize: none;
+    /* Remover aparência nativa que pode causar artefatos visuais */
+    -webkit-appearance: none;
+    appearance: none;
 }
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
@@ -89,6 +94,16 @@ input[type="date"] {
     display: block;
     width: 100%;
     min-height: 38px;
+    box-sizing: border-box;
+}
+
+/* ── Select: remover aparência nativa problemática ── */
+select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.25rem;
+    cursor: pointer;
 }
 
 /* ── Botões e links: resposta mais rápida ── */
@@ -138,44 +153,44 @@ aside {
 /* Impressão de propostas */
 @media print {
     body {
-          @apply bg-white;
+        @apply bg-white;
     }
     .print\:hidden {
-          display: none !important;
+        display: none !important;
     }
     aside {
-          display: none !important;
+        display: none !important;
     }
 }
 
 /* ── Mobile: ajustes específicos ── */
 @media (max-width: 640px) {
     /* Texto mínimo legível */
-  body {
+    body {
         font-size: 15px;
-  }
+    }
 
-  /* Evitar overflow horizontal */
-  .container, main {
+    /* Evitar overflow horizontal */
+    .container, main {
         padding-left: env(safe-area-inset-left, 0px);
         padding-right: env(safe-area-inset-right, 0px);
-  }
+    }
 
-  /* Padding inferior para iOS home bar */
-  .pb-safe {
+    /* Padding inferior para iOS home bar */
+    .pb-safe {
         padding-bottom: env(safe-area-inset-bottom, 16px);
-  }
+    }
 
-  /* Botões maiores para toque fácil */
-  button {
+    /* Botões maiores para toque fácil */
+    button {
         min-height: 44px;
         min-width: 44px;
-  }
+    }
 
-  /* Tabelas: scroll horizontal */
-  table {
+    /* Tabelas: scroll horizontal */
+    table {
         display: block;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-  }
+    }
 }
