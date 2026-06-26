@@ -15,7 +15,7 @@ export default async function MarketingPage() {
     db.municipio.findMany({ orderBy: { nome: "asc" }, select: { nome: true } }),
     db.maquina.findMany({
       where: { proprio: true },
-      select: { marca: true, categoria: true },
+      select: { marca: true, modelo: true, categoria: true },
     }),
   ]);
 
@@ -56,7 +56,7 @@ export default async function MarketingPage() {
         <div className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
           <Sparkles size={18} className="text-fuchsia-600" /> Gerar novo post
         </div>
-        <GerarPostForm categorias={categorias} marcas={marcas} />
+        <GerarPostForm categorias={categorias} marcas={marcas} maquinas={maquinasLinhas} />
       </div>
 
       {/* Pendentes de aprovação */}
