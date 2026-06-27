@@ -5,7 +5,6 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-hh
 // Provedor de IA disponível, em ordem de preferência: Anthropic > Groq.
 function provedorIA(): "anthropic" | "groq" | null {
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
