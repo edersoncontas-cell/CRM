@@ -5,7 +5,7 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-
+hh
 // Provedor de IA disponível, em ordem de preferência: Anthropic > Groq.
 function provedorIA(): "anthropic" | "groq" | null {
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
@@ -544,7 +544,8 @@ export async function gerarPostMarketingIA(
   } | null,
   tipo: TipoPost,
   feedbackAnterior?: string,
-  conteudoAnterior?: string
+  conteudoAnterior?: string,
+    imagem?: { base64: string; mediaType: string }
 ): Promise<PostMarketing> {
   if (!iaHabilitada()) {
     return _postHeuristico(maquina, tipo);
@@ -561,13 +562,44 @@ export async function gerarPostMarketingIA(
       : "";
 
   try {
+    // Se houver imagem e Anthropic disponível, usa vision para criar post baseado na foto
+    if (imagem && process.env.ANTHROPIC_API_KEY) {
+      const systemVision = `Você é o social media de Ederson, vendedor de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo (Brasil).
+Analise a imagem da máquina enviada e crie um post CRIATIVO, com emojis estratégicos, linguagem profissional mas próxima.
+Tema do post: ${tema}.
+REGRA IMPORTANTE: NUNCA misture New Holland com Dynapac no mesmo post.
+Descreva o que vê na imagem e use isso para enriquecer o post. Use dados reais de produtividade/economia quando disponíveis.
+Devolva SOMENTE um JSON válido (sem texto fora do JSON):
+{"titulo": string, "corpo": string, "hashtags": string}
+"corpo": texto completo do post com emojis, máx 450 caracteres para WhatsApp.
+"hashtags": string com hashtags separadas por espaço.`;
+      const resp = await client().messages.create({
+        model: MODEL,
+        max_tokens: 800,
+        system: systemVision,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: imagem.mediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: imagem.base64 } },
+            { type: "text", text: `${infoMaquina}${feedbackPart}` },
+          ],
+        }],
+      });
+      const visionRaw = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+      const visionParsed = JSON.parse(visionRaw.slice(visionRaw.indexOf("{"), visionRaw.lastIndexOf("}") + 1));
+      return {
+        titulo: visionParsed.titulo ?? "Post de marketing",
+        corpo: visionParsed.corpo ?? "",
+        hashtags: visionParsed.hashtags ?? "",
+      };
+    }
     const raw = await llmTexto(
       `Você é o social media de Ederson, vendedor de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo (Brasil).
 Crie posts CRIATIVOS, com emojis estratégicos, linguagem profissional mas próxima.
 Tema do post: ${tema}.
 REGRA IMPORTANTE: NUNCA misture New Holland com Dynapac no mesmo post.
 Seja específico, mencione o modelo da máquina. Use dados reais de produtividade/economia quando disponíveis.
-Devolva SOMENTE um JSON válido (sem texto fora do JSON):
+Devolva SOMENTE um JSON válido (sem texto fora doh JSON):
 {"titulo": string, "corpo": string, "hashtags": string}
 "corpo": texto completo do post com emojis, máx 450 caracteres para WhatsApp.
 "hashtags": string com hashtags separadas por espaço.`,
