@@ -14,38 +14,123 @@ function anthropicClient() {
 export const runtime = "nodejs";
 export const maxDuration = 180;
 
-// ── Busca dados completos do CRM para o contexto do Cérebro ──
+// ── Busca dados COMPLETOS do CRM para o contexto do Cérebro ──────────────────
 async function buscarContextoCRM(mensagem: string) {
-  // Detectar se a mensagem menciona busca por cliente específico
   const nomeBuscado = extrairNomeCliente(mensagem);
+
+  const agora = new Date();
+  const inicioDia = new Date(agora); inicioDia.setHours(0, 0, 0, 0);
+  const fimDia = new Date(agora); fimDia.setHours(23, 59, 59, 999);
+  const inicioSemana = new Date(agora); inicioSemana.setDate(agora.getDate() - agora.getDay());
+  inicioSemana.setHours(0, 0, 0, 0);
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const inicioAno = new Date(agora.getFullYear(), 0, 1);
 
   const [
     totalClientes,
     totalNegs,
     negsGanhas,
     negsPerdidas,
-    audits,
-    ultimosClientes,
+    // Visitas por período
+    visitasHoje,
+    visitasSemana,
+    visitasMes,
+    visitasAno,
+    // Conversas WhatsApp por período
+    conversasHoje,
+    conversasSemana,
+    conversasMes,
+    conversasAno,
+    // Vendas ganhas por período
+    vendasHoje,
+    vendasSemana,
+    vendasMes,
+    // Negociações abertas completas
     negsAbertas,
+    // Últimos clientes cadastrados
+    ultimosClientes,
+    // Auditoria IA
+    auditorias,
+    // Agenda próximas visitas
+    proximasVisitas,
+    // Clientes aguardando resposta
+    aguardandoResposta,
+    // Clientes esquecidos (sem contato 15+ dias)
+    clientesEsquecidos,
+    // Interesse futuro
+    interesseFuturo,
+    // Posts marketing
+    postsMarketing,
+    // Resumo financeiro anual
+    vendasGanhasAno,
   ] = await Promise.all([
     db.cliente.count(),
     db.negociacao.count({ where: { status: "aberta" } }),
     db.negociacao.count({ where: { status: "ganha" } }),
     db.negociacao.count({ where: { status: "perdida" } }),
+    // Visitas
+    db.visita.count({ where: { data: { gte: inicioDia, lte: fimDia } } }),
+    db.visita.count({ where: { data: { gte: inicioSemana } } }),
+    db.visita.count({ where: { data: { gte: inicioMes } } }),
+    db.visita.count({ where: { data: { gte: inicioAno } } }),
+    // Conversas WhatsApp (novas mensagens recebidas de clientes)
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioDia } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioSemana } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioMes } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioAno } } }).catch(() => 0),
+    // Vendas fechadas por período
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioDia } } }),
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioSemana } } }),
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioMes } } }),
+    // Negociações abertas com detalhes
+    db.negociacao.findMany({
+      where: { status: "aberta" },
+      include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+      orderBy: { ultimoContato: "asc" },
+      take: 30,
+    }),
+    // Últimos 15 clientes
+    db.cliente.findMany({
+      orderBy: { criadoEm: "desc" },
+      take: 15,
+      select: { id: true, nome: true, telefone: true, status: true, municipio: { select: { nome: true } }, criadoEm: true },
+    }),
+    // Auditoria
     db.auditLog.findMany({
       orderBy: { criadoEm: "desc" },
       take: 20,
-      select: { acao: true, descricao: true, criadoEm: true, origem: true },
+      select: { acao: true, descricao: true, criadoEm: true, via: true },
     }),
+    // Próximas visitas agendadas (30 dias)
     db.cliente.findMany({
-      orderBy: { criadoEm: "desc" },
-      take: 10,
-      select: { id: true, nome: true, telefone: true, status: true, municipio: { select: { nome: true } } },
+      where: {
+        proximaVisita: { gte: agora, lte: new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000) },
+      },
+      select: { nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+      orderBy: { proximaVisita: "asc" },
+      take: 20,
     }),
-    db.negociacao.findMany({
-      where: { status: "aberta" },
-      take: 10,
-      include: { cliente: { select: { nome: true } } },
+    // Clientes aguardando resposta no WhatsApp
+    db.cliente.count({ where: { aguardandoResposta: true } }),
+    // Clientes sem contato há 15+ dias com negociação aberta
+    db.negociacao.count({
+      where: {
+        status: "aberta",
+        ultimoContato: { lt: new Date(agora.getTime() - 15 * 24 * 60 * 60 * 1000) },
+      },
+    }),
+    // Clientes com interesse futuro
+    db.cliente.count({ where: { interesseFuturo: true } }),
+    // Posts de marketing por status
+    db.postMarketing.groupBy({
+      by: ["status"],
+      _count: true,
+    }).catch(() => []),
+    // Total de vendas no ano com valor
+    db.negociacao.aggregate({
+      where: { status: "ganha", atualizadoEm: { gte: inicioAno } },
+      _sum: { valor: true },
+      _count: true,
     }),
   ]);
 
@@ -59,7 +144,8 @@ async function buscarContextoCRM(mensagem: string) {
     perfilIA?: string | null;
     municipio?: { nome: string } | null;
     negociacoes?: { maquinaModelo: string | null; valor: number | null; status: string; estagio: string }[];
-    conversas?: { id: string; previa: string; lastMessageAt: Date; mensagens?: { direction: string; body: string; sentAt: Date }[] }[];
+    conversas?: { id: string; preview: string; ultimaMensagemEm: Date; mensagens?: { direcao: string; corpo: string; enviadoEm: Date }[] }[];
+    visitas?: { data: Date; observacao: string | null }[];
   } | null = null;
 
   if (nomeBuscado) {
@@ -75,26 +161,30 @@ async function buscarContextoCRM(mensagem: string) {
           take: 1,
           select: {
             id: true,
-            previa: true,
-            lastMessageAt: true,
+            preview: true,
+            ultimaMensagemEm: true,
           },
         } as any,
+        visitas: {
+          orderBy: { data: "desc" },
+          take: 10,
+          select: { data: true, observacao: true },
+        },
       } as any,
     }) as any;
 
     if (c) {
       clienteEspecifico = c;
-      // Buscar mensagens da conversa WA
       if (c.conversas?.length > 0) {
-        const convId = c.conversas[0].id;
-        const msgs = await db.whatsAppMessage.findMany({
-          where: { conversationId: convId },
-          orderBy: { sentAt: "desc" },
+        const convid = c.conversas[0].id;
+        const mensagens = await db.whatsappMensagem.findMany({
+          where: { conversaId: convid },
+          orderBy: { enviadoEm: "desc" },
           take: 50,
-          select: { direction: true, body: true, sentAt: true },
+          select: { direcao: true, corpo: true, enviadoEm: true },
         });
         if (clienteEspecifico && clienteEspecifico.conversas) {
-          clienteEspecifico.conversas[0].mensagens = msgs.reverse() as any;
+          clienteEspecifico.conversas[0].mensagens = mensagens.reverse() as any;
         }
       }
     }
@@ -105,216 +195,258 @@ async function buscarContextoCRM(mensagem: string) {
     totalNegs,
     negsGanhas,
     negsPerdidas,
-    audits,
-    ultimosClientes,
+    visitas: { hoje: visitasHoje, semana: visitasSemana, mes: visitasMes, ano: visitasAno },
+    conversas: { hoje: conversasHoje, semana: conversasSemana, mes: conversasMes, ano: conversasAno },
+    vendas: { hoje: vendasHoje, semana: vendasSemana, mes: vendasMes, valorAno: vendasGanhasAno._sum.valor ?? 0, totalAno: vendasGanhasAno._count },
     negsAbertas: negsAbertas as any[],
+    ultimosClientes,
+    auditorias,
+    proximasVisitas,
+    aguardandoResposta,
+    clientesEsquecidos,
+    interesseFuturo,
+    postsMarketing,
     clienteEspecifico,
     nomeBuscado,
   };
 }
 
-// Extrai nome de cliente mencionado na mensagem
 function extrairNomeCliente(mensagem: string): string | null {
   const lower = mensagem.toLowerCase();
-  // Padrões comuns: "conversa do X", "dados do X", "cliente X", "sobre o X", "ver o X"
   const padroes = [
-    /(?:conversa|mensagens?|whatsapp|chat|histórico|dados|resumo|cadastro|cliente)s+(?:d[aoe]s?s+)?([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú]?[a-zà-ú]+){0,3})/,
-    /(?:sobre|do|da|de|para|pro|pra)s+(?:clientes+)?([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú]?[a-zà-ú]+){0,3})/,
-    /^([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú]?[a-zà-ú]+){1,3})$/,
+    /(?:conversa|dados|cliente|sobre|ver|mostre?|histórico|visita[s]? de?|negociação de?|perfil de?)s+(?:do?|da|de)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)/i,
+    /(?:o|a)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)s+(?:está|tem|quer|precisa|ligou|mandou)/i,
   ];
   for (const p of padroes) {
     const m = mensagem.match(p);
-    if (m?.[1] && m[1].length > 2) return m[1].trim();
+    if (m?.[1] && m[1].length > 2) return m[1];
   }
   return null;
 }
 
+function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>): string {
+  const dataHoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+
+  let txt = `=== DADOS DO CRM — ${dataHoje} ===
+
+📊 RESUMO GERAL:
+- Total de clientes cadastrados: ${ctx.totalClientes}
+- Negociações em andamento: ${ctx.totalNegs}
+- Vendas ganhas (histórico total): ${ctx.negsGanhas}
+- Negociações perdidas (histórico total): ${ctx.negsPerdidas}
+
+🚗 VISITAS REALIZADAS:
+- Hoje: ${ctx.visitas.hoje}
+- Esta semana: ${ctx.visitas.semana}
+- Este mês: ${ctx.visitas.mes}
+- Este ano: ${ctx.visitas.ano}
+
+💬 MENSAGENS RECEBIDAS DE CLIENTES (WhatsApp):
+- Hoje: ${ctx.conversas.hoje}
+- Esta semana: ${ctx.conversas.semana}
+- Este mês: ${ctx.conversas.mes}
+- Este ano: ${ctx.conversas.ano}
+- Clientes aguardando resposta agora: ${ctx.aguardandoResposta}
+
+🏆 VENDAS FECHADAS:
+- Hoje: ${ctx.vendas.hoje} venda(s)
+- Esta semana: ${ctx.vendas.semana} venda(s)
+- Este mês: ${ctx.vendas.mes} venda(s)
+- Este ano: ${ctx.vendas.totalAno} venda(s) | Valor total: R$ ${ctx.vendas.valorAno.toLocaleString("pt-BR")}
+
+⚠️ ALERTAS:
+- Leads sem contato há 15+ dias: ${ctx.clientesEsquecidos}
+- Clientes com interesse futuro (aguardando Plano Safra / próxima compra): ${ctx.interesseFuturo}
+
+`;
+
+  if (ctx.proximasVisitas.length > 0) {
+    txt += `📅 PRÓXIMAS VISITAS AGENDADAS (30 dias):\n`;
+    for (const v of ctx.proximasVisitas) {
+      const dataVisita = new Date(v.proximaVisita!).toLocaleDateString("pt-BR");
+      txt += `  - ${(v as any).nome} (${(v as any).municipio?.nome ?? "?"}) — ${dataVisita}${v.proximaVisitaNota ? " — " + v.proximaVisitaNota : ""}\n`;
+    }
+    txt += "\n";
+  }
+
+  if (ctx.negsAbertas.length > 0) {
+    txt += `🔥 NEGOCIAÇÕES EM ABERTO (top 30):\n`;
+    for (const n of ctx.negsAbertas) {
+      const cliente = (n as any).cliente?.nome ?? "?";
+      const cidade = (n as any).cliente?.municipio?.nome ?? "?";
+      const dias = n.ultimoContato ? Math.floor((Date.now() - new Date(n.ultimoContato).getTime()) / 86400000) : "?";
+      txt += `  - ${cliente} (${cidade}) | Máquina: ${n.maquinaModelo ?? "?"} | Valor: R$ ${(n.valor ?? 0).toLocaleString("pt-BR")} | Estágio: ${n.estagio} | Termômetro: ${n.termometro}% | Último contato: há ${dias} dias\n`;
+    }
+    txt += "\n";
+  }
+
+  if (ctx.ultimosClientes.length > 0) {
+    txt += `👥 ÚLTIMOS CLIENTES CADASTRADOS:\n`;
+    for (const c of ctx.ultimosClientes) {
+      txt += `  - ${c.nome} | ${(c as any).municipio?.nome ?? "?"} | Status: ${c.status}\n`;
+    }
+    txt += "\n";
+  }
+
+  if (ctx.clienteEspecifico) {
+    const ce = ctx.clienteEspecifico;
+    txt += `\n🔍 CLIENTE ESPECÍFICO: ${ce.nome}\n`;
+    txt += `  Telefone: ${ce.telefone ?? "?"} | Cidade: ${(ce as any).municipio?.nome ?? "?"} | Status: ${ce.status}\n`;
+    if (ce.resumoTexto) txt += `  Resumo: ${ce.resumoTexto}\n`;
+    if (ce.perfilIA) txt += `  Perfil IA: ${ce.perfilIA}\n`;
+    if (ce.negociacoes?.length) {
+      txt += `  Negociações abertas: ${ce.negociacoes.map(n => `${n.maquinaModelo ?? "?"} R$${n.valor?.toLocaleString("pt-BR") ?? "?"} (${n.estagio})`).join(", ")}\n`;
+    }
+    if ((ce as any).visitas?.length) {
+      txt += `  Visitas recentes: ${(ce as any).visitas.slice(0,5).map((v: any) => new Date(v.data).toLocaleDateString("pt-BR") + (v.observacao ? ": " + v.observacao : "")).join(" | ")}\n`;
+    }
+    if (ce.conversas?.length && ce.conversas[0].mensagens?.length) {
+      txt += `\n  Conversa WhatsApp (últimas mensagens):\n`;
+      for (const msg of ce.conversas[0].mensagens.slice(-30)) {
+        const hora = new Date(msg.enviadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        const quem = msg.direcao === "enviada" ? "Vendedor" : "Cliente";
+        txt += `    [${hora}] ${quem}: ${msg.corpo}\n`;
+      }
+    }
+    txt += "\n";
+  }
+
+  if (ctx.auditorias.length > 0) {
+    txt += `📋 ÚLTIMAS AÇÕES NO CRM:\n`;
+    for (const a of ctx.auditorias.slice(0, 10)) {
+      const data = new Date(a.criadoEm).toLocaleDateString("pt-BR");
+      txt += `  [${data}] ${a.descricao}\n`;
+    }
+    txt += "\n";
+  }
+
+  return txt;
+}
+
+// ── System prompt do Cérebro ─────────────────────────────────────────────────
+function montarSystemPrompt(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>, academiaTxt: string): string {
+  return `Você é o CÉREBRO do CRM de Ederson, vendedor especializado em máquinas pesadas da linha amarela/construção:
+- New Holland Construction: escavadeiras (E50, E60, E80, E115C, E145C, E175C, E215C, E265C), retroescavadeiras (B95C, B115C), pás-carregadeiras (W80C, W130C, W170C, W190C), motoniveladoras (RG140.B, RG170.B, RG200.B)
+- Dynapac: rolos compactadores (CA2500, CA3500, CA4000, CC2200, CC2800, CC4200), pavimentadoras
+
+Você tem ACESSO TOTAL a todos os dados do CRM. Pode responder qualquer pergunta sobre clientes, negociações, visitas, conversas, vendas, metas, marketing, financeiro, agenda e mais.
+
+CAPACIDADES:
+✅ Responder sobre qualquer cliente pelo nome
+✅ Mostrar estatísticas de visitas (hoje/semana/mês/ano)
+✅ Mostrar contagem de conversas e mensagens recebidas
+✅ Analisar pipeline de vendas e oportunidades
+✅ Identificar leads esquecidos e urgências
+✅ Dar sugestões estratégicas baseadas nos dados reais
+✅ Resumir negociações, histórico e próximas ações
+✅ Ajudar a escrever mensagens, propostas, roteiros de visita
+✅ Analisar documentos/imagens enviados (PDF, foto, contrato)
+
+REGRAS:
+- Sempre use os dados reais do CRM que estão no contexto abaixo
+- Seja direto e prático — o vendedor está no campo
+- Use linguagem informal e motivadora
+- Quando mencionar valores, sempre formate em R$ com pontos e vírgulas
+- Se não souber algo, diga claramente e sugira como o vendedor pode verificar
+
+${academiaTxt ? "\n📚 ACADEMIA DE VENDAS (resumo):\n" + academiaTxt + "\n" : ""}
+
+--- DADOS ATUAIS DO CRM ---
+${montarContextoTexto(ctx)}
+--- FIM DOS DADOS ---`;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const ct = req.headers.get("content-type") ?? "";
-    let mensagem = "";
-    const arquivos: { base64: string; mediaType: string; nome: string; texto?: string }[] = [];
+    const fd = await req.formData();
+    const mensagem = (fd.get("mensagem") as string) ?? "";
+    const historicoRaw = (fd.get("historico") as string) ?? "[]";
+    const arquivos: File[] = fd.getAll("arquivo") as File[];
+
     let historico: { role: "user" | "assistant"; content: string }[] = [];
+    try { historico = JSON.parse(historicoRaw); } catch { /* ok */ }
+    historico = historico.filter((m) => m.content?.trim()).slice(-120);
 
-    if (ct.includes("multipart/form-data")) {
-      const fd = await req.formData();
-      mensagem = String(fd.get("mensagem") ?? "").trim();
-      try {
-        const h = String(fd.get("historico") ?? "[]");
-        historico = JSON.parse(h);
-        if (!Array.isArray(historico)) historico = [];
-      } catch { historico = []; }
-      const files = fd.getAll("arquivo") as File[];
-      for (const f of files) {
-        const buf = Buffer.from(await f.arrayBuffer());
-        const isImage = (MEDIA_TYPES as readonly string[]).includes(f.type);
-        const isText = f.type.startsWith("text/") || f.name.match(/\.(txt|md|csv|html|json|xml|js|ts|tsx|jsx|py|java|cs|php|rb|go|rs|swift|kt|dart)$/i);
-        const isPdf = f.type === "application/pdf";
-        const isDoc = f.name.match(/\.(doc|docx|xls|xlsx)$/i);
-        if (isImage) {
-          arquivos.push({ base64: buf.toString("base64"), mediaType: f.type as ImageMediaType, nome: f.name });
-        } else if (isText) {
-          const texto = buf.toString("utf-8").substring(0, 8000);
-          arquivos.push({ base64: "", mediaType: f.type, nome: f.name, texto });
-        } else if (isPdf || isDoc) {
-          arquivos.push({ base64: "", mediaType: f.type, nome: f.name, texto: `[Arquivo ${f.name} — ${Math.round(buf.length/1024)}KB]` });
-        } else {
-          arquivos.push({ base64: "", mediaType: f.type, nome: f.name });
-        }
-      }
-    } else {
-      const body = await req.json();
-      mensagem = String(body.mensagem ?? "").trim();
-    }
+    const [ctx, academiaTxt] = await Promise.all([
+      buscarContextoCRM(mensagem),
+      resumoAcademia().catch(() => ""),
+    ]);
 
-    if (!mensagem && arquivos.length === 0) {
-      return Response.json({ ok: false, erro: "Mensagem vazia." }, { status: 400 });
-    }
+    const systemPrompt = montarSystemPrompt(ctx, academiaTxt);
 
-    // ── Busca contexto completo do CRM (inclui WhatsApp se mencionado) ──
-    const ctx = await buscarContextoCRM(mensagem);
-    const academiaSummary = resumoAcademia();
-
-    // Extrai a última pergunta do Cérebro para interpretar respostas curtas
-    const ultimaMsgAssistente = historico.filter(h => h.role === "assistant").slice(-1)[0]?.content ?? "";
-
-    // ── Monta seção de cliente específico com histórico WA ──
-    let secaoClienteEspecifico = "";
-    if (ctx.clienteEspecifico) {
-      const c = ctx.clienteEspecifico;
-      secaoClienteEspecifico = `
-## CLIENTE ENCONTRADO: ${c.nome}
-- **Telefone:** ${c.telefone ?? "não cadastrado"}
-- **Status:** ${c.status ?? "potencial"}
-- **Município:** ${c.municipio?.nome ?? "não cadastrado"}
-- **Resumo IA:** ${(c as any).resumoTexto ?? (c as any).perfilIA ?? "sem resumo ainda"}
-${c.negociacoes?.length ? `- **Negociações abertas:** ${c.negociacoes.map((n: any) => `${n.maquinaModelo ?? "?"} (${n.estagio})`).join(", ")}` : "- Sem negociações abertas"}
-${c.conversas?.length ? `
-### Conversa no WhatsApp (últimas ${c.conversas[0].mensagens?.length ?? 0} mensagens):
-${c.conversas[0].mensagens?.map((m: any) => {
-  const hora = new Date(m.sentAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  return `[${hora}] ${m.direction === "OUT" ? "Ederson" : c.nome}: ${m.body}`;
-}).join("\n") ?? "Sem mensagens"}
-` : "- Sem conversa no WhatsApp cadastrada"}
-`;
-    }
-
-    // ── Formata negociações abertas ──
-    const negsStr = ctx.negsAbertas.length > 0
-      ? ctx.negsAbertas.map((n: any) =>
-          `- ${n.cliente?.nome ?? "?"}: ${n.maquinaModelo ?? "?"} | R$ ${n.valor?.toLocaleString("pt-BR") ?? "?"} | ${n.estagio}`
-        ).join("\n")
-      : "Nenhuma negociação aberta";
-
-    const systemPrompt = `Você é o **Cérebro** — assistente de IA do CRM do Ederson, vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo, Brasil.
-
-Você tem o MESMO nível de inteligência, capacidade de raciocínio e qualidade de resposta que o Claude (Anthropic). Você é o melhor assistente possível para Ederson.
-
-## ══ REGRAS ABSOLUTAS DE CONTEXTO ══
-
-1. **MEMÓRIA PERFEITA:** Você lembra de TUDO que foi dito nesta conversa. Nunca peça para repetir.
-2. **RESPOSTAS CURTAS TÊM CONTEXTO:** "sim", "não", "ok", "quero", "pode", "claro" → você SABE o que significa baseado na sua última mensagem. EXECUTE imediatamente. NUNCA pergunte "pode ser mais específico?".
-3. **VOCÊ PERGUNTOU, ELE RESPONDEU:** Se você propôs algo e o usuário confirmou → aja. Sem perguntas extras.
-4. **ANTECIPE:** Conecte informações, ofereça insights que o usuário não pediu mas precisa.
-5. **ACESSO TOTAL AO CRM:** Você VÊ os dados dos clientes, negociações, histórico de WhatsApp e auditorias abaixo.
-
-${ultimaMsgAssistente ? `## ► SUA ÚLTIMA MENSAGEM FOI:
-"${ultimaMsgAssistente.slice(0, 600)}${ultimaMsgAssistente.length > 600 ? "…" : ""}"
-(Use isso para interpretar a resposta do usuário corretamente.)
-` : ""}
-
-## ══ DADOS DO CRM — ${new Date().toLocaleDateString("pt-BR")} ══
-
-**Visão geral:**
-- Clientes cadastrados: ${ctx.totalClientes}
-- Negociações abertas: ${ctx.totalNegs} | Ganhas: ${ctx.negsGanhas} | Perdidas: ${ctx.negsPerdidas}
-
-**Negociações abertas (top 10):**
-${negsStr}
-
-**Últimas ações no sistema:**
-${ctx.audits.map((a) => `- [${a.origem}] ${a.descricao}`).join("\n")}
-
-${secaoClienteEspecifico}
-
-## ══ CAPACIDADES QUE VOCÊ TEM ══
-- **Ler conversas de WhatsApp** de qualquer cliente cadastrado (mencione o nome e eu busco automaticamente)
-- **Analisar dados** de clientes, negociações, histórico completo
-- **Criar e editar** clientes, negociações via orientação passo a passo
-- **Estratégia de vendas** personalizada com base nos dados reais
-- **Academia de Vendas:** ${academiaSummary}
-
-## ══ FORMATO DE RESPOSTA ══
-- Use português brasileiro, linguagem direta e estratégica
-- Use markdown: **negrito**, listas, títulos quando útil
-- Seja conciso mas completo. Máximo 600 palavras salvo pedido explícito.
-- Ao mostrar conversas do WhatsApp: apresente de forma cronológica e limpa
-- Quando o usuário pedir para "ler conversa", "ver mensagens", "histórico" de alguém → você JÁ TEM os dados acima, apresente diretamente`;
-
-    // ── Monta conteúdo da mensagem atual ──
-    const content: Anthropic.MessageParam["content"] = [];
-
-    for (const arq of arquivos) {
-      if ((MEDIA_TYPES as readonly string[]).includes(arq.mediaType) && arq.base64) {
-        content.push({ type: "image", source: { type: "base64", media_type: arq.mediaType as ImageMediaType, data: arq.base64 } });
-      }
-    }
-
-    const textoArqs = arquivos.filter((a) => a.texto).map((a) => `=== Arquivo: ${a.nome} ===\n${a.texto}`).join("\n\n");
-    const nomesNaoProcessados = arquivos.filter((a) => !(MEDIA_TYPES as readonly string[]).includes(a.mediaType) && !a.texto).map((a) => a.nome);
-    const textoFinal = [
-      nomesNaoProcessados.length ? `[Arquivos recebidos mas não processados: ${nomesNaoProcessados.join(", ")}]\n` : "",
-      textoArqs ? textoArqs + "\n\n" : "",
-      mensagem,
-    ].filter(Boolean).join("") || "(sem texto)";
-
-    content.push({ type: "text", text: textoFinal });
-
-    // ── Histórico com deduplicação e limite ──
-    const historicoFiltrado = historico.filter((h) => h.content?.trim()).slice(-120);
-    const mensagensHistorico: Anthropic.MessageParam[] = [];
-    for (const h of historicoFiltrado) {
-      const ultimo = mensagensHistorico[mensagensHistorico.length - 1];
-      if (ultimo && ultimo.role === h.role) {
-        if (typeof ultimo.content === "string") {
-          mensagensHistorico[mensagensHistorico.length - 1] = { ...ultimo, content: ultimo.content + "\n" + h.content };
-        }
-      } else {
-        mensagensHistorico.push({ role: h.role, content: h.content });
-      }
-    }
-
-    const mensagensCompletas: Anthropic.MessageParam[] = [
-      ...mensagensHistorico,
-      { role: "user", content },
+    // Monta mensagens para a API
+    const msgs: Anthropic.MessageParam[] = [
+      ...historico.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
     ];
 
-    // ── Chama Claude via streaming ──
-    const stream = await anthropicClient().messages.stream({
-      model: "claude-sonnet-4-5",
-      max_tokens: 8096,
-      system: systemPrompt,
-      messages: mensagensCompletas,
-    });
+    // Última mensagem do usuário (pode ter arquivos)
+    const contentParts: Anthropic.ContentBlockParam[] = [];
 
-    registrarAudit({
-      acao: "perfil_atualizado",
-      origem: "usuario",
-      descricao: `Cérebro: "${mensagem.slice(0, 80)}${mensagem.length > 80 ? "…" : ""}"`,
-    }).catch(() => {});
+    for (const arquivo of arquivos) {
+      const buf = Buffer.from(await arquivo.arrayBuffer());
+      const mt = arquivo.type as ImageMediaType;
+      if (MEDIA_TYPES.includes(mt as any)) {
+        contentParts.push({
+          type: "image",
+          source: { type: "base64", media_type: mt, data: buf.toString("base64") },
+        });
+      } else {
+        // PDF ou texto
+        contentParts.push({
+          type: "text",
+          text: `[Arquivo recebido: ${arquivo.name} (${arquivo.type}, ${(arquivo.size / 1024).toFixed(1)} KB). Analise com base no conteúdo se possível.]`,
+        });
+      }
+    }
 
-    const encoder = new TextEncoder();
+    if (mensagem.trim()) {
+      contentParts.push({ type: "text", text: mensagem });
+    }
+
+    if (contentParts.length === 0) {
+      contentParts.push({ type: "text", text: "(mensagem vazia)" });
+    }
+
+    msgs.push({ role: "user", content: contentParts });
+
+    // Stream SSE
     const readable = new ReadableStream({
       async start(controller) {
+        const encoder = new TextEncoder();
         try {
+          const stream = await anthropicClient().messages.stream({
+            model: process.env.ANTHROPIC_MODEL || "claude-opus-4-5",
+            max_tokens: 2048,
+            system: systemPrompt,
+            messages: msgs,
+          });
+
           for await (const chunk of stream) {
-            if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`));
+            if (
+              chunk.type === "content_block_delta" &&
+              chunk.delta.type === "text_delta"
+            ) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ texto: chunk.delta.text })}\n\n`)
+              );
             }
           }
+
+          await registrarAudit({
+            acao: "cerebro_pergunta",
+            descricao: `Cérebro respondeu: "${mensagem.slice(0, 80)}${mensagem.length > 80 ? "..." : ""}"`,
+            via: "ia",
+          }).catch(() => {});
+
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (e) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ erro: String(e) })}\n\n`));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ erro: String(e) })}\n\n`)
+          );
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } finally {
           controller.close();
         }
@@ -329,6 +461,9 @@ ${secaoClienteEspecifico}
       },
     });
   } catch (e) {
-    return Response.json({ ok: false, erro: String(e) }, { status: 500 });
+    return new Response(
+      JSON.stringify({ erro: String(e) }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
