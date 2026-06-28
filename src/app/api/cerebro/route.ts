@@ -59,8 +59,8 @@ async function buscarContextoCRM(mensagem: string) {
     clientesEsquecidos,
     // Interesse futuro
     interesseFuturo,
-    // Posts marketing
-    postsMarketing,
+    // Campanhas de marketing por status
+    campanhasMarketing,
     // Resumo financeiro anual
     vendasGanhasAno,
   ] = await Promise.all([
@@ -121,8 +121,8 @@ async function buscarContextoCRM(mensagem: string) {
     }),
     // Clientes com interesse futuro
     db.cliente.count({ where: { interesseFuturo: true } }),
-    // Posts de marketing por status
-    db.postMarketing.groupBy({
+    // Campanhas de marketing por status
+    db.campanhaMarketing.groupBy({
       by: ["status"],
       _count: true,
     }).catch(() => []),
@@ -190,7 +190,7 @@ async function buscarContextoCRM(mensagem: string) {
     totalAguardandoResposta,
     clientesEsquecidos,
     interesseFuturo,
-    postsMarketing,
+    campanhasMarketing,
     clienteEspecifico,
     nomeBuscado,
   };
@@ -198,8 +198,8 @@ async function buscarContextoCRM(mensagem: string) {
 
 function extrairNomeCliente(mensagem: string): string | null {
   const padroes = [
-    /(?:conversa|dados|cliente|sobre|ver|mostre?|histórico|visitas? d[eo]?|negociação d[eo]?|perfil d[eo]?)s+(?:do?|da|de)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)/i,
-    /(?:o|a)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)s+(?:está|tem|quer|precisa|ligou|mandou)/i,
+    /(?:conversa|dados|cliente|sobre|ver|mostre?|histórico|visitas? d[eo]?|negociação d[eo]?|perfil d[eo]?)\s+(?:do?|da|de)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)/i,
+    /(?:o|a)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s+(?:está|tem|quer|precisa|ligou|mandou)/i,
   ];
   for (const p of padroes) {
     const m = mensagem.match(p);
@@ -248,7 +248,7 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
     txt += `📅 PRÓXIMAS VISITAS AGENDADAS (30 dias):\n`;
     for (const v of ctx.proximasVisitas) {
       const dataVisita = new Date(v.proximaVisita!).toLocaleDateString("pt-BR");
-      txt += `  - ${(v as any).nome} (${(v as any).municipio?.nome ?? "?"}) — ${dataVisita}${v.proximaVisitaNota ? " — " + v.proximaVisitaNota : ""}\n`;
+      txt += ` - ${(v as any).nome} (${(v as any).municipio?.nome ?? "?"}) — ${dataVisita}${v.proximaVisitaNota ? " — " + v.proximaVisitaNota : ""}\n`;
     }
     txt += "\n";
   }
@@ -259,7 +259,7 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
       const cliente = (n as any).cliente?.nome ?? "?";
       const cidade = (n as any).cliente?.municipio?.nome ?? "?";
       const dias = n.ultimoContato ? Math.floor((Date.now() - new Date(n.ultimoContato).getTime()) / 86400000) : "?";
-      txt += `  - ${cliente} (${cidade}) | Máquina: ${n.maquinaModelo ?? "?"} | Valor: R$ ${(n.valor ?? 0).toLocaleString("pt-BR")} | Estágio: ${n.estagio} | Termômetro: ${n.termometro}% | Último contato: há ${dias} dias\n`;
+      txt += ` - ${cliente} (${cidade}) | Máquina: ${n.maquinaModelo ?? "?"} | Valor: R$ ${(n.valor ?? 0).toLocaleString("pt-BR")} | Estágio: ${n.estagio} | Termômetro: ${n.termometro}% | Último contato: há ${dias} dias\n`;
     }
     txt += "\n";
   }
@@ -267,7 +267,7 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
   if (ctx.ultimosClientes.length > 0) {
     txt += `👥 ÚLTIMOS CLIENTES CADASTRADOS:\n`;
     for (const c of ctx.ultimosClientes) {
-      txt += `  - ${c.nome} | ${(c as any).municipio?.nome ?? "?"} | Status: ${c.status}\n`;
+      txt += ` - ${c.nome} | ${(c as any).municipio?.nome ?? "?"} | Status: ${c.status}\n`;
     }
     txt += "\n";
   }
@@ -275,21 +275,21 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
   if (ctx.clienteEspecifico) {
     const ce = ctx.clienteEspecifico;
     txt += `\n🔍 CLIENTE ESPECÍFICO: ${ce.nome}\n`;
-    txt += `  Telefone: ${ce.telefone ?? "?"} | Cidade: ${(ce as any).municipio?.nome ?? "?"} | Status: ${ce.status}\n`;
-    if (ce.resumoTexto) txt += `  Resumo: ${ce.resumoTexto}\n`;
-    if (ce.perfilIA) txt += `  Perfil IA: ${ce.perfilIA}\n`;
+    txt += ` Telefone: ${ce.telefone ?? "?"} | Cidade: ${(ce as any).municipio?.nome ?? "?"} | Status: ${ce.status}\n`;
+    if (ce.resumoTexto) txt += ` Resumo: ${ce.resumoTexto}\n`;
+    if (ce.perfilIA) txt += ` Perfil IA: ${ce.perfilIA}\n`;
     if (ce.negociacoes?.length) {
-      txt += `  Negociações abertas: ${ce.negociacoes.map(n => `${n.maquinaModelo ?? "?"} R$${n.valor?.toLocaleString("pt-BR") ?? "?"} (${n.estagio})`).join(", ")}\n`;
+      txt += ` Negociações abertas: ${ce.negociacoes.map(n => `${n.maquinaModelo ?? "?"} R$${n.valor?.toLocaleString("pt-BR") ?? "?"} (${n.estagio})`).join(", ")}\n`;
     }
     if ((ce as any).visitas?.length) {
-      txt += `  Visitas recentes: ${(ce as any).visitas.slice(0,5).map((v: any) => new Date(v.data).toLocaleDateString("pt-BR") + (v.observacao ? ": " + v.observacao : "")).join(" | ")}\n`;
+      txt += ` Visitas recentes: ${(ce as any).visitas.slice(0,5).map((v: any) => new Date(v.data).toLocaleDateString("pt-BR") + (v.observacao ? ": " + v.observacao : "")).join(" | ")}\n`;
     }
     if (ce.conversas?.length) {
-      txt += `\n  Conversas recentes (últimas ${Math.min(ce.conversas.length, 30)}):\n`;
+      txt += `\n Conversas recentes (últimas ${Math.min(ce.conversas.length, 30)}):\n`;
       for (const msg of ce.conversas.slice(0, 30)) {
         const hora = new Date(msg.criadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
         const quem = msg.remetente === "vendedor" ? "Você" : "Cliente";
-        txt += `    [${hora}] ${quem}: ${msg.conteudo.substring(0, 200)}\n`;
+        txt += ` [${hora}] ${quem}: ${msg.conteudo.substring(0, 200)}\n`;
       }
     }
     txt += "\n";
@@ -299,7 +299,7 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
     txt += `📋 ÚLTIMAS AÇÕES NO CRM:\n`;
     for (const a of ctx.auditorias.slice(0, 10)) {
       const data = new Date(a.criadoEm).toLocaleDateString("pt-BR");
-      txt += `  [${data}] ${a.descricao}\n`;
+      txt += ` [${data}] ${a.descricao}\n`;
     }
     txt += "\n";
   }
