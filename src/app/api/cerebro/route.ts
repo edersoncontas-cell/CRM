@@ -419,7 +419,7 @@ export async function POST(req: NextRequest) {
           }
 
           await registrarAudit({
-            acao: "cerebro_pergunta",
+            acao: "ia_acao" as any,
             descricao: `Cérebro respondeu: "${mensagem.slice(0, 80)}${mensagem.length > 80 ? "..." : ""}"`,
             via: "ia",
           }).catch(() => {});
