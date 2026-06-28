@@ -1,5 +1,4 @@
 import { db } from "@/lib/db";
-import { PageHeader, Badge } from "@/components/ui";
 import { formatCurrency, diasDesde, saudacaoBrasilia } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { resolverAlerta } from "@/lib/actions";
@@ -11,17 +10,16 @@ import Link from "next/link";
 import {
   Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
   Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle, UserX,
+  MapPin, Calendar, Trophy, BarChart3, Zap, Eye,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// ── Paleta dark ──────────────────────────────────────────────────────────────
-// Surface:  #09090b (zinc-950) | Card: #18181b (zinc-900) | Border: #27272a
-// Text:     #fafafa / #a1a1aa / #71717a
-// Accents:  #BFDE4D agro | #22c55e green | #f59e0b amber | #f87171 red | #60a5fa blue
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Dark palette ──────────────────────────────────────────────────────────────
+// Surface: #09090b (zinc-950) | Card: #18181b (zinc-900) | Border: #27272a
+// Text: #fafafa / #a1a1aa / #71717a
+// Accents: #BFDE4D agro | #22c55e green | #f59e0b amber | #f87171 red | #60a5fa blue
 
-// Palavras que indicam conversa encerrada — IA não precisa responder.
 const DESPEDIDA_RE =
   /\b(obrigad[ao]|valeu|até logo|tchau|tchauzinho|boa noite|boa tarde|bom dia(?! pessoal)|até mais|abraços?|foi um prazer|tudo certo|combinado|fechado|até amanhã|até segunda|pode ser|ok obrigad[ao])\b/i;
 
@@ -29,69 +27,98 @@ export default async function DashboardPage() {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const inicioAno = new Date(anoAtual, 0, 1);
+  const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
+  const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
+  const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate() - hoje.getDay()); inicioSemana.setHours(0, 0, 0, 0);
+  const inicioMes = new Date(anoAtual, hoje.getMonth(), 1);
 
   const DIAS_ESQUECIDO = 15;
   const corteEsquecido = new Date(hoje);
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [metas, alertas, negociacoes, clientesCount, aguardando, clientesAguardandoRaw, esquecidos, futuros] =
-    await Promise.all([
-      db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
-      db.alerta.findMany({
-        where: { resolvido: false },
-        include: { cliente: true },
-        orderBy: { diasDesde: "desc" },
-      }),
-      db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
-      db.cliente.count(),
-      db.negociacao.findMany({
-        where: { status: "aberta" },
-        include: { cliente: true },
-        orderBy: { ultimoContato: "asc" },
-      }),
-      db.cliente.findMany({
-        where: { aguardandoResposta: true },
-        include: {
-          conversas: { orderBy: { criadoEm: "desc" }, take: 1 },
-        },
-        orderBy: { ultimoContato: "asc" },
-      }),
-      // Clientes com negociação aberta e sem contato há 15+ dias
-      db.negociacao.findMany({
-        where: {
-          status: "aberta",
-          ultimoContato: { lt: corteEsquecido },
-        },
-        include: { cliente: true },
-        orderBy: { ultimoContato: "asc" },
-        take: 8,
-      }),
-      // Clientes com interesse futuro (ex: aguardando Plano Safra)
-      db.cliente.findMany({
-        where: { interesseFuturo: true },
-        orderBy: { interesseFuturoData: "asc" },
-        take: 12,
-        select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
-      }),
-    ]);
+  const [
+    metas, alertas, negociacoes, clientesCount,
+    aguardando, clientesAguardandoRaw, esquecidos, futuros,
+    // Visitas por período
+    visitasHoje, visitasSemana, visitasMes, visitasAno,
+    // Conversas por período
+    conversasHoje, conversasSemana, conversasMes, conversasAno,
+    // Vendas por período
+    vendasHoje, vendasSemana, vendasMes, vendasGanhasAno,
+    // Valor financeiro
+    valorVendasAno,
+    // Próximas visitas agendadas
+    proximasVisitas,
+  ] = await Promise.all([
+    db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
+    db.alerta.findMany({
+      where: { resolvido: false },
+      include: { cliente: true },
+      orderBy: { diasDesde: "desc" },
+    }),
+    db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
+    db.cliente.count(),
+    db.negociacao.findMany({
+      where: { status: "aberta" },
+      include: { cliente: true },
+      orderBy: { ultimoContato: "asc" },
+    }),
+    db.cliente.findMany({
+      where: { aguardandoResposta: true },
+      include: {
+        conversas: { orderBy: { criadoEm: "desc" }, take: 1 },
+      },
+      orderBy: { ultimoContato: "asc" },
+    }),
+    db.negociacao.findMany({
+      where: { status: "aberta", ultimoContato: { lt: corteEsquecido } },
+      include: { cliente: true },
+      orderBy: { ultimoContato: "asc" },
+      take: 8,
+    }),
+    db.cliente.findMany({
+      where: { interesseFuturo: true },
+      orderBy: { interesseFuturoData: "asc" },
+      take: 12,
+      select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
+    }),
+    // Visitas
+    db.visita.count({ where: { data: { gte: inicioDia, lte: fimDia } } }),
+    db.visita.count({ where: { data: { gte: inicioSemana } } }),
+    db.visita.count({ where: { data: { gte: inicioMes } } }),
+    db.visita.count({ where: { data: { gte: inicioAno } } }),
+    // Conversas (mensagens recebidas de clientes)
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioDia } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioSemana } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioMes } } }).catch(() => 0),
+    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioAno } } }).catch(() => 0),
+    // Vendas fechadas
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioDia } } }),
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioSemana } } }),
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioMes } } }),
+    db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioAno } } }),
+    // Valor total vendido no ano
+    db.negociacao.aggregate({
+      where: { status: "ganha", atualizadoEm: { gte: inicioAno } },
+      _sum: { valor: true },
+    }),
+    // Próximas visitas (30 dias)
+    db.cliente.findMany({
+      where: {
+        proximaVisita: { gte: hoje, lte: new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000) },
+      },
+      select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+      orderBy: { proximaVisita: "asc" },
+      take: 5,
+    }),
+  ]);
 
-  // "Chegou a hora": data de retomar o contato já passou ou está a até 30 dias.
+  // "Chegou a hora": interesse futuro dentro de 30 dias
   const em30Dias = new Date(hoje);
   em30Dias.setDate(em30Dias.getDate() + 30);
   const futurosNaHora = futuros.filter(
     (f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias
   ).length;
-
-  const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
-  const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
-  const [visitasHoje, vendasGanhasAno] = await Promise.all([
-    db.negociacao.count({
-      where: { dataVisita: { gte: inicioDia, lte: fimDia }, status: { not: "perdida" } },
-    }),
-    db.negociacao.count({
-      where: { status: "ganha", atualizadoEm: { gte: inicioAno } },
-    }),
-  ]);
 
   const saudacao = saudacaoBrasilia(hoje);
   const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
@@ -109,492 +136,290 @@ export default async function DashboardPage() {
   const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
   const filaAguardando = aguardandoFiltrado.slice(0, 6);
 
-  // Filtra "aguardando retorno no WhatsApp": exclui conversas que terminaram em despedida.
   const clientesAguardando = clientesAguardandoRaw
     .filter((c) => {
       const ultima = c.conversas[0];
       if (!ultima) return true;
-      if (ultima.remetente === "vendedor") return false; // eu já respondi
+      if (ultima.remetente === "vendedor") return false;
       return !DESPEDIDA_RE.test(ultima.conteudo);
     })
     .slice(0, 8);
 
+  const valorVendasAnoNum = valorVendasAno._sum?.valor ?? 0;
+  const mesAtual = hoje.toLocaleString("pt-BR", { month: "long" });
+  const diaDoAno = Math.ceil((hoje.getTime() - inicioAno.getTime()) / 86400000);
+  const diasRestantesAno = 365 - diaDoAno;
+  const ritmoMensal = vendasGanhasAno > 0 ? (vendasGanhasAno / (hoje.getMonth() + 1)).toFixed(1) : "0";
+
   return (
-    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
-      {/* Header */}
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-4 md:-m-8 md:p-6 space-y-5">
+      {/* ── Saudação + Atualizar ── */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Dashboard</h1>
-          <p className="mt-1 text-sm" style={{ color: "#71717a" }}>Visão geral das suas metas e negociações</p>
+          <h1 className="text-2xl font-black text-white">{saudacao} 👋</h1>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            {hoje.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {hoje.getFullYear()}
+          </p>
         </div>
         <BotaoAtualizar />
       </div>
 
-      {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <div
-        className="mb-7 overflow-hidden rounded-2xl p-6"
-        style={{
-          background: "#000000",
-          border: "1px solid #27272a",
-          boxShadow: "0 0 40px 0 rgba(191,222,77,0.06)",
-        }}
-      >
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xl font-bold text-white">
-              ☀️ {saudacao}, Ederson!
-            </div>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "#a1a1aa" }}>
-              Você tem{" "}
-              <Chip cor="#22c55e" bg="rgba(34,197,94,0.12)">{visitasHoje} visita{visitasHoje !== 1 ? "s" : ""}</Chip>
-              {" "}hoje,{" "}
-              <Chip cor="#f59e0b" bg="rgba(245,158,11,0.12)">{aguardandoFiltrado.length} cliente{aguardandoFiltrado.length !== 1 ? "s" : ""}</Chip>
-              {" "}esperando resposta e{" "}
-              <Chip
-                cor={alertas.length > 0 ? "#f87171" : "#22c55e"}
-                bg={alertas.length > 0 ? "rgba(248,113,113,0.12)" : "rgba(34,197,94,0.12)"}
-              >
-                {alertas.length} alerta{alertas.length !== 1 ? "s" : ""}
-              </Chip>
-              {" "}{alertas.length === 0 ? "✅ Tudo em dia!" : "para resolver."}
-            </p>
-            <p className="mt-1.5 text-xs" style={{ color: "#52525b" }}>
-              {metasAbertas > 0
-                ? `Faltam ${metasAbertas} meta(s) para bater este período.`
-                : "🎉 Todas as metas batidas!"}
-            </p>
-          </div>
+      <MotivacaoWidget />
 
-          <div className="flex flex-wrap gap-2 sm:flex-col">
-            <Link href="/pipeline">
-              <MiniStat
-                label={faltamVendas === 0 ? "Meta anual atingida! 🎉" : `Faltam ${faltamVendas} p/ meta`}
-                valor={`${vendasGanhasAno}/${META_ANUAL} vendas`}
-                cor={faltamVendas === 0 ? "#4ade80" : "#BFDE4D"}
-              />
-            </Link>
-            <Link href="/pipeline">
-              <MiniStat label="Comissão (confirmadas)" valor={formatCurrency(comissao)} cor="#4ade80" />
-            </Link>
-          </div>
+      {/* ── BLOCO 1: Visitas ── */}
+      <Section titulo="🚗 Visitas Realizadas" cor="#60a5fa">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard titulo="Hoje" valor={visitasHoje} cor="#60a5fa" sub="visita(s)" />
+          <KpiCard titulo="Semana" valor={visitasSemana} cor="#60a5fa" sub="visita(s)" />
+          <KpiCard titulo={mesAtual} valor={visitasMes} cor="#60a5fa" sub="visita(s)" />
+          <KpiCard titulo={String(anoAtual)} valor={visitasAno} cor="#60a5fa" sub="visita(s)" />
         </div>
-      </div>
+      </Section>
 
-      {/* ── KPIs ──────────────────────────────────────────────────────── */}
-      <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <DarkStatCard
-          href="/pipeline"
-          icone={<DollarSign size={18} />}
-          rotulo="Pipeline aberto"
-          valor={formatCurrency(valorPipeline)}
-          accentColor="#4ade80"
-        />
-        <DarkStatCard
-          href="/pipeline"
-          icone={<TrendingUp size={18} />}
-          rotulo="Negociações ativas"
-          valor={String(negociacoes.length)}
-          accentColor="#60a5fa"
-        />
-        <DarkStatCard
-          href="/clientes"
-          icone={<Users size={18} />}
-          rotulo="Clientes cadastrados"
-          valor={String(clientesCount)}
-          accentColor="#a78bfa"
-        />
-        <DarkStatCard
-          href="#alertas"
-          icone={<AlertTriangle size={18} />}
-          rotulo="Alertas abertos"
-          valor={String(alertas.length)}
-          accentColor={alertas.length > 0 ? "#f87171" : "#4ade80"}
-        />
-      </div>
+      {/* ── BLOCO 2: Conversas WhatsApp ── */}
+      <Section titulo="💬 Conversas WhatsApp" cor="#BFDE4D">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard titulo="Hoje" valor={conversasHoje} cor="#BFDE4D" sub="mensagem(ns)" />
+          <KpiCard titulo="Semana" valor={conversasSemana} cor="#BFDE4D" sub="mensagem(ns)" />
+          <KpiCard titulo={mesAtual} valor={conversasMes} cor="#BFDE4D" sub="mensagem(ns)" />
+          <KpiCard titulo={String(anoAtual)} valor={conversasAno} cor="#BFDE4D" sub="mensagem(ns)" />
+        </div>
+      </Section>
 
-      {/* ── Motivação + Dica ──────────────────────────────────────────── */}
-      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <MotivacaoWidget />
-        <DicaVendas />
-      </div>
+      {/* ── BLOCO 3: Vendas Fechadas ── */}
+      <Section titulo="🏆 Vendas Fechadas" cor="#4ade80">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard titulo="Hoje" valor={vendasHoje} cor="#4ade80" sub="venda(s)" />
+          <KpiCard titulo="Semana" valor={vendasSemana} cor="#4ade80" sub="venda(s)" />
+          <KpiCard titulo={mesAtual} valor={vendasMes} cor="#4ade80" sub="venda(s)" />
+          <KpiCard titulo={String(anoAtual)} valor={vendasGanhasAno} cor="#4ade80" sub={<><span style={{ color: "#4ade80", fontSize: 11 }}>R$ {valorVendasAnoNum.toLocaleString("pt-BR")}</span></>} />
+        </div>
+      </Section>
 
-      {/* ── Metas + Funil ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <DarkCard className="lg:col-span-2">
-          <SectionLabel icone={<Target size={15} />} cor="#BFDE4D">Metas do período</SectionLabel>
-          <div className="space-y-4">
-            {metas.length === 0 ? (
-              <p className="text-sm" style={{ color: "#71717a" }}>Nenhuma meta configurada. Acesse Configurações.</p>
-            ) : metas.map((m) => {
-              const pct = Math.min(100, Math.round((m.progresso / m.alvo) * 100));
-              const barColor = pct >= 100 ? "#4ade80" : pct >= 60 ? "#BFDE4D" : "#f59e0b";
-              return (
-                <div key={m.id}>
-                  <div className="mb-1.5 flex items-center justify-between text-sm">
-                    <span style={{ color: "#d4d4d8" }}>{m.rotulo}</span>
-                    <div className="flex items-center gap-2">
-                      <span style={{ color: "#71717a" }}>{m.progresso}/{m.alvo}</span>
-                      <span className="text-xs font-bold" style={{ color: barColor }}>
-                        {pct}%{pct >= 100 && " ✓"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: "#27272a" }}>
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%`, background: barColor }}
-                    />
-                  </div>
+      {/* ── BLOCO 4: Pipeline e Metas ── */}
+      <Section titulo="📊 Pipeline & Metas" cor="#f59e0b">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <KpiCard titulo="Negoc. Abertas" valor={negociacoes.length} cor="#f59e0b" sub="em andamento" />
+          <KpiCard titulo="Valor Pipeline" valor={"R$ " + (valorPipeline / 1000).toFixed(0) + "k"} cor="#f59e0b" sub="estimado" numerico={false} />
+          <KpiCard titulo="Meta Anual" valor={<><span style={{ color: "#4ade80" }}>{vendasGanhasAno}</span><span style={{ color: "#71717a", fontSize: 13 }}>/{META_ANUAL}</span></>} cor="#BFDE4D" sub={faltamVendas + " para bater"} numerico={false} />
+          <KpiCard titulo="Ritmo Mensal" valor={ritmoMensal} cor="#a78bfa" sub="vendas/mês (média)" />
+        </div>
+        {/* Barra de progresso meta anual */}
+        <div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs text-zinc-400 font-semibold">Meta Anual: {vendasGanhasAno}/{META_ANUAL} vendas</span>
+            <span className="text-xs font-bold" style={{ color: "#BFDE4D" }}>{Math.round((vendasGanhasAno / META_ANUAL) * 100)}%</span>
+          </div>
+          <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "#27272a" }}>
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: Math.min(100, (vendasGanhasAno / META_ANUAL) * 100) + "%", background: "linear-gradient(90deg, #BFDE4D, #22c55e)" }}
+            />
+          </div>
+          <p className="text-xs text-zinc-600 mt-1.5">{diasRestantesAno} dias restantes no ano · {faltamVendas} vendas para a meta</p>
+        </div>
+      </Section>
+
+      {/* ── BLOCO 5: Alertas e Atenção ── */}
+      <Section titulo="⚠️ Atenção Necessária" cor="#f87171">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard titulo="Aguard. WhatsApp" valor={clientesAguardando.length} cor="#f87171" sub="sem resposta" />
+          <KpiCard titulo="Leads Esquecidos" valor={esquecidos.length} cor="#f59e0b" sub={"15+ dias sem contato"} />
+          <KpiCard titulo="Interesse Futuro" valor={futuros.length} cor="#a78bfa" sub={futurosNaHora + " chegando (30d)"} />
+          <KpiCard titulo="Leads Esfriando" valor={leadsEsfriando.length} cor="#f87171" sub="termômetro baixo" />
+        </div>
+      </Section>
+
+      {/* ── Próximas Visitas Agendadas ── */}
+      {proximasVisitas.length > 0 && (
+        <section>
+          <SectionLabel icone={<Calendar size={16} />} cor="#60a5fa">Próximas Visitas Agendadas</SectionLabel>
+          <div className="space-y-2">
+            {proximasVisitas.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                <Calendar size={16} style={{ color: "#60a5fa", flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{v.nome}</p>
+                  {v.municipio && <p className="text-xs text-zinc-500">{v.municipio.nome}</p>}
+                  {v.proximaVisitaNota && <p className="text-xs text-zinc-400 truncate">{v.proximaVisitaNota}</p>}
                 </div>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: "#60a5fa" }}>
+                  {new Date(v.proximaVisita!).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Aguardando resposta WhatsApp ── */}
+      {clientesAguardando.length > 0 && (
+        <section>
+          <SectionLabel icone={<MessageCircle size={16} />} cor="#f87171">Aguardando Resposta no WhatsApp</SectionLabel>
+          <div className="space-y-2">
+            {clientesAguardando.map((c) => (
+              <Link key={c.id} href={"/clientes/" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                <MessageCircle size={16} style={{ color: "#f87171", flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{c.nome}</p>
+                  <p className="text-xs text-zinc-500">Aguardando resposta · {diasDesde(c.ultimoContato)}d sem contato</p>
+                </div>
+                <ArrowRight size={14} className="text-zinc-600" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Leads esquecidos ── */}
+      {esquecidos.length > 0 && (
+        <section>
+          <SectionLabel icone={<Snowflake size={16} />} cor="#f59e0b">Leads Sem Contato (15+ dias)</SectionLabel>
+          <div className="space-y-2">
+            {esquecidos.map((n) => (
+              <Link key={n.id} href={"/clientes/" + n.clienteId} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                <Snowflake size={16} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
+                  <p className="text-xs text-zinc-500">{n.maquinaModelo ?? "Máquina não definida"} · há {diasDesde(n.ultimoContato)}d sem contato</p>
+                </div>
+                <ArrowRight size={14} className="text-zinc-600" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Leads esfriando ── */}
+      {leadsEsfriando.length > 0 && (
+        <section>
+          <SectionLabel icone={<AlertTriangle size={16} />} cor="#f87171">Pipeline em Risco</SectionLabel>
+          <div className="space-y-2">
+            {leadsEsfriando.map((n) => {
+              const { classe, esfriando } = classificarLead(n);
+              return (
+                <Link key={n.id} href={"/pipeline"} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                  <span className={"w-2.5 h-2.5 rounded-full flex-shrink-0 " + COR_CLASSE[classe]} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
+                    <p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · R$ {(n.valor ?? 0).toLocaleString("pt-BR")} · {n.estagio}</p>
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: "#f87171" }}>{n.termometro}%</span>
+                </Link>
               );
             })}
           </div>
-        </DarkCard>
+        </section>
+      )}
 
-        <DarkCard>
-          <SectionLabel cor="#60a5fa">Funil por estágio</SectionLabel>
-          <PipelineChart data={porEstagio} dark />
-        </DarkCard>
-      </div>
-
-      {/* ── Alertas + Aguardando ──────────────────────────────────────── */}
-      <div id="alertas" className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <DarkCard>
-          <SectionLabel icone={<Bell size={15} />} cor="#f87171">Clientes sem resposta</SectionLabel>
-          {alertas.length === 0 ? (
-            <EmptyOk>Tudo em dia! Nenhum cliente esquecido.</EmptyOk>
-          ) : (
-            <ul className="space-y-2">
-              {alertas.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center justify-between rounded-xl px-3 py-2.5"
-                  style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                >
-                  <div className="min-w-0">
-                    <Link href={`/clientes/${a.clienteId}`} className="block truncate text-sm font-semibold text-white hover:text-[#BFDE4D]">
-                      {a.cliente.nome}
-                    </Link>
-                    <p className="truncate text-xs" style={{ color: "#71717a" }}>{a.mensagem}</p>
-                  </div>
-                  <div className="ml-3 flex shrink-0 items-center gap-2">
-                    <span
-                      className="rounded-full px-2 py-0.5 text-xs font-bold"
-                      style={a.severidade === "alta"
-                        ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
-                        : { background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
-                    >
-                      {a.diasDesde}d
-                    </span>
-                    <form action={resolverAlerta.bind(null, a.id)}>
-                      <button
-                        className="rounded-lg px-2.5 py-1 text-xs font-semibold transition"
-                        style={{ background: "rgba(191,222,77,0.1)", color: "#BFDE4D" }}
-                      >
-                        Resolver
-                      </button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DarkCard>
-
-        <DarkCard>
-          <SectionLabel icone={<Clock size={15} />} cor="#f59e0b">Aguardando sua resposta</SectionLabel>
-          {filaAguardando.length === 0 ? (
-            <EmptyOk>Nenhuma negociação parada. Ótimo ritmo!</EmptyOk>
-          ) : (
-            <ul className="space-y-2">
-              {filaAguardando.map((n) => (
-                <li
-                  key={n.id}
-                  className="flex items-center justify-between rounded-xl px-3 py-2.5"
-                  style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                >
-                  <div className="min-w-0">
-                    <Link href={`/clientes/${n.clienteId}`} className="block truncate text-sm font-semibold text-white hover:text-[#BFDE4D]">
-                      {n.cliente.nome}
-                    </Link>
-                    <p className="truncate text-xs" style={{ color: "#71717a" }}>
-                      {n.maquinaModelo ?? "Sem máquina"} · {n.proximaAcao ?? "Retomar contato"}
-                    </p>
-                  </div>
-                  <span
-                    className="ml-3 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                    style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
-                  >
-                    {diasDesde(n.ultimoContato)}d
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DarkCard>
-      </div>
-
-      {/* ── WhatsApp aguardando ───────────────────────────────────────── */}
-      <div className="mt-6">
-        <DarkCard>
-          <div className="mb-4 flex items-center gap-2">
-            <MessageCircle size={15} style={{ color: "#4ade80" }} />
-            <span className="font-semibold text-white text-sm">Aguardando seu retorno no WhatsApp</span>
-            {clientesAguardando.length > 0 && (
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}
-              >
-                {clientesAguardando.length}
-              </span>
-            )}
-            <span className="ml-1 text-xs" style={{ color: "#52525b" }} title="Despedidas e agradecimentos são filtrados automaticamente">🤖 IA filtra despedidas</span>
-            <Link href="/inbox" className="ml-auto text-xs font-semibold hover:underline" style={{ color: "#BFDE4D" }}>
-              Abrir WhatsApp →
-            </Link>
-          </div>
-          {clientesAguardando.length === 0 ? (
-            <EmptyOk>Nenhum cliente esperando resposta. Tudo respondido! 🎉</EmptyOk>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {clientesAguardando.map((c) => {
-                const dias = c.ultimoContato ? diasDesde(c.ultimoContato) : 0;
-                return (
-                  <Link
-                    key={c.id}
-                    href="/inbox"
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
-                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                  >
-                    <span className="min-w-0 truncate text-sm font-semibold text-white">{c.nome}</span>
-                    <span
-                      className="ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                      style={dias >= 2
-                        ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
-                        : { background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
-                    >
-                      {dias === 0 ? "hoje" : `${dias}d`}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </DarkCard>
-      </div>
-
-      {/* ── Clientes esquecidos ──────────────────────────────────────── */}
-      {esquecidos.length > 0 && (
-        <div className="mt-6">
-          <DarkCard>
-            <div className="mb-4 flex items-center gap-2">
-              <UserX size={15} style={{ color: "#c084fc" }} />
-              <span className="font-semibold text-white text-sm">Clientes esquecidos</span>
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: "rgba(192,132,252,0.15)", color: "#c084fc" }}
-              >
-                {esquecidos.length}
-              </span>
-              <span className="ml-1 text-xs" style={{ color: "#52525b" }}>
-                +{DIAS_ESQUECIDO} dias sem contato em negociação aberta
-              </span>
-              <Link href="/clientes?esquecidos=1" className="ml-auto text-xs font-semibold hover:underline" style={{ color: "#BFDE4D" }}>
-                Ver todos →
+      {/* ── Aguardando na Fila ── */}
+      {filaAguardando.length > 0 && (
+        <section>
+          <SectionLabel icone={<Clock size={16} />} cor="#60a5fa">Fila de Follow-up</SectionLabel>
+          <div className="space-y-2">
+            {filaAguardando.map((n) => (
+              <Link key={n.id} href={"/pipeline"} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                <Clock size={16} style={{ color: "#60a5fa", flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
+                  <p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · {n.proximaAcao ?? "Definir próxima ação"}</p>
+                </div>
+                <span className="text-xs text-zinc-500">{diasDesde(n.ultimoContato)}d</span>
               </Link>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {esquecidos.map((n) => {
-                const dias = diasDesde(n.ultimoContato);
-                const urgente = dias >= 30;
-                return (
-                  <Link
-                    key={n.id}
-                    href={`/clientes/${n.clienteId}`}
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
-                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                  >
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-white">{n.cliente.nome}</span>
-                      <p className="text-xs truncate" style={{ color: "#71717a" }}>
-                        {n.maquinaModelo ?? "—"} · {n.estagio}
-                      </p>
-                    </div>
-                    <span
-                      className="ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                      style={urgente
-                        ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
-                        : { background: "rgba(192,132,252,0.15)", color: "#c084fc" }}
-                    >
-                      {dias}d
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </DarkCard>
-        </div>
+            ))}
+          </div>
+        </section>
       )}
 
-      {/* ── Interesse futuro (ex: aguardando Plano Safra) ─────────────── */}
-      {futuros.length > 0 && (
-        <div className="mt-6">
-          <DarkCard>
-            <div className="mb-4 flex items-center gap-2">
-              <Clock size={15} style={{ color: "#fbbf24" }} />
-              <span className="font-semibold text-white text-sm">Interesse futuro</span>
-              {futurosNaHora > 0 && (
-                <span
-                  className="rounded-full px-2 py-0.5 text-xs font-bold"
-                  style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80" }}
-                >
-                  {futurosNaHora} na hora de contatar
-                </span>
-              )}
-              <span className="ml-1 text-xs" style={{ color: "#52525b" }}>
-                clientes aguardando o momento certo (ex: Plano Safra)
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {futuros.map((f) => {
-                const naHora = !!f.interesseFuturoData && f.interesseFuturoData <= em30Dias;
-                const dataFmt = f.interesseFuturoData
-                  ? f.interesseFuturoData.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "2-digit" })
-                  : null;
-                return (
-                  <Link
-                    key={f.id}
-                    href={`/clientes/${f.id}`}
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
-                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                  >
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-white">{f.nome}</span>
-                      <p className="truncate text-xs" style={{ color: "#71717a" }}>
-                        {f.interesseFuturoNota ?? "Aguardando momento certo"}
-                      </p>
-                    </div>
-                    <span
-                      className="ml-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold"
-                      style={naHora
-                        ? { background: "rgba(34,197,94,0.15)", color: "#4ade80" }
-                        : { background: "rgba(251,191,36,0.15)", color: "#fbbf24" }}
-                    >
-                      {naHora ? "agora!" : dataFmt ?? "futuro"}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </DarkCard>
-        </div>
+      {/* ── Interesse Futuro chegando ── */}
+      {futurosNaHora > 0 && (
+        <section>
+          <SectionLabel icone={<Bell size={16} />} cor="#a78bfa">Chegou a Hora — Interesse Futuro</SectionLabel>
+          <div className="space-y-2">
+            {futuros
+              .filter((f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias)
+              .map((f) => (
+                <Link key={f.id} href={"/clientes/" + f.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                  <Bell size={16} style={{ color: "#a78bfa", flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{f.nome}</p>
+                    <p className="text-xs text-zinc-500">{f.interesseFuturoNota ?? "Interesse futuro"}</p>
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: "#a78bfa" }}>
+                    {f.interesseFuturoData ? new Date(f.interesseFuturoData).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "Em breve"}
+                  </span>
+                </Link>
+              ))}
+          </div>
+        </section>
       )}
 
-      {/* ── Leads esfriando ──────────────────────────────────────────── */}
-      {leadsEsfriando.length > 0 && (
-        <div className="mt-6">
-          <DarkCard>
-            <div className="mb-4 flex items-center gap-2">
-              <Snowflake size={15} style={{ color: "#60a5fa" }} />
-              <span className="font-semibold text-white text-sm">Leads esfriando</span>
-              <span className="ml-auto text-xs" style={{ color: "#71717a" }}>Estavam quentes e pararam</span>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {leadsEsfriando.map((n) => {
-                const { classe } = classificarLead(n);
-                return (
-                  <Link
-                    key={n.id}
-                    href={`/clientes/${n.clienteId}`}
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 transition hover:brightness-110"
-                    style={{ background: "#27272a", border: "1px solid #3f3f46" }}
-                  >
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-white">
-                        {n.cliente.nome}
-                      </span>
-                      <p className="text-xs" style={{ color: "#71717a" }}>
-                        {n.maquinaModelo ?? "—"} · {diasDesde(n.ultimoContato)}d sem contato
-                      </p>
-                    </div>
-                    <div className="ml-2 flex shrink-0 items-center gap-1">
-                      <Badge tom={COR_CLASSE[classe]}>Lead {classe}</Badge>
-                      <ArrowRight size={12} style={{ color: "#52525b" }} />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </DarkCard>
-        </div>
+      {/* ── Pipeline por estágio ── */}
+      <section>
+        <SectionLabel icone={<BarChart3 size={16} />} cor="#BFDE4D">Pipeline por Estágio</SectionLabel>
+        <PipelineChart porEstagio={porEstagio} />
+      </section>
+
+      {/* ── Alertas do CRM ── */}
+      {alertas.length > 0 && (
+        <section>
+          <SectionLabel icone={<Bell size={16} />} cor="#f59e0b">Alertas do Sistema</SectionLabel>
+          <div className="space-y-2">
+            {alertas.slice(0, 5).map((a) => (
+              <div key={a.id} className="flex items-start gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+                <AlertTriangle size={16} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 1 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{a.cliente?.nome}</p>
+                  <p className="text-xs text-zinc-400">{a.mensagem}</p>
+                </div>
+                <form action={resolverAlerta.bind(null, a.id)}>
+                  <button type="submit" className="text-xs px-2 py-1 rounded-lg" style={{ background: "#27272a", color: "#a1a1aa" }}>
+                    OK
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
+
+      <DicaVendas />
     </div>
   );
 }
 
-// ── Utilitários de UI (dark) ──────────────────────────────────────────────────
+// ── Componentes internos ───────────────────────────────────────────────────────
 
-function DarkCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Section({ titulo, cor, children }: { titulo: string; cor: string; children: React.ReactNode }) {
   return (
-    <div
-      className={`rounded-2xl p-5 ${className}`}
-      style={{ background: "#18181b", border: "1px solid #27272a" }}
-    >
+    <section className="space-y-2">
+      <h2 className="text-sm font-bold" style={{ color: cor }}>{titulo}</h2>
       {children}
-    </div>
+    </section>
   );
 }
 
-function DarkStatCard({
-  icone, rotulo, valor, accentColor, href,
+function KpiCard({
+  titulo, valor, cor, sub, numerico = true,
 }: {
-  icone: React.ReactNode;
-  rotulo: string;
-  valor: string;
-  accentColor: string;
-  href?: string;
+  titulo: string;
+  valor: React.ReactNode;
+  cor: string;
+  sub?: React.ReactNode;
+  numerico?: boolean;
 }) {
-  const inner = (
-    <>
-      <div
-        className="w-fit rounded-xl p-2.5"
-        style={{ background: `${accentColor}18`, color: accentColor }}
-      >
-        {icone}
-      </div>
-      <div className="min-w-0 w-full">
-        <div className="text-xs font-medium leading-tight" style={{ color: "#71717a" }}>{rotulo}</div>
-        <div className="text-lg font-bold text-white sm:text-xl">{valor}</div>
-      </div>
-    </>
-  );
-  const cls =
-    "flex flex-col items-start gap-2 rounded-2xl p-4 transition hover:brightness-110 sm:flex-row sm:items-center sm:gap-4";
-  const style = { background: "#18181b", border: "1px solid #27272a" };
-  if (href) return <Link href={href} className={cls} style={style}>{inner}</Link>;
-  return <div className={cls} style={style}>{inner}</div>;
-}
-
-function MiniStat({ label, valor, cor }: { label: string; valor: string; cor: string }) {
   return (
-    <div className="rounded-xl px-4 py-2.5 text-right" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-      <div className="text-xs" style={{ color: "#71717a" }}>{label}</div>
-      <div className="text-base font-bold" style={{ color: cor }}>{valor}</div>
+    <div className="rounded-2xl p-4 flex flex-col gap-1" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+      <p className="text-xs text-zinc-500 font-medium truncate">{titulo}</p>
+      <p className="text-2xl font-black leading-none" style={{ color: cor }}>{valor}</p>
+      {sub && <p className="text-xs text-zinc-600 leading-tight">{sub}</p>}
     </div>
   );
 }
 
-function Chip({ children, cor, bg }: { children: React.ReactNode; cor: string; bg: string }) {
+function SectionLabel({ children, icone, cor }: { children: React.ReactNode; icone?: React.ReactNode; cor?: string }) {
   return (
-    <span className="rounded-md px-1.5 py-0.5 font-bold" style={{ background: bg, color: cor }}>
-      {children}
-    </span>
-  );
-}
-
-function SectionLabel({ children, icone, cor }: { children: React.ReactNode; icone?: React.ReactNode; cor: string }) {
-  return (
-    <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
       {icone && <span style={{ color: cor }}>{icone}</span>}
       {children}
     </div>
