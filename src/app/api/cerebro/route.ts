@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
-import { registrarAudit } from "@/lib/audit";
+
 import { resumoAcademia } from "@/lib/academia";
 
 const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
@@ -418,11 +418,6 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          await registrarAudit({
-            acao: "ia_acao" as any,
-            descricao: `Cérebro respondeu: "${mensagem.slice(0, 80)}${mensagem.length > 80 ? "..." : ""}"`,
-            via: "ia",
-          }).catch(() => {});
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (e) {
