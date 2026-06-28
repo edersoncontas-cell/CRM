@@ -88,11 +88,10 @@ export default async function DashboardPage() {
     db.visita.count({ where: { data: { gte: inicioMes } } }),
     db.visita.count({ where: { data: { gte: inicioAno } } }),
     // Conversas (mensagens recebidas de clientes)
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioDia } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioSemana } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioMes } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioAno } } }).catch(() => 0),
-    // Vendas fechadas
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioDia } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioSemana } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioMes } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioAno } } }).catch(() => 0),    // Vendas fechadas
     db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioDia } } }),
     db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioSemana } } }),
     db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioMes } } }),
