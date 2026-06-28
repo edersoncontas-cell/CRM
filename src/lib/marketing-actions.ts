@@ -5,6 +5,14 @@ import { revalidatePath } from "next/cache";
 import { gerarPostMarketingIA, type TipoPost } from "@/lib/ai/index";
 import { registrarAudit } from "@/lib/audit";
 
+// Tenta extrair um modelo de máquina mencionado no texto do feedback.
+// Ex.: "o modelo tem que ser a E145C" → "E145C"
+function extrairModeloDoFeedback(feedback: string): string | null {
+  // Padrões comuns: letras+números como E145C, B95C, W190B, RG170B, CA2500, CC2200
+  const match = feedback.match(/\b([A-Z]{1,3}[\d]{2,4}[A-Z0-9]{0,4})\b/);
+  return match ? match[1] : null;
+}
+
 // Gera um novo post de marketing e salva como rascunho
 export async function gerarPostAction(formData: FormData) {
   const tipo = (formData.get("tipo") as TipoPost) ?? "avulso";
@@ -78,11 +86,30 @@ export async function pedirAlteracaoCampanha(id: string, feedback: string) {
   const campanha = await db.campanhaMarketing.findUnique({ where: { id } });
   if (!campanha) return;
 
+  // Tenta extrair modelo mencionado no feedback para buscar a máquina correta
+  const modeloNoFeedback = extrairModeloDoFeedback(feedback);
+
   const where: { proprio: boolean; marca?: string; modelo?: string; categoria?: string } = { proprio: true };
   if (campanha.marca) where.marca = campanha.marca;
   if (campanha.categoria) where.categoria = campanha.categoria;
+  // Se o feedback pede um modelo específico, prioriza ele
+  if (modeloNoFeedback) where.modelo = modeloNoFeedback;
 
-  const maquinas = await db.maquina.findMany({ where });
+  let maquinas = await db.maquina.findMany({ where });
+
+  // Se não encontrou a máquina pelo modelo + marca, tenta só pelo modelo
+  if (maquinas.length === 0 && modeloNoFeedback) {
+    maquinas = await db.maquina.findMany({ where: { proprio: true, modelo: modeloNoFeedback } });
+  }
+
+  // Fallback: busca pela marca/categoria sem filtro de modelo
+  if (maquinas.length === 0) {
+    const whereSemModelo: { proprio: boolean; marca?: string; categoria?: string } = { proprio: true };
+    if (campanha.marca) whereSemModelo.marca = campanha.marca;
+    if (campanha.categoria) whereSemModelo.categoria = campanha.categoria;
+    maquinas = await db.maquina.findMany({ where: whereSemModelo });
+  }
+
   const maquina = maquinas.length
     ? maquinas[Math.floor(Math.random() * maquinas.length)]
     : null;
