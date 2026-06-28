@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
     ];
 
     // Última mensagem do usuário (pode ter arquivos)
-    const contentParts: Anthropic.ContentBlockParam[] = [];
+    const contentParts: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = [];
 
     for (const arquivo of arquivos) {
       const buf = Buffer.from(await arquivo.arrayBuffer());
