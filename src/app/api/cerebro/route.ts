@@ -36,11 +36,11 @@ async function buscarContextoCRM(mensagem: string) {
     visitasSemana,
     visitasMes,
     visitasAno,
-    // Conversas WhatsApp por período
-    conversasHoje,
-    conversasSemana,
-    conversasMes,
-    conversasAno,
+    // Mensagens WhatsApp recebidas por período (direction "IN" = incoming)
+    mensagensHoje,
+    mensagensSemana,
+    mensagensMes,
+    mensagensAno,
     // Vendas ganhas por período
     vendasHoje,
     vendasSemana,
@@ -54,7 +54,7 @@ async function buscarContextoCRM(mensagem: string) {
     // Agenda próximas visitas
     proximasVisitas,
     // Clientes aguardando resposta
-    aguardandoResposta,
+    totalAguardandoResposta,
     // Clientes esquecidos (sem contato 15+ dias)
     clientesEsquecidos,
     // Interesse futuro
@@ -73,11 +73,11 @@ async function buscarContextoCRM(mensagem: string) {
     db.visita.count({ where: { data: { gte: inicioSemana } } }),
     db.visita.count({ where: { data: { gte: inicioMes } } }),
     db.visita.count({ where: { data: { gte: inicioAno } } }),
-    // Conversas WhatsApp (novas mensagens recebidas de clientes)
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioDia } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioSemana } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioMes } } }).catch(() => 0),
-    db.whatsappMensagem.count({ where: { direcao: "recebida", enviadoEm: { gte: inicioAno } } }).catch(() => 0),
+    // WhatsApp messages received (IN = incoming from client)
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioDia } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioSemana } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioMes } } }).catch(() => 0),
+    db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioAno } } }).catch(() => 0),
     // Vendas fechadas por período
     db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioDia } } }),
     db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioSemana } } }),
@@ -99,7 +99,7 @@ async function buscarContextoCRM(mensagem: string) {
     db.auditLog.findMany({
       orderBy: { criadoEm: "desc" },
       take: 20,
-      select: { acao: true, descricao: true, criadoEm: true, via: true },
+      select: { acao: true, descricao: true, criadoEm: true, origem: true },
     }),
     // Próximas visitas agendadas (30 dias)
     db.cliente.findMany({
@@ -139,12 +139,12 @@ async function buscarContextoCRM(mensagem: string) {
     id: string;
     nome: string;
     telefone: string | null;
-    status: string | null;
+    status: string;
     resumoTexto?: string | null;
     perfilIA?: string | null;
     municipio?: { nome: string } | null;
     negociacoes?: { maquinaModelo: string | null; valor: number | null; status: string; estagio: string }[];
-    conversas?: { id: string; preview: string; ultimaMensagemEm: Date; mensagens?: { direcao: string; corpo: string; enviadoEm: Date }[] }[];
+    conversas?: { id: string; conteudo: string; remetente: string; criadoEm: Date }[];
     visitas?: { data: Date; observacao: string | null }[];
   } | null = null;
 
@@ -158,35 +158,20 @@ async function buscarContextoCRM(mensagem: string) {
           select: { maquinaModelo: true, valor: true, status: true, estagio: true },
         },
         conversas: {
-          take: 1,
-          select: {
-            id: true,
-            preview: true,
-            ultimaMensagemEm: true,
-          },
-        } as any,
+          orderBy: { criadoEm: "desc" },
+          take: 40,
+          select: { id: true, conteudo: true, remetente: true, criadoEm: true },
+        },
         visitas: {
           orderBy: { data: "desc" },
           take: 10,
           select: { data: true, observacao: true },
         },
-      } as any,
-    }) as any;
+      },
+    });
 
     if (c) {
-      clienteEspecifico = c;
-      if (c.conversas?.length > 0) {
-        const convid = c.conversas[0].id;
-        const mensagens = await db.whatsappMensagem.findMany({
-          where: { conversaId: convid },
-          orderBy: { enviadoEm: "desc" },
-          take: 50,
-          select: { direcao: true, corpo: true, enviadoEm: true },
-        });
-        if (clienteEspecifico && clienteEspecifico.conversas) {
-          clienteEspecifico.conversas[0].mensagens = mensagens.reverse() as any;
-        }
-      }
+      clienteEspecifico = c as any;
     }
   }
 
@@ -196,13 +181,13 @@ async function buscarContextoCRM(mensagem: string) {
     negsGanhas,
     negsPerdidas,
     visitas: { hoje: visitasHoje, semana: visitasSemana, mes: visitasMes, ano: visitasAno },
-    conversas: { hoje: conversasHoje, semana: conversasSemana, mes: conversasMes, ano: conversasAno },
+    mensagens: { hoje: mensagensHoje, semana: mensagensSemana, mes: mensagensMes, ano: mensagensAno },
     vendas: { hoje: vendasHoje, semana: vendasSemana, mes: vendasMes, valorAno: vendasGanhasAno._sum.valor ?? 0, totalAno: vendasGanhasAno._count },
     negsAbertas: negsAbertas as any[],
     ultimosClientes,
     auditorias,
     proximasVisitas,
-    aguardandoResposta,
+    totalAguardandoResposta,
     clientesEsquecidos,
     interesseFuturo,
     postsMarketing,
@@ -212,9 +197,8 @@ async function buscarContextoCRM(mensagem: string) {
 }
 
 function extrairNomeCliente(mensagem: string): string | null {
-  const lower = mensagem.toLowerCase();
   const padroes = [
-    /(?:conversa|dados|cliente|sobre|ver|mostre?|histórico|visita[s]? de?|negociação de?|perfil de?)s+(?:do?|da|de)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)/i,
+    /(?:conversa|dados|cliente|sobre|ver|mostre?|histórico|visitas? d[eo]?|negociação d[eo]?|perfil d[eo]?)s+(?:do?|da|de)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)/i,
     /(?:o|a)s+([A-ZÀ-Ú][a-zà-ú]+(?:s+[A-ZÀ-Ú][a-zà-ú]+)*)s+(?:está|tem|quer|precisa|ligou|mandou)/i,
   ];
   for (const p of padroes) {
@@ -242,11 +226,11 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
 - Este ano: ${ctx.visitas.ano}
 
 💬 MENSAGENS RECEBIDAS DE CLIENTES (WhatsApp):
-- Hoje: ${ctx.conversas.hoje}
-- Esta semana: ${ctx.conversas.semana}
-- Este mês: ${ctx.conversas.mes}
-- Este ano: ${ctx.conversas.ano}
-- Clientes aguardando resposta agora: ${ctx.aguardandoResposta}
+- Hoje: ${ctx.mensagens.hoje}
+- Esta semana: ${ctx.mensagens.semana}
+- Este mês: ${ctx.mensagens.mes}
+- Este ano: ${ctx.mensagens.ano}
+- Clientes aguardando resposta agora: ${ctx.totalAguardandoResposta}
 
 🏆 VENDAS FECHADAS:
 - Hoje: ${ctx.vendas.hoje} venda(s)
@@ -256,7 +240,7 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
 
 ⚠️ ALERTAS:
 - Leads sem contato há 15+ dias: ${ctx.clientesEsquecidos}
-- Clientes com interesse futuro (aguardando Plano Safra / próxima compra): ${ctx.interesseFuturo}
+- Clientes com interesse futuro: ${ctx.interesseFuturo}
 
 `;
 
@@ -300,12 +284,12 @@ function montarContextoTexto(ctx: Awaited<ReturnType<typeof buscarContextoCRM>>)
     if ((ce as any).visitas?.length) {
       txt += `  Visitas recentes: ${(ce as any).visitas.slice(0,5).map((v: any) => new Date(v.data).toLocaleDateString("pt-BR") + (v.observacao ? ": " + v.observacao : "")).join(" | ")}\n`;
     }
-    if (ce.conversas?.length && ce.conversas[0].mensagens?.length) {
-      txt += `\n  Conversa WhatsApp (últimas mensagens):\n`;
-      for (const msg of ce.conversas[0].mensagens.slice(-30)) {
-        const hora = new Date(msg.enviadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        const quem = msg.direcao === "enviada" ? "Vendedor" : "Cliente";
-        txt += `    [${hora}] ${quem}: ${msg.corpo}\n`;
+    if (ce.conversas?.length) {
+      txt += `\n  Conversas recentes (últimas ${Math.min(ce.conversas.length, 30)}):\n`;
+      for (const msg of ce.conversas.slice(0, 30)) {
+        const hora = new Date(msg.criadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const quem = msg.remetente === "vendedor" ? "Você" : "Cliente";
+        txt += `    [${hora}] ${quem}: ${msg.conteudo.substring(0, 200)}\n`;
       }
     }
     txt += "\n";
@@ -334,7 +318,7 @@ Você tem ACESSO TOTAL a todos os dados do CRM. Pode responder qualquer pergunta
 CAPACIDADES:
 ✅ Responder sobre qualquer cliente pelo nome
 ✅ Mostrar estatísticas de visitas (hoje/semana/mês/ano)
-✅ Mostrar contagem de conversas e mensagens recebidas
+✅ Mostrar contagem de mensagens recebidas de clientes
 ✅ Analisar pipeline de vendas e oportunidades
 ✅ Identificar leads esquecidos e urgências
 ✅ Dar sugestões estratégicas baseadas nos dados reais
@@ -394,7 +378,6 @@ export async function POST(req: NextRequest) {
           source: { type: "base64", media_type: mt, data: buf.toString("base64") },
         });
       } else {
-        // PDF ou texto
         contentParts.push({
           type: "text",
           text: `[Arquivo recebido: ${arquivo.name} (${arquivo.type}, ${(arquivo.size / 1024).toFixed(1)} KB). Analise com base no conteúdo se possível.]`,
