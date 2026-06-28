@@ -353,7 +353,7 @@ export async function POST(req: NextRequest) {
 
     const [ctx, academiaTxt] = await Promise.all([
       buscarContextoCRM(mensagem),
-      resumoAcademia().catch(() => ""),
+      Promise.resolve(resumoAcademia()).catch(() => ""),
     ]);
 
     const systemPrompt = montarSystemPrompt(ctx, academiaTxt);
