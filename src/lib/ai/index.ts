@@ -557,7 +557,9 @@ export async function gerarPostMarketingIA(
 
   const feedbackPart =
     feedbackAnterior && conteudoAnterior
-      ? `\n\nPost anterior gerado (reescreva melhorando com base no feedback):\n---\n${conteudoAnterior}\n---\nFeedback do vendedor: "${feedbackAnterior}"`
+      ? `\n\n⚠️ INSTRUÇÃO OBRIGATÓRIA DO VENDEDOR (siga à risca, sem exceção):\n---\n${conteudoAnterior}\n---\nINSTRUÇÃO DO VENDEDOR (execute EXATAMENTE): "${feedbackAnterior}"
+
+ATENÇÃO: Se o vendedor pediu um modelo específico, use ESSE modelo e nenhum outro.`
       : "";
 
   try {
