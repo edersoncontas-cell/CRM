@@ -5,7 +5,7 @@ import {
   METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS,
   PSICOLOGIA_PERSUASAO, NEUROCIENCIA_VENDAS, NEGOCIACAO_AVANCADA, SCRIPTS_WHATSAPP, DICAS_PROSPECCAO, ROTEIRO_VISITA_COMPLETO,
   type Metodologia, type PerfilCliente, type Objecao, type Fechamento,
-  type PsicologiaTopico, type NeurocienciaTopico, type TecnicaNegociacao, type ScriptWhatsApp, type DicaProspeccao, type FaseVisita,
+  type PsicologiaTopico, type NeurocienciaTopico, type TecnicaNegociacao, type ScriptWhatsApp, type DicaProspeccao,
 } from "@/lib/academia";
 import { gerarEstrategiaAction, toggleFavoritoEstrategia, excluirEstrategia } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -849,7 +849,7 @@ function TabProspeccao() {
             <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="font-bold text-slate-800 text-sm mb-1">{d.titulo}</div>
               <p className="text-sm text-slate-600 mb-2">{d.descricao}</p>
-              <div className="text-xs text-brand-700 font-medium">Acao: {d.acao}</div>
+              <div className="text-xs text-brand-700 font-medium">Acao: {d.acaoPratica}</div>
             </div>
           ))}
         </div>
