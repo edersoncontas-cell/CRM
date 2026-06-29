@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import {
   METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS,
-  PSICOLOGIA_PERSUASAO, NEUROCIENCIA_VENDAS, NEGOCIACAO_AVANCADA,
+  PSICOLOGIA_PERSUASAO, NEUROCIENCIA_VENDAS, NEGOCIACAO_AVANCADA, SCRIPTS_WHATSAPP, DICAS_PROSPECCAO, ROTEIRO_VISITA_COMPLETO,
   type Metodologia, type PerfilCliente, type Objecao, type Fechamento,
-  type PsicologiaTopico, type NeurocienciaTopico, type TecnicaNegociacao,
+  type PsicologiaTopico, type NeurocienciaTopico, type TecnicaNegociacao, type ScriptWhatsApp, type DicaProspeccao, type FaseVisita,
 } from "@/lib/academia";
 import { gerarEstrategiaAction, toggleFavoritoEstrategia, excluirEstrategia } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ type EstrategiaRow = {
   criadoEm: string;
 };
 
-type Tab = "metodologias" | "disc" | "objecoes" | "fechamentos" | "psicologia" | "neurociencia" | "negociacao" | "estrategias";
+type Tab = "metodologias" | "disc" | "objecoes" | "fechamentos" | "psicologia" | "neurociencia" | "negociacao" | "estrategias" | "scripts" | "prospeccao" | "roteiro";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "metodologias", label: "Metodologias", icon: BookOpen },
@@ -36,6 +36,9 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "neurociencia", label: "Neurociência", icon: Zap },
   { id: "negociacao", label: "Negociação Elite", icon: Trophy },
   { id: "estrategias", label: "Gerador IA", icon: Sparkles },
+  { id: "scripts", label: "Scripts WhatsApp", icon: MessageSquareWarning },
+  { id: "prospeccao", label: "Prospecção", icon: Users },
+  { id: "roteiro", label: "Roteiro de Visita", icon: Handshake },
 ];
 
 const NIVEL_COR: Record<string, string> = {
@@ -135,11 +138,12 @@ export function AcademiaClient({
           onDelete={(id) => setEstategias((prev) => prev.filter((e) => e.id !== id))}
         />
       )}
+      {aba === "scripts" && <TabScripts />}
+      {aba === "prospeccao" && <TabProspeccao />}
+      {aba === "roteiro" && <TabRoteiro />}
     </div>
   );
 }
-
-// ─── Tab Metodologias ────────────────────────────────────────────────────────
 
 function TabMetodologias() {
   const [aberta, setAberta] = useState<string | null>(METODOLOGIAS[0]?.nome ?? null);
@@ -812,3 +816,79 @@ function EstrategiaCard({
     </div>
   );
 }
+function TabScripts() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="font-bold text-slate-800 mb-3">Scripts WhatsApp Profissionais</h3>
+        <p className="text-sm text-slate-500 mb-4">Textos prontos para cada situacao de venda. Copie, adapte e envie.</p>
+        <div className="space-y-4">
+          {SCRIPTS_WHATSAPP.map((s, i) => (
+            <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-brand-700 bg-brand-100 rounded-full px-2 py-0.5">{s.situacao}</span>
+              </div>
+              <p className="text-xs text-slate-500 mb-2">{s.contexto}</p>
+              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{s.mensagem}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabProspeccao() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="font-bold text-slate-800 mb-3">Dicas de Prospeccao</h3>
+        <p className="text-sm text-slate-500 mb-4">Tecnicas para encontrar e abordar novos clientes com eficiencia.</p>
+        <div className="space-y-3">
+          {DICAS_PROSPECCAO.map((d, i) => (
+            <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="font-bold text-slate-800 text-sm mb-1">{d.titulo}</div>
+              <p className="text-sm text-slate-600 mb-2">{d.descricao}</p>
+              <div className="text-xs text-brand-700 font-medium">Acao: {d.acao}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabRoteiro() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="font-bold text-slate-800 mb-3">Roteiro de Visita Completo</h3>
+        <p className="text-sm text-slate-500 mb-4">Estrutura passo a passo para conduzir uma visita de vendas de alto impacto.</p>
+        <div className="space-y-4">
+          {ROTEIRO_VISITA_COMPLETO.map((fase, i) => (
+            <div key={i} className="rounded-lg border border-brand-200 bg-brand-50 p-3">
+              <div className="font-bold text-brand-800 mb-2">{fase.fase}</div>
+              <div className="space-y-1">
+                {fase.perguntas.map((p, j) => (
+                  <div key={j} className="flex items-start gap-2 text-sm text-slate-700">
+                    <span className="text-brand-600 font-bold shrink-0">{j+1}.</span>
+                    <span>{p}</span>
+                  </div>
+                ))}
+              </div>
+              {fase.errosComuns && (
+                <div className="mt-2 pt-2 border-t border-brand-200">
+                  <div className="text-xs font-bold text-red-600 mb-1">Evitar:</div>
+                  {fase.errosComuns.map((e, k) => (
+                    <div key={k} className="text-xs text-red-600">- {e}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
