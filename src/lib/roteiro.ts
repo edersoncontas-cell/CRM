@@ -144,13 +144,13 @@ export function montarGruposSugeridos(
 
     grupos.push({
       municipioId: info.id,
-municipioNome: informacoes.nome,
+municipioNome: info.nome,
       clientes,
       prospectos,
-      diaRecomendado: diaRecomendadoPara(informacoes.nome),
+      diaRecomendado: diaRecomendadoPara(info.nome),
       lat: info.lat,
       lng: info.lng,
-      mapsUrl: googlemapsUrl([informacoes.nome]),
+      mapsUrl: googlemapsUrl([info.nome]),
     });
   }
 
