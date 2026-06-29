@@ -5,7 +5,7 @@ import { diasDesde } from "./utils";
 
 export type ClienteRota = {
   id: string;
-  nome: string;
+  nome: string;h
   telefone: string | null;
   origem: string | null;
   visitado: boolean;
@@ -144,13 +144,13 @@ export function montarGruposSugeridos(
 
     grupos.push({
       municipioId: info.id,
-      municipioNome,
+municipioNome: informacoes.nome,
       clientes,
       prospectos,
-      diaRecomendado: diaRecomendadoPara(municipioNome),
+      diaRecomendado: diaRecomendadoPara(informacoes.nome),
       lat: info.lat,
       lng: info.lng,
-      mapsUrl: googleMapsUrl([municipioNome]),
+      mapsUrl: googlemapsUrl([informacoes.nome]),
     });
   }
 
