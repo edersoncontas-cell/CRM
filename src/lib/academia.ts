@@ -845,15 +845,7 @@ export const SCRIPTS_WHATSAPP: ScriptWhatsApp[] = [
   {
     situacao: "Enviar proposta por WhatsApp",
     contexto: "Apos reuniao, enviar resumo da proposta",
-    mensagem: "[Nome], conforme nossa conversa, segue o resumo:
-
-Maquina: [modelo]
-Aplicacao ideal: [uso]
-Investimento: R$ [valor]
-Financiamento: Finame — entrada de [X]% e parcelas de R$ [Y] em [Z] meses
-Entrega estimada: [prazo]
-
-Posso agendar uma reuniao com nosso financeiro para detalhar as condicoes?",
+    mensagem: "[Nome], conforme nossa conversa, segue o resumo:\n\nMaquina: [modelo]\nAplicacao ideal: [uso]\nInvestimento: R$ [valor]\nFinanciamento: Finame - entrada de [X]% e parcelas de R$ [Y] em [Z] meses\nEntrega estimada: [prazo]\n\nPosso agendar uma reuniao com nosso financeiro para detalhar as condicoes?",
   },
   {
     situacao: "Comunicar lancamento ou novidade",
