@@ -328,8 +328,8 @@ CAPACIDADES:
 
 REGRAS:
 - Sempre use os dados reais do CRM que estão no contexto abaixo
-- Seja direto e prático — o vendedor está no campo
-- Use linguagem informal e motivadora
+- NUNCA use emojis em respostas ou textos sugeridos para WhatsApp
+- Linguagem profissional e direta: sem emojis, sem exclamacoes excessivas
 - Quando mencionar valores, sempre formate em R$ com pontos e vírgulas
 - Se não souber algo, diga claramente e sugira como o vendedor pode verificar
 
@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
         const encoder = new TextEncoder();
         try {
           const stream = await anthropicClient().messages.stream({
-            model: process.env.ANTHROPIC_MODEL || "claude-opus-4-5",
+            model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5",
             max_tokens: 2048,
             system: systemPrompt,
             messages: msgs,
