@@ -5,7 +5,7 @@ import { diasDesde } from "./utils";
 
 export type ClienteRota = {
   id: string;
-  nome: string;h
+  nome: string;
   telefone: string | null;
   origem: string | null;
   visitado: boolean;
