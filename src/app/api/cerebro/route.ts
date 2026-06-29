@@ -413,7 +413,7 @@ export async function POST(req: NextRequest) {
               chunk.delta.type === "text_delta"
             ) {
               controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ texto: chunk.delta.text })}\n\n`)
+                encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
               );
             }
           }
