@@ -807,3 +807,190 @@ export function resumoAcademia(): string {
   const negociacao = NEGOCIACAO_AVANCADA.map((n) => n.nome).join(", ");
   return `Metodologias: ${metodologias}. Psicologia: ${psicologia}. Neurociência: ${neuro}. Negociação: ${negociacao}.`;
 }
+
+
+// ─── SCRIPTS WHATSAPP PROFISSIONAIS ─────────────────────────────────────────
+// Mensagens prontas sem emojis, linguagem direta e profissional
+
+export interface ScriptWhatsApp {
+  situacao: string;
+  contexto: string;
+  mensagem: string;
+  followUp?: string;
+}
+
+export const SCRIPTS_WHATSAPP: ScriptWhatsApp[] = [
+  {
+    situacao: "Primeiro contato — lead frio",
+    contexto: "Cliente nunca conversou com voce antes",
+    mensagem: "Bom dia, [Nome]. Meu nome e Ederson, trabalho com maquinas New Holland e Dynapac aqui no sul do ES. Vi que voce atua com [tipo de obra] e quero entender se faz sentido conversar sobre como reduzir o custo operacional da sua frota. Tem 10 minutos esta semana?",
+    followUp: "Oi [Nome], so para nao perder o contato — conseguiu ver minha mensagem anterior? Qualquer duvida sobre as maquinas New Holland, pode me chamar."
+  },
+  {
+    situacao: "Follow-up apos visita",
+    contexto: "Voce fez uma visita e quer dar continuidade",
+    mensagem: "Boa tarde, [Nome]. Conforme conversamos na visita de [data], segue minha analise: a [modelo] atende exatamente o que voce precisa para [aplicacao]. O investimento fica em torno de R$ [valor] com opcoes de financiamento pelo Finame. Quando podemos avancar?",
+    followUp: "Oi [Nome], passando para ver se ficou alguma duvida sobre a proposta que trouxe. Estou disponivel para agendar uma demonstracao se ajudar na decisao."
+  },
+  {
+    situacao: "Resposta a objecao de preco",
+    contexto: "Cliente achou caro ou comparou com concorrente",
+    mensagem: "[Nome], entendo a preocupacao com o investimento. Vamos fazer a conta juntos: uma maquina que custa R$ 50 mil a menos mas tem 30% mais custo de manutencao e combustivel — em 3 anos voce paga o dobro. O que importa e o custo total de operacao, nao o preco de entrada. Posso mostrar essa planilha?",
+  },
+  {
+    situacao: "Reativar lead esquecido",
+    contexto: "Cliente sumiu ha mais de 30 dias",
+    mensagem: "Oi [Nome], ja faz um tempo que nao conversamos. Quero saber como esta andando a sua obra em [cidade]. Temos uma condicao de financiamento pelo Finame agora ate dezembro que pode fazer sentido para o seu planejamento. Vale uma conversa rapida?",
+  },
+  {
+    situacao: "Enviar proposta por WhatsApp",
+    contexto: "Apos reuniao, enviar resumo da proposta",
+    mensagem: "[Nome], conforme nossa conversa, segue o resumo:
+
+Maquina: [modelo]
+Aplicacao ideal: [uso]
+Investimento: R$ [valor]
+Financiamento: Finame — entrada de [X]% e parcelas de R$ [Y] em [Z] meses
+Entrega estimada: [prazo]
+
+Posso agendar uma reuniao com nosso financeiro para detalhar as condicoes?",
+  },
+  {
+    situacao: "Comunicar lancamento ou novidade",
+    contexto: "Nova maquina, condicao especial ou evento",
+    mensagem: "[Nome], bom dia. A New Holland lancou a [modelo] com melhorias no sistema hidraulico e reducao de 12% no consumo. Dado o tipo de servico que voce faz, acredito que vai fazer diferenca na sua producao. Quando posso passar uma demonstracao tecnica?",
+  },
+  {
+    situacao: "Pedido de indicacao",
+    contexto: "Apos fechar venda ou ter bom relacionamento",
+    mensagem: "Oi [Nome], como esta a [maquina que comprou]? Estou expandindo aqui na regiao e voce conhece muita gente boa no setor. Se tiver algum contato que esteja pensando em renovar frota ou comprar maquina nova, me indica?",
+  },
+  {
+    situacao: "Agendamento de visita tecnica",
+    contexto: "Para demonstrar a maquina em campo",
+    mensagem: "[Nome], quero trazer a [modelo] para uma demonstracao na sua obra. Voce ve na pratica o que ela entrega: producao por hora, consumo real, facilidade de operacao. Fica melhor segunda ou terca da semana que vem?",
+  },
+];
+
+// ─── DICAS DE PROSPECCAO ─────────────────────────────────────────────────────
+
+export interface DicaProspeccao {
+  titulo: string;
+  categoria: string;
+  descricao: string;
+  acaoPratica: string;
+}
+
+export const DICAS_PROSPECCAO: DicaProspeccao[] = [
+  {
+    titulo: "Mapa de obras ativas",
+    categoria: "Prospeccao",
+    descricao: "Toda obra de terraplanagem, mineracao ou pavimentacao e uma oportunidade. Use o Google Maps e portais de licitacao para identificar obras ativas na sua regiao.",
+    acaoPratica: "Acesse o Portal da Transparencia e busque por obras publicas nos municipios do sul do ES. Entre em contato com a construtora responsavel."
+  },
+  {
+    titulo: "Sindicatos e associacoes rurais",
+    categoria: "Prospeccao",
+    descricao: "Fazendeiros que fazem terraplanagem propria sao compradores recorrentes. Sindicatos como Senar e Faema tem acesso direto a esse publico.",
+    acaoPratica: "Peca uma reuniao com o presidente do Sindicato Rural de Cachoeiro ou Alegre. Um parceiro institucional vale dezenas de leads qualificados."
+  },
+  {
+    titulo: "Revendas e locadoras de maquinas",
+    categoria: "Parceria",
+    descricao: "Empresas de locacao de maquinas precisam renovar frota periodicamente. Uma locadora com 5 escavadeiras e uma oportunidade de R$ 3 milhoes.",
+    acaoPratica: "Mapeie as locadoras de maquinas pesadas no ES. Visita pessoal uma vez por trimestre. Eles indicam clientes que querem comprar em vez de alugar."
+  },
+  {
+    titulo: "Financiamentos vencendo",
+    categoria: "Timing",
+    descricao: "Financiamentos de maquinas tipicamente vencem em 5 a 7 anos. Um cliente que comprou em 2018 esta pronto para renovar agora.",
+    acaoPratica: "Reveja sua base e marque quem comprou entre 2017 e 2020. Esses sao os mais propensos a comprar agora."
+  },
+  {
+    titulo: "Plano Safra como janela de oportunidade",
+    categoria: "Financiamento",
+    descricao: "O Plano Safra abre todos os anos com condicoes especiais de financiamento para produtores rurais. E uma janela com prazo definido.",
+    acaoPratica: "Monitore o calendario do Plano Safra (geralmente julho). Ligue para todos os clientes rurais 30 dias antes anunciando as condicoes."
+  },
+  {
+    titulo: "Venda o resultado, nao a maquina",
+    categoria: "Abordagem",
+    descricao: "Ninguem quer uma escavadeira. Querem acabar a obra no prazo, reduzir custo de aluguel, ter disponibilidade. Venda o resultado.",
+    acaoPratica: "Antes de cada visita, anote qual e o resultado que aquele cliente especifico quer. Comece a conversa por esse resultado."
+  },
+  {
+    titulo: "CRM como arma competitiva",
+    categoria: "Gestao",
+    descricao: "Vendedor que usa CRM fecha 28% mais do que vendedor sem CRM, segundo pesquisa da Salesforce.",
+    acaoPratica: "Apos cada conversa de WhatsApp relevante, registre no CRM: o que foi dito, qual o interesse, qual o proximo passo."
+  },
+  {
+    titulo: "Clientes do concorrente insatisfeitos",
+    categoria: "Competicao",
+    descricao: "Equipamentos de outras marcas com manutencao cara sao oportunidades. O cliente insatisfeito esta aberto a conversar.",
+    acaoPratica: "Quando visitar uma obra, pergunte: Como esta sendo a manutencao dessa maquina? Uma reclamacao e a sua abertura."
+  },
+];
+
+// ─── ROTEIROS DE VISITA ──────────────────────────────────────────────────────
+
+export const ROTEIRO_VISITA_COMPLETO = [
+  {
+    fase: "Preparacao (30 min antes)",
+    perguntas: [] as string[],
+    errosComuns: [
+      "Ir sem saber o que o cliente faz",
+      "Nao ter o preco na ponta da lingua",
+      "Chegar sem ficha tecnica ou simulacao Finame"
+    ]
+  },
+  {
+    fase: "Abertura (10 min)",
+    perguntas: [
+      "Como esta o movimento das obras aqui na regiao?",
+      "Ha quanto tempo voce esta nesse ramo?",
+      "Como e a sua operacao atualmente?"
+    ],
+    errosComuns: [
+      "Comecar falando do produto imediatamente",
+      "Nao estabelecer quanto tempo tem disponivel"
+    ]
+  },
+  {
+    fase: "Levantamento de necessidades (20 min)",
+    perguntas: [
+      "Qual e sua frota atual? Propria ou alugada?",
+      "Qual e o maior problema operacional que voce tem hoje?",
+      "Se voce pudesse mudar uma coisa na sua operacao, o que seria?",
+      "Como esta sendo a manutencao das maquinas atuais?",
+      "Qual e o tipo de servico que mais da resultado aqui?"
+    ],
+    errosComuns: [
+      "Falar mais do que ouvir",
+      "Nao anotar as respostas",
+      "Pular para o produto antes de entender o problema"
+    ]
+  },
+  {
+    fase: "Apresentacao (15 min)",
+    perguntas: [] as string[],
+    errosComuns: [
+      "Apresentar todas as maquinas do catalogo",
+      "Falar de especificacoes que o cliente nao pediu",
+      "Nao conectar caracteristicas com o problema levantado"
+    ]
+  },
+  {
+    fase: "Fechamento (5 min)",
+    perguntas: [
+      "Voce prefere dar entrada e parcelar ou e compra a vista?",
+      "Fica melhor entregar em 30 ou 60 dias?",
+      "Para voce ver a maquina trabalhando, posso agendar demonstracao. Quando seria melhor?"
+    ],
+    errosComuns: [
+      "Sair sem proximo passo definido",
+      "Nao pedir o pedido",
+      "Prometer o que nao pode cumprir"
+    ]
+  },
+];
