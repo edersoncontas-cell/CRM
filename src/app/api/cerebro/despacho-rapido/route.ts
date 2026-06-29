@@ -205,12 +205,14 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
 - NUNCA invente preços, prazos ou especificações
 - Se não tiver a informação, diga que vai verificar
 - Use as técnicas de venda da Academia quando fizer sentido NATURAL — nunca de forma mecânica
-- Não use emojis em excesso`;
+- NUNCA use emojis — linguagem 100% profissional e direta
+- Seja ULTRA-CONCISO: max 2-3 frases. Sem longas explicacoes
+- Resposta direta e acionavel. Sem enrolacao`;
 
   try {
     const msg = await anthropic().messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 400,
+      model: "claude-haiku-4-5",
+      max_tokens: 150,
       system,
       messages: [{
         role: "user",
@@ -290,7 +292,7 @@ export async function POST(req: NextRequest) {
   const contextoAcademia = montarContextoAcademia(historicoCompleto);
 
   const reply = await gerarRespostaCerebro({
-    historico: historicoCompleto.slice(-9000), // mais histórico para 120 msgs // máximo 6000 chars de histórico
+    historico: historicoCompleto.slice(-2500), // mais histórico para 120 msgs // máximo 6000 chars de histórico
     ultimasMensagens,
     contextoCliente,
     contextoAcademia,
