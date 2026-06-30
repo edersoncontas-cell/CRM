@@ -29,7 +29,7 @@ export const GRUPOS: GrupoMenu[] = [
     links: [
       { href: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
-      { href: "/usado", label: "Máquinas Usadas", icon: Truck },
+      { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
       { href: "/super-trunfo", label: "Super Trunfo", icon: Trophy },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
