@@ -7,7 +7,7 @@ import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
 import {
-Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,h
+Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
 Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle, UserX,
 MapPin, Calendar, Trophy, BarChart3, Zap, Eye,
 } from "lucide-react";
