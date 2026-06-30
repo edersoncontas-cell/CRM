@@ -7,7 +7,7 @@ import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
 import {
-Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
+Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,h
 Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle, UserX,
 MapPin, Calendar, Trophy, BarChart3, Zap, Eye,
 } from "lucide-react";
@@ -86,11 +86,11 @@ db.visita.count({ where: { data: { gte: inicioDia, lte: fimDia } } }),
 db.visita.count({ where: { data: { gte: inicioSemana } } }),
 db.visita.count({ where: { data: { gte: inicioMes } } }),
 db.visita.count({ where: { data: { gte: inicioAno } } }),
-// Conversas (mensagens recebidas de clientes)
-db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioDia } } }).catch(() => 0),
-db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioSemana } } }).catch(() => 0),
-db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioMes } } }).catch(() => 0),
-db.whatsAppMessage.count({ where: { direction: "IN", sentAt: { gte: inicioAno } } }).catch(() => 0),
+// Conversas (clientes únicos — com quem interagi)
+db.whatsappConversation.count({ where: { ultimaMensagemEm: { gte: inicioDia } } }).catch(() => 0),
+db.whatsappConversation.count({ where: { ultimaMensagemEm: { gte: inicioSemana } } }).catch(() => 0),
+db.whatsappConversation.count({ where: { ultimaMensagemEm: { gte: inicioMes } } }).catch(() => 0),
+db.whatsappConversation.count({ where: { ultimaMensagemEm: { gte: inicioAno } } }).catch(() => 0),
 // Vendas fechadas
 db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioDia } } }),
 db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioSemana } } }),
@@ -178,10 +178,10 @@ return (
 {/* ── BLOCO 2: Conversas WhatsApp ── */}
 <Section titulo="💬 Conversas WhatsApp" cor="#BFDE4D">
 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-<KpiCard titulo="Hoje" valor={conversasHoje} cor="#BFDE4D" sub="mensagem(ns)" />
-<KpiCard titulo="Semana" valor={conversasSemana} cor="#BFDE4D" sub="mensagem(ns)" />
-<KpiCard titulo={mesAtual} valor={conversasMes} cor="#BFDE4D" sub="mensagem(ns)" />
-<KpiCard titulo={String(anoAtual)} valor={conversasAno} cor="#BFDE4D" sub="mensagem(ns)" />
+<KpiCard titulo="Hoje" valor={conversasHoje} cor="#BFDE4D" sub="conversa(s)" />
+<KpiCard titulo="Semana" valor={conversasSemana} cor="#BFDE4D" sub="conversa(s)" />
+<KpiCard titulo={mesAtual} valor={conversasMes} cor="#BFDE4D" sub="conversa(s)" />
+<KpiCard titulo={String(anoAtual)} valor={conversasAno} cor="#BFDE4D" sub="conversa(s)" />
 </div>
 </Section>
 
