@@ -150,7 +150,7 @@ municipioNome: info.nome,
       diaRecomendado: diaRecomendadoPara(info.nome),
       lat: info.lat,
       lng: info.lng,
-      mapsUrl: googlemapsUrl([info.nome]),
+      mapsUrl: googleMapsUrl([info.nome]),
     });
   }
 
