@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia } from "@/lib/utils";
 import { PipelineChart } from "@/components/charts";
 import { comissaoConfirmada, classificarLead, COR_CLASSE, ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
-import { ESTAGIOS, normalizarEstagio } from "@/lib/pipeline";
+import { ESTAGIOS, normalizarEstagio, ROTULO_ESTAGIO } from "@/lib/pipeline";
 import { MotivacaoWidget, DicaVendas } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import Link from "next/link";
@@ -301,7 +301,7 @@ return (
 <span className={"w-2.5 h-2.5 rounded-full flex-shrink-0 " + COR_CLASSE[classe]} />
 <div className="flex-1 min-w-0">
 <p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
-<p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · R$ {(n.valor ?? 0).toLocaleString("pt-BR")} · {n.estagio}</p>
+<p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · R$ {(n.valor ?? 0).toLocaleString("pt-BR")} · {ROTULO_ESTAGIO[n.estagio] ?? n.estagio}</p>
 </div>
 <span className="text-xs font-bold" style={{ color: "#f87171" }}>{n.termometro}%</span>
 </Link>
