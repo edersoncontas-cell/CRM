@@ -17,7 +17,7 @@ import { Termometro } from "@/components/ui";
 import { ESTAGIOS, COL_PERDIDO } from "@/lib/pipeline";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2, CheckSquare, Square, ListChecks,
-  GripVertical, MoreVertical, Check,
+  GripVertical, MoreVertical, Check, MapPin,
 } from "lucide-react";
 
 interface CardData {
@@ -45,6 +45,8 @@ type DemandaCard = {
   coluna: string;
   checklist: string | null;
   clienteId: string | null;
+  dueDate: string | null;
+  cidade: string | null;
 };
 type ItemChecklist = { t: string; d: boolean };
 
@@ -380,6 +382,18 @@ function DemandaCardView({
             {feitos}/{itens.length}
           </div>
         )}
+        {card.dueDate && (
+          <div className="mt-2 flex items-center gap-1 text-xs text-violet-200">
+            <Calendar size={11} />
+            {new Date(card.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+          </div>
+        )}
+        {card.cidade && (
+          <div className="mt-0.5 flex items-center gap-1 text-xs text-violet-200">
+            <MapPin size={11} />
+            {card.cidade}
+          </div>
+        )}
       </div>
       {!arrastando && onEditar && (
         <button
@@ -418,6 +432,16 @@ function FormAdicionarTarefa({ coluna, onFechar }: { coluna: string; onFechar: (
         placeholder="Descrição (opcional)"
         className="mb-1.5 w-full resize-none rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-agro-500"
       />
+      <div className="grid grid-cols-2 gap-1.5">
+        <label className="block">
+          <span className="mb-0.5 block text-[10px] font-medium text-slate-500">Data/hora</span>
+          <input type="datetime-local" name="dueDate" className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-agro-500" />
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-[10px] font-medium text-slate-500">Cidade</span>
+          <input name="cidade" placeholder="Ex: Colatina" className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-agro-500" />
+        </label>
+      </div>
       <ChecklistEditor itens={checklist} onChange={setChecklist} />
       <div className="mt-1.5 flex items-center gap-2">
         <button className="flex-1 rounded-lg bg-black py-1.5 text-xs font-bold text-agro-400 hover:bg-brand-800">
@@ -553,6 +577,14 @@ function ModalEditarTarefa({ tarefa, onClose }: { tarefa: DemandaCard; onClose: 
           <Campo label="Descrição">
             <textarea name="descricao" rows={3} defaultValue={tarefa.descricao ?? ""} className={cn(inputCls, "resize-none")} />
           </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Data/hora">
+              <input type="datetime-local" name="dueDate" defaultValue={tarefa.dueDate ? new Date(tarefa.dueDate).toISOString().slice(0,16) : ""} className={inputCls} />
+            </Campo>
+            <Campo label="Cidade">
+              <input name="cidade" placeholder="Ex: Colatina" defaultValue={tarefa.cidade ?? ""} className={inputCls} />
+            </Campo>
+          </div>
           <ChecklistEditor itens={checklist} onChange={setChecklist} />
           <button className="w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 hover:bg-brand-800">
             Salvar alterações
