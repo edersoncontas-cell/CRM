@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, Smile, Paperclip, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Brain, Bell, Trash2, Pencil, X, FileText, KanbanSquare, RefreshCw,
+  DownloadCloud, Loader2, Brain, Bell, Trash2, Pencil, X, FileText, Handshake, RefreshCw,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -85,6 +85,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [cfgAberto, setCfgAberto] = useState(false);
   const [auditMode, setAuditMode] = useState<boolean | null>(null);
   const [renomeandoId, setRenomeandoId] = useState<string | null>(null);
+  const [novaNegoConv, setNovaNegoConv] = useState<ConvLista | null>(null);
   const [novoNome, setNovoNome] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const fimRef = useRef<HTMLDivElement>(null);
@@ -376,32 +377,17 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     }
   }
 
-  // ── Gerar Card no Pipeline ──
-  async function gerarCardPipeline(conv: ConvLista) {
-    setMenuAberto(false);
-    if (!conv.clienteId) {
-      window.alert('Esta conversa ainda não está vinculada a um cliente no CRM. Acesse o cadastro para criar o vínculo.');
-      return;
-    }
-    try {
-      const r = await fetch('/api/pipeline/criar-card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clienteId: conv.clienteId, estagio: 'primeiro_contato' }),
-      });
-      const d = await r.json();
-      if (d?.ok) {
-        window.alert('✅ Card criado no Pipeline! Acesse o Pipeline para ver.');
-        router.refresh();
-      } else {
-        window.alert('Erro ao criar card: ' + (d?.erro || 'Tente novamente'));
-      }
-    } catch (e) {
-      window.alert('Erro ao criar card: ' + String(e));
-    }
+  // ── Gerar Negociação (abre modal) ──
+async function abrirModalNegociacao(conv: ConvLista) {
+  setMenuAberto(false);
+  if (!conv.clienteId) {
+    window.alert('Esta conversa ainda não está vinculada a um cliente no CRM. Acesse o cadastro para criar o vínculo.');
+    return;
   }
+  setNovaNegoConv(conv);
+}
 
-  // ── Importar histórico de conversa do WhatsApp ──
+// ── Importar histórico de conversa do WhatsApp ──
   async function importarHistoricoConversa(conv: ConvLista) {
     const input = document.createElement('input');
     input.type = 'file';
@@ -616,9 +602,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                       {gerandoResumo ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
                     </button>
                     {/* Gerar Card no Pipeline */}
-                    <button onClick={() => gerarCardPipeline(sel)}
+                    <button onClick={() => abrirModalNegociacao(sel)}
                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
-                      <KanbanSquare size={15} style={{ color: "#60a5fa" }} /> Gerar Card no Pipeline
+                      <Handshake size={15} style={{ color: "#60a5fa" }} /> Gerar Negociação
                     </button>
                     <div className="my-1 border-t" style={{ borderColor: "#2a3942" }} />
                     {/* Excluir conversa */}
@@ -714,7 +700,318 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
           </>
         )}
       </section>
+      {/* Modal Nova Negociação */}
+      {novaNegoConv && (
+        <NovaNegoModal
+          conv={novaNegoConv}
+          onClose={() => setNovaNegoConv(null)}
+        />
+      )}
     </div>
   );
 }
 
+
+
+// ── MARCAS E MODELOS ───────────────────────────────────────────────────
+const MODELOS_NEW_HOLLAND = [
+  "E20C","E22C","E30C","E35C","E50C","E57C","E80C","E115C","E135C","E145C","E175C","E215C","E265C","E305C","E385C","E485C",
+  "B95C","B110C","B115C","B115CTC","B95BTC","LB90","LB110","B110TC",
+  "W50C","W70C","W80C","W110C","W130C","W170C",
+  "D120B","D150B","D180B",
+  "RG140B","RG170B",
+  "WE150C","WE170C",
+];
+const MODELOS_DYNAPAC = [
+  "CA1500","CA2500","CA3500","CA4500","CA6000","CA8000",
+  "CC900","CC1000","CC1100","CC1200","CC1300","CC5200","CC6200",
+  "CP142","CP144","CP274","CP275","CP374","CP375",
+  "F1000C","F1200C","F1500C","F1800C","F2000C",
+  "CG2300","CG2600",
+];
+const BANCOS_OPCOES = [
+  "Banco CNH","Sicoob","Sicredi","Bradesco","Banestes",
+  "Banco do Nordeste","Banco do Brasil","Banco Itaú","Outros Bancos",
+];
+
+function formatBRL(val: string): string {
+  const digits = val.replace(/\D/g, "");
+  if (!digits) return "";
+  const num = parseInt(digits, 10);
+  return num.toLocaleString("pt-BR");
+}
+
+function calcPercentual(valor: number, total: number): string {
+  if (!total) return "";
+  return ((valor / total) * 100).toFixed(1);
+}
+function calcValorDePerc(perc: number, total: number): string {
+  if (!total) return "";
+  return Math.round((perc / 100) * total).toLocaleString("pt-BR");
+}
+
+type NovaNegoModalProps = {
+  conv: ConvLista;
+  onClose: () => void;
+};
+
+function NovaNegoModal({ conv, onClose }: NovaNegoModalProps) {
+  const router = useRouter();
+  const [marca, setMarca] = useState<"New Holland" | "Dynapac" | "">("");
+  const [tipoPagamento, setTipoPagamento] = useState("");
+  const [valorStr, setValorStr] = useState("");
+  const [entradaValorStr, setEntradaValorStr] = useState("");
+  const [entradaPercStr, setEntradaPercStr] = useState("");
+  const [pagamentoNaEntrega, setPagamentoNaEntrega] = useState(false);
+  const [crdQtd, setCrdQtd] = useState("");
+  const [crdParcelaStr, setCrdParcelaStr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const valorNum = parseFloat(valorStr.replace(/\./g, "").replace(",", ".")) || 0;
+
+  // Sync entrada valor <-> percentual
+  function onEntradaValorChange(v: string) {
+    const digits = v.replace(/\D/g, "");
+    const num = parseInt(digits || "0", 10);
+    setEntradaValorStr(num.toLocaleString("pt-BR"));
+    if (valorNum) setEntradaPercStr(calcPercentual(num, valorNum));
+  }
+  function onEntradaPercChange(v: string) {
+    const perc = parseFloat(v.replace(",", ".")) || 0;
+    setEntradaPercStr(v);
+    if (valorNum) setEntradaValorStr(calcValorDePerc(perc, valorNum));
+  }
+
+  // CRD: calcula valor da parcela automaticamente
+  const crdSaldo = valorNum - (parseFloat(entradaValorStr.replace(/\./g, "").replace(",", ".")) || 0);
+  const crdQtdNum = parseInt(crdQtd) || 1;
+  const crdParcelaCalc = crdQtd ? (crdSaldo / crdQtdNum).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    fd.set("clienteId", conv.clienteId ?? "");
+    fd.set("valor", valorStr.replace(/\./g, "").replace(",", "."));
+    fd.set("entradaValor", entradaValorStr.replace(/\./g, "").replace(",", "."));
+    fd.set("entradaPercentual", entradaPercStr.replace(",", "."));
+    fd.set("pagamentoNaEntrega", pagamentoNaEntrega ? "true" : "false");
+    if (crdQtd) {
+      fd.set("crdSaldoParcelasQtd", crdQtd);
+      fd.set("crdParcelaValor", crdSaldo.toFixed(2));
+    }
+    try {
+      const { criarNegociacaoCompleta } = await import("@/lib/actions");
+      const res = await criarNegociacaoCompleta(fd);
+      if (res && typeof res === "object" && "ok" in res && !res.ok) {
+        window.alert("Erro ao criar negociação: " + (res as any).erro);
+      } else {
+        router.refresh();
+        onClose();
+      }
+    } catch (err) {
+      window.alert("Erro: " + String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputCls = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+  const selectCls = inputCls;
+  const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-xl rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-5 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-lg font-bold text-white">Nova Negociação</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{conv.contactName || conv.externalPhone}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Marca + Máquina */}
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className={labelCls}>Marca</span>
+              <select name="marca" value={marca} onChange={e => setMarca(e.target.value as any)} className={selectCls}>
+                <option value="">— Selecionar —</option>
+                <option value="New Holland">New Holland</option>
+                <option value="Dynapac">Dynapac</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className={labelCls}>Máquina</span>
+              <select name="maquinaModelo" className={selectCls} disabled={!marca}>
+                <option value="">{marca ? "— Selecionar —" : "Selecione a marca"}</option>
+                {(marca === "New Holland" ? MODELOS_NEW_HOLLAND : marca === "Dynapac" ? MODELOS_DYNAPAC : []).map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* Valor */}
+          <label className="block">
+            <span className={labelCls}>Valor (R$)</span>
+            <input
+              type="text" inputMode="numeric"
+              value={valorStr}
+              onChange={e => setValorStr(formatBRL(e.target.value))}
+              placeholder="0"
+              className={inputCls}
+            />
+          </label>
+
+          {/* Coluna (Estágio) */}
+          <label className="block">
+            <span className={labelCls}>Estágio / Coluna</span>
+            <select name="estagio" className={selectCls} defaultValue="Primeiro contato">
+              <option value="Primeiro contato">Primeiro contato</option>
+              <option value="Visitas pendentes">Visitas pendentes</option>
+              <option value="Visita realizada">Visita realizada</option>
+              <option value="Proposta no BCNH">Proposta no BCNH</option>
+              <option value="Vendas Confirmadas">Vendas Confirmadas</option>
+              <option value="Faturado">Faturado</option>
+            </select>
+          </label>
+
+          {/* Pagamento */}
+          <label className="block">
+            <span className={labelCls}>Pagamento</span>
+            <select name="tipoPagamento" value={tipoPagamento} onChange={e => setTipoPagamento(e.target.value)} className={selectCls}>
+              <option value="">—</option>
+              <option value="avista">À vista</option>
+              <option value="financiamento">Financiamento</option>
+              <option value="consorcio">Consórcio</option>
+              <option value="crd_pme">CRD PME</option>
+            </select>
+          </label>
+
+          {/* Condição de Pagamento — condicional */}
+          {tipoPagamento === "avista" && (
+            <div className="rounded-xl bg-sky-50 border border-sky-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-sky-700 uppercase tracking-wide">Condição — À Vista</p>
+              <label className="block">
+                <span className={labelCls}>Estimativa de data do pagamento</span>
+                <input type="date" name="dataPagamentoAvista" disabled={pagamentoNaEntrega} className={inputCls} />
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={pagamentoNaEntrega} onChange={e => setPagamentoNaEntrega(e.target.checked)} className="rounded" />
+                <span className="text-sm text-slate-700">Pagamento na entrega da máquina</span>
+              </label>
+            </div>
+          )}
+
+          {tipoPagamento === "financiamento" && (
+            <div className="rounded-xl bg-violet-50 border border-violet-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-violet-700 uppercase tracking-wide">Condição — Financiamento</p>
+              <label className="block">
+                <span className={labelCls}>Banco</span>
+                <select name="bancoFinanciamento" className={selectCls}>
+                  <option value="">— Selecionar —</option>
+                  {BANCOS_OPCOES.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className={labelCls}>Entrada (R$)</span>
+                  <input type="text" inputMode="numeric" value={entradaValorStr} onChange={e => onEntradaValorChange(e.target.value)} placeholder="0" className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className={labelCls}>Entrada (%)</span>
+                  <input type="text" inputMode="decimal" value={entradaPercStr} onChange={e => onEntradaPercChange(e.target.value)} placeholder="0" className={inputCls} />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {tipoPagamento === "consorcio" && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">Condição — Consórcio</p>
+              <label className="block">
+                <span className={labelCls}>Tipo de Consórcio</span>
+                <select name="consorcioTipo" className={selectCls}>
+                  <option value="">— Selecionar —</option>
+                  <option value="new_holland">New Holland</option>
+                  <option value="outro">Outro consórcio</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className={labelCls}>Nº de Cotas</span>
+                  <input type="number" name="consorcioCotas" min={1} placeholder="1" className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className={labelCls}>Valor Total do Crédito (R$)</span>
+                  <input type="text" inputMode="numeric" name="consorcioCredito" placeholder="0" className={inputCls} />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {tipoPagamento === "crd_pme" && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Condição — CRD PME</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className={labelCls}>Entrada (R$)</span>
+                  <input type="text" inputMode="numeric" value={entradaValorStr} onChange={e => onEntradaValorChange(e.target.value)} placeholder="0" className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className={labelCls}>Entrada (%)</span>
+                  <input type="text" inputMode="decimal" value={entradaPercStr} onChange={e => onEntradaPercChange(e.target.value)} placeholder="0" className={inputCls} />
+                </label>
+              </div>
+              <label className="block">
+                <span className={labelCls}>Saldo Restante — Parcelas (boleto)</span>
+                <select value={crdQtd} onChange={e => setCrdQtd(e.target.value)} className={selectCls}>
+                  <option value="">— Selecionar —</option>
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}x</option>)}
+                </select>
+              </label>
+              {crdQtd && (
+                <div className="rounded-lg bg-white border border-emerald-200 px-3 py-2 text-sm">
+                  <span className="text-slate-500">Valor de cada parcela: </span>
+                  <span className="font-bold text-emerald-700">R$ {crdParcelaCalc}</span>
+                  <span className="text-xs text-slate-400 ml-2">(saldo: R$ {crdSaldo.toLocaleString("pt-BR", {minimumFractionDigits:2})})</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Outros campos */}
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className={labelCls}>Data da Visita</span>
+              <input type="datetime-local" name="dataVisita" className={inputCls} />
+            </label>
+            <label className="block">
+              <span className={labelCls}>Concorrente</span>
+              <input type="text" name="concorrente" placeholder="Ex: CAT, Komatsu..." className={inputCls} />
+            </label>
+          </div>
+          <label className="block">
+            <span className={labelCls}>Próxima Ação</span>
+            <input type="text" name="proximaAcao" placeholder="Ex: Ligar terça para follow-up" className={inputCls} />
+          </label>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full rounded-xl bg-slate-900 py-3 font-bold text-emerald-400 hover:bg-slate-800 transition-all disabled:opacity-50 shadow-lg"
+          >
+            {saving ? "Criando..." : "Criar Negociação"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
