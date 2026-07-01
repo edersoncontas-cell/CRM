@@ -46,6 +46,8 @@ conversasHoje, conversasSemana, conversasMes, conversasAno,
 vendasHoje, vendasSemana, vendasMes, vendasGanhasAno,
 // Valor financeiro
 valorVendasAno,
+// Demandas de hoje
+demandasHoje,
 // Próximas visitas agendadas
 proximasVisitas,
 ] = await Promise.all([
@@ -101,6 +103,8 @@ db.negociacao.aggregate({
 where: { status: "ganha", atualizadoEm: { gte: inicioAno } },
 _sum: { valor: true },
 }),
+// Demandas de hoje (com dueDate definida para hoje)
+db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
 // Próximas visitas (30 dias)
 db.cliente.findMany({
 where: {
@@ -183,6 +187,13 @@ return (
 <KpiCard titulo={mesAtual} valor={conversasMes} cor="#BFDE4D" sub="conversa(s)" />
 <KpiCard titulo={String(anoAtual)} valor={conversasAno} cor="#BFDE4D" sub="conversa(s)" />
 </div>
+</Section>
+
+{/* ── BLOCO 3b: Demandas de Hoje ── */}
+<Section titulo="📋 Demandas de Hoje" sub="agendadas para hoje">
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <KpiCard titulo="Hoje" valor={demandasHoje} sub="demanda(s)" cor="amber" />
+  </div>
 </Section>
 
 {/* ── BLOCO 3: Vendas Fechadas ── */}
