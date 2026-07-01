@@ -21,7 +21,7 @@ export default async function RoteiroPage() {
   const em45dias = new Date(hoje);
   em45dias.setDate(em45dias.getDate() + 45);
 
-  const [clientesRaw, visitasRaw, negsComVisita] = await Promise.all([
+  const [clientesRaw, visitasRaw, negsComVisita, demandasHojeRaw] = await Promise.all([
     db.cliente.findMany({
       where: {
         OR: [
@@ -57,6 +57,15 @@ export default async function RoteiroPage() {
       where: { dataVisita: { gte: hoje, lte: em45dias }, status: { not: "perdida" } },
       include: { cliente: { include: { municipio: true } } },
       orderBy: { dataVisita: "asc" },
+    }),
+    // Demandas de hoje com cidade definida
+    db.tarefaKanban.findMany({
+      where: {
+        dueDate: { gte: hoje, lte: new Date(hoje.getTime() + 24 * 60 * 60 * 1000) },
+        cidade: { not: null },
+      },
+      select: { id: true, titulo: true, descricao: true, dueDate: true, cidade: true },
+      orderBy: { dueDate: "asc" },
     }),
   ]);
 
@@ -157,7 +166,25 @@ export default async function RoteiroPage() {
     };
   });
 
-  return (
+  // ── Rota das Demandas de Hoje ────────────────────────────────────────────
+const cidades = demandasHojeRaw
+  .map((d) => d.cidade)
+  .filter((c): c is string => !!c && c.trim().length > 0);
+
+// Build a Google Maps route URL with waypoints (starting from Vila Velha, ES)
+function buildMapaRotaUrl(origem: string, destinos: string[]): string {
+  if (destinos.length === 0) return "";
+  const base = "https://www.google.com/maps/dir/";
+  const origemEnc = encodeURIComponent(origem + ", ES, Brasil");
+  if (destinos.length === 1) {
+    return base + origemEnc + "/" + encodeURIComponent(destinos[0] + ", ES, Brasil");
+  }
+  const waypoints = destinos.slice(0, -1).map((d) => encodeURIComponent(d + ", ES, Brasil")).join("/");
+  const destino = encodeURIComponent(destinos[destinos.length - 1] + ", ES, Brasil");
+  return base + origemEnc + "/" + waypoints + "/" + destino;
+}
+
+return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -174,6 +201,65 @@ export default async function RoteiroPage() {
         </div>
         <BotaoAtualizar />
       </div>
+
+      {/* ── Rota das Demandas de Hoje ── */}
+      {demandasHojeRaw.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-lg font-bold text-amber-300">📍 Rota das Demandas de Hoje</span>
+            <span className="rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+              {demandasHojeRaw.length} demanda(s)
+            </span>
+          </div>
+          <div className="mb-4 space-y-2">
+            {demandasHojeRaw.map((d) => (
+              <div key={d.id} className="flex items-start gap-2 text-sm text-amber-100">
+                <span className="mt-0.5 text-amber-400">•</span>
+                <span className="font-medium">{d.titulo}</span>
+                {d.cidade && (
+                  <span className="ml-auto shrink-0 rounded bg-amber-400/20 px-2 py-0.5 text-xs text-amber-300">
+                    📍 {d.cidade}
+                  </span>
+                )}
+                {d.dueDate && (
+                  <span className="shrink-0 text-xs text-amber-400">
+                    {new Date(d.dueDate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          {cidades.length > 0 && (
+            <div className="mt-4">
+              <form
+                action="/roteiro"
+                className="flex flex-wrap items-center gap-2"
+              >
+                <label className="flex items-center gap-2 text-xs font-medium text-amber-200">
+                  <span>🏠 Saindo de:</span>
+                  <input
+                    name="origem"
+                    defaultValue="Vila Velha"
+                    className="rounded-lg border border-amber-400/40 bg-black/30 px-3 py-1.5 text-sm text-white outline-none placeholder:text-amber-200/40 focus:border-amber-400"
+                    placeholder="Cidade de origem"
+                  />
+                </label>
+                <a
+                  href={buildMapaRotaUrl("Vila Velha", cidades)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-black hover:bg-amber-300"
+                >
+                  🗺️ Abrir Rota no Google Maps
+                </a>
+              </form>
+              <p className="mt-2 text-xs text-amber-400/70">
+                Cidades: {cidades.join(" → ")}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <RoteiroClient
         gruposSugeridos={gruposSugeridos}
