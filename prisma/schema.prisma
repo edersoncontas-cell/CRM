@@ -184,6 +184,7 @@ model TarefaKanban {
   cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   clienteId String?
   dueDate   DateTime?
+  cidade    String?  // cidade de destino da demanda
   criadoEm  DateTime @default(now())
 }
 
