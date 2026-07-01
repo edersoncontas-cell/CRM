@@ -6,7 +6,7 @@ import {
   TrendingDown, Sparkles, Megaphone, Settings, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
   Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText, Trophy,
-  Truck, Brain,
+  Truck, Brain, Handshake, ListTodo,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,7 +27,8 @@ export const GRUPOS: GrupoMenu[] = [
   {
     label: "Vendas",
     links: [
-      { href: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
+      { href: "/negociacoes", label: "Negociações", icon: Handshake },
+      { href: "/pipeline", label: "Demandas", icon: ListTodo },
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
