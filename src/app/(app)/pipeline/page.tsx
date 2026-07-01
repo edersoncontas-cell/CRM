@@ -50,6 +50,8 @@ export default async function PipelinePage() {
     coluna: t.coluna,
     checklist: t.checklist,
     clienteId: t.clienteId,
+    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+    cidade: t.cidade ?? null,
   }));
 
   return (
