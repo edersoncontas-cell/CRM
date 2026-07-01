@@ -87,11 +87,13 @@ export function KanbanBoard({
   clientes,
   colunasDemanda,
   demandas: demandasIniciais,
+  somenteDemandas = false,
 }: {
   cards: CardData[];
   clientes: Cliente[];
   colunasDemanda: ColunaDemanda[];
   demandas: DemandaCard[];
+  somenteDemandas?: boolean;
 }) {
   const [cards, setCards] = useState(cardsIniciais);
   const [demandas, setDemandas] = useState(demandasIniciais);
@@ -192,10 +194,10 @@ export function KanbanBoard({
           ))}
 
           {/* Separador visual entre demandas e funil */}
-          <div className="mx-1 w-px shrink-0 self-stretch bg-slate-700" />
+          {!somenteDemandas && <div className="mx-1 w-px shrink-0 self-stretch bg-slate-700" />}
 
           {/* Colunas do FUNIL de negociação */}
-          {COLUNAS_NEG.map((col) => {
+          {!somenteDemandas && COLUNAS_NEG.map((col) => {
             const lista =
               col.id === COL_PERDIDO.id
                 ? cards.filter((c) => c.status === "perdida")
