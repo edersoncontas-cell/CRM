@@ -199,6 +199,15 @@ model ColunaDemanda {
   criadoEm DateTime @default(now())
 }
 
+model ColunaFunil {
+  id       String   @id @default(cuid())
+  titulo   String
+  cor      String   @default("border-t-slate-400")
+  ordem    Int      @default(0)
+  fixa     Boolean  @default(false) // colunas fixas não podem ser excluídas
+  criadoEm DateTime @default(now())
+}
+
 // Estoque de máquinas usadas/seminovas que o vendedor tem para oferecer.
 model MaquinaUsada {
   id           String   @id @default(cuid())
