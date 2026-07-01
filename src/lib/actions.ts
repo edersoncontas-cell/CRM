@@ -1745,3 +1745,65 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
   return { ok: true, conversas: novasConversas, clientes: novosClientes };
 }
 
+
+
+// ── CRUD ColunaFunil (colunas dinâmicas do funil de negociações) ──────────
+
+export async function garantirColunasFunil() {
+  "use server";
+  const count = await db.colunaFunil.count();
+  if (count > 0) return;
+  // Cria as colunas padrão com base nos estágios fixos do pipeline
+  const defaults = [
+    { titulo: "Primeiro contato",    cor: "border-t-sky-400",    ordem: 1, fixa: true },
+    { titulo: "Visitas pendentes",   cor: "border-t-agro-400",   ordem: 2, fixa: true },
+    { titulo: "Visita realizada",    cor: "border-t-emerald-400",ordem: 3, fixa: false },
+    { titulo: "Proposta no BCNH",    cor: "border-t-violet-400", ordem: 4, fixa: false },
+    { titulo: "Vendas Confirmadas",  cor: "border-t-green-500",  ordem: 5, fixa: false },
+    { titulo: "Venda perdida",       cor: "border-t-red-400",    ordem: 6, fixa: true },
+  ];
+  await db.colunaFunil.createMany({ data: defaults });
+}
+
+export async function criarColunaFunil(titulo: string) {
+  "use server";
+  const max = await db.colunaFunil.aggregate({ _max: { ordem: true } });
+  await db.colunaFunil.create({
+    data: { titulo: titulo.trim() || "Nova coluna", ordem: (max._max.ordem ?? 0) + 1 },
+  });
+  revalidatePath("/negociacoes");
+}
+
+export async function excluirColunaFunil(id: string) {
+  "use server";
+  const col = await db.colunaFunil.findUnique({ where: { id } });
+  if (!col || col.fixa) return; // protege colunas fixas
+  // Move negociações desta coluna para "primeiro_contato"
+  await db.negociacao.updateMany({
+    where: { estagio: col.titulo },
+    data: { estagio: "primeiro_contato" },
+  });
+  await db.colunaFunil.delete({ where: { id } });
+  revalidatePath("/negociacoes");
+}
+
+export async function renomearColunaFunil(id: string, novoTitulo: string) {
+  "use server";
+  const col = await db.colunaFunil.findUnique({ where: { id } });
+  if (!col) return;
+  const titulo = novoTitulo.trim();
+  if (!titulo) return;
+  // Atualiza o estagio nas negociações que usam o título antigo como chave
+  await db.negociacao.updateMany({
+    where: { estagio: col.titulo },
+    data: { estagio: titulo },
+  });
+  await db.colunaFunil.update({ where: { id }, data: { titulo } });
+  revalidatePath("/negociacoes");
+}
+
+export async function reordenarColunasFunil(ids: string[]) {
+  "use server";
+  await Promise.all(ids.map((id, i) => db.colunaFunil.update({ where: { id }, data: { ordem: i + 1 } })));
+  revalidatePath("/negociacoes");
+}
