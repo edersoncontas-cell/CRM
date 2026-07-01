@@ -7,78 +7,72 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model Municipio {
-  id       String    @id @default(cuid())
-  nome     String    @unique
-  regiao   String    @default("Sul do Espírito Santo")
+  id       String  @id @default(cuid())
+  nome     String  @unique
+  regiao   String  @default("Sul do Espírito Santo")
   lat      Float?
   lng      Float?
-  // true = fora da minha área (região de outro vendedor). Clientes marcados
-  // assim NÃO recebem campanhas/disparos automáticos — só conversa se eles iniciarem.
   foraDeArea Boolean @default(false)
   clientes Cliente[]
 }
 
 model Cliente {
-  id          String    @id @default(cuid())
-  nome        String
-  telefone    String?
-  email       String?
-  endereco    String?   // endereço/logradouro completo
-  municipio   Municipio? @relation(fields: [municipioId], references: [id])
-  municipioId String?
-  perfilIA    String?   // resumo de perfil gerado pela IA
-  origem      String?   // ex: whatsapp, indicacao, feira, manual
-  jaComprou   Boolean   @default(false)
-  visitado    Boolean   @default(false)
-  fotoUrl     String?
-  observacoes String?
-  ultimoContato     DateTime? // último contato (recebido ou enviado)
-  aguardandoResposta Boolean  @default(false) // cliente mandou mensagem e ainda não respondi
-  perfilDISC  String?   // D | I | S | C — perfil de personalidade para abordagem
-  abordagemIA String?   // abordagem sugerida pela IA conforme o perfil
-  dataCompra  DateTime? // para lembretes de pós-venda (revisão, garantia)
+  id              String    @id @default(cuid())
+  nome            String
+  telefone        String?
+  email           String?
+  endereco        String?
+  municipio       Municipio? @relation(fields: [municipioId], references: [id])
+  municipioId     String?
+  perfilIA        String?
+  origem          String?
+  jaComprou       Boolean   @default(false)
+  visitado        Boolean   @default(false)
+  fotoUrl         String?
+  observacoes     String?
+  ultimoContato   DateTime?
+  aguardandoResposta Boolean @default(false)
+  perfilDISC      String?
+  abordagemIA     String?
+  dataCompra      DateTime?
   maquinaComprada String?
-  interesseFuturo     Boolean   @default(false)
+  interesseFuturo Boolean   @default(false)
   interesseFuturoData DateTime?
   interesseFuturoNota String?
-  // Status do cliente
-  status        String    @default("potencial") // cliente | potencial | nao_cliente
-  // Próxima visita agendada
-  proximaVisita     DateTime?
+  status          String    @default("potencial")
+  proximaVisita   DateTime?
   proximaVisitaNota String?
-  // Resumo do cliente (substitui "Negociações" no cadastro)
-  resumoMaquinas String?  // máquinas de interesse separadas por ;
-  resumoValor    Float?   // valor negociado
-  resumoEntrada  Float?   // entrada
-  resumoCondicao String?  // avista | financiamento | consorcio | pesquisando | interesse_futuro
-  resumoTexto    String?  // resumo livre gerado pela IA / editável
-  indicadoPor   Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
-  indicadoPorId String?
-  indicados     Cliente[] @relation("Indicacoes")
-  criadoEm    DateTime  @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  negociacoes Negociacao[]
-  conversas   Conversa[]
-  alertas     Alerta[]
-  sugestoes   SugestaoVinculo[]
-  tarefas     TarefaKanban[]
-  visitas     Visita[]
-  frota       ClienteMaquina[]
+  resumoMaquinas  String?
+  resumoValor     Float?
+  resumoEntrada   Float?
+  resumoCondicao  String?
+  resumoTexto     String?
+  indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
+  indicadoPorId   String?
+  indicados       Cliente[] @relation("Indicacoes")
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+  negociacoes    Negociacao[]
+  conversas      Conversa[]
+  alertas        Alerta[]
+  sugestoes      SugestaoVinculo[]
+  tarefas        TarefaKanban[]
+  visitas        Visita[]
+  frota          ClienteMaquina[]
 }
 
 model ClienteMaquina {
-  id        String   @id @default(cuid())
-  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  clienteId String
-  marca     String   // New Holland | Dynapac
-  modelo    String
+  id         String   @id @default(cuid())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String
+  marca      String
+  modelo     String
   criadoEm  DateTime @default(now())
 }
 
@@ -88,319 +82,322 @@ model Visita {
   clienteId  String
   data       DateTime
   observacao String?
-  criadoEm   DateTime @default(now())
+  criadoEm  DateTime @default(now())
 }
 
 model Negociacao {
-  id                   String    @id @default(cuid())
-  cliente              Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  clienteId            String
-  maquinaModelo        String?
-  valor                Float?
-  condicaoPagamento    String?   // avista | consorcio | financiamento | outro
+  id                    String    @id @default(cuid())
+  cliente               Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId             String
+  marca                 String?   // New Holland | Dynapac
+  maquinaModelo         String?
+  valor                 Float?
+  tipoPagamento         String?   // avista | financiamento | consorcio | crd_pme | outro
+  condicaoPagamento     String?   // legado / texto livre
+  // Campos financiamento
+  bancoFinanciamento    String?
+  entradaValor          Float?
+  entradaPercentual     Float?
+  // Campos à vista
+  dataPagamentoAvista   DateTime?
+  pagamentoNaEntrega    Boolean   @default(false)
+  // Campos consórcio
+  consorcioTipo         String?   // new_holland | outro
+  consorcioCotas        Int?
+  consorcioCredito      Float?
+  // Campos CRD PME
+  crdSaldoParcelasQtd   Int?
+  crdParcelaValor       Float?
+  // Negociação antiga (vendas históricas)
+  negociacaoAntiga      Boolean   @default(false)
+  mesAnoReferencia      String?   // formato "YYYY-MM" para vendas antigas
+  // Controle de estágio e status
   concorrenteMencionado String?
-  estagio              String    @default("novo") // colunas do Kanban
-  termometro           Int       @default(50)     // 0-100, "quentura" calculada pela IA
-  proximaAcao          String?
-  ultimoContato        DateTime?
-  dataVisita           DateTime?
-  status               String    @default("aberta") // aberta | ganha | perdida
-  motivoPerda          String?
+  estagio               String    @default("novo")
+  termometro            Int       @default(50)
+  proximaAcao           String?
+  ultimoContato         DateTime?
+  dataVisita            DateTime?
+  status                String    @default("aberta") // aberta | ganha | perdida
+  motivoPerda           String?
+  faturadoEm            DateTime? // data em que chegou na coluna FATURADO
   criadoEm             DateTime  @default(now())
   atualizadoEm         DateTime  @updatedAt
-
-  analises             AnaliseIA[]
+  analises              AnaliseIA[]
 }
 
 model Maquina {
-  id          String  @id @default(cuid())
-  marca       String  @default("New Holland") // New Holland | Dynapac | Caterpillar | Komatsu | ...
-  modelo      String
-  categoria   String  // miniescavadeira | escavadeira | retroescavadeira | pacarregadeira | motoniveladora | tratoresteira | rolo_solo | rolo_tandem | rolo_pneumatico | paver | leve
-  proprio              Boolean @default(false) // true = minha linha (New Holland / Dynapac)
-  maisComercializado   Boolean @default(false) // marcado pelo vendedor como modelo prioritário
-  volumeVendas         Int     @default(0)     // unidades vendidas na região (ranking de mais vendidas)
-  pesoOperacional Float? // kg (para casar faixa de peso no comparativo)
-  potencia    Int?       // cv
-  valorInicial      Float?  // R$ — valor inicial a passar ao cliente (banco de negociação)
-  consumoLitrosHora Float?  // litros de diesel/hora (para o comparativo de combustível)
-  argumentos        String? // argumentos e condições de negociação livres (banco de negociação)
-  descricao   String?
-  especificacoes String? // ficha técnica livre (ex: "Força de escavação: 142 kN\nProfundidade: 6,4 m")
-  pontosFortes String?   // argumentos prontos de venda (das minhas máquinas)
-  diferenciais String?   // diferenciais recorrentes (o que o mercado mais elogia)
-  curiosidades String?
-  imagemUrl   String?
-  midiaPosts  MidiaPost[]
-
+  id                String  @id @default(cuid())
+  marca             String  @default("New Holland")
+  modelo            String
+  categoria         String
+  proprio           Boolean @default(false)
+  maisComercializado Boolean @default(false)
+  volumeVendas      Int     @default(0)
+  pesoOperacional   Float?
+  potencia          Int?
+  valorInicial      Float?
+  consumoLitrosHora Float?
+  argumentos        String?
+  descricao         String?
+  especificacoes    String?
+  pontosFortes      String?
+  diferenciais      String?
+  curiosidades      String?
+  imagemUrl         String?
+  midiaPosts        MidiaPost[]
   @@unique([marca, modelo])
 }
 
 model Conversa {
-  id          String    @id @default(cuid())
-  cliente     Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId   String?
-  canal       String    @default("manual") // whatsapp | manual
-  tipo        String    @default("texto")  // texto | audio
-  conteudo    String
-  transcricao String?
-  remetente   String    @default("cliente") // cliente | vendedor
-  zapiId      String?   // id da mensagem na Z-API (dedupe import x ao vivo)
-  analisadaEm DateTime?
-  criadoEm    DateTime  @default(now())
-
-  analise     AnaliseIA?
-
+  id            String    @id @default(cuid())
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId     String?
+  canal         String    @default("manual")
+  tipo          String    @default("texto")
+  conteudo      String
+  transcricao   String?
+  remetente     String    @default("cliente")
+  zapiId        String?
+  analisadaEm  DateTime?
+  criadoEm     DateTime  @default(now())
+  analise       AnaliseIA?
   @@index([zapiId])
 }
 
 model AnaliseIA {
-  id              String      @id @default(cuid())
-  conversa        Conversa?   @relation(fields: [conversaId], references: [id], onDelete: Cascade)
-  conversaId      String?     @unique
-  negociacao      Negociacao? @relation(fields: [negociacaoId], references: [id], onDelete: SetNull)
-  negociacaoId    String?
-  resumo          String?
-  perfil          String?
-  maquina         String?
-  valor           Float?
-  condicaoPagamento String?
-  concorrente     String?
-  dataVisita      DateTime?
-  sentimento      String?     // positivo | neutro | negativo
-  ehProspectReal  Boolean     @default(false)
-  rascunhoResposta String?
-  fonte           String      @default("ia") // ia | heuristica
-  criadoEm        DateTime    @default(now())
+  id                 String     @id @default(cuid())
+  conversa           Conversa?  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId         String?    @unique
+  negociacao         Negociacao? @relation(fields: [negociacaoId], references: [id], onDelete: SetNull)
+  negociacaoId       String?
+  resumo             String?
+  perfil             String?
+  maquina            String?
+  valor              Float?
+  condicaoPagamento  String?
+  concorrente        String?
+  dataVisita         DateTime?
+  sentimento         String?
+  ehProspectReal     Boolean    @default(false)
+  rascunhoResposta   String?
+  fonte              String     @default("ia")
+  criadoEm          DateTime   @default(now())
 }
 
 model TarefaKanban {
-  id        String   @id @default(cuid())
-  titulo    String
-  descricao String?
-  coluna    String   @default("a_fazer")
-  ordem     Int      @default(0)
-  checklist String?  // JSON: [{ "t": "item", "d": false }]
-  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId String?
-  dueDate   DateTime?
-  cidade    String?  // cidade de destino da demanda
-  criadoEm  DateTime @default(now())
+  id         String    @id @default(cuid())
+  titulo     String
+  descricao  String?
+  coluna     String    @default("a_fazer")
+  ordem      Int       @default(0)
+  checklist  String?
+  cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId  String?
+  dueDate    DateTime?
+  cidade     String?
+  criadoEm  DateTime  @default(now())
 }
 
-// Colunas de "demandas" (estilo Trello), separadas do funil de negociação.
-// As fixas ("Demandas" e "Demandas Concluída") não podem ser excluídas.
 model ColunaDemanda {
-  id       String   @id @default(cuid())
-  titulo   String
-  cor      String   @default("border-t-slate-400")
-  ordem    Int      @default(0)
-  fixa     Boolean  @default(false)
+  id        String   @id @default(cuid())
+  titulo    String
+  cor       String   @default("border-t-slate-400")
+  ordem     Int      @default(0)
+  fixa      Boolean  @default(false)
   criadoEm DateTime @default(now())
 }
 
 model ColunaFunil {
-  id       String   @id @default(cuid())
-  titulo   String
-  cor      String   @default("border-t-slate-400")
-  ordem    Int      @default(0)
-  fixa     Boolean  @default(false) // colunas fixas não podem ser excluídas
+  id        String   @id @default(cuid())
+  titulo    String
+  cor       String   @default("border-t-slate-400")
+  ordem     Int      @default(0)
+  fixa      Boolean  @default(false)
   criadoEm DateTime @default(now())
 }
 
-// Estoque de máquinas usadas/seminovas que o vendedor tem para oferecer.
 model MaquinaUsada {
   id           String   @id @default(cuid())
   marca        String
   modelo       String
   categoria    String   @default("outro")
   ano          Int?
-  horimetro    Int?     // horas de uso (horímetro)
+  horimetro    Int?
   preco        Float?
-  estado       String   @default("boa")        // seminova | boa | regular
-  localizacao  String?  // cidade onde está a máquina
+  estado       String   @default("boa")
+  localizacao  String?
   descricao    String?
-  fotoUrl      String?  // link de uma foto (opcional)
-  status       String   @default("disponivel") // disponivel | reservada | vendida
-  criadoEm     DateTime @default(now())
+  fotoUrl      String?
+  status       String   @default("disponivel")
+  criadoEm    DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 }
 
 model Meta {
-  id        String   @id @default(cuid())
-  tipo      String   // prospeccao | conversas | negocios_banco | diaria | semanal | mensal
-  rotulo    String
-  alvo      Float
-  progresso Float    @default(0)
-  periodo   String   @default("mensal")
+  id         String   @id @default(cuid())
+  tipo       String
+  rotulo     String
+  alvo       Float
+  progresso  Float    @default(0)
+  periodo    String   @default("mensal")
   criadoEm  DateTime @default(now())
 }
 
 model SugestaoVinculo {
-  id            String   @id @default(cuid())
-  telefone      String
-  nomeDetectado String?
-  textoContexto String?
-  clienteSugerido Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId     String?
-  confianca     Int      @default(50) // 0-100
-  status        String   @default("pendente") // pendente | confirmado | rejeitado
-  criadoEm      DateTime @default(now())
+  id               String   @id @default(cuid())
+  telefone         String
+  nomeDetectado    String?
+  textoContexto    String?
+  clienteSugerido  Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId        String?
+  confianca        Int      @default(50)
+  status           String   @default("pendente")
+  criadoEm        DateTime @default(now())
 }
 
 model Alerta {
-  id        String   @id @default(cuid())
-  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  clienteId String
-  tipo      String   // sem_resposta | sem_contato | visita_proxima
-  mensagem  String
-  diasDesde Int      @default(0)
-  severidade String  @default("media") // baixa | media | alta
-  resolvido Boolean  @default(false)
+  id         String   @id @default(cuid())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String
+  tipo       String
+  mensagem   String
+  diasDesde  Int      @default(0)
+  severidade String   @default("media")
+  resolvido  Boolean  @default(false)
   criadoEm  DateTime @default(now())
 }
 
 model MidiaPost {
-  id          String    @id @default(cuid())
-  maquina     Maquina?  @relation(fields: [maquinaId], references: [id], onDelete: SetNull)
-  maquinaId   String?
-  titulo      String
-  conteudo    String
-  status      String    @default("rascunho") // rascunho | agendado | publicado
-  agendadoPara DateTime?
-  criadoEm    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  maquina       Maquina?  @relation(fields: [maquinaId], references: [id], onDelete: SetNull)
+  maquinaId     String?
+  titulo        String
+  conteudo      String
+  status        String    @default("rascunho")
+  agendadoPara  DateTime?
+  criadoEm     DateTime  @default(now())
 }
 
 model EstiloDeFala {
-  id         String   @id @default(cuid())
-  guia       String
-  exemplos   String?
+  id           String   @id @default(cuid())
+  guia         String
+  exemplos     String?
   atualizadoEm DateTime @updatedAt @default(now())
 }
 
 model CampanhaMarketing {
-  id              String   @id @default(cuid())
-  tipo            String   // diario | segunda | sexta | mensal_inicio | mensal_fim | avulso
+  id              String    @id @default(cuid())
+  tipo            String
   titulo          String
   conteudo        String
   hashtags        String?
-  canalAlvo       String   @default("ambos") // whatsapp | instagram | ambos
-  status          String   @default("rascunho") // rascunho | aprovado | rejeitado | enviado
-  marca           String?  // "New Holland" | "Dynapac" | null = qualquer
+  canalAlvo       String    @default("ambos")
+  status          String    @default("rascunho")
+  marca           String?
   categoria       String?
   municipioFiltro String?
   feedbackEderson String?
-  totalEnviado    Int      @default(0)
+  totalEnviado    Int       @default(0)
   enviadoEm       DateTime?
-  criadoEm        DateTime @default(now())
-  atualizadoEm    DateTime @updatedAt
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
 }
 
 model Motivacao {
   id        String   @id @default(cuid())
   texto     String
   autor     String?
-  categoria String   @default("vendas") // vendas | foco | persistencia | mindset | tdah
+  categoria String   @default("vendas")
   ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
+  criadoEm DateTime @default(now())
 }
 
-// Configurações globais do CRM (key-value).
 model Configuracao {
   chave String @id
   valor String
 }
 
-// Academia de Vendas — estratégias salvas/geradas pela IA (sempre atualizando).
 model EstrategiaVenda {
   id         String   @id @default(cuid())
   titulo     String
-  categoria  String   // metodologia | perfil | objecao | fechamento | prospeccao | ideia
-  perfilAlvo String?  // D | I | S | C | null (geral)
-  conteudo   String   // texto da estratégia (markdown simples)
-  fonte      String   @default("ia") // ia | curado
+  categoria  String
+  perfilAlvo String?
+  conteudo   String
+  fonte      String   @default("ia")
   favorito   Boolean  @default(false)
-  criadoEm   DateTime @default(now())
-}
-
-// Log de auditoria — registra ações automáticas da IA e do sistema.
-model AuditLog {
-  id         String   @id @default(cuid())
-  acao       String   // "cliente_criado", "negociacao_atualizada", "campanha_enviada", etc.
-  origem     String   @default("ia") // ia | usuario | sistema
-  descricao  String   // texto legível
-  entidade   String?  // "Cliente" | "Negociacao" | "CampanhaMarketing" | etc.
-  entidadeId String?  // ID do registro afetado
-  clienteId  String?  // atalho para filtrar por cliente
-  extra      String?  // JSON com dados adicionais (valor, modelo, etc.)
   criadoEm  DateTime @default(now())
 }
 
-// ============================================================
-// WhatsApp — sistema de atendimento (separado do CRM)
-// ============================================================
+model AuditLog {
+  id          String   @id @default(cuid())
+  acao        String
+  origem      String   @default("ia")
+  descricao   String
+  entidade    String?
+  entidadeId  String?
+  clienteId   String?
+  extra       String?
+  criadoEm   DateTime @default(now())
+}
 
 model WhatsAppConversation {
-  id                String    @id @default(cuid())
-  externalPhone     String                       // número (só dígitos) ou ID do grupo
-  lid               String?                      // WhatsApp Linked ID (@lid)
-  contactName       String?
-  isGroup           Boolean   @default(false)
-  groupName         String?
-  status            String    @default("UNASSIGNED") // UNASSIGNED | IN_PROGRESS | RESOLVED
-  category          String?                      // CLIENTE | LEAD | GRUPO | OUTRO
-  categoryConfirmed Boolean   @default(false)
-  aiActive          Boolean   @default(false)
-  ignored           Boolean   @default(false)
-  lastMessageAt     DateTime  @default(now())
-  lastAccessedAt    DateTime?
-  contactPhotoUrl   String?
-  agnesScheduledAt  DateTime?
-  clienteId         String?                      // ponte opcional p/ a ficha do CRM
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  messages WhatsAppMessage[]
-
+  id               String    @id @default(cuid())
+  externalPhone    String
+  lid              String?
+  contactName      String?
+  isGroup          Boolean   @default(false)
+  groupName        String?
+  status           String    @default("UNASSIGNED")
+  category         String?
+  categoryConfirmed Boolean  @default(false)
+  aiActive         Boolean   @default(false)
+  ignored          Boolean   @default(false)
+  lastMessageAt    DateTime  @default(now())
+  lastAccessedAt   DateTime?
+  contactPhotoUrl  String?
+  agnesScheduledAt DateTime?
+  clienteId        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  messages         WhatsAppMessage[]
   @@index([lid])
   @@index([lastMessageAt])
   @@index([externalPhone])
 }
 
 model WhatsAppMessage {
-  id                  String    @id @default(cuid())
-  conversationId      String
-  direction           String                       // IN | OUT
-  body                String
-  operatorDisplayName String?
-  senderName          String?
-  mediaUrl            String?
-  mediaType           String?                       // image | video | document | audio | sticker
-  mediaName           String?
-  transcript          String?
-  sentAt              DateTime  @default(now())
-  isDraft             Boolean   @default(false)
-  draftStatus         String?                       // PENDING | APPROVED | REJECTED
-  zapiMessageId       String?
-  origin              String?                       // CRM | EXTERNAL
-  sendStatus          String?                       // QUEUED | SENT | DELIVERED | READ | FAILED | UNCONFIRMED
-  retryCount          Int       @default(0)
-  lastRetryAt         DateTime?
-  lastSendError       String?
-
-  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
+  id                   String    @id @default(cuid())
+  conversationId       String
+  direction            String
+  body                 String
+  operatorDisplayName  String?
+  senderName           String?
+  mediaUrl             String?
+  mediaType            String?
+  mediaName            String?
+  transcript           String?
+  sentAt               DateTime  @default(now())
+  isDraft              Boolean   @default(false)
+  draftStatus          String?
+  zapiMessageId        String?
+  origin               String?
+  sendStatus           String?
+  retryCount           Int       @default(0)
+  lastRetryAt          DateTime?
+  lastSendError        String?
+  conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, sentAt])
   @@index([zapiMessageId])
 }
 
 model WhatsAppSettings {
-  id          String   @id @default(cuid())
-  instanceId  String   @default("")
-  token       String   @default("")
-  clientToken String   @default("")
-  apiUrl      String   @default("https://api.z-api.io")
-  isActive    Boolean  @default(false)
-  auditMode   Boolean  @default(true)
-  updatedAt   DateTime @updatedAt
+  id           String  @id @default(cuid())
+  instanceId   String  @default("")
+  token        String  @default("")
+  clientToken  String  @default("")
+  apiUrl       String  @default("https://api.z-api.io")
+  isActive     Boolean @default(false)
+  auditMode    Boolean @default(true)
+  updatedAt    DateTime @updatedAt
 }
