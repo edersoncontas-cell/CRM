@@ -1038,13 +1038,15 @@ export async function criarTarefa(formData: FormData) {
   if (!titulo) return;
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const checklist = String(formData.get("checklist") ?? "").trim() || null;
+  const cidade = String(formData.get("cidade") ?? "").trim();
+  const dueDate = String(formData.get("dueDate") ?? "").trim();
   const ultima = await db.tarefaKanban.findFirst({
     where: { coluna },
     orderBy: { ordem: "desc" },
     select: { ordem: true },
   });
   await db.tarefaKanban.create({
-    data: { titulo, descricao, coluna, checklist, ordem: (ultima?.ordem ?? 0) + 1 },
+    data: { titulo, descricao, coluna, checklist, ordem: (ultima?.ordem ?? 0) + 1, cidade: cidade || null, dueDate: dueDate ? new Date(dueDate) : null },
   });
   revalidatePath("/pipeline");
 }
@@ -1060,6 +1062,8 @@ export async function editarTarefa(id: string, formData: FormData) {
       titulo,
       descricao: String(formData.get("descricao") ?? "").trim() || null,
       checklist: String(formData.get("checklist") ?? "").trim() || null,
+      cidade: String(formData.get("cidade") ?? "").trim() || null,
+      dueDate: String(formData.get("dueDate") ?? "").trim() ? new Date(String(formData.get("dueDate"))) : null,
     },
   });
   revalidatePath("/pipeline");
