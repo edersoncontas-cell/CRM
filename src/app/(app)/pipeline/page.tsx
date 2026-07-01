@@ -43,6 +43,7 @@ export default async function PipelinePage() {
         clientes={clientes}
         colunasDemanda={colunas}
         demandas={demandas}
+        somenteDemandas={true}
       />
     </div>
   );
