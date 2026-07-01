@@ -409,13 +409,35 @@ export async function editarNegociacao(id: string, formData: FormData) {
 }
 
 export async function moverNegociacao(id: string, estagio: string) {
-  if (estagio === COL_PERDIDO.id) {
+  const isPerdido = estagio.toLowerCase().includes("perdid");
+  const isFaturado = estagio.toLowerCase().includes("faturad");
+  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("vendas confirm");
+  
+  if (isPerdido) {
     await db.negociacao.update({
       where: { id },
       data: { status: "perdida", estagio, ultimoContato: new Date() },
     });
-  } else if (estagio === "proposta_aprovada") {
-    // VENDAS CONFIRMADAS: marca como ganha e atualiza cliente + meta de vendas
+  } else if (isFaturado) {
+    // FATURADO: marca como ganha, registra faturadoEm, atualiza cliente
+    const neg = await db.negociacao.update({
+      where: { id },
+      data: { status: "ganha", estagio, faturadoEm: new Date(), ultimoContato: new Date() },
+      include: { cliente: true },
+    });
+    await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
+    await registrarAudit({
+      acao: "negociacao_faturada",
+      origem: "usuario",
+      descricao: `Negociação FATURADA! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
+      entidade: "Negociacao",
+      entidadeId: id,
+      clienteId: neg.clienteId,
+      extra: JSON.stringify({ maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome, tipoPagamento: (neg as any).tipoPagamento ?? null }),
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/financeiro");
+  } else if (isConfirmado) {
     const neg = await db.negociacao.update({
       where: { id },
       data: { status: "ganha", estagio, ultimoContato: new Date() },
@@ -429,22 +451,21 @@ export async function moverNegociacao(id: string, estagio: string) {
       entidade: "Negociacao",
       entidadeId: id,
       clienteId: neg.clienteId,
-      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
+      extra: JSON.stringify({ maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome }),
     });
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
   } else {
-    // Volta para aberta caso estivesse perdida e seja reposicionada.
     await db.negociacao.update({
       where: { id },
       data: { status: "aberta", estagio, ultimoContato: new Date() },
     });
   }
+  revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/vendas-perdidas");
 }
 
-// Exclui definitivamente uma negociação (card do pipeline).
 export async function excluirNegociacao(id: string) {
   await db.negociacao.delete({ where: { id } });
   revalidatePath("/pipeline");
@@ -1828,4 +1849,114 @@ export async function reordenarColunasFunil(ids: string[]) {
   "use server";
   await Promise.all(ids.map((id, i) => db.colunaFunil.update({ where: { id }, data: { ordem: i + 1 } })));
   revalidatePath("/negociacoes");
+}
+
+
+// ---------- Nova Negociação (popup completo) ----------
+// Cria uma negociação completa com marca, máquina, valor formatado, tipo de pagamento
+// e todos os campos condicionais (financiamento, consórcio, CRD PME, à vista).
+export async function criarNegociacaoCompleta(formData: FormData) {
+  "use server";
+  let clienteId = String(formData.get("clienteId") ?? "") || null;
+  const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
+  if (!clienteId && nomeNovo) {
+    if (deveDescartarContato(nomeNovo)) return { ok: false, erro: "Nome inválido" };
+    const novo = await db.cliente.create({ data: { nome: nomeNovo, origem: "negociacao" } });
+    clienteId = novo.id;
+  }
+  if (!clienteId) return { ok: false, erro: "Cliente obrigatório" };
+
+  // Valor: remove tudo que não for dígito ou vírgula/ponto, depois converte
+  const valorRaw = String(formData.get("valor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const valor = valorRaw ? parseFloat(valorRaw) : null;
+
+  const tipoPagamento = String(formData.get("tipoPagamento") ?? "") || null;
+  const estagio = String(formData.get("estagio") ?? "") || "Primeiro contato";
+  const negociacaoAntiga = formData.get("negociacaoAntiga") === "true";
+  const mesAnoReferencia = negociacaoAntiga ? String(formData.get("mesAnoReferencia") ?? "") || null : null;
+
+  // Entrada
+  const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const entradaValor = entradaValorRaw ? parseFloat(entradaValorRaw) : null;
+  const entradaPercentualRaw = String(formData.get("entradaPercentual") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const entradaPercentual = entradaPercentualRaw ? parseFloat(entradaPercentualRaw) : null;
+
+  // À vista
+  const dataPagamentoRaw = String(formData.get("dataPagamentoAvista") ?? "");
+  const pagamentoNaEntrega = formData.get("pagamentoNaEntrega") === "true";
+
+  // CRD PME
+  const crdQtdRaw = String(formData.get("crdSaldoParcelasQtd") ?? "");
+  const crdParcelaRaw = String(formData.get("crdParcelaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+
+  await db.negociacao.create({
+    data: {
+      clienteId,
+      marca: String(formData.get("marca") ?? "") || null,
+      maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
+      valor,
+      tipoPagamento,
+      condicaoPagamento: tipoPagamento,
+      bancoFinanciamento: String(formData.get("bancoFinanciamento") ?? "") || null,
+      entradaValor,
+      entradaPercentual,
+      dataPagamentoAvista: dataPagamentoRaw && !pagamentoNaEntrega ? new Date(dataPagamentoRaw + "T12:00:00-03:00") : null,
+      pagamentoNaEntrega,
+      consorcioTipo: String(formData.get("consorcioTipo") ?? "") || null,
+      consorcioCotas: formData.get("consorcioCotas") ? parseInt(String(formData.get("consorcioCotas"))) : null,
+      consorcioCredito: formData.get("consorcioCredito") ? parseFloat(String(formData.get("consorcioCredito") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".")) : null,
+      crdSaldoParcelasQtd: crdQtdRaw ? parseInt(crdQtdRaw) : null,
+      crdParcelaValor: crdParcelaRaw ? parseFloat(crdParcelaRaw) : null,
+      concorrenteMencionado: String(formData.get("concorrente") ?? "") || null,
+      proximaAcao: String(formData.get("proximaAcao") ?? "") || null,
+      dataVisita: String(formData.get("dataVisita") ?? "") ? new Date(String(formData.get("dataVisita")) + ":00-03:00") : null,
+      estagio,
+      negociacaoAntiga,
+      mesAnoReferencia,
+      ultimoContato: new Date(),
+      // Se estagio é FATURADO, marca como ganha imediatamente
+      status: estagio.toLowerCase().includes("faturad") ? "ganha" : "aberta",
+      faturadoEm: estagio.toLowerCase().includes("faturad") ? new Date() : null,
+    } as any,
+  });
+
+  if (estagio.toLowerCase().includes("faturad")) {
+    await db.cliente.update({ where: { id: clienteId }, data: { jaComprou: true } });
+    revalidatePath("/financeiro");
+    revalidatePath("/dashboard");
+  }
+
+  revalidatePath("/negociacoes");
+  revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Calcula comissão de uma negociação (0.5% por padrão)
+// Para CRD PME, a comissão só é paga quando 75% do valor for pago
+export function calcularComissao(valor: number | null, taxa = 0.005): number {
+  if (!valor) return 0;
+  return valor * taxa;
+}
+
+// Calcula data prevista de pagamento da comissão CRD PME
+// Baseado em faturadoEm + parcelas (30 dias cada) até atingir 75% do valor
+export function calcularPrevisaoComissaoCrdPme(
+  faturadoEm: Date,
+  valor: number,
+  entradaValor: number,
+  nParcelas: number,
+  valorParcela: number
+): Date {
+  // 75% do valor total precisa ser pago
+  const alvo75 = valor * 0.75;
+  let pago = entradaValor;
+  let meses = 0;
+  while (pago < alvo75 && meses < nParcelas) {
+    pago += valorParcela;
+    meses++;
+  }
+  const previsao = new Date(faturadoEm);
+  previsao.setMonth(previsao.getMonth() + meses);
+  return previsao;
 }
