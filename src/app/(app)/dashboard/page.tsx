@@ -190,7 +190,7 @@ return (
 </Section>
 
 {/* ── BLOCO 3b: Demandas de Hoje ── */}
-<Section titulo="📋 Demandas de Hoje" sub="agendadas para hoje">
+<Section titulo="📋 Demandas de Hoje">
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
     <KpiCard titulo="Hoje" valor={demandasHoje} sub="demanda(s)" cor="amber" />
   </div>
