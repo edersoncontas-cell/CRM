@@ -1948,7 +1948,7 @@ export async function calcularPrevisaoComissaoCrdPme(
   entradaValor: number,
   nParcelas: number,
   valorParcela: number
-): Date {
+): Promise<Date> {
   // 75% do valor total precisa ser pago
   const alvo75 = valor * 0.75;
   let pago = entradaValor;
