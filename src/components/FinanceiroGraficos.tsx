@@ -170,8 +170,8 @@ export function FinanceiroGraficos({ receitaMensal }: { receitaMensal: MesData[]
             <line x1="55" y1="30" x2="55" y2="175" stroke="#d1d5db" strokeWidth="1.5"/>
             <line x1="55" y1="175" x2="480" y2="175" stroke="#d1d5db" strokeWidth="1.5"/>
             {/* Y-axis labels */}
-            <text x="47" y="34" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(max)}</text>
-            <text x="47" y="106" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(max / 2)}</text>
+            <text x="47" y="34" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(maxCmp)}</text>
+            <text x="47" y="106" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(maxCmp / 2)}</text>
             <text x="47" y="179" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">R$ 0</text>
             {/* Bars */}
             {cmpData.map((d, i) => {
@@ -182,7 +182,7 @@ export function FinanceiroGraficos({ receitaMensal }: { receitaMensal: MesData[]
               const centerX = 55 + spacing * i + spacing / 2;
               const x = centerX - barW / 2;
               const plotH = 145;
-              const pct = max > 0 ? d.valor / max : 0;
+              const pct = maxCmp > 0 ? d.valor / maxCmp : 0;
               const barH = Math.max(pct * plotH, 6);
               const baseY = 175;
               const badgeY = Math.max(baseY - barH - 14, 20);
