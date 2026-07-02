@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ValorMaquinasPage() {
   const negocios = await db.negociacao.findMany({
-    where: { ganha: true },
-    include: { cliente: true },
+    where: { status: "ganha" },
+    include: { cliente: { select: { nome: true } } },
     orderBy: { faturadoEm: "desc" },
   });
 
