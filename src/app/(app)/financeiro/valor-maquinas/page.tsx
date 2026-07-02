@@ -1,5 +1,4 @@
 import { db } from "@/lib/db";
-import { PageHeader } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Truck } from "lucide-react";
@@ -25,10 +24,10 @@ export default async function ValorMaquinasPage() {
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Financeiro
         </Link>
-        <PageHeader
-          title="Valor das Máquinas Vendidas"
-          description="Somatório de todas as máquinas faturadas"
-        />
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Valor das Máquinas Vendidas</h1>
+          <p className="text-sm text-gray-500">Somatório de todas as máquinas faturadas</p>
+        </div>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-center gap-3">
