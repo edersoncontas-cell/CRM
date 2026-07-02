@@ -611,7 +611,6 @@ function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () =
           </div>
         </div>
       </div>
-    </div>
   );
 }
 
