@@ -1935,7 +1935,7 @@ export async function criarNegociacaoCompleta(formData: FormData) {
 
 // Calcula comissão de uma negociação (0.5% por padrão)
 // Para CRD PME, a comissão só é paga quando 75% do valor for pago
-export async function calcularComissao(valor: number | null, taxa = 0.005): number {
+export async function calcularComissao(valor: number | null, taxa = 0.005): Promise<number> {
   if (!valor) return 0;
   return valor * taxa;
 }
