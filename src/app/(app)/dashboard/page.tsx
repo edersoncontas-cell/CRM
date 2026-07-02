@@ -116,7 +116,7 @@ orderBy: { proximaVisita: "asc" },
 take: 5,
 }),
 // Negociações faturadas
-db.negociacao.findMany({ where: { ganha: true }, include: { cliente: true }, orderBy: { faturadoEm: "desc" } }),
+db.negociacao.findMany({ where: { status: "ganha" }, include: { cliente: { select: { nome: true } } }, orderBy: { faturadoEm: "desc" } }),
 ]);
 // Dados faturadas no mês atual
 const faturadoMes = (faturadas as any[]).filter(n => {
