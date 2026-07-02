@@ -433,7 +433,7 @@ export async function moverNegociacao(id: string, estagio: string) {
       entidade: "Negociacao",
       entidadeId: id,
       clienteId: neg.clienteId,
-      extra: JSON.stringify({ maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome, tipoPagamento: (neg as any).tipoPagamento ?? null }),
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: (neg.cliente as any)?.nome, tipoPagamento: (neg as any).tipoPagamento ?? null } as any,
     });
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
@@ -451,7 +451,7 @@ export async function moverNegociacao(id: string, estagio: string) {
       entidade: "Negociacao",
       entidadeId: id,
       clienteId: neg.clienteId,
-      extra: JSON.stringify({ maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome }),
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: (neg.cliente as any)?.nome } as any,
     });
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
