@@ -57,7 +57,6 @@ export function ResumoClienteForm({
   negociacoes: Negociacao[];
   temConversa?: boolean;
 }) {
-  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
   const [valor, setValor] = useState(resumo.valor != null ? String(resumo.valor) : "");
@@ -72,7 +71,6 @@ export function ResumoClienteForm({
   const [gerando, startGerar] = useTransition();
   const [erroIA, setErroIA] = useState<string | null>(null);
   const [negsExpand, setNegsExpand] = useState(false);
-  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
 
   // Auto-gera resumo ao montar se o cliente tem conversa no WA mas não tem resumo ainda
   useEffect(() => {
