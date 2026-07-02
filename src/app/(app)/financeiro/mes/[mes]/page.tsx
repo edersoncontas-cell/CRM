@@ -1,6 +1,6 @@
 import { ArrowLeft, Calendar } from "lucide-react";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import MesDetailClient from "./client";
 
 const MESES_LABEL: Record<string, string> = {
@@ -13,27 +13,23 @@ export default async function MesDetailPage({ params }: { params: Promise<{ mes:
   const mesLabel = MESES_LABEL[mes] ?? mes;
 
   // Buscar negociações faturadas deste mês
-  const negociacoes = await prisma.negociacao.findMany({
-    where: {
-      OR: [
-        { mesAnoReferencia: { startsWith: mes } },
-        { status: "ganha", faturadoEm: { not: null } },
-      ],
-    },
+  const todas = await db.negociacao.findMany({
+    where: { status: "ganha" },
     include: { cliente: { select: { nome: true } } },
     orderBy: { faturadoEm: "desc" },
   });
 
+  const mesesPT: Record<number, string> = {
+    0:"janeiro",1:"fevereiro",2:"marco",3:"abril",4:"maio",5:"junho",
+    6:"julho",7:"agosto",8:"setembro",9:"outubro",10:"novembro",11:"dezembro"
+  };
+
   // Filtrar pelo mês correto
-  const negsFiltradas = negociacoes.filter((n) => {
+  const negsFiltradas = todas.filter((n) => {
     if (n.mesAnoReferencia) {
       return n.mesAnoReferencia.startsWith(mes);
     }
     if (n.faturadoEm) {
-      const mesesPT: Record<number, string> = {
-        0:"janeiro",1:"fevereiro",2:"marco",3:"abril",4:"maio",5:"junho",
-        6:"julho",7:"agosto",8:"setembro",9:"outubro",10:"novembro",11:"dezembro"
-      };
       const mNum = new Date(n.faturadoEm).getMonth();
       return mesesPT[mNum] === mes;
     }
