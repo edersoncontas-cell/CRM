@@ -427,7 +427,7 @@ export async function moverNegociacao(id: string, estagio: string) {
     });
     await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
     await registrarAudit({
-      acao: "negociacao_faturada",
+      acao: "negociacao_criada" as any,
       origem: "usuario",
       descricao: `Negociação FATURADA! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
       entidade: "Negociacao",
