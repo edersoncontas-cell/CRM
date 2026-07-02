@@ -50,6 +50,7 @@ valorVendasAno,
 demandasHoje,
 // Próximas visitas agendadas
 proximasVisitas,
+faturadas,
 ] = await Promise.all([
 db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
 db.alerta.findMany({
@@ -114,7 +115,17 @@ select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, mu
 orderBy: { proximaVisita: "asc" },
 take: 5,
 }),
+// Negociações faturadas
+db.negociacao.findMany({ where: { ganha: true }, include: { cliente: true }, orderBy: { faturadoEm: "desc" } }),
 ]);
+// Dados faturadas no mês atual
+const faturadoMes = (faturadas as any[]).filter(n => {
+  const d = n.faturadoEm ? new Date(n.faturadoEm) : null;
+  return d && d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth();
+});
+const valorFaturadoMes = faturadoMes.reduce((s: number, n: any) => s + (n.valor ?? 0), 0);
+const comissoesMes = valorFaturadoMes * 0.005;
+
 
 // "Chegou a hora": interesse futuro dentro de 30 dias
 const em30Dias = new Date(hoje);
@@ -204,6 +215,19 @@ return (
 <KpiCard titulo={mesAtual} valor={vendasMes} cor="#4ade80" sub="venda(s)" />
 <KpiCard titulo={String(anoAtual)} valor={vendasGanhasAno} cor="#4ade80" sub={<><span style={{ color: "#4ade80", fontSize: 11 }}>R$ {valorVendasAnoNum.toLocaleString("pt-BR")}</span></>} />
 </div>
+
+{/* ── BLOCO: Negociações Faturadas (novo) ── */}
+<Section titulo="📦 Negociações Faturadas" cor="#f59e0b">
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <KpiCard titulo={mesAtual} valor={faturadoMes.length} cor="#f59e0b" sub="faturadas" />
+    <KpiCard titulo="Valor " valor={"R$ " + (valorFaturadoMes/1000).toFixed(0) + "k"} cor="#f59e0b" sub="valor mês" numerico={false} />
+    <KpiCard titulo="Comissões" valor={"R$ " + comissoesMes.toLocaleString("pt-BR", {minimumFractionDigits:0,maximumFractionDigits:0})} cor="#a78bfa" sub="0,5% a receber" numerico={false} />
+    <KpiCard titulo="Total hist." valor={(faturadas as any[]).length} cor="#4ade80" sub="desde sempre" />
+  </div>
+  <div className="mt-3 text-right">
+    <a href="/financeiro" className="text-xs text-zinc-400 hover:text-white underline">Ver financeiro completo →</a>
+  </div>
+</Section>
 </Section>
 
 {/* ── BLOCO 4: Pipeline e Metas ── */}
