@@ -1,5 +1,4 @@
 import { db } from "@/lib/db";
-import { PageHeader } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, DollarSign } from "lucide-react";
@@ -30,10 +29,10 @@ export default async function ComissoesPage() {
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Financeiro
         </Link>
-        <PageHeader
-          title="Comissões a Receber"
-          description="Todas as comissões sobre negociações faturadas"
-        />
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Comissões a Receber</h1>
+          <p className="text-sm text-gray-500">Todas as comissões sobre negociações faturadas</p>
+        </div>
       </div>
 
       <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center gap-3">
