@@ -10,8 +10,8 @@ const TAXA = 0.005;
 
 export default async function ComissoesPage() {
   const negocios = await db.negociacao.findMany({
-    where: { ganha: true },
-    include: { cliente: true, coluna: true },
+    where: { status: "ganha" },
+    include: { cliente: { select: { nome: true } } },
     orderBy: { faturadoEm: "desc" },
   });
 
