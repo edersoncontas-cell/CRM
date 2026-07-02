@@ -1782,6 +1782,7 @@ export async function garantirColunasFunil() {
       { titulo: "Proposta no BCNH",    cor: "border-t-violet-400", ordem: 4, fixa: false },
       { titulo: "Vendas Confirmadas",  cor: "border-t-green-500",  ordem: 5, fixa: false },
       { titulo: "Venda perdida",       cor: "border-t-red-400",    ordem: 6, fixa: true },
+      { titulo: "FATURADO",            cor: "border-t-yellow-500",  ordem: 7, fixa: true },
     ];
     await db.colunaFunil.createMany({ data: defaults });
   }
