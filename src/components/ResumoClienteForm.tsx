@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { atualizarResumoCliente, gerarResumoClienteIA } from "@/lib/actions";
-import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2 } from "lucide-react";
+import { atualizarResumoCliente, criarNegociacaoCompleta, gerarResumoClienteIA } from "@/lib/actions";
+import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2, PlusCircle } from "lucide-react";
 import Link from "next/link";
 
 const CONDICAO_OPTS = [
@@ -57,6 +57,7 @@ export function ResumoClienteForm({
   negociacoes: Negociacao[];
   temConversa?: boolean;
 }) {
+  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
   const [valor, setValor] = useState(resumo.valor != null ? String(resumo.valor) : "");
@@ -71,6 +72,7 @@ export function ResumoClienteForm({
   const [gerando, startGerar] = useTransition();
   const [erroIA, setErroIA] = useState<string | null>(null);
   const [negsExpand, setNegsExpand] = useState(false);
+  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
 
   // Auto-gera resumo ao montar se o cliente tem conversa no WA mas não tem resumo ainda
   useEffect(() => {
@@ -111,6 +113,8 @@ export function ResumoClienteForm({
   }
 
   const temResumo = maquinas || valor || condicao || texto;
+  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
+
 
   return (
     <div className="rounded-2xl shadow-sm" style={{ background: "#18181b", border: "1px solid #27272a" }}>
@@ -133,6 +137,12 @@ export function ResumoClienteForm({
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200"
           >
             <Pencil size={13} /> {editando ? "Cancelar" : "Editar"}
+          </button>
+          <button
+            onClick={() => setNovaNegoOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            <PlusCircle size={13} /> Gerar Negociação
           </button>
         </div>
       </div>
@@ -287,6 +297,90 @@ export function ResumoClienteForm({
             )}
           </div>
         )}
+      </div>
+      {novaNegoOpen && (
+        <NovaNegoModalInline clienteId={clienteId} onClose={() => setNovaNegoOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+
+// ─── Modal Gerar Negociação (embutido no cadastro do cliente) ─────────────
+
+const NH_MODELS = ["E145C","E215C","E245C","W130C","W170C","W190C","B90C","B115C","B175C","EH215B","EH315C","TC5.80","TC5.90","TC5.100","T7.315","T6.180","L213","L215","L218","L220","L221","L223","L228","C227","C232","C238","C242","C245","SR200","SR220","TR270","TV380","FR480","FR9040","FR9060","FR680"];
+const DY_MODELS = ["CC1200","CC1300","CC900","CP1200","CA1500","CA3500","CS1400","CT718","CT722","BMP8500","LG500","F141C","F181C","F201C","AP400","AP655D","AP1055F"];
+
+function formatBRL(v: string): string {
+  const n = v.replace(/\D/g, "");
+  if (!n) return "";
+  const num = parseInt(n, 10);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num / 100);
+}
+
+function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClose: () => void }) {
+  const [marca, setMarca] = useState("");
+  const [maquina, setMaquina] = useState("");
+  const [valor, setValor] = useState("");
+  const [pagamento, setPagamento] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const models = marca === "New Holland" ? NH_MODELS : marca === "Dynapac" ? DY_MODELS : [];
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    try {
+      const valorNum = parseFloat(valor.replace(/\./g,"").replace(",",".")) || 0;
+      await criarNegociacaoCompleta({ clienteId, marca, maquina, valor: valorNum, tipoPagamento: pagamento });
+      onClose();
+      window.location.reload();
+    } catch {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Gerar Negociação</h3>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">MARCA</label>
+            <select value={marca} onChange={(e) => { setMarca(e.target.value); setMaquina(""); }} className="w-full border rounded-lg px-3 py-2 text-sm" required>
+              <option value="">Selecionar marca...</option>
+              <option>New Holland</option>
+              <option>Dynapac</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">MÁQUINA</label>
+            <select value={maquina} onChange={(e) => setMaquina(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" required>
+              <option value="">Selecionar modelo...</option>
+              {models.map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">VALOR (R$)</label>
+            <input value={valor} onChange={(e) => setValor(formatBRL(e.target.value))} placeholder="R$ 0,00" className="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">PAGAMENTO</label>
+            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+              <option value="">Selecionar...</option>
+              <option>À vista</option>
+              <option>Financiamento</option>
+              <option>Consórcio</option>
+              <option>CRD PME</option>
+            </select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={salvando} className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+              {salvando ? "Salvando..." : "Criar Negociação"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
