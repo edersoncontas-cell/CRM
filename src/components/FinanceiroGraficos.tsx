@@ -143,22 +143,65 @@ export function FinanceiroGraficos({ receitaMensal }: { receitaMensal: MesData[]
             </div>
           </div>
         </div>
-        <div className="flex items-end gap-4 h-40">
-          {cmpData.map((d) => {
-            const pct = (d.valor / maxCmp) * 100;
-            return (
-              <div key={d.ano} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-xs text-gray-600 font-semibold">{formatBRL(d.valor)}</span>
-                <div className="w-full rounded-t" style={{ height: Math.max(pct * 1.5, 4) + "px", background: d.color, minHeight: "4px" }} />
-                <span className="text-xs font-bold text-gray-700">{d.ano}</span>
-                <span className="text-[10px] text-green-600">{formatBRL(d.comissao)}</span>
-              </div>
-            );
-          })}
-          {cmpData.length === 0 && (
-            <p className="text-sm text-gray-400 w-full text-center py-8">Selecione anos para comparar</p>
-          )}
-        </div>
+        {/* Chart SVG – proporcional, sem sobreposição */}
+        {cmpData.length === 0 ? (
+          <p className="text-sm text-gray-400 w-full text-center py-8">Selecione anos para comparar</p>
+        ) : (
+          <svg
+            viewBox="0 0 500 220"
+            width="100%"
+            style={{ display: "block", overflow: "visible" as const }}
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              {cmpData.map((d) => (
+                <linearGradient key={`grad-${d.ano}`} id={`grad-${d.ano}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={d.color} stopOpacity="1"/>
+                  <stop offset="100%" stopColor={d.color} stopOpacity="0.65"/>
+                </linearGradient>
+              ))}
+            </defs>
+            {/* Grid lines */}
+            <line x1="55" y1="30" x2="480" y2="30" stroke="#e5e7eb" strokeWidth="0.8" strokeDasharray="4,3"/>
+            <line x1="55" y1="102" x2="480" y2="102" stroke="#e5e7eb" strokeWidth="0.8" strokeDasharray="4,3"/>
+            <line x1="55" y1="66" x2="480" y2="66" stroke="#f0f0f0" strokeWidth="0.5" strokeDasharray="3,2"/>
+            <line x1="55" y1="138" x2="480" y2="138" stroke="#f0f0f0" strokeWidth="0.5" strokeDasharray="3,2"/>
+            {/* Axes */}
+            <line x1="55" y1="30" x2="55" y2="175" stroke="#d1d5db" strokeWidth="1.5"/>
+            <line x1="55" y1="175" x2="480" y2="175" stroke="#d1d5db" strokeWidth="1.5"/>
+            {/* Y-axis labels */}
+            <text x="47" y="34" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(max)}</text>
+            <text x="47" y="106" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">{formatBRL(max / 2)}</text>
+            <text x="47" y="179" textAnchor="end" fontSize="11" fill="#9ca3af" fontFamily="system-ui,sans-serif">R$ 0</text>
+            {/* Bars */}
+            {cmpData.map((d, i) => {
+              const totalBars = cmpData.length;
+              const plotW = 425;
+              const barW = Math.min(80, plotW / totalBars * 0.5);
+              const spacing = plotW / totalBars;
+              const centerX = 55 + spacing * i + spacing / 2;
+              const x = centerX - barW / 2;
+              const plotH = 145;
+              const pct = max > 0 ? d.valor / max : 0;
+              const barH = Math.max(pct * plotH, 6);
+              const baseY = 175;
+              const badgeY = Math.max(baseY - barH - 14, 20);
+              return (
+                <g key={d.ano}>
+                  <rect x={x} y={baseY - barH} width={barW} height={barH} fill={`url(#grad-${d.ano})`} rx="4" ry="4"/>
+                  <rect x={x} y={baseY - Math.min(barH, 6)} width={barW} height={Math.min(barH, 6)} fill={d.color} opacity="0.7"/>
+                  <g transform={`translate(${centerX}, ${badgeY})`}>
+                    <rect x={-28} y={-12} width={56} height={18} rx="9" fill="white" stroke={d.color} strokeWidth="1.2"/>
+                    <text x="0" y="1" textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill="#374151" fontFamily="system-ui,sans-serif">{formatBRL(d.valor)}</text>
+                  </g>
+                  <line x1={centerX} y1={badgeY + 6} x2={centerX} y2={baseY - barH} stroke={d.color} strokeWidth="1" strokeDasharray="2,2"/>
+                  <text x={centerX} y={baseY + 15} textAnchor="middle" fontSize="13" fontWeight="700" fill="#374151" fontFamily="system-ui,sans-serif">{d.ano}</text>
+                  <text x={centerX} y={baseY + 30} textAnchor="middle" fontSize="10" fill={d.comissao > 0 ? "#16a34a" : "#9ca3af"} fontFamily="system-ui,sans-serif">+{formatBRL(d.comissao)} comis.</text>
+                </g>
+              );
+            })}
+          </svg>
+        )}
         {cmpData.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-3">
             {cmpData.map((d) => (
