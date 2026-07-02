@@ -330,7 +330,13 @@ function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClos
     setSalvando(true);
     try {
       const valorNum = parseFloat(valor.replace(/\./g,"").replace(",",".")) || 0;
-      await criarNegociacaoCompleta({ clienteId, marca, maquina, valor: valorNum, tipoPagamento: pagamento });
+      const fd = new FormData();
+      fd.set("clienteId", clienteId);
+      fd.set("marca", marca);
+      fd.set("maquinaModelo", maquina);
+      fd.set("valor", String(valorNum));
+      fd.set("tipoPagamento", pagamento);
+      await criarNegociacaoCompleta(fd);
       onClose();
       window.location.reload();
     } catch {
