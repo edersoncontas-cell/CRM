@@ -11,7 +11,7 @@ import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./p
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
-import { deveDescartarContato } from "./utils";
+import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
 
 // ---------- Clientes ----------
@@ -1930,6 +1930,37 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// ── Pagamento de comissão ────────────────────────────────────────────────
+// Marca/desmarca a comissão de UMA negociação como paga, com o mês de referência.
+export async function definirComissaoPaga(id: string, paga: boolean, mesPagamento?: string | null) {
+  "use server";
+  await db.negociacao.update({
+    where: { id },
+    data: paga
+      ? { comissaoPaga: true, comissaoPagaMes: mesPagamento || mesAnoAtualBrasilia(), comissaoPagaEm: new Date() }
+      : { comissaoPaga: false, comissaoPagaMes: null, comissaoPagaEm: null },
+  });
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/faturadas");
+  revalidatePath("/financeiro/comissoes");
+  return { ok: true };
+}
+
+// Confirma o pagamento de VÁRIAS comissões de uma vez (usado no pop-up do
+// 5º dia útil do mês, no setor Financeiro).
+export async function marcarComissoesPagas(ids: string[], mesPagamento: string) {
+  "use server";
+  if (!ids.length) return { ok: false };
+  await db.negociacao.updateMany({
+    where: { id: { in: ids } },
+    data: { comissaoPaga: true, comissaoPagaMes: mesPagamento, comissaoPagaEm: new Date() },
+  });
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/faturadas");
+  revalidatePath("/financeiro/comissoes");
   return { ok: true };
 }
 

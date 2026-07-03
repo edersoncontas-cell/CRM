@@ -38,7 +38,7 @@ export default async function CerebroPage() {
         {[
           { label: "Clientes", valor: totalClientes, cor: "#60a5fa" },
           { label: "Negoc. abertas", valor: negsAbertas, cor: "#BFDE4D" },
-          { label: "Vendas ganhas", valor: negsGanhas, cor: "#4ade80" },
+          { label: "Vendas faturadas", valor: negsGanhas, cor: "#4ade80" },
           { label: "Perdidas", valor: negsPerdidas, cor: "#f87171" },
         ].map((m) => (
           <div key={m.label} className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a" }}>

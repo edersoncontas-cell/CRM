@@ -9,7 +9,7 @@ const TAXA = 0.005;
 
 export default async function ComissoesPage() {
   const negocios = await db.negociacao.findMany({
-    where: { status: "ganha" },
+    where: { status: "ganha", comissaoPaga: false },
     include: { cliente: { select: { nome: true } } },
     orderBy: { faturadoEm: "desc" },
   });
@@ -31,7 +31,7 @@ export default async function ComissoesPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Comissões a Receber</h1>
-          <p className="text-sm text-gray-500">Todas as comissões sobre negociações faturadas</p>
+          <p className="text-sm text-gray-500">Comissões sobre negociações faturadas ainda não marcadas como pagas</p>
         </div>
       </div>
 

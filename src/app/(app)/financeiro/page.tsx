@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { Card, PageHeader } from "@/components/ui";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, apos5DiaUtilBrasilia, mesAnoAtualBrasilia } from "@/lib/utils";
 import Link from "next/link";
 import {
   DollarSign, TrendingUp, Award, BarChart3,
@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { FinanceiroGraficos } from "@/components/FinanceiroGraficos";
 import { ComissoesPagasSection } from "@/components/ComissoesPagasSection";
+import { PopupComissoesPendentes } from "@/components/PopupComissoesPendentes";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,20 @@ export default async function FinanceiroPage() {
 
   // KPIs
   const totalFaturado = todasGanhas.reduce((s: number, n: any) => s + (n.valor ?? 0), 0);
-  const comissaoTotal = calcComissao(totalFaturado);
+  // "Comissões a Receber" = apenas as que ainda NÃO foram marcadas como pagas.
+  const pendentesComissao = todasGanhas.filter((n: any) => !n.comissaoPaga);
+  const comissaoTotal = pendentesComissao.reduce((s: number, n: any) => s + calcComissao(n.valor), 0);
+
+  // Pop-up do 5º dia útil do mês: lista as comissões pendentes para confirmação de pagamento.
+  const mesReferenciaPagamento = mesAnoAtualBrasilia();
+  const pendentesPopup = pendentesComissao.map((n: any) => ({
+    id: n.id,
+    clienteNome: n.cliente.nome,
+    maquina: n.maquinaModelo ?? null,
+    valor: n.valor ?? 0,
+    comissao: calcComissao(n.valor),
+  }));
+  const mostrarPopupComissoes = apos5DiaUtilBrasilia() && pendentesPopup.length > 0;
 
   // Comissões deste mês (faturadas este mês)
   const inicioMes = new Date(anoAtual, mesAtual, 1);
@@ -143,16 +157,21 @@ export default async function FinanceiroPage() {
   }));
 
   // ── Comissões Pagas (por ano/período) ───────────────────────────────────────
-  // Agrupar todas negociações ganhas por ano, calcular total de comissões e lista de clientes
+  // Agrupar SOMENTE as comissões efetivamente confirmadas como pagas (comissaoPaga=true),
+  // pelo ano do mês de pagamento informado.
   const comissoesPagasPorAno: Record<string, {
     total: number;
     quantidade: number;
     negs: Array<{ clienteNome: string; clienteId: string; valor: number; comissao: number; faturadoEm: Date | null; maquina: string }>;
   }> = {};
 
-  for (const n of todasGanhas as any[]) {
-    const dt: Date | null = n.faturadoEm ?? n.atualizadoEm;
-    const ano = dt ? new Date(dt).getFullYear().toString() : "desconhecido";
+  const comissoesPagas = (todasGanhas as any[]).filter((n) => n.comissaoPaga);
+  for (const n of comissoesPagas) {
+    const ano = n.comissaoPagaMes
+      ? n.comissaoPagaMes.slice(0, 4)
+      : n.comissaoPagaEm
+      ? new Date(n.comissaoPagaEm).getFullYear().toString()
+      : "desconhecido";
     if (!comissoesPagasPorAno[ano]) comissoesPagasPorAno[ano] = { total: 0, quantidade: 0, negs: [] };
     const comissao = calcComissao(n.valor);
     comissoesPagasPorAno[ano].total += comissao;
@@ -171,6 +190,11 @@ export default async function FinanceiroPage() {
 
   return (
     <div>
+      <PopupComissoesPendentes
+        pendentes={pendentesPopup}
+        mostrar={mostrarPopupComissoes}
+        mesReferencia={mesReferenciaPagamento}
+      />
       <PageHeader
         titulo="Financeiro & Comissões"
         subtitulo={`Taxa de comissão: ${(TAXA_COMISSAO * 100).toFixed(1)}% sobre valor negociado`}
@@ -201,7 +225,7 @@ export default async function FinanceiroPage() {
             <div className="mb-2 text-emerald-600"><DollarSign size={20} /></div>
             <div className="text-xs text-slate-500 mb-1">Comissões a Receber</div>
             <div className="text-xl font-bold text-emerald-700">{formatCurrency(comissaoTotal)}</div>
-            <div className="text-xs text-slate-400 mt-0.5">0.5% sobre {formatCurrency(totalFaturado)}</div>
+            <div className="text-xs text-slate-400 mt-0.5">{pendentesComissao.length} negociação(ões) ainda não pagas</div>
             <div className="text-xs text-emerald-600 group-hover:underline mt-1 flex items-center gap-1">Ver relação <ChevronRight size={12} /></div>
           </div>
         </Link>

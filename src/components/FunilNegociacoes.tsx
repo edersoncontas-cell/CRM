@@ -66,7 +66,7 @@ export function FunilNegociacoes({
   const [ativo, setAtivo] = useState<CardData | null>(null);
   const [editando, setEditando] = useState<CardData | null>(null);
   const [filtro, setFiltro] = useState("");
-  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "ganhos" | "perdidos">("todos");
+  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -79,10 +79,10 @@ export function FunilNegociacoes({
 
   // KPIs
   const abertos = cards.filter((c) => c.status === "aberta");
-  const ganhos = cards.filter((c) => c.status === "ganha");
+  const faturados = cards.filter((c) => c.status === "ganha");
   const totalAberto = abertos.reduce((s, c) => s + (c.valor ?? 0), 0);
-  const totalGanho = ganhos.reduce((s, c) => s + (c.valor ?? 0), 0);
-  const taxaConversao = cards.length > 0 ? Math.round((ganhos.length / cards.length) * 100) : 0;
+  const totalFaturado = faturados.reduce((s, c) => s + (c.valor ?? 0), 0);
+  const taxaConversao = cards.length > 0 ? Math.round((faturados.length / cards.length) * 100) : 0;
 
   // Filtrar cards
   const cardsFiltrados = cards.filter((c) => {
@@ -93,7 +93,7 @@ export function FunilNegociacoes({
     const matchAba =
       abaFiltro === "todos" ||
       (abaFiltro === "abertos" && c.status === "aberta") ||
-      (abaFiltro === "ganhos" && c.status === "ganha") ||
+      (abaFiltro === "faturados" && c.status === "ganha") ||
       (abaFiltro === "perdidos" && c.status === "perdida");
     return matchFiltro && matchAba;
   });
@@ -131,7 +131,7 @@ export function FunilNegociacoes({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard icone={<Target size={20} />} rotulo="Em aberto" valor={abertos.length.toString()} sub={formatCurrency(totalAberto)} cor="azul" />
         <KpiCard icone={<DollarSign size={20} />} rotulo="Volume aberto" valor={formatCurrency(totalAberto)} sub={`${abertos.length} negoc.`} cor="verde" />
-        <KpiCard icone={<Trophy size={20} />} rotulo="Vendas ganhas" valor={ganhos.length.toString()} sub={formatCurrency(totalGanho)} cor="amarelo" />
+        <KpiCard icone={<Trophy size={20} />} rotulo="Vendas faturadas" valor={faturados.length.toString()} sub={formatCurrency(totalFaturado)} cor="amarelo" />
         <KpiCard icone={<BarChart3 size={20} />} rotulo="Taxa conversão" valor={`${taxaConversao}%`} sub={`${cards.length} total`} cor="roxo" />
       </div>
 
@@ -151,7 +151,7 @@ export function FunilNegociacoes({
           )}
         </div>
         <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-          {(["todos", "abertos", "ganhos", "perdidos"] as const).map((aba) => (
+          {(["todos", "abertos", "faturados", "perdidos"] as const).map((aba) => (
             <button
               key={aba}
               onClick={() => setAbaFiltro(aba)}
@@ -160,7 +160,7 @@ export function FunilNegociacoes({
                 abaFiltro === aba ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
               )}
             >
-              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : aba === "ganhos" ? "Ganhos" : "Perdidos"}
+              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : aba === "faturados" ? "Faturados" : "Perdidos"}
             </button>
           ))}
         </div>
@@ -763,33 +763,61 @@ function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () =
 }
 
 
-// ── Formulário de negociação antiga (dentro da coluna FATURADO) ─────────
+// ── Formulário de negociação antiga (modal — mesmo padrão de "Nova Negociação") ──
 function FormAntigaNegociacao({ estagio, clientes, onFechar }: { estagio: string; clientes: { id: string; nome: string }[]; onFechar: () => void }) {
+  const [isPending, startTransition] = useTransition();
   return (
-    <form
-      action={async (fd) => {
-        fd.set("negociacaoAntiga", "true");
-        fd.set("estagio", estagio);
-        await criarNegociacaoCompleta(fd);
-        onFechar();
-      }}
-      className="rounded-xl border border-amber-300 bg-amber-50 p-3 shadow-lg"
-    >
-      <p className="text-xs font-bold text-amber-700 mb-2">Venda Antiga</p>
-      <select name="clienteId" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400">
-        <option value="">— Selecionar cliente —</option>
-        {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-      </select>
-      <input name="maquinaModelo" placeholder="Máquina (ex: E215C)" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <input name="valor" placeholder="Valor (R$)" inputMode="numeric" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <label className="mb-2 block text-xs text-slate-600">
-        Mês/Ano da venda:
-        <input type="month" name="mesAnoReferencia" className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      </label>
-      <div className="flex items-center gap-2">
-        <button className="flex-1 rounded-lg bg-amber-700 py-2 text-xs font-bold text-white hover:bg-amber-800 transition-colors">Registrar Venda Antiga</button>
-        <button type="button" onClick={onFechar} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={14} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Venda Antiga</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Coluna: {estagio}</p>
+          </div>
+          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+            <X size={18} />
+          </button>
+        </div>
+        <form
+          action={(fd) => {
+            fd.set("negociacaoAntiga", "true");
+            fd.set("estagio", estagio);
+            startTransition(async () => {
+              await criarNegociacaoCompleta(fd);
+              onFechar();
+            });
+          }}
+          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
+        >
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Cliente</label>
+            <select name="clienteId" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+              <option value="">— Selecionar cliente —</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Máquina</label>
+            <input name="maquinaModelo" placeholder="Ex: E215C" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
+            <input name="valor" placeholder="0" inputMode="numeric" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Mês/Ano da venda</label>
+            <input type="month" name="mesAnoReferencia" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div className="flex items-center gap-2 pt-2">
+            <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
+              {isPending ? "Registrando..." : "Registrar Venda Antiga"}
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 }
