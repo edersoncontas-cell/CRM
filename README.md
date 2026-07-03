@@ -91,7 +91,7 @@ Postgres em produção) · Anthropic SDK · dnd-kit · Recharts.
 | `APP_PASSWORD`        | CRM inteiro bloqueado (tela `/config-necessaria`) até ser definida. |
 | `AUTH_SECRET`         | Se `APP_PASSWORD` estiver definida mas esta não, o login quebra (erro proposital, não abre com segredo previsível). |
 | `CRON_SECRET`         | Rotas `/api/cron/*` retornam 401. A Vercel envia automaticamente `Authorization: Bearer $CRON_SECRET` nas chamadas agendadas quando esta env existe — não precisa configurar nada além da variável. |
-| `ZAPI_WEBHOOK_TOKEN`  | Webhook `/api/webhooks/zapi` retorna 401 para qualquer POST (proteção contra mensagens forjadas). Configure o mesmo valor no painel da Z-API em "Client-Token" do webhook. |
+| `ZAPI_WEBHOOK_TOKEN`  | **Opcional.** Só configure se sua conta Z-API tiver um "Token de segurança da conta" (nem todo plano tem — nesse caso, use o mesmo valor de `ZAPI_CLIENT_TOKEN`). Sem essa env, o webhook aceita o POST normalmente (a URL não é pública e o `instanceId` do payload é conferido). Se configurar com um valor que a Z-API não carimba nas chamadas, o webhook passa a rejeitar TODAS as mensagens — não invente um valor por conta própria. |
 | `GROQ_API_KEY`        | Sem ela, sem transcrição de áudio do WhatsApp e sem IA de texto gratuita (fallback heurístico continua funcionando). Grátis em console.groq.com. |
 
 4. Se qualquer token de acesso à Vercel/GitHub tiver sido exposto (ex.: em logs,

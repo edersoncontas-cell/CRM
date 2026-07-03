@@ -121,13 +121,16 @@ export async function sendDocument(phone: string, docUrl: string, fileName: stri
 
 // ---------- Webhook ----------
 
-// Sem ZAPI_WEBHOOK_TOKEN configurado, aceita qualquer POST em dev (a URL
-// secreta ainda protege minimamente), mas exige o token em produção
-// (fail-closed) — sem ele, qualquer um poderia forjar mensagens de WhatsApp.
+// Nem todo plano/conta da Z-API oferece um "Client-Token" de segurança para
+// carimbar nos webhooks — quando não está disponível, não dá para exigir essa
+// validação sem quebrar o recebimento de mensagens de verdade. Por isso: se
+// ZAPI_WEBHOOK_TOKEN estiver configurado, valida estritamente (fail-closed);
+// se não estiver, aceita o POST (a URL do webhook não é pública/óbvia, e
+// isAllowedInstance() no route.ts confere o instanceId como camada extra).
 export function validateWebhook(clientTokenHeader: string | null): boolean {
   const expected = process.env.ZAPI_WEBHOOK_TOKEN;
   if (expected) return clientTokenHeader === expected;
-  return process.env.NODE_ENV !== "production";
+  return true;
 }
 
 export function expectedZApiInstanceId(): string | null {
