@@ -199,9 +199,8 @@ export async function POST(req: NextRequest) {
         );
         // Dispara o Cérebro de forma assíncrona após 3s de debounce
         // Usa setTimeout para não bloquear o webhook (responde ao Z-API imediatamente)
-        const baseUrl = process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : "http://localhost:3000";
+        const baseUrl = process.env.NEXTAUTH_URL
+          ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
         const cronSecret = process.env.CRON_SECRET ?? "";
         // Dispara sem await — o webhook responde OK imediatamente, Cérebro processa em background
         fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {

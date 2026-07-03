@@ -122,7 +122,21 @@
   `ZEUS_WHATSAPP_DESTINO`); testado `global-error.tsx` → `api/zeus/report-erro` → `ZeusEvent`; testadas as
   server actions do painel (toggle ZEUS ativo, toggle modo auditoria, forçar tick, resolver evento) via uma
   rota Next.js real (removida ao final), confirmando que `revalidatePath` funciona no contexto de produção.
-  `/security-review` rodado ao final, conforme pedido explicitamente pelo plano para a Fase 4.
+  `/security-review` rodado ao final, conforme pedido explicitamente pelo plano para a Fase 4 — achou e já
+  corrigiu **1 vulnerabilidade real (XSS armazenado)**: `CerebroChat.tsx` renderizava a resposta do Cérebro via
+  `dangerouslySetInnerHTML` sem nunca escapar `&lt;`/`&gt;`/`&amp;` antes das substituições de markdown. O sink
+  já existia antes desta sessão, mas as Fases 2-3 desta sessão (`lib/zeus/pipeline.ts` vinculando automaticamente
+  qualquer remetente de WhatsApp a um `Cliente`, sem revisão humana, e a tool `detalhes_cliente` do Cérebro
+  expondo o corpo bruto dessas mensagens ao modelo) abriram o primeiro caminho de um remetente externo não
+  autenticado até esse sink — um contato mandando `&lt;img src=x onerror=...&gt;` no WhatsApp podia rodar
+  JavaScript na sessão autenticada do Ederson se ele pedisse ao Cérebro para citar a mensagem. Corrigido
+  escapando o texto ANTES das substituições de markdown em `renderMarkdown()`. Outros achados do scan
+  (SSRF via `mediaUrl` do webhook, rotas sem `APP_PASSWORD` configurado) ficaram abaixo do limiar de confiança
+  exigido — dependem de configurações que já são escolhas conscientes de segurança documentadas fora do
+  escopo desta sessão (token opcional da Z-API, senha opcional do app), não bugs introduzidos aqui. Também
+  corrigido de brinde um bug de precedência de operador (não é falha de segurança) em
+  `api/webhooks/zapi/route.ts`: `A ?? B ? X : Y` calculava `(A ?? B) ? X : Y` em vez de `A ?? (B ? X : Y)` —
+  com `NEXTAUTH_URL` definido mas `VERCEL_URL` não, o despacho do Cérebro tentava `https://undefined`.
   - **1. Modelo de dados**: `ZeusEvent` (tipo `health|fix|alerta|acao|erro`, severidade, título, detalhe JSON,
     resolvido) — substitui o rolling-log do `zapi-diag` (que continua existindo só para o diagnóstico específico
     do webhook em `/conexao`). `Configuracao` ganha as chaves `zeus.ativo` (kill-switch), `heartbeat.<nome>`

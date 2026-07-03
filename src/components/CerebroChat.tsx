@@ -6,9 +6,16 @@ import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus } f
 type Msg = { role: "user" | "assistant"; content: string; arquivos?: string[] };
 type FerramentaAtiva = { name: string; label: string; status: "start" | "done" };
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function renderMarkdown(text: string): string {
   if (!text) return "";
-  return text
+  return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/^### (.+)$/gm, "<h3 class='text-sm font-bold text-white mt-3 mb-1'>$1</h3>")
