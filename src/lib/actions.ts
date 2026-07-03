@@ -1875,6 +1875,16 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const estagio = String(formData.get("estagio") ?? "") || "Primeiro contato";
   const negociacaoAntiga = formData.get("negociacaoAntiga") === "true";
   const mesAnoReferencia = negociacaoAntiga ? String(formData.get("mesAnoReferencia") ?? "") || null : null;
+  const isFaturadoEstagio = estagio.toLowerCase().includes("faturad");
+
+  // Data de faturamento: usa a informada manualmente (ex: CRD PME) ou, se a
+  // coluna já é FATURADO, a data de agora.
+  const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
+  const faturadoEmFinal = dataFaturamentoRaw
+    ? new Date(dataFaturamentoRaw + "T12:00:00-03:00")
+    : isFaturadoEstagio
+    ? new Date()
+    : null;
 
   // Entrada
   const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
@@ -1916,12 +1926,12 @@ export async function criarNegociacaoCompleta(formData: FormData) {
       mesAnoReferencia,
       ultimoContato: new Date(),
       // Se estagio é FATURADO, marca como ganha imediatamente
-      status: estagio.toLowerCase().includes("faturad") ? "ganha" : "aberta",
-      faturadoEm: estagio.toLowerCase().includes("faturad") ? new Date() : null,
+      status: isFaturadoEstagio ? "ganha" : "aberta",
+      faturadoEm: faturadoEmFinal,
     } as any,
   });
 
-  if (estagio.toLowerCase().includes("faturad")) {
+  if (isFaturadoEstagio) {
     await db.cliente.update({ where: { id: clienteId }, data: { jaComprou: true } });
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
@@ -1929,6 +1939,23 @@ export async function criarNegociacaoCompleta(formData: FormData) {
 
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Ajusta a data de faturamento de uma negociação já faturada (usado no pop-up
+// que pergunta, ao arrastar o card para FATURADO, se o faturamento foi hoje
+// ou em uma data retroativa).
+export async function definirFaturadoEm(id: string, data: string) {
+  "use server";
+  if (!data) return { ok: false };
+  await db.negociacao.update({
+    where: { id },
+    data: { faturadoEm: new Date(data + "T12:00:00-03:00") },
+  });
+  revalidatePath("/negociacoes");
+  revalidatePath("/pipeline");
+  revalidatePath("/financeiro");
   revalidatePath("/dashboard");
   return { ok: true };
 }
