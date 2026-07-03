@@ -64,6 +64,37 @@ export function diaSemanaBrasilia(date: Date): number {
   return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[nome] ?? date.getDay();
 }
 
+// Mês/ano atual (YYYY-MM) no fuso de Brasília — usado para marcar comissões pagas.
+export function mesAnoAtualBrasilia(date: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_BR, year: "numeric", month: "2-digit" });
+  const partes = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+  return `${partes.year}-${partes.month}`;
+}
+
+// Dia do mês (1-31) correspondente ao 5º dia útil (seg-sex, sem considerar feriados).
+function diaDoQuintoDiaUtil(ano: number, mesIndex0: number): number {
+  let dia = 1;
+  let uteis = 0;
+  while (uteis < 5) {
+    const diaSemana = new Date(ano, mesIndex0, dia).getDay();
+    if (diaSemana !== 0 && diaSemana !== 6) uteis++;
+    if (uteis === 5) break;
+    dia++;
+  }
+  return dia;
+}
+
+// True se, no horário de Brasília, hoje já é o 5º dia útil do mês corrente ou depois.
+// Não considera feriados nacionais/locais — apenas fins de semana.
+export function apos5DiaUtilBrasilia(date: Date = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_BR, year: "numeric", month: "2-digit", day: "2-digit" });
+  const partes = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+  const ano = Number(partes.year);
+  const mes = Number(partes.month) - 1;
+  const dia = Number(partes.day);
+  return dia >= diaDoQuintoDiaUtil(ano, mes);
+}
+
 // Saudação correta conforme o período do dia em Brasília.
 export function saudacaoBrasilia(date: Date = new Date()): "Bom dia" | "Boa tarde" | "Boa noite" {
   const h = horaBrasilia(date);

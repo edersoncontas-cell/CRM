@@ -121,6 +121,10 @@ model Negociacao {
   status                String    @default("aberta") // aberta | ganha | perdida
   motivoPerda           String?
   faturadoEm            DateTime? // data em que chegou na coluna FATURADO
+  // Controle de pagamento da comissão (0,5% sobre o valor faturado)
+  comissaoPaga          Boolean   @default(false)
+  comissaoPagaMes       String?   // "YYYY-MM" — mês em que a comissão foi paga
+  comissaoPagaEm        DateTime? // timestamp de quando foi confirmada
   criadoEm             DateTime  @default(now())
   atualizadoEm         DateTime  @updatedAt
   analises              AnaliseIA[]

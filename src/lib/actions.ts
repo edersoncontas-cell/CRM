@@ -12,7 +12,7 @@ import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./p
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
-import { deveDescartarContato } from "./utils";
+import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
 import { z } from "zod";
 
@@ -436,7 +436,7 @@ export async function editarNegociacao(id: string, formData: FormData) {
 export async function moverNegociacao(id: string, estagio: string) {
   const isPerdido = estagio.toLowerCase().includes("perdid");
   const isFaturado = estagio.toLowerCase().includes("faturad");
-  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("vendas confirm");
+  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("ganho") || estagio.toLowerCase().includes("vendid");
   
   if (isPerdido) {
     await db.negociacao.update({
@@ -1910,6 +1910,16 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const estagio = String(formData.get("estagio") ?? "") || "Primeiro contato";
   const negociacaoAntiga = formData.get("negociacaoAntiga") === "true";
   const mesAnoReferencia = negociacaoAntiga ? String(formData.get("mesAnoReferencia") ?? "") || null : null;
+  const isFaturadoEstagio = estagio.toLowerCase().includes("faturad");
+
+  // Data de faturamento: usa a informada manualmente (ex: CRD PME) ou, se a
+  // coluna já é FATURADO, a data de agora.
+  const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
+  const faturadoEmFinal = dataFaturamentoRaw
+    ? new Date(dataFaturamentoRaw + "T12:00:00-03:00")
+    : isFaturadoEstagio
+    ? new Date()
+    : null;
 
   // Entrada
   const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
@@ -1953,12 +1963,12 @@ export async function criarNegociacaoCompleta(formData: FormData) {
       mesAnoReferencia,
       ultimoContato: new Date(),
       // Se estagio é FATURADO, marca como ganha imediatamente
-      status: estagio.toLowerCase().includes("faturad") ? "ganha" : "aberta",
-      faturadoEm: estagio.toLowerCase().includes("faturad") ? new Date() : null,
+      status: isFaturadoEstagio ? "ganha" : "aberta",
+      faturadoEm: faturadoEmFinal,
     } as any,
   });
 
-  if (estagio.toLowerCase().includes("faturad")) {
+  if (isFaturadoEstagio) {
     await db.cliente.update({ where: { id: clienteId }, data: { jaComprou: true } });
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
@@ -1967,6 +1977,54 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Ajusta a data de faturamento de uma negociação já faturada (usado no pop-up
+// que pergunta, ao arrastar o card para FATURADO, se o faturamento foi hoje
+// ou em uma data retroativa).
+export async function definirFaturadoEm(id: string, data: string) {
+  "use server";
+  if (!data) return { ok: false };
+  await db.negociacao.update({
+    where: { id },
+    data: { faturadoEm: new Date(data + "T12:00:00-03:00") },
+  });
+  revalidatePath("/negociacoes");
+  revalidatePath("/pipeline");
+  revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// ── Pagamento de comissão ────────────────────────────────────────────────
+// Marca/desmarca a comissão de UMA negociação como paga, com o mês de referência.
+export async function definirComissaoPaga(id: string, paga: boolean, mesPagamento?: string | null) {
+  "use server";
+  await db.negociacao.update({
+    where: { id },
+    data: paga
+      ? { comissaoPaga: true, comissaoPagaMes: mesPagamento || mesAnoAtualBrasilia(), comissaoPagaEm: new Date() }
+      : { comissaoPaga: false, comissaoPagaMes: null, comissaoPagaEm: null },
+  });
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/faturadas");
+  revalidatePath("/financeiro/comissoes");
+  return { ok: true };
+}
+
+// Confirma o pagamento de VÁRIAS comissões de uma vez (usado no pop-up do
+// 5º dia útil do mês, no setor Financeiro).
+export async function marcarComissoesPagas(ids: string[], mesPagamento: string) {
+  "use server";
+  if (!ids.length) return { ok: false };
+  await db.negociacao.updateMany({
+    where: { id: { in: ids } },
+    data: { comissaoPaga: true, comissaoPagaMes: mesPagamento, comissaoPagaEm: new Date() },
+  });
+  revalidatePath("/financeiro");
+  revalidatePath("/financeiro/faturadas");
+  revalidatePath("/financeiro/comissoes");
   return { ok: true };
 }
 

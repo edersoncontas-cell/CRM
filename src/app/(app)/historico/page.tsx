@@ -83,7 +83,7 @@ export default async function HistoricoPage() {
     <div>
       <PageHeader
         titulo="Histórico de Negócios"
-        subtitulo="Negociações ganhas, condições mais usadas e ticket médio por modelo"
+        subtitulo="Negociações faturadas, condições mais usadas e ticket médio por modelo"
       />
 
       {/* KPIs */}
@@ -226,7 +226,7 @@ export default async function HistoricoPage() {
         {ganhas.length === 0 ? (
           <Card>
             <p className="text-center text-sm text-slate-400">
-              Nenhum negócio ganho ainda. Vai lá vender! 💪
+              Nenhuma negociação faturada ainda. Vai lá vender! 💪
             </p>
           </Card>
         ) : (

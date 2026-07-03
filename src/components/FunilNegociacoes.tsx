@@ -10,7 +10,7 @@ import {
   moverNegociacao, marcarPerdida, marcarGanha,
   criarNegociacaoCard, editarNegociacao, excluirNegociacao,
   criarColunaFunil, excluirColunaFunil, renomearColunaFunil,
-  criarNegociacaoCompleta,
+  criarNegociacaoCompleta, definirFaturadoEm,
 } from "@/lib/actions";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
@@ -66,7 +66,8 @@ export function FunilNegociacoes({
   const [ativo, setAtivo] = useState<CardData | null>(null);
   const [editando, setEditando] = useState<CardData | null>(null);
   const [filtro, setFiltro] = useState("");
-  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "ganhos" | "perdidos">("todos");
+  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
+  const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -79,10 +80,10 @@ export function FunilNegociacoes({
 
   // KPIs
   const abertos = cards.filter((c) => c.status === "aberta");
-  const ganhos = cards.filter((c) => c.status === "ganha");
+  const faturados = cards.filter((c) => c.status === "ganha");
   const totalAberto = abertos.reduce((s, c) => s + (c.valor ?? 0), 0);
-  const totalGanho = ganhos.reduce((s, c) => s + (c.valor ?? 0), 0);
-  const taxaConversao = cards.length > 0 ? Math.round((ganhos.length / cards.length) * 100) : 0;
+  const totalFaturado = faturados.reduce((s, c) => s + (c.valor ?? 0), 0);
+  const taxaConversao = cards.length > 0 ? Math.round((faturados.length / cards.length) * 100) : 0;
 
   // Filtrar cards
   const cardsFiltrados = cards.filter((c) => {
@@ -93,7 +94,7 @@ export function FunilNegociacoes({
     const matchAba =
       abaFiltro === "todos" ||
       (abaFiltro === "abertos" && c.status === "aberta") ||
-      (abaFiltro === "ganhos" && c.status === "ganha") ||
+      (abaFiltro === "faturados" && c.status === "ganha") ||
       (abaFiltro === "perdidos" && c.status === "perdida");
     return matchFiltro && matchAba;
   });
@@ -112,14 +113,21 @@ export function FunilNegociacoes({
     if (!novaColuna) return;
     // Usa o titulo da coluna como estagio (chave dinamica)
     const novoEstagio = novaColuna.titulo;
-    const isPerdido = novaColuna.titulo.toLowerCase().includes("perdid");
+    const tituloNovo = novaColuna.titulo.toLowerCase();
+    const isPerdido = tituloNovo.includes("perdid");
+    // FATURADO e colunas de venda ganha viram status "ganha" (mesma regra do servidor)
+    const isGanha = tituloNovo.includes("faturad") || tituloNovo.includes("ganho") || tituloNovo.includes("confirm") || tituloNovo.includes("vendid");
     if (card.estagio === novoEstagio) return;
     setCards((cs) =>
       cs.map((c) =>
-        c.id === card.id ? { ...c, estagio: novoEstagio, status: isPerdido ? "perdida" : "aberta" } : c
+        c.id === card.id ? { ...c, estagio: novoEstagio, status: isPerdido ? "perdida" : isGanha ? "ganha" : "aberta" } : c
       )
     );
     moverNegociacao(card.id, novoEstagio);
+    // Ao cair na coluna FATURADO, pergunta se o faturamento foi hoje (ou retroativo).
+    if (tituloNovo.includes("faturad")) {
+      setConfirmFaturamento({ cardId: card.id, cliente: card.cliente });
+    }
   }
 
   return (
@@ -128,7 +136,7 @@ export function FunilNegociacoes({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard icone={<Target size={20} />} rotulo="Em aberto" valor={abertos.length.toString()} sub={formatCurrency(totalAberto)} cor="azul" />
         <KpiCard icone={<DollarSign size={20} />} rotulo="Volume aberto" valor={formatCurrency(totalAberto)} sub={`${abertos.length} negoc.`} cor="verde" />
-        <KpiCard icone={<Trophy size={20} />} rotulo="Vendas ganhas" valor={ganhos.length.toString()} sub={formatCurrency(totalGanho)} cor="amarelo" />
+        <KpiCard icone={<Trophy size={20} />} rotulo="Vendas faturadas" valor={faturados.length.toString()} sub={formatCurrency(totalFaturado)} cor="amarelo" />
         <KpiCard icone={<BarChart3 size={20} />} rotulo="Taxa conversão" valor={`${taxaConversao}%`} sub={`${cards.length} total`} cor="roxo" />
       </div>
 
@@ -148,7 +156,7 @@ export function FunilNegociacoes({
           )}
         </div>
         <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-          {(["todos", "abertos", "ganhos", "perdidos"] as const).map((aba) => (
+          {(["todos", "abertos", "faturados", "perdidos"] as const).map((aba) => (
             <button
               key={aba}
               onClick={() => setAbaFiltro(aba)}
@@ -157,7 +165,7 @@ export function FunilNegociacoes({
                 abaFiltro === aba ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
               )}
             >
-              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : aba === "ganhos" ? "Ganhos" : "Perdidos"}
+              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : aba === "faturados" ? "Faturados" : "Perdidos"}
             </button>
           ))}
         </div>
@@ -169,9 +177,11 @@ export function FunilNegociacoes({
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {colunas.map((col) => {
-              const lista = col.titulo.toLowerCase().includes("perdid")
+              const tituloCol = col.titulo.toLowerCase();
+              const colunaGanha = tituloCol.includes("faturad") || tituloCol.includes("ganho") || tituloCol.includes("confirm") || tituloCol.includes("vendid");
+              const lista = tituloCol.includes("perdid")
                 ? cardsFiltrados.filter((c) => c.status === "perdida")
-                : col.titulo.toLowerCase().includes("ganho") || col.titulo.toLowerCase().includes("confirm") || col.titulo.toLowerCase().includes("vendid")
+                : colunaGanha
                 ? cardsFiltrados.filter((c) => c.status === "ganha" && c.estagio === col.titulo)
                 : cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo);
               const totalCol = lista.reduce((s, c) => s + (c.valor ?? 0), 0);
@@ -202,6 +212,99 @@ export function FunilNegociacoes({
       </DndContext>
 
       {editando && <ModalEditar card={editando} onClose={() => setEditando(null)} colunas={colunas} />}
+
+      {confirmFaturamento && (
+        <PopupConfirmarFaturamento
+          cliente={confirmFaturamento.cliente}
+          onFechar={() => setConfirmFaturamento(null)}
+          onConfirmarData={async (data) => {
+            await definirFaturadoEm(confirmFaturamento.cardId, data);
+            setConfirmFaturamento(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Pop-up de confirmação da data de faturamento (ao arrastar para FATURADO) ──
+function PopupConfirmarFaturamento({
+  cliente,
+  onFechar,
+  onConfirmarData,
+}: {
+  cliente: string;
+  onFechar: () => void;
+  onConfirmarData: (data: string) => Promise<void>;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [retroativo, setRetroativo] = useState(false);
+  const [data, setData] = useState("");
+  const hojeStr = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Faturamento</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{cliente}</p>
+          </div>
+          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {!retroativo ? (
+            <>
+              <p className="text-sm text-slate-600">O faturamento foi hoje, <b>{hojeStr}</b>?</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onFechar}
+                  className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors"
+                >
+                  Sim, foi hoje
+                </button>
+                <button
+                  onClick={() => setRetroativo(true)}
+                  className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors"
+                >
+                  Informar data
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Data do faturamento</label>
+                <input
+                  type="date"
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRetroativo(false)}
+                  className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors"
+                >
+                  Voltar
+                </button>
+                <button
+                  disabled={!data || isPending}
+                  onClick={() => startTransition(() => onConfirmarData(data))}
+                  className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50"
+                >
+                  {isPending ? "Salvando..." : "Confirmar data"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -528,6 +631,53 @@ function FormAdicionar({
   const [isPending, startTransition] = useTransition();
   const [pagamento, setPagamento] = useState("");
   const [entradaValor, setEntradaValor] = useState("");
+  const [valorMaquina, setValorMaquina] = useState("");
+  const [crdEntradaValor, setCrdEntradaValor] = useState("");
+  const [crdEntradaPercentual, setCrdEntradaPercentual] = useState("");
+  const [crdParcelasQtd, setCrdParcelasQtd] = useState("1");
+  const [crdDataFaturamento, setCrdDataFaturamento] = useState("");
+
+  function parseNum(s: string): number {
+    const n = parseFloat(s.replace(/[^0-9,.-]/g, "").replace(",", "."));
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Valor da máquina mudou: recalcula a entrada CRD PME mantendo o que já
+  // estava fixado (percentual, se preenchido; senão o valor em R$).
+  function onValorChange(v: string) {
+    setValorMaquina(v);
+    const valorNum = parseNum(v);
+    if (crdEntradaPercentual) {
+      const novoValor = (valorNum * parseNum(crdEntradaPercentual)) / 100;
+      setCrdEntradaValor(novoValor ? novoValor.toFixed(0) : "");
+    } else if (crdEntradaValor && valorNum > 0) {
+      const pct = (parseNum(crdEntradaValor) / valorNum) * 100;
+      setCrdEntradaPercentual(pct ? pct.toFixed(1) : "");
+    }
+  }
+
+  // Entrada em R$ da CRD PME: recalcula o percentual automaticamente.
+  function onCrdEntradaValorChange(v: string) {
+    setCrdEntradaValor(v);
+    const valorNum = parseNum(valorMaquina);
+    if (valorNum > 0) {
+      const pct = (parseNum(v) / valorNum) * 100;
+      setCrdEntradaPercentual(v ? pct.toFixed(1) : "");
+    }
+  }
+
+  // Entrada em % da CRD PME: recalcula o valor em R$ automaticamente.
+  function onCrdEntradaPercentualChange(v: string) {
+    setCrdEntradaPercentual(v);
+    const valorNum = parseNum(valorMaquina);
+    if (valorNum > 0) {
+      const val = (valorNum * parseNum(v)) / 100;
+      setCrdEntradaValor(v ? val.toFixed(0) : "");
+    }
+  }
+
+  const crdSaldoRestante = Math.max(0, parseNum(valorMaquina) - parseNum(crdEntradaValor));
+  const crdParcelaValorCalc = crdParcelasQtd ? crdSaldoRestante / Number(crdParcelasQtd) : 0;
 
   const CONDICAO_OPTS = [
     { value: "pesquisa_preco", label: "Pesquisa de Preço" },
@@ -568,7 +718,14 @@ function FormAdicionar({
         <form
           action={async (fd) => {
             fd.set("estagio", estagio);
-            if (entradaValor) fd.set("entradaValor", entradaValor);
+            if (pagamento === "financiamento" && entradaValor) fd.set("entradaValor", entradaValor);
+            if (pagamento === "crd_pme") {
+              if (crdEntradaValor) fd.set("entradaValor", crdEntradaValor);
+              if (crdEntradaPercentual) fd.set("entradaPercentual", crdEntradaPercentual);
+              fd.set("crdSaldoParcelasQtd", crdParcelasQtd);
+              fd.set("crdParcelaValor", crdParcelaValorCalc.toFixed(2));
+              if (crdDataFaturamento) fd.set("dataFaturamento", crdDataFaturamento);
+            }
             startTransition(async () => {
               await criarNegociacaoCompleta(fd);
               onFechar();
@@ -615,7 +772,14 @@ function FormAdicionar({
           {/* Valor */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
-            <input name="valor" placeholder="0" inputMode="numeric" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+            <input
+              value={valorMaquina}
+              onChange={(e) => onValorChange(e.target.value)}
+              name="valor"
+              placeholder="0"
+              inputMode="numeric"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+            />
           </div>
           {/* Pagamento */}
           <div>
@@ -625,15 +789,13 @@ function FormAdicionar({
               {CONDICAO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          {/* Banco (shown when financiamento or crd_pme) */}
-          {(pagamento === "financiamento" || pagamento === "crd_pme") && (
-            <div className={`rounded-xl p-3 space-y-3 ${pagamento === "crd_pme" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
-              <p className={`text-xs font-bold uppercase ${pagamento === "crd_pme" ? "text-emerald-700" : "text-blue-700"}`}>
-                {pagamento === "crd_pme" ? "CRD PME" : "Financiamento"}
-              </p>
+          {/* Financiamento: mantém Banco + Entrada simples */}
+          {pagamento === "financiamento" && (
+            <div className="rounded-xl p-3 space-y-3 bg-blue-50 border border-blue-200">
+              <p className="text-xs font-bold uppercase text-blue-700">Financiamento</p>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Banco</label>
-                <select name="banco" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400">
+                <select name="bancoFinanciamento" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400">
                   <option value="">— Selecionar banco —</option>
                   {BANCOS.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
@@ -646,6 +808,59 @@ function FormAdicionar({
                   placeholder="0"
                   inputMode="numeric"
                   className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* CRD PME: sem banco — entrada em R$/% com cálculo automático,
+              saldo restante, parcelas (30 em 30 dias) e data de faturamento manual */}
+          {pagamento === "crd_pme" && (
+            <div className="rounded-xl p-3 space-y-3 bg-emerald-50 border border-emerald-200">
+              <p className="text-xs font-bold uppercase text-emerald-700">CRD PME</p>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (R$)</label>
+                <input
+                  value={crdEntradaValor}
+                  onChange={(e) => onCrdEntradaValorChange(e.target.value)}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (%)</label>
+                <input
+                  value={crdEntradaPercentual}
+                  onChange={(e) => onCrdEntradaPercentualChange(e.target.value)}
+                  placeholder="0"
+                  inputMode="decimal"
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-white px-3 py-2">
+                <span className="text-xs font-semibold text-emerald-700">Saldo Restante</span>
+                <span className="text-sm font-bold text-emerald-800">{formatCurrency(crdSaldoRestante)}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Parcelas (30 em 30 dias)</label>
+                <select
+                  value={crdParcelasQtd}
+                  onChange={(e) => setCrdParcelasQtd(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n}x de {formatCurrency(crdSaldoRestante / n)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Faturamento (opcional)</label>
+                <input
+                  type="date"
+                  value={crdDataFaturamento}
+                  onChange={(e) => setCrdDataFaturamento(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
                 />
               </div>
             </div>
@@ -758,33 +973,61 @@ function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () =
 }
 
 
-// ── Formulário de negociação antiga (dentro da coluna FATURADO) ─────────
+// ── Formulário de negociação antiga (modal — mesmo padrão de "Nova Negociação") ──
 function FormAntigaNegociacao({ estagio, clientes, onFechar }: { estagio: string; clientes: { id: string; nome: string }[]; onFechar: () => void }) {
+  const [isPending, startTransition] = useTransition();
   return (
-    <form
-      action={async (fd) => {
-        fd.set("negociacaoAntiga", "true");
-        fd.set("estagio", estagio);
-        await criarNegociacaoCompleta(fd);
-        onFechar();
-      }}
-      className="rounded-xl border border-amber-300 bg-amber-50 p-3 shadow-lg"
-    >
-      <p className="text-xs font-bold text-amber-700 mb-2">Venda Antiga</p>
-      <select name="clienteId" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400">
-        <option value="">— Selecionar cliente —</option>
-        {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-      </select>
-      <input name="maquinaModelo" placeholder="Máquina (ex: E215C)" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <input name="valor" placeholder="Valor (R$)" inputMode="numeric" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <label className="mb-2 block text-xs text-slate-600">
-        Mês/Ano da venda:
-        <input type="month" name="mesAnoReferencia" className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      </label>
-      <div className="flex items-center gap-2">
-        <button className="flex-1 rounded-lg bg-amber-700 py-2 text-xs font-bold text-white hover:bg-amber-800 transition-colors">Registrar Venda Antiga</button>
-        <button type="button" onClick={onFechar} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={14} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Venda Antiga</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Coluna: {estagio}</p>
+          </div>
+          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+            <X size={18} />
+          </button>
+        </div>
+        <form
+          action={(fd) => {
+            fd.set("negociacaoAntiga", "true");
+            fd.set("estagio", estagio);
+            startTransition(async () => {
+              await criarNegociacaoCompleta(fd);
+              onFechar();
+            });
+          }}
+          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
+        >
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Cliente</label>
+            <select name="clienteId" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+              <option value="">— Selecionar cliente —</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Máquina</label>
+            <input name="maquinaModelo" placeholder="Ex: E215C" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
+            <input name="valor" placeholder="0" inputMode="numeric" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Mês/Ano da venda</label>
+            <input type="month" name="mesAnoReferencia" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          <div className="flex items-center gap-2 pt-2">
+            <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
+              {isPending ? "Registrando..." : "Registrar Venda Antiga"}
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 }
