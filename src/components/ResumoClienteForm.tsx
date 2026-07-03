@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { atualizarResumoCliente, criarNegociacaoCompleta, gerarResumoClienteIA } from "@/lib/actions";
 import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2, PlusCircle } from "lucide-react";
 import Link from "next/link";
 
 const CONDICAO_OPTS = [
-  { value: "pesquisando",       label: "Só pesquisando preço" },
-  { value: "interesse_futuro",  label: "Interesse futuro" },
-  { value: "avista",            label: "À vista" },
-  { value: "financiamento",     label: "Financiamento" },
-  { value: "consorcio",         label: "Consórcio" },
+  { value: "pesquisando", label: "Só pesquisando preço" },
+  { value: "interesse_futuro", label: "Interesse futuro" },
+  { value: "avista", label: "À vista" },
+  { value: "financiamento", label: "Financiamento" },
+  { value: "consorcio", label: "Consórcio" },
 ];
 
 const CONDICAO_LABEL: Record<string, string> = Object.fromEntries(CONDICAO_OPTS.map((o) => [o.value, o.label]));
@@ -71,26 +71,25 @@ export function ResumoClienteForm({
   const [gerando, startGerar] = useTransition();
   const [erroIA, setErroIA] = useState<string | null>(null);
   const [negsExpand, setNegsExpand] = useState(false);
+  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
 
-  // Auto-gera resumo ao montar se o cliente tem conversa no WA mas não tem resumo ainda
-  useEffect(() => {
-    if (temConversa && !resumo.texto && !resumo.maquinas) {
-      // Pequeno delay para não sobrecarregar no carregamento inicial
-      const t = setTimeout(() => gerarIA(), 1500);
-      return () => clearTimeout(t);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // CORREÇÃO: NÃO auto-gera resumo ao montar — isso causava erro de página.
+  // O botão "Gerar resumo pelo Cérebro" fica visível para o usuário acionar manualmente.
 
   function gerarIA() {
     setErroIA(null);
     if (!editando) setEditando(true);
     startGerar(async () => {
-      const r = await gerarResumoClienteIA(clienteId);
-      if (r.ok && r.resumo) {
-        setTexto(r.resumo);
-      } else {
-        setErroIA(r.erro ?? "Erro ao gerar resumo.");
+      try {
+        const r = await gerarResumoClienteIA(clienteId);
+        if (r.ok && r.resumo) {
+          setTexto(r.resumo);
+        } else {
+          setErroIA(r.erro ?? "Erro ao gerar resumo.");
+        }
+      } catch (e) {
+        setErroIA("Erro inesperado ao gerar resumo. Tente novamente.");
+        console.error("[ResumoClienteForm] gerarIA error:", e);
       }
     });
   }
@@ -111,122 +110,85 @@ export function ResumoClienteForm({
   }
 
   const temResumo = maquinas || valor || condicao || texto;
-  const [novaNegoOpen, setNovaNegoOpen] = useState(false);
-
 
   return (
     <div className="rounded-2xl shadow-sm" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid #27272a" }}>
         <h2 className="font-semibold text-zinc-100">Resumo do Cliente</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={gerarIA}
-            disabled={gerando}
-            title="O Cérebro lê toda a conversa, audios transcritos e atualizações do cliente, gerando um resumo completo"
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={gerarIA} disabled={gerando} title="O Cérebro lê toda a conversa e gera um resumo completo"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: gerando ? "#666" : "#BFDE4D", color: "#111" }}
-          >
+            style={{ background: gerando ? "#666" : "#BFDE4D", color: "#111" }}>
             {gerando ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
             {gerando ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
           </button>
-          <button
-            onClick={() => setEditando((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-          >
+          <button onClick={() => setEditando((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200">
             <Pencil size={13} /> {editando ? "Cancelar" : "Editar"}
           </button>
-          <button
-            onClick={() => setNovaNegoOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-          >
+          <button onClick={() => setNovaNegoOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
             <PlusCircle size={13} /> Gerar Negociação
           </button>
         </div>
       </div>
 
       <div className="p-5 space-y-5">
-        {/* Formulário de edição */}
+        {temConversa && !temResumo && (
+          <div className="rounded-xl bg-brand-50 border border-brand-200 px-4 py-3 flex items-center gap-2">
+            <Brain size={16} className="text-brand-600 shrink-0" />
+            <p className="text-xs text-brand-700">Este cliente tem conversa no WhatsApp. Clique em <b>Gerar resumo pelo Cérebro</b> para criar um resumo automático.</p>
+          </div>
+        )}
+
         {editando ? (
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Máquinas de interesse</label>
-              <input
-                value={maquinas}
-                onChange={(e) => setMaquinas(e.target.value)}
-                placeholder="Ex: E215B; E145C EVO"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-              />
+              <input value={maquinas} onChange={(e) => setMaquinas(e.target.value)} placeholder="Ex: E215B; E145C EVO"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Valor (R$)</label>
-                <input
-                  value={valor}
-                  onChange={(e) => setValor(e.target.value)}
-                  placeholder="Ex: 850000"
-                  inputMode="numeric"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-                />
+                <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="Ex: 850000" inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Entrada (R$)</label>
-                <input
-                  value={entrada}
-                  onChange={(e) => setEntrada(e.target.value)}
-                  placeholder="Ex: 200000"
-                  inputMode="numeric"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-                />
+                <input value={entrada} onChange={(e) => setEntrada(e.target.value)} placeholder="Ex: 200000" inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
               </div>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Condição / situação</label>
-              <select
-                value={condicao}
-                onChange={(e) => setCondicao(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-              >
+              <select value={condicao} onChange={(e) => setCondicao(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500">
                 <option value="">—</option>
                 {CONDICAO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Próxima visita</label>
-              <input
-                type="date"
-                value={proximaVisita}
-                onChange={(e) => setProximaVisita(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-              />
+              <input type="date" value={proximaVisita} onChange={(e) => setProximaVisita(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Horário / nota</label>
-              <input
-                value={proximaVisitaNota}
-                onChange={(e) => setProximaVisitaNota(e.target.value)}
-                placeholder="O dia todo / 14h"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-              />
+              <input value={proximaVisitaNota} onChange={(e) => setProximaVisitaNota(e.target.value)} placeholder="O dia todo / 14h"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Resumo geral (IA ou livre)</label>
-              <textarea
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                rows={4}
+              <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={4}
                 placeholder="Resumo do que foi conversado, situação do cliente, intenção de compra…"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 resize-none"
-              />
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 resize-none" />
             </div>
             {erroIA && (
               <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erroIA}</p>
             )}
-            <button
-              onClick={salvar}
-              disabled={salvando}
-              className="flex items-center gap-1.5 rounded-lg bg-black px-4 py-2 text-sm font-bold text-agro-400 hover:bg-brand-800 disabled:opacity-50"
-            >
+            <button onClick={salvar} disabled={salvando}
+              className="flex items-center gap-1.5 rounded-lg bg-black px-4 py-2 text-sm font-bold text-agro-400 hover:bg-brand-800 disabled:opacity-50">
               <Save size={14} /> {salvando ? "Salvando…" : "Salvar resumo"}
             </button>
           </div>
@@ -245,21 +207,16 @@ export function ResumoClienteForm({
                 {condicao && <div><span className="font-semibold text-slate-600">Condição: </span><span className="text-slate-700">{CONDICAO_LABEL[condicao] ?? condicao}</span></div>}
               </div>
             )}
-            {texto && (
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{texto}</p>
-            )}
+            {texto && <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{texto}</p>}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">Nenhum resumo ainda. Clique em Editar para preencher ou aguarde a IA analisar as conversas do WhatsApp.</p>
+          <p className="text-sm text-slate-400">Nenhum resumo ainda. Clique em Editar para preencher ou use o botão do Cérebro para gerar automaticamente.</p>
         )}
 
-        {/* Negociações legadas (colapsável) */}
         {negociacoes.length > 0 && (
           <div>
-            <button
-              onClick={() => setNegsExpand((v) => !v)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600"
-            >
+            <button onClick={() => setNegsExpand((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600">
               {negsExpand ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               {negociacoes.length} negociação(ões) no pipeline
             </button>
@@ -281,8 +238,7 @@ export function ResumoClienteForm({
                         {dias != null && <span>{dias}d sem contato</span>}
                         {n.concorrenteMencionado && (
                           <Link href={`/comparativo?modelo=${encodeURIComponent(n.maquinaModelo ?? "")}&vs=${encodeURIComponent(n.concorrenteMencionado)}`}
-                            className="flex items-center gap-1 text-red-600 hover:underline"
-                          >
+                            className="flex items-center gap-1 text-red-600 hover:underline">
                             <Swords size={11} /> vs {n.concorrenteMencionado}
                           </Link>
                         )}
@@ -303,17 +259,15 @@ export function ResumoClienteForm({
   );
 }
 
+// ─── Modal Gerar Negociação (no cadastro do cliente) ─────────────────────────
+const BANCOS_OPCOES = ["Banco CNH","Sicoob","Sicredi","Bradesco","Banestes","Banco do Nordeste","Banco do Brasil","Banco Itaú","Outros Bancos"];
+const NH_MODELS = ["E145C","E215C","E265C","E305C","E385C","W130C","W170C","B95C","B110C","B115C","RG140B","RG170B","D150B","D180B"];
+const DY_MODELS = ["CC1200","CC1300","CC900","CP1200","CA1500","CA3500","CS1400","F141C","F181C"];
 
-// ─── Modal Gerar Negociação (embutido no cadastro do cliente) ─────────────
-
-const NH_MODELS = ["E145C","E215C","E245C","W130C","W170C","W190C","B90C","B115C","B175C","EH215B","EH315C","TC5.80","TC5.90","TC5.100","T7.315","T6.180","L213","L215","L218","L220","L221","L223","L228","C227","C232","C238","C242","C245","SR200","SR220","TR270","TV380","FR480","FR9040","FR9060","FR680"];
-const DY_MODELS = ["CC1200","CC1300","CC900","CP1200","CA1500","CA3500","CS1400","CT718","CT722","BMP8500","LG500","F141C","F181C","F201C","AP400","AP655D","AP1055F"];
-
-function formatBRL(v: string): string {
+function fmtBRL(v: string): string {
   const n = v.replace(/\D/g, "");
   if (!n) return "";
-  const num = parseInt(n, 10);
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num / 100);
+  return parseInt(n, 10).toLocaleString("pt-BR");
 }
 
 function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClose: () => void }) {
@@ -321,21 +275,27 @@ function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClos
   const [maquina, setMaquina] = useState("");
   const [valor, setValor] = useState("");
   const [pagamento, setPagamento] = useState("");
+  const [banco, setBanco] = useState("");
+  const [entradaValor, setEntradaValor] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const models = marca === "New Holland" ? NH_MODELS : marca === "Dynapac" ? DY_MODELS : [];
+  const inputCls = "w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSalvando(true);
     try {
       const valorNum = parseFloat(valor.replace(/\./g,"").replace(",",".")) || 0;
+      const entradaNum = parseFloat(entradaValor.replace(/\./g,"").replace(",",".")) || 0;
       const fd = new FormData();
       fd.set("clienteId", clienteId);
       fd.set("marca", marca);
       fd.set("maquinaModelo", maquina);
       fd.set("valor", String(valorNum));
       fd.set("tipoPagamento", pagamento);
+      if (banco) fd.set("bancoFinanciamento", banco);
+      if (entradaNum) fd.set("entradaValor", String(entradaNum));
       await criarNegociacaoCompleta(fd);
       onClose();
       window.location.reload();
@@ -345,43 +305,73 @@ function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClos
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Gerar Negociação</h3>
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">MARCA</label>
-            <select value={marca} onChange={(e) => { setMarca(e.target.value); setMaquina(""); }} className="w-full border rounded-lg px-3 py-2 text-sm" required>
-              <option value="">Selecionar marca...</option>
-              <option>New Holland</option>
-              <option>Dynapac</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">MÁQUINA</label>
-            <select value={maquina} onChange={(e) => setMaquina(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" required>
-              <option value="">Selecionar modelo...</option>
-              {models.map((m) => <option key={m}>{m}</option>)}
-            </select>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between sticky top-0">
+          <h3 className="text-lg font-bold text-white">Gerar Negociação</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">MARCA</label>
+              <select value={marca} onChange={(e) => { setMarca(e.target.value); setMaquina(""); }} className={inputCls} required>
+                <option value="">Selecionar marca...</option>
+                <option>New Holland</option>
+                <option>Dynapac</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">MÁQUINA</label>
+              <select value={maquina} onChange={(e) => setMaquina(e.target.value)} className={inputCls} required>
+                <option value="">Selecionar...</option>
+                {models.map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">VALOR (R$)</label>
-            <input value={valor} onChange={(e) => setValor(formatBRL(e.target.value))} placeholder="R$ 0,00" className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <input value={valor} onChange={(e) => setValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">PAGAMENTO</label>
-            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
-              <option value="">Selecionar...</option>
-              <option>À vista</option>
-              <option>Financiamento</option>
-              <option>Consórcio</option>
-              <option>CRD PME</option>
+            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} className={inputCls}>
+              <option value="">—</option>
+              <option value="avista">À vista</option>
+              <option value="financiamento">Financiamento</option>
+              <option value="consorcio">Consórcio</option>
+              <option value="crd_pme">CRD PME</option>
             </select>
           </div>
+          {pagamento === "financiamento" && (
+            <div className="rounded-xl bg-violet-50 border border-violet-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-violet-700 uppercase">Financiamento</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">BANCO</label>
+                <select value={banco} onChange={(e) => setBanco(e.target.value)} className={inputCls}>
+                  <option value="">— Selecionar —</option>
+                  {BANCOS_OPCOES.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">ENTRADA (R$)</label>
+                <input value={entradaValor} onChange={(e) => setEntradaValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
+              </div>
+            </div>
+          )}
+          {pagamento === "crd_pme" && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
+              <p className="text-xs font-bold text-emerald-700 uppercase">CRD PME</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">ENTRADA (R$)</label>
+                <input value={entradaValor} onChange={(e) => setEntradaValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
+              </div>
+            </div>
+          )}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={salvando} className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-              {salvando ? "Salvando..." : "Criar Negociação"}
+              {salvando ? "Criando..." : "Criar Negociação"}
             </button>
           </div>
         </form>
