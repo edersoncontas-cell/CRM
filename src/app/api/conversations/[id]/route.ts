@@ -26,8 +26,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const conv = await db.whatsAppConversation.update({ where: { id: params.id }, data });
 
-  // Sincroniza o nome no cadastro do cliente vinculado
-  if (data.contactName && conv.clienteId) {
+  // Sincroniza o nome no cadastro do cliente vinculado — só quando o front
+  // manda a flag explícita (checkbox "Atualizar também o cadastro"), para não
+  // sobrescrever o nome do Cliente sem confirmação a cada rename de contato.
+  if (data.contactName && conv.clienteId && body.syncCliente === true) {
     await db.cliente.update({ where: { id: conv.clienteId }, data: { nome: data.contactName as string } }).catch(() => {});
   }
 

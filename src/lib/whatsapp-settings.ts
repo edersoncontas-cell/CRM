@@ -7,8 +7,11 @@ export async function getWaSettings() {
   return s;
 }
 
+// A Vercel envia `Authorization: Bearer $CRON_SECRET` automaticamente quando
+// a env var existe. Sem CRON_SECRET configurado, os crons ficam abertos ao
+// público em dev (conveniência local), mas negados em produção (fail-closed).
 export function cronAutorizado(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // sem secret → liberado
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  if (secret) return req.headers.get("authorization") === `Bearer ${secret}`;
+  return process.env.NODE_ENV !== "production";
 }

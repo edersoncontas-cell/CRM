@@ -75,7 +75,7 @@ export default async function ConexaoPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-slate-50 p-3 text-center">
                 <div className="text-xl font-bold text-slate-800">{diag.totalChamadas}</div>
                 <div className="text-xs text-slate-500">chamadas recebidas da Z-API</div>
@@ -128,7 +128,7 @@ export default async function ConexaoPage() {
         </div>
         <ul className="space-y-1.5 text-sm text-slate-600">
           <li>• O número fica no seu celular (igual ao WhatsApp Web) — nada migra para a Meta.</li>
-          <li>• Mensagens recebidas entram no <b>/inbox</b> e a IA analisa cada uma.</li>
+          <li>• Mensagens recebidas entram no <b>/atendimento</b> e a IA analisa cada uma.</li>
           <li>• Você responde direto pelo CRM e o cliente sai da fila de &quot;aguardando retorno&quot;.</li>
           <li>• Clientes de regiões fora da sua área não recebem disparos automáticos.</li>
         </ul>

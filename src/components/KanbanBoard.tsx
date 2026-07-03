@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
   useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import {
@@ -102,7 +102,11 @@ export function KanbanBoard({
   const [ativoTar, setAtivoTar] = useState<DemandaCard | null>(null);
   const [editando, setEditando] = useState<CardData | null>(null);
   const [editandoTarefa, setEditandoTarefa] = useState<DemandaCard | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // No toque, segurar (200ms) inicia o drag; deslizar continua rolando a tela.
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   // Re-sincroniza com o servidor após cada ação (as actions revalidam a rota).
   useEffect(() => setCards(cardsIniciais), [cardsIniciais]);
@@ -579,7 +583,7 @@ function ModalEditarTarefa({ tarefa, onClose }: { tarefa: DemandaCard; onClose: 
           <Campo label="Descrição">
             <textarea name="descricao" rows={3} defaultValue={tarefa.descricao ?? ""} className={cn(inputCls, "resize-none")} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Data/hora">
               <input type="datetime-local" name="dueDate" defaultValue={tarefa.dueDate ? new Date(tarefa.dueDate).toISOString().slice(0,16) : ""} className={inputCls} />
             </Campo>
@@ -811,7 +815,7 @@ function ModalEditar({ card, onClose }: { card: CardData; onClose: () => void })
           <Campo label="Máquina">
             <input name="maquinaModelo" defaultValue={card.maquina ?? ""} className={inputCls} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Valor (R$)">
               <input name="valor" inputMode="numeric" defaultValue={card.valor ?? ""} className={inputCls} />
             </Campo>
@@ -825,7 +829,7 @@ function ModalEditar({ card, onClose }: { card: CardData; onClose: () => void })
               </select>
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Coluna">
               <select name="estagio" defaultValue={card.estagio} className={inputCls}>
                 {ESTAGIOS.map((e) => (

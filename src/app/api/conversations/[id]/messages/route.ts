@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendText } from "@/lib/zapi";
+import { sendText, EnvioNaoConfirmadoError } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { message } = await req.json().catch(() => ({ message: "" }));
   const texto = String(message ?? "").trim();
   if (!texto) return NextResponse.json({ ok: false, erro: "Mensagem vazia." }, { status: 400 });
+  if (texto.length > 4096) return NextResponse.json({ ok: false, erro: "Mensagem muito longa (máx. 4096 caracteres)." }, { status: 400 });
 
   const conv = await db.whatsAppConversation.findUnique({ where: { id: params.id } });
   if (!conv) return NextResponse.json({ ok: false, erro: "Conversa não encontrada." }, { status: 404 });
@@ -34,10 +35,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     return NextResponse.json({ ok: true, message: msg });
   } catch (e) {
-    // grava como FAILED para o cron de reenvio reprocessar
+    // UNCONFIRMED: a Z-API pode ter entregue (sem erro de rede/API), só não
+    // deu para confirmar o ID — não marcar como FAILED para o cron de reenvio
+    // não duplicar a mensagem no cliente. FAILED é só para falha real.
+    const unconfirmed = e instanceof EnvioNaoConfirmadoError;
     const msg = await inserirMensagem(conv.id, {
       direction: "OUT", body: texto, origin: "CRM", operatorDisplayName: "Você",
-      sendStatus: "FAILED",
+      sendStatus: unconfirmed ? "UNCONFIRMED" : "FAILED",
     });
     await db.whatsAppMessage.update({ where: { id: msg.id }, data: { lastSendError: String(e).slice(0, 200) } }).catch(() => {});
     return NextResponse.json({ ok: false, erro: String(e).slice(0, 200), message: msg }, { status: 500 });

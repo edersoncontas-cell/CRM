@@ -1,21 +1,32 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_NAME, authAtivo, tokenEsperado, cookieOpts } from "@/lib/auth";
+import { COOKIE_NAME, authAtivo, producaoSemSenha, tokenEsperado, cookieOpts } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
-  if (!authAtivo()) return NextResponse.next();
-
   const { pathname } = req.nextUrl;
   // Rotas públicas: login, auth e SOMENTE os webhooks de WhatsApp (Meta e Z-API).
   // A Meta/Z-API não enviam cookie; os webhooks se protegem pelo payload da origem.
   // As demais rotas /api/zapi/* (status, qr) exigem login — o navegador do
   // Ederson manda o cookie, então funcionam normalmente para ele.
-  if (
+  const rotaPublica =
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks/zapi") ||
     pathname.startsWith("/api/zapi/webhook") ||
-    pathname.startsWith("/api/cron/")
-  ) {
+    pathname.startsWith("/api/cron/");
+
+  // Fail-closed: em produção, sem APP_PASSWORD o CRM ficaria público. Bloqueia
+  // as telas com uma página de aviso; webhooks/crons seguem para suas próprias
+  // rotas (que exigem CRON_SECRET/ZAPI_WEBHOOK_TOKEN independentemente).
+  if (producaoSemSenha()) {
+    if (rotaPublica || pathname.startsWith("/config-necessaria")) return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = "/config-necessaria";
+    return NextResponse.redirect(url);
+  }
+
+  if (!authAtivo()) return NextResponse.next();
+
+  if (rotaPublica) {
     return NextResponse.next();
   }
 

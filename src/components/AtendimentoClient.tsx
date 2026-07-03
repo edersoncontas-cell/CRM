@@ -45,7 +45,11 @@ function iniciais(s: string) {
 function hora(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 }
-function nomeConv(c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string }) {
+function nomeConv(
+  c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string },
+  overlayName?: string | null,
+) {
+  if (overlayName) return overlayName;
   return (c.isGroup ? c.groupName : c.contactName) || c.contactName || c.externalPhone;
 }
 
@@ -79,18 +83,19 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   const [sincMsg, setSincMsg] = useState<string | null>(null);
   const [gerandoResumo, setGerandoResumo] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
-  const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null }>>({});
+  const [flags, setFlags] = useState<Record<string, { aiActive: boolean; ignored: boolean; category: string | null; contactName?: string }>>({});
   const [menuAberto, setMenuAberto] = useState(false);
   const [cfgAberto, setCfgAberto] = useState(false);
   const [auditMode, setAuditMode] = useState<boolean | null>(null);
   const [renomeandoId, setRenomeandoId] = useState<string | null>(null);
   const [novaNegoConv, setNovaNegoConv] = useState<ConvLista | null>(null);
   const [novoNome, setNovoNome] = useState("");
+  const [syncCliente, setSyncCliente] = useState(false);
   const [vincularConv, setVincularConv] = useState<ConvLista | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const fimRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const prevSelIdRef = useRef<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -102,9 +107,10 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     [flags],
   );
 
-  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; category: string; contactName: string; clienteId: string | null }>) {
+  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; category: string; contactName: string; clienteId: string | null; syncCliente: boolean }>) {
+    const { syncCliente: _syncCliente, ...overlayPatch } = patch;
     const base = curr(c);
-    setFlags((f) => ({ ...f, [c.id]: { ...base, ...patch } }));
+    setFlags((f) => ({ ...f, [c.id]: { ...base, ...overlayPatch } }));
     try {
       await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     } catch {}
@@ -112,15 +118,16 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   function abrirRenomear(c: ConvLista) {
-    setNovoNome(nomeConv(c));
+    setNovoNome(nomeConv(c, curr(c).contactName));
     setRenomeandoId(c.id);
+    setSyncCliente(false);
     setMenuAberto(false);
   }
 
   async function salvarNome(c: ConvLista) {
     const nome = novoNome.trim();
-    if (!nome || nome === nomeConv(c)) { setRenomeandoId(null); return; }
-    await patchConv(c, { contactName: nome });
+    if (!nome || nome === nomeConv(c, curr(c).contactName)) { setRenomeandoId(null); return; }
+    await patchConv(c, { contactName: nome, syncCliente });
     setRenomeandoId(null);
   }
 
@@ -257,7 +264,9 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   useEffect(() => {
-    const iv = setInterval(() => router.refresh(), 15000);
+    // 30s: só atualiza a LISTA de conversas (novas/renomeadas/etc). As
+    // mensagens da conversa aberta já chegam em tempo real via SSE.
+    const iv = setInterval(() => router.refresh(), 30000);
     return () => clearInterval(iv);
   }, [router]);
 
@@ -295,8 +304,13 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   useEffect(() => {
     const el = chatRef.current;
     if (!el) return;
-    if (autoScrollRef.current) el.scrollTop = el.scrollHeight;
-  }, [mensagens.length]);
+    // Ao trocar de conversa, força ir para o fim mesmo que a quantidade de
+    // mensagens coincida com a da conversa anterior (o efeito não dispararia
+    // só pela dependência de mensagens.length nesse caso).
+    const trocouConversa = prevSelIdRef.current !== selId;
+    prevSelIdRef.current = selId;
+    if (trocouConversa || autoScrollRef.current) el.scrollTop = el.scrollHeight;
+  }, [selId, mensagens.length]);
 
   async function enviar() {
     const t = texto.trim();
@@ -322,7 +336,7 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
     .filter((c) => {
       if (!busca.trim()) return true;
       const q = busca.toLowerCase();
-      return nomeConv(c).toLowerCase().includes(q) || c.externalPhone.includes(q) || c.previa.toLowerCase().includes(q);
+      return nomeConv(c, curr(c).contactName).toLowerCase().includes(q) || c.externalPhone.includes(q) || c.previa.toLowerCase().includes(q);
     });
 
   async function gerarResumoCerebro(conv: ConvLista) {
@@ -401,7 +415,10 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
   }
 
   return (
-    <div className="-m-4 flex h-[100dvh] overflow-hidden sm:-m-6 md:-m-8" style={{ background: "#111b21" }}>
+    <div
+      className="-m-4 flex overflow-hidden sm:-m-6 md:-m-8 h-[calc(100dvh-57px-max(0.75rem,env(safe-area-inset-top)))] md:h-[100dvh]"
+      style={{ background: "#111b21" }}
+    >
       {/* ── Lista ── */}
       <aside className={`flex w-full flex-col border-r lg:w-80 ${sel ? "hidden lg:flex" : "flex"}`} style={{ borderColor: "#2a3942", background: "#111b21" }}>
         <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: "#008069" }}>
@@ -466,10 +483,10 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             <button key={c.id} onClick={() => setSelId(c.id)}
               className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left ${selId === c.id ? "bg-[#1e2a2a]" : "hover:bg-[#1e2a2a]/80"}`}
               style={{ borderColor: "#2a3942" }}>
-              <Avatar nome={nomeConv(c)} isGroup={c.isGroup} photo={c.contactPhotoUrl} size={48} />
+              <Avatar nome={nomeConv(c, curr(c).contactName)} isGroup={c.isGroup} photo={c.contactPhotoUrl} size={48} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="truncate text-sm font-semibold" style={{ color: "#e9edef" }}>{nomeConv(c)}</span>
+                  <span className="truncate text-sm font-semibold" style={{ color: "#e9edef" }}>{nomeConv(c, curr(c).contactName)}</span>
                   <span className="shrink-0 text-[11px]" style={{ color: c.naoLida ? "#00a884" : "#667781" }}>{hora(c.lastMessageAt)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-1">
@@ -497,18 +514,26 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
             {/* Header — fixo no topo, não rola */}
             <div className="flex items-center gap-3 px-4 py-2.5 shrink-0" style={{ background: "#008069", zIndex: 10 }}>
               <button onClick={() => setSelId(null)} className="rounded-full p-1 text-white/90 hover:bg-white/10 lg:hidden"><ArrowLeft size={20} /></button>
-              <Avatar nome={nomeConv(sel)} isGroup={sel.isGroup} photo={sel.contactPhotoUrl} size={36} />
+              <Avatar nome={nomeConv(sel, curr(sel).contactName)} isGroup={sel.isGroup} photo={sel.contactPhotoUrl} size={36} />
               <div className="min-w-0 flex-1">
                 {renomeandoId === sel.id ? (
-                  <div className="flex items-center gap-1">
-                    <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") salvarNome(sel); if (e.key === "Escape") setRenomeandoId(null); }}
-                      className="min-w-0 flex-1 rounded bg-white/20 px-2 py-0.5 text-sm font-bold text-white outline-none" style={{ maxWidth: 180 }} />
-                    <button onClick={() => salvarNome(sel)} className="rounded p-1 text-white/80 hover:bg-white/20"><Check size={14} /></button>
-                    <button onClick={() => setRenomeandoId(null)} className="rounded p-1 text-white/60 hover:bg-white/20"><X size={14} /></button>
+                  <div>
+                    <div className="flex items-center gap-1">
+                      <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") salvarNome(sel); if (e.key === "Escape") setRenomeandoId(null); }}
+                        className="min-w-0 flex-1 rounded bg-white/20 px-2 py-0.5 text-sm font-bold text-white outline-none" style={{ maxWidth: 180 }} />
+                      <button onClick={() => salvarNome(sel)} className="rounded p-1 text-white/80 hover:bg-white/20"><Check size={14} /></button>
+                      <button onClick={() => setRenomeandoId(null)} className="rounded p-1 text-white/60 hover:bg-white/20"><X size={14} /></button>
+                    </div>
+                    {sel.clienteId && (
+                      <label className="mt-1 flex items-center gap-1.5 text-[11px] font-normal text-white/80">
+                        <input type="checkbox" checked={syncCliente} onChange={(e) => setSyncCliente(e.target.checked)} />
+                        Atualizar também o cadastro
+                      </label>
+                    )}
                   </div>
                 ) : (
-                  <div className="truncate text-sm font-bold text-white">{nomeConv(sel)}</div>
+                  <div className="truncate text-sm font-bold text-white">{nomeConv(sel, curr(sel).contactName)}</div>
                 )}
                 <div className="text-[11px] text-white/70 flex items-center gap-1">
                   {sel.isGroup ? "Grupo" : sel.externalPhone}
@@ -623,7 +648,6 @@ export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLis
                   </div>
                 );
               })}
-              <div ref={fimRef} />
             </div>
 
             {/* Input — fixo no fundo, não rola */}

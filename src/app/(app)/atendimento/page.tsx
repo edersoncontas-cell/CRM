@@ -26,7 +26,7 @@ export default async function AtendimentoPage() {
       clienteId: c.clienteId,
       lastMessageAt: c.lastMessageAt.toISOString(),
       naoLida: !!(c.lastAccessedAt ? c.lastMessageAt > c.lastAccessedAt : true),
-      previa: ult ? (ult.mediaType ? `${ult.direction === "OUT" ? "Você: " : ""}${ult.body}` : `${ult.direction === "OUT" ? "Você: " : ""}${ult.body}`) : "",
+      previa: ult ? `${ult.direction === "OUT" ? "Você: " : ""}${ult.body}` : "",
     };
   });
 

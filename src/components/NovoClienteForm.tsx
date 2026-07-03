@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { criarCliente } from "@/lib/actions";
 import { Plus, X } from "lucide-react";
 
@@ -10,6 +10,8 @@ export function NovoClienteForm({
   municipios: { id: string; nome: string; foraDeArea?: boolean }[];
 }) {
   const [aberto, setAberto] = useState(false);
+  const [salvando, startSalvar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
   const cidades = municipios.filter((m) => !m.foraDeArea);
   const regioes = municipios.filter((m) => m.foraDeArea);
 
@@ -23,13 +25,17 @@ export function NovoClienteForm({
       </button>
 
       {aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4">
           <form
-            action={async (fd) => {
-              await criarCliente(fd);
-              setAberto(false);
+            action={(fd) => {
+              setErro(null);
+              startSalvar(async () => {
+                const r = await criarCliente(fd);
+                if (r.ok) setAberto(false);
+                else setErro(r.erro ?? "Erro ao salvar.");
+              });
             }}
-            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            className="my-auto w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800">Novo cliente</h2>
@@ -41,7 +47,7 @@ export function NovoClienteForm({
               <Campo label="Nome *">
                 <input name="nome" required className="campo" />
               </Campo>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Campo label="Telefone">
                   <input name="telefone" placeholder="28 99999-9999" className="campo" />
                 </Campo>
@@ -92,7 +98,7 @@ export function NovoClienteForm({
                   <input type="checkbox" name="interesseFuturo" />
                   ⏳ Interesse futuro (aguardando o momento certo)
                 </label>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Campo label="Lembrar em">
                     <input type="date" name="interesseFuturoData" className="campo" />
                   </Campo>
@@ -102,13 +108,13 @@ export function NovoClienteForm({
                 </div>
               </div>
             </div>
-            <button className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700">
-              Salvar
+            {erro && <p className="mt-3 text-sm text-red-500">{erro}</p>}
+            <button disabled={salvando} className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
+              {salvando ? "Salvando…" : "Salvar"}
             </button>
           </form>
         </div>
       )}
-      <style>{`.campo{width:100%;border:1px solid #cbd5e1;border-radius:.5rem;padding:.5rem .75rem;font-size:.875rem;outline:none}.campo:focus{border-color:#2f82ff;box-shadow:0 0 0 2px #bcdcff}`}</style>
     </>
   );
 }

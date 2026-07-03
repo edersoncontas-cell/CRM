@@ -57,6 +57,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
     proximaVisita: (cliente as { proximaVisita?: Date }).proximaVisita ?? null,
     proximaVisitaNota: (cliente as { proximaVisitaNota?: string }).proximaVisitaNota ?? null,
   };
+  const perfilDISC = cliente.perfilDISC ?? null;
+  const abordagemIA = cliente.abordagemIA ?? null;
 
   const waHref = waConv ? `/atendimento?conversa=${waConv.id}` : `/atendimento`;
 
@@ -98,7 +100,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
           <AgendarVisitaDialog
             clienteId={cliente.id}
             clienteNome={cliente.nome}
@@ -200,6 +202,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
       <ResumoClienteForm
         clienteId={cliente.id}
         resumo={resumo}
+        perfilDISC={perfilDISC}
+        abordagemIA={abordagemIA}
         temConversa={!!waConv}
         negociacoes={cliente.negociacoes.map((n) => ({
           id: n.id,
