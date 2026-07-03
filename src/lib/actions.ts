@@ -411,7 +411,7 @@ export async function editarNegociacao(id: string, formData: FormData) {
 export async function moverNegociacao(id: string, estagio: string) {
   const isPerdido = estagio.toLowerCase().includes("perdid");
   const isFaturado = estagio.toLowerCase().includes("faturad");
-  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("vendas confirm");
+  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("ganho") || estagio.toLowerCase().includes("vendid");
   
   if (isPerdido) {
     await db.negociacao.update({

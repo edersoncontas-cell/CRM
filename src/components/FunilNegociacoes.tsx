@@ -112,11 +112,14 @@ export function FunilNegociacoes({
     if (!novaColuna) return;
     // Usa o titulo da coluna como estagio (chave dinamica)
     const novoEstagio = novaColuna.titulo;
-    const isPerdido = novaColuna.titulo.toLowerCase().includes("perdid");
+    const tituloNovo = novaColuna.titulo.toLowerCase();
+    const isPerdido = tituloNovo.includes("perdid");
+    // FATURADO e colunas de venda ganha viram status "ganha" (mesma regra do servidor)
+    const isGanha = tituloNovo.includes("faturad") || tituloNovo.includes("ganho") || tituloNovo.includes("confirm") || tituloNovo.includes("vendid");
     if (card.estagio === novoEstagio) return;
     setCards((cs) =>
       cs.map((c) =>
-        c.id === card.id ? { ...c, estagio: novoEstagio, status: isPerdido ? "perdida" : "aberta" } : c
+        c.id === card.id ? { ...c, estagio: novoEstagio, status: isPerdido ? "perdida" : isGanha ? "ganha" : "aberta" } : c
       )
     );
     moverNegociacao(card.id, novoEstagio);
@@ -169,9 +172,11 @@ export function FunilNegociacoes({
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {colunas.map((col) => {
-              const lista = col.titulo.toLowerCase().includes("perdid")
+              const tituloCol = col.titulo.toLowerCase();
+              const colunaGanha = tituloCol.includes("faturad") || tituloCol.includes("ganho") || tituloCol.includes("confirm") || tituloCol.includes("vendid");
+              const lista = tituloCol.includes("perdid")
                 ? cardsFiltrados.filter((c) => c.status === "perdida")
-                : col.titulo.toLowerCase().includes("ganho") || col.titulo.toLowerCase().includes("confirm") || col.titulo.toLowerCase().includes("vendid")
+                : colunaGanha
                 ? cardsFiltrados.filter((c) => c.status === "ganha" && c.estagio === col.titulo)
                 : cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo);
               const totalCol = lista.reduce((s, c) => s + (c.valor ?? 0), 0);
