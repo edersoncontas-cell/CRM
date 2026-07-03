@@ -516,25 +516,168 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
 }
 
 // ── Formulário de nova negociação ────────────────────────────────────────
-function FormAdicionar({ estagio, clientes, onFechar }: { estagio: string; clientes: Cliente[]; onFechar: () => void }) {
+function FormAdicionar({
+  estagio,
+  clientes,
+  onFechar,
+}: {
+  estagio: string;
+  clientes: Cliente[];
+  onFechar: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [pagamento, setPagamento] = useState("");
+  const [entradaValor, setEntradaValor] = useState("");
+
+  const CONDICAO_OPTS = [
+    { value: "pesquisa_preco", label: "Pesquisa de Preço" },
+    { value: "interesse_real", label: "Interesse Real" },
+    { value: "avista", label: "À Vista" },
+    { value: "financiamento", label: "Financiamento Banco" },
+    { value: "crd_pme", label: "CRD PME" },
+    { value: "consorcio", label: "Consórcio" },
+    { value: "outro", label: "Outro" },
+  ];
+
+  const BANCOS = [
+    "Banco do Brasil", "CNH Industrial Capital", "Bradesco", "Sicoob",
+    "Sicredi", "Itaú", "Safra", "BV Financeira", "Outro",
+  ];
+
+  const MARCAS: Record<string, string[]> = {
+    "CASE": ["CX130D","CX145C","CX145D","CX160D","CX210D","CX220D","CX240D","E145C","E215C","821G","851L","621G","RG140B","B110B","SV280"],
+    "New Holland": ["E115C","E135B","E145C","E215C","W130C","W80C","RG140B"],
+    "Outro": [],
+  };
+
+  const [marca, setMarca] = useState("");
+  const maquinasDisp = MARCAS[marca] ?? [];
+
   return (
-    <form
-      action={async (fd) => { await criarNegociacaoCard(fd); onFechar(); }}
-      className="rounded-xl border border-slate-300 bg-white p-3 shadow-lg"
-    >
-      <input type="hidden" name="estagio" value={estagio} />
-      <select name="clienteId" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400">
-        <option value="">— Selecionar cliente —</option>
-        {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-      </select>
-      <input name="nomeNovo" placeholder="ou novo cliente (nome)" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <input name="maquinaModelo" placeholder="Máquina (ex: E215C)" className="mb-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <input name="valor" placeholder="Valor (R$)" inputMode="numeric" className="mb-3 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      <div className="flex items-center gap-2">
-        <button className="flex-1 rounded-lg bg-slate-900 py-2 text-xs font-bold text-agro-400 hover:bg-slate-800 transition-colors">Criar negociação</button>
-        <button type="button" onClick={onFechar} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={14} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Nova Negociação</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Coluna: {estagio}</p>
+          </div>
+          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+            <X size={18} />
+          </button>
+        </div>
+        <form
+          action={async (fd) => {
+            fd.set("estagio", estagio);
+            if (entradaValor) fd.set("entradaValor", entradaValor);
+            startTransition(async () => {
+              await criarNegociacaoCompleta(fd);
+              onFechar();
+            });
+          }}
+          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
+        >
+          <input type="hidden" name="estagio" value={estagio} />
+          {/* Cliente */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Cliente</label>
+              <select name="clienteId" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+                <option value="">— Selecionar —</option>
+                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Novo cliente</label>
+              <input name="nomeNovo" placeholder="ou digitar nome" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
+            </div>
+          </div>
+          {/* Marca + Máquina */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Marca</label>
+              <select value={marca} onChange={(e) => setMarca(e.target.value)} name="marca" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+                <option value="">— Selecionar —</option>
+                {Object.keys(MARCAS).map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Máquina</label>
+              {maquinasDisp.length > 0 ? (
+                <select name="maquinaModelo" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+                  <option value="">Selecione</option>
+                  {maquinasDisp.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              ) : (
+                <input name="maquinaModelo" placeholder="Ex: E215C" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
+              )}
+            </div>
+          </div>
+          {/* Valor */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
+            <input name="valor" placeholder="0" inputMode="numeric" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          {/* Pagamento */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Condição de Pagamento</label>
+            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} name="tipoPagamento" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+              <option value="">—</option>
+              {CONDICAO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          {/* Banco (shown when financiamento or crd_pme) */}
+          {(pagamento === "financiamento" || pagamento === "crd_pme") && (
+            <div className={`rounded-xl p-3 space-y-3 ${pagamento === "crd_pme" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
+              <p className={`text-xs font-bold uppercase ${pagamento === "crd_pme" ? "text-emerald-700" : "text-blue-700"}`}>
+                {pagamento === "crd_pme" ? "CRD PME" : "Financiamento"}
+              </p>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Banco</label>
+                <select name="banco" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400">
+                  <option value="">— Selecionar banco —</option>
+                  {BANCOS.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (R$)</label>
+                <input
+                  value={entradaValor}
+                  onChange={(e) => setEntradaValor(e.target.value)}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
+          )}
+          {/* Data da visita + Concorrente */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Data da Visita</label>
+              <input type="datetime-local" name="dataVisita" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Concorrente</label>
+              <input name="concorrenteMencionado" placeholder="Ex: CAT, Komatsu..." className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
+            </div>
+          </div>
+          {/* Próxima ação */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Próxima Ação</label>
+            <input name="proximaAcao" placeholder="Ex: Ligar terça para follow-up" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
+          </div>
+          {/* Buttons */}
+          <div className="flex items-center gap-2 pt-2">
+            <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
+              {isPending ? "Criando..." : "Criar Negociação"}
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 }
 
