@@ -27,8 +27,9 @@ async function transcribeAudio(audioUrl: string): Promise<string | null> {
   if (!audioUrl) return null;
 
   try {
-    // Baixa o áudio da URL
-    const audioResp = await fetch(audioUrl);
+    // Baixa o áudio da URL — timeout para não travar o webhook (a Z-API
+    // espera resposta rápida; se demorar demais ela reenvia o evento).
+    const audioResp = await fetch(audioUrl, { signal: AbortSignal.timeout(15_000) });
     if (!audioResp.ok) return null;
     const audioBuffer = await audioResp.arrayBuffer();
     const audioBytes = new Uint8Array(audioBuffer);
@@ -50,6 +51,7 @@ async function transcribeAudio(audioUrl: string): Promise<string | null> {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: formData,
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!resp.ok) {

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { cronAutorizado } from "@/lib/whatsapp-settings";
 import { temaDestaSeamana } from "@/lib/academia";
 import Anthropic from "@anthropic-ai/sdk";
+import { MODEL_CHAT } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,7 +28,7 @@ Retorne APENAS o conteúdo, sem introdução ou metadados.`;
 
   try {
     const msg = await anthropic().messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODEL_CHAT,
       max_tokens: 1200,
       system,
       messages: [{ role: "user", content: `Gere uma estratégia completa sobre: ${tema}` }],

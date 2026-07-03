@@ -76,11 +76,26 @@ Webhook do WhatsApp: `POST /api/whatsapp/webhook` (verificação por `GET`).
 Next.js 14 (App Router) · TypeScript · Tailwind · Prisma (SQLite no dev,
 Postgres em produção) · Anthropic SDK · dnd-kit · Recharts.
 
-## ☁️ Produção (Vercel + Postgres)
+## ☁️ Produção (Vercel + Postgres/Neon)
 
-1. Troque o `provider` do `prisma/schema.prisma` para `postgresql`.
-2. Configure `DATABASE_URL` para o Postgres gerenciado.
-3. `npx prisma migrate deploy` e defina as variáveis de ambiente na Vercel.
+1. Configure `DATABASE_URL` e `DATABASE_URL_UNPOOLED` (Neon: pooled + direct).
+2. O build (`npm run build`) só roda `prisma generate && next build` — ele **não**
+   altera o schema do banco automaticamente. Depois de mudar `prisma/schema.prisma`,
+   rode `npm run db:push` manualmente (ou configure migrations com `prisma migrate`).
+3. Defina as variáveis de ambiente abaixo na Vercel **antes** do primeiro deploy em
+   produção — sem elas, o CRM roda com proteções desligadas (fail-open) ou fica
+   bloqueado com uma tela de aviso:
+
+| Variável             | Efeito se ausente em produção                                      |
+| -------------------- | ------------------------------------------------------------------- |
+| `APP_PASSWORD`        | CRM inteiro bloqueado (tela `/config-necessaria`) até ser definida. |
+| `AUTH_SECRET`         | Se `APP_PASSWORD` estiver definida mas esta não, o login quebra (erro proposital, não abre com segredo previsível). |
+| `CRON_SECRET`         | Rotas `/api/cron/*` retornam 401. A Vercel envia automaticamente `Authorization: Bearer $CRON_SECRET` nas chamadas agendadas quando esta env existe — não precisa configurar nada além da variável. |
+| `ZAPI_WEBHOOK_TOKEN`  | **Opcional.** Só configure se sua conta Z-API tiver um "Token de segurança da conta" (nem todo plano tem — nesse caso, use o mesmo valor de `ZAPI_CLIENT_TOKEN`). Sem essa env, o webhook aceita o POST normalmente (a URL não é pública e o `instanceId` do payload é conferido). Se configurar com um valor que a Z-API não carimba nas chamadas, o webhook passa a rejeitar TODAS as mensagens — não invente um valor por conta própria. |
+| `GROQ_API_KEY`        | Sem ela, sem transcrição de áudio do WhatsApp e sem IA de texto gratuita (fallback heurístico continua funcionando). Grátis em console.groq.com. |
+
+4. Se qualquer token de acesso à Vercel/GitHub tiver sido exposto (ex.: em logs,
+   chat, commit), revogue-o e gere um novo antes de seguir.
 
 ## 🗺️ Próximas fases
 

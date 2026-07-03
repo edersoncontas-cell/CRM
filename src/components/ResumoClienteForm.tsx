@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { atualizarResumoCliente, criarNegociacaoCompleta, gerarResumoClienteIA } from "@/lib/actions";
-import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2, PlusCircle } from "lucide-react";
+import { atualizarResumoCliente, criarNegociacaoCompleta, gerarResumoClienteIA, sugerirAbordagemCliente } from "@/lib/actions";
+import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2, PlusCircle, Compass } from "lucide-react";
 import Link from "next/link";
 
 const CONDICAO_OPTS = [
@@ -51,11 +51,15 @@ export function ResumoClienteForm({
   resumo,
   negociacoes,
   temConversa = false,
+  perfilDISC = null,
+  abordagemIA = null,
 }: {
   clienteId: string;
   resumo: Resumo;
   negociacoes: Negociacao[];
   temConversa?: boolean;
+  perfilDISC?: string | null;
+  abordagemIA?: string | null;
 }) {
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
@@ -70,6 +74,10 @@ export function ResumoClienteForm({
   const [salvando, startSalvar] = useTransition();
   const [gerando, startGerar] = useTransition();
   const [erroIA, setErroIA] = useState<string | null>(null);
+  const [sugerindo, startSugerir] = useTransition();
+  const [erroAbordagem, setErroAbordagem] = useState<string | null>(null);
+  const [disc, setDisc] = useState(perfilDISC);
+  const [abordagem, setAbordagem] = useState(abordagemIA);
   const [negsExpand, setNegsExpand] = useState(false);
   const [novaNegoOpen, setNovaNegoOpen] = useState(false);
 
@@ -90,6 +98,24 @@ export function ResumoClienteForm({
       } catch (e) {
         setErroIA("Erro inesperado ao gerar resumo. Tente novamente.");
         console.error("[ResumoClienteForm] gerarIA error:", e);
+      }
+    });
+  }
+
+  function sugerirAbordagem() {
+    setErroAbordagem(null);
+    startSugerir(async () => {
+      try {
+        const r = await sugerirAbordagemCliente(clienteId);
+        if (r.ok) {
+          setDisc(r.perfil ?? null);
+          setAbordagem(r.abordagem ?? null);
+        } else {
+          setErroAbordagem(r.erro ?? "Erro ao sugerir abordagem.");
+        }
+      } catch (e) {
+        setErroAbordagem("Erro inesperado ao sugerir abordagem. Tente novamente.");
+        console.error("[ResumoClienteForm] sugerirAbordagem error:", e);
       }
     });
   }
@@ -122,6 +148,11 @@ export function ResumoClienteForm({
             {gerando ? <Loader2 size={13} className="animate-spin" /> : <Brain size={13} />}
             {gerando ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
           </button>
+          <button onClick={sugerirAbordagem} disabled={sugerindo} title="A IA lê a conversa e sugere o perfil DISC e a melhor forma de abordar o cliente"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600 disabled:opacity-60">
+            {sugerindo ? <Loader2 size={13} className="animate-spin" /> : <Compass size={13} />}
+            {sugerindo ? "Analisando…" : "Sugerir abordagem (DISC)"}
+          </button>
           <button onClick={() => setEditando((v) => !v)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200">
             <Pencil size={13} /> {editando ? "Cancelar" : "Editar"}
@@ -141,6 +172,20 @@ export function ResumoClienteForm({
           </div>
         )}
 
+        {erroAbordagem && (
+          <p className="text-xs text-red-500">{erroAbordagem}</p>
+        )}
+
+        {abordagem && (
+          <div className="rounded-xl border border-slate-700 bg-zinc-800/60 px-4 py-3">
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
+              <Compass size={13} style={{ color: "#BFDE4D" }} />
+              Perfil DISC{disc ? `: ${disc}` : ""}
+            </div>
+            <p className="text-xs text-zinc-400 whitespace-pre-wrap">{abordagem}</p>
+          </div>
+        )}
+
         {editando ? (
           <div className="space-y-3">
             <div>
@@ -148,7 +193,7 @@ export function ResumoClienteForm({
               <input value={maquinas} onChange={(e) => setMaquinas(e.target.value)} placeholder="Ex: E215B; E145C EVO"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600">Valor (R$)</label>
                 <input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="Ex: 850000" inputMode="numeric"

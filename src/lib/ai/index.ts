@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
+import { MODEL_TAREFA } from "./config";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+const MODEL = MODEL_TAREFA;
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 // Provedor de IA disponível, em ordem de preferência: Anthropic > Groq.
@@ -767,18 +768,20 @@ export async function buscarProspectosIA(
   const catLista = categorias.join(", ");
 
   if (!iaHabilitada()) {
-    // Fallback: lista genérica por tipo
-    return categorias.flatMap((c) => [
-      { nome: `Construtora ${municipio} ${c}`, tipo: c, descricao: `Empresa de ${c} em ${municipio}`, prioridade: "media" as const },
-    ]);
+    // Sem IA disponível: não há como saber nomes reais de empresas — melhor
+    // não sugerir nada do que inventar um nome de empresa fictícia.
+    return [];
   }
 
   try {
     const raw = await llmTexto(
       `Você é um especialista em prospecção de vendas de máquinas pesadas (escavadeiras, retroescavadeiras, pás-carregadeiras, motoniveladoras, rolos compactadores) no sul do Espírito Santo, Brasil.
-Seu objetivo: listar empresas REAIS ou PROVÁVEIS que possam comprar ou locar máquinas pesadas em um município específico.
-Foque nas categorias solicitadas. Se não souber nomes exatos, gere nomes plausíveis e realistas (ex: "Terraplan Cachoeiro", "Construtora Vale do Rio").
-IMPORTANTE: retorne SOMENTE um JSON válido, array com até 8 objetos:
+Seu objetivo: listar empresas REAIS que você efetivamente conhece/tem alta confiança que existam nesse município e possam comprar ou locar máquinas pesadas.
+Foque nas categorias solicitadas.
+NUNCA invente nomes de empresas que você não tem certeza que existem — isso vira cadastro real no CRM do vendedor
+e ele pode tentar contatar uma empresa fictícia. Se não souber nomes reais e específicos para uma categoria, OMITA essa
+categoria da lista em vez de inventar um nome plausível.
+IMPORTANTE: retorne SOMENTE um JSON válido, array com até 8 objetos (pode ser um array vazio [] se não souber nenhuma empresa real):
 [{"nome": string, "tipo": string, "descricao": string, "prioridade": "alta"|"media"|"baixa"}]
 "tipo" deve ser um de: locacao, terraplanagem, engenharia, asfalto, mineracao, construcao
 "descricao": 1 frase sobre o potencial desta empresa para compra de máquinas

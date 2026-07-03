@@ -142,7 +142,7 @@ export function ConexaoWhatsApp() {
           {status.telefone ? `Número ${status.telefone}` : "Seu número está pareado e recebendo mensagens."}
         </p>
         <p className="mt-2 text-sm text-slate-600">
-          As mensagens recebidas entram no <b>/inbox</b> e são analisadas pela IA automaticamente.
+          As mensagens recebidas entram no <b>/atendimento</b> e são analisadas pela IA automaticamente.
         </p>
         <button
           onClick={() => startTransition(async () => { await desconectarZapi(); await buscarStatus(); })}

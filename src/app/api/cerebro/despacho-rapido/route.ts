@@ -5,6 +5,7 @@ import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 import Anthropic from "@anthropic-ai/sdk";
 import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia";
+import { MODEL_CHAT } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -211,7 +212,7 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
 
   try {
     const msg = await anthropic().messages.create({
-      model: "claude-haiku-4-5",
+      model: MODEL_CHAT,
       max_tokens: 150,
       system,
       messages: [{
@@ -308,7 +309,7 @@ export async function POST(req: NextRequest) {
     });
   } else {
     try {
-      const id = await sendText(conv.externalPhone, reply, "Cérebro");
+      const id = await sendText(conv.externalPhone, reply);
       await inserirMensagem(conv.id, {
         direction: "OUT", body: reply, origin: "CRM",
         operatorDisplayName: "Cérebro", zapiMessageId: id, sendStatus: "SENT",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
+import { MODEL_TAREFA } from "@/lib/ai/config";
 
 function anthropicClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -101,7 +102,7 @@ Responda em JSON com o seguinte formato exato:
 }`;
 
     const resposta = await anthropicClient().messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+      model: MODEL_TAREFA,
       max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     });

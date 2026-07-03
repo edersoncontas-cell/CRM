@@ -3,7 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA, sugerirAbordagemIA } from "./ai";
+import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
 import { vincularMunicipio, acharClientePorTelefone } from "./integrations/inbox";
@@ -13,16 +14,29 @@ import * as zapi from "./integrations/zapi";
 import { registrarAudit } from "./audit";
 import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
+import { z } from "zod";
+
+// Validação de maior risco (grava direto no banco a partir de FormData bruto).
+const clienteInputSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório."),
+  email: z.union([z.string().trim().email("E-mail inválido."), z.literal("")]),
+});
 
 // ---------- Clientes ----------
-export async function criarCliente(formData: FormData) {
-  const nome = String(formData.get("nome") ?? "").trim();
-  if (!nome || deveDescartarContato(nome)) return;
+export async function criarCliente(formData: FormData): Promise<{ ok: boolean; erro?: string }> {
+  const parsed = clienteInputSchema.safeParse({
+    nome: formData.get("nome") ?? "",
+    email: formData.get("email") ?? "",
+  });
+  if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  const { nome, email } = parsed.data;
+  if (deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
+
   await db.cliente.create({
     data: {
       nome,
       telefone: String(formData.get("telefone") ?? "") || null,
-      email: String(formData.get("email") ?? "") || null,
+      email: email || null,
       endereco: String(formData.get("endereco") ?? "") || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
       origem: String(formData.get("origem") ?? "manual") || null,
@@ -35,6 +49,7 @@ export async function criarCliente(formData: FormData) {
   });
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // Converte o campo date (YYYY-MM-DD) em Date ao meio-dia de Brasília (ou null).
@@ -43,15 +58,22 @@ function parseDataBR(raw: string): Date | null {
   return d ? new Date(`${d}T12:00:00-03:00`) : null;
 }
 
-export async function atualizarCliente(id: string, formData: FormData) {
+export async function atualizarCliente(id: string, formData: FormData): Promise<{ ok: boolean; erro?: string }> {
+  const parsed = clienteInputSchema.safeParse({
+    nome: formData.get("nome") ?? "",
+    email: formData.get("email") ?? "",
+  });
+  if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  const { nome, email } = parsed.data;
+
   const status = String(formData.get("status") ?? "potencial") || "potencial";
   const tel = String(formData.get("telefone") ?? "").replace(/^(\+55|55)(?=\d{10,11}$)/, "");
   await db.cliente.update({
     where: { id },
     data: {
-      nome: String(formData.get("nome") ?? "").trim(),
+      nome,
       telefone: tel || null,
-      email: String(formData.get("email") ?? "") || null,
+      email: email || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
       status,
       jaComprou: status === "cliente",
@@ -63,6 +85,7 @@ export async function atualizarCliente(id: string, formData: FormData) {
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // Sincroniza a frota de máquinas do cliente (substitui a lista inteira).
@@ -70,17 +93,20 @@ export async function gerenciarFrotaCliente(
   clienteId: string,
   frota: { marca: string; modelo: string }[]
 ): Promise<void> {
-  "use server";
   try {
-    await db.$executeRawUnsafe(`DELETE FROM "ClienteMaquina" WHERE "clienteId" = $1`, clienteId);
-    for (const f of frota) {
-      if (!f.modelo || f.modelo === "__outro__") continue;
-      const id = `cm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      await db.$executeRawUnsafe(
-        `INSERT INTO "ClienteMaquina" ("id","clienteId","marca","modelo","criadoEm") VALUES ($1,$2,$3,$4,NOW())`,
-        id, clienteId, f.marca, f.modelo
-      );
-    }
+    // Transação: se alguma inserção falhar no meio do loop, o DELETE inicial
+    // é desfeito junto — a frota nunca fica parcialmente apagada.
+    await db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`DELETE FROM "ClienteMaquina" WHERE "clienteId" = $1`, clienteId);
+      for (const f of frota) {
+        if (!f.modelo || f.modelo === "__outro__") continue;
+        const id = `cm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "ClienteMaquina" ("id","clienteId","marca","modelo","criadoEm") VALUES ($1,$2,$3,$4,NOW())`,
+          id, clienteId, f.marca, f.modelo
+        );
+      }
+    });
   } catch (e) {
     console.error("[frota] erro:", e);
   }
@@ -100,7 +126,6 @@ export async function atualizarResumoCliente(
     proximaVisitaNota?: string;
   }
 ): Promise<void> {
-  "use server";
   try {
     await db.$executeRawUnsafe(`
       UPDATE "Cliente" SET
@@ -133,7 +158,7 @@ export async function excluirCliente(id: string): Promise<{ ok: boolean }> {
   await db.cliente.delete({ where: { id } });
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   return { ok: true };
 }
 
@@ -169,7 +194,7 @@ export async function marcarRespondido(clienteId: string) {
     data: { aguardandoResposta: false, ultimoContato: new Date() },
   });
   revalidatePath("/dashboard");
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   revalidatePath("/clientes");
 }
 
@@ -192,7 +217,7 @@ export async function definirModoFimDeSemana(
       ? "Modo fim de semana ATIVADO — IA responderá automaticamente."
       : "Modo fim de semana DESATIVADO — IA volta a só sugerir.",
   });
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   return { ok: true };
 }
 
@@ -262,7 +287,7 @@ export async function enviarResposta(
     extra: { chars: conteudo.length, modo: envio.modo },
   });
 
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   revalidatePath("/dashboard");
   revalidatePath(`/clientes/${clienteId}`);
   return { ok: true };
@@ -549,14 +574,12 @@ async function acharOuCriarCliente(
 
 // ---------- Modelos em Foco ----------
 export async function toggleMaquinaComercializada(id: string, valor: boolean) {
-  "use server";
   await db.maquina.update({ where: { id }, data: { maisComercializado: valor } });
   revalidatePath("/maquinas");
 }
 
 // ---------- Ranking de vendas ----------
 export async function setVolumeVendas(id: string, valor: number) {
-  "use server";
   const v = Number.isFinite(valor) && valor > 0 ? Math.round(valor) : 0;
   await db.maquina.update({ where: { id }, data: { volumeVendas: v } });
   revalidatePath("/maquinas");
@@ -575,7 +598,6 @@ export async function salvarFichaTecnica(
     argumentos?: string;
   }
 ) {
-  "use server";
   await db.maquina.update({
     where: { id },
     data: {
@@ -603,7 +625,6 @@ export async function preencherFichaTecnicaIA(id: string): Promise<{
   diferenciais?: string;
   erro?: string;
 }> {
-  "use server";
   const maq = await db.maquina.findUnique({
     where: { id },
     select: { marca: true, modelo: true, categoria: true, proprio: true },
@@ -629,7 +650,6 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
   valorInicial?: number | null;
   erro?: string;
 }> {
-  "use server";
   const arquivo = formData.get("arquivo");
   if (!(arquivo instanceof File) || arquivo.size === 0) {
     return { ok: false, erro: "Nenhum arquivo enviado." };
@@ -669,7 +689,6 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
 export async function gerarAnaliseCategoriaIAAction(
   categoria: string
 ): Promise<{ ok: boolean; texto?: string; erro?: string }> {
-  "use server";
   const maquinas = await db.maquina.findMany({
     where: { categoria },
     select: { marca: true, modelo: true, proprio: true, especificacoes: true },
@@ -691,7 +710,6 @@ export async function gerarAnaliseCategoriaIAAction(
 export async function preencherFichasVaziasIA(
   apenasProprias: boolean
 ): Promise<{ ok: boolean; preenchidas: number; erro?: string }> {
-  "use server";
   const vazias = await db.maquina.findMany({
     where: { especificacoes: null, ...(apenasProprias ? { proprio: true } : {}) },
     select: { id: true, marca: true, modelo: true, categoria: true, proprio: true },
@@ -725,7 +743,6 @@ export async function gerarBattlecardsComparativoIA(
   minhaId: string,
   concorrentesIds: string[]
 ): Promise<{ ok: boolean; cards?: { id: string; texto: string }[]; erro?: string }> {
-  "use server";
   const minha = await db.maquina.findUnique({
     where: { id: minhaId },
     select: { marca: true, modelo: true, categoria: true, especificacoes: true, pontosFortes: true },
@@ -958,7 +975,6 @@ export async function gerarEstrategiaAction(formData: FormData): Promise<{
   estrategia?: { id: string; titulo: string; conteudo: string };
   erro?: string;
 }> {
-  "use server";
   const tema = (formData.get("tema") as string | null)?.trim();
   const perfil = (formData.get("perfil") as string | null) || null;
   const contexto = (formData.get("contexto") as string | null) || null;
@@ -981,13 +997,11 @@ export async function gerarEstrategiaAction(formData: FormData): Promise<{
 }
 
 export async function toggleFavoritoEstrategia(id: string, favorito: boolean) {
-  "use server";
   await db.estrategiaVenda.update({ where: { id }, data: { favorito } });
   revalidatePath("/academia");
 }
 
 export async function excluirEstrategia(id: string) {
-  "use server";
   await db.estrategiaVenda.delete({ where: { id } });
   revalidatePath("/academia");
 }
@@ -1005,7 +1019,6 @@ const CATEGORIAS_PROSPECT = [
 export async function buscarProspectosIAAction(
   municipioId: string
 ): Promise<{ ok: boolean; inseridos: number; erro?: string }> {
-  "use server";
   try {
     const municipio = await db.municipio.findUnique({ where: { id: municipioId } });
     if (!municipio) return { ok: false, inseridos: 0, erro: "Município não encontrado" };
@@ -1026,7 +1039,7 @@ export async function buscarProspectosIAAction(
           nome: p.nome,
           municipioId,
           origem: "prospect_ia",
-          observacoes: `${p.tipo.toUpperCase()} — ${p.descricao}`,
+          observacoes: `⚠️ Sugestão da IA — empresa NÃO confirmada, verifique se existe antes de contatar.\n${p.tipo.toUpperCase()} — ${p.descricao}`,
         },
       });
       inseridos++;
@@ -1042,7 +1055,6 @@ export async function buscarProspectosIAAction(
 }
 
 export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean }> {
-  "use server";
   await db.cliente.delete({ where: { id: clienteId, origem: "prospect_ia" } });
   revalidatePath("/roteiro");
   revalidatePath("/clientes");
@@ -1053,7 +1065,6 @@ export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean
 
 // Cria uma tarefa (card livre) em uma coluna de demandas.
 export async function criarTarefa(formData: FormData) {
-  "use server";
   const titulo = String(formData.get("titulo") ?? "").trim();
   const coluna = String(formData.get("coluna") ?? "demandas") || "demandas";
   if (!titulo) return;
@@ -1074,7 +1085,6 @@ export async function criarTarefa(formData: FormData) {
 
 // Edita título, descrição e checklist de uma tarefa.
 export async function editarTarefa(id: string, formData: FormData) {
-  "use server";
   const titulo = String(formData.get("titulo") ?? "").trim();
   if (!titulo) return;
   await db.tarefaKanban.update({
@@ -1091,7 +1101,6 @@ export async function editarTarefa(id: string, formData: FormData) {
 }
 
 export async function excluirTarefa(id: string) {
-  "use server";
   await db.tarefaKanban.delete({ where: { id } });
   revalidatePath("/pipeline");
 }
@@ -1099,7 +1108,6 @@ export async function excluirTarefa(id: string) {
 // ---------- Colunas de demandas ----------
 
 export async function criarColunaDemanda(titulo: string) {
-  "use server";
   const nome = titulo.trim();
   if (!nome) return { ok: false };
   await garantirColunasDemanda();
@@ -1113,7 +1121,6 @@ export async function criarColunaDemanda(titulo: string) {
 // Exclui uma coluna personalizada. As fixas não podem ser removidas. Os cards
 // da coluna voltam para "Demandas" para não se perderem.
 export async function excluirColunaDemanda(id: string) {
-  "use server";
   const col = await db.colunaDemanda.findUnique({ where: { id } });
   if (!col || col.fixa) return { ok: false, erro: "Coluna fixa não pode ser excluída." };
   await db.tarefaKanban.updateMany({ where: { coluna: id }, data: { coluna: "demandas" } });
@@ -1124,7 +1131,6 @@ export async function excluirColunaDemanda(id: string) {
 
 // Renomeia uma coluna de demanda (o id permanece o mesmo).
 export async function renomearColunaDemanda(id: string, titulo: string) {
-  "use server";
   const nome = titulo.trim();
   if (!nome) return { ok: false };
   await db.colunaDemanda.update({ where: { id }, data: { titulo: nome } });
@@ -1134,7 +1140,6 @@ export async function renomearColunaDemanda(id: string, titulo: string) {
 
 // Reordena as colunas de demanda conforme a lista de ids recebida.
 export async function reordenarColunasDemanda(ids: string[]) {
-  "use server";
   await Promise.all(
     ids.map((id, i) => db.colunaDemanda.update({ where: { id }, data: { ordem: i } }))
   );
@@ -1147,7 +1152,6 @@ export async function reordenarColunasDemanda(ids: string[]) {
 // Gera um resumo completo do cliente via IA, baseado nas conversas de WhatsApp,
 // negociações e visitas registradas. Salva o resultado em resumoTexto no banco.
 export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
-  "use server";
 
   const [cliente, conversas, negociacoes, visitas] = await Promise.all([
     db.cliente.findUnique({
@@ -1165,14 +1169,14 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
         id: true,
         contactName: true,
         lastMessageAt: true,
-        mensagens: {
+        messages: {
           orderBy: { sentAt: "asc" },
           take: 80,
           select: { direction: true, body: true, sentAt: true },
         },
-      } as any,
+      },
       take: 3,
-    } as any),
+    }),
     db.negociacao.findMany({
       where: { clienteId },
       orderBy: { criadoEm: "desc" },
@@ -1195,8 +1199,8 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
 
   // Monta o histórico de mensagens do WhatsApp
   const mensagensWA: string[] = [];
-  for (const conv of (conversas as any[])) {
-    const msgs = (conv.mensagens ?? []) as { direction: string; body: string; sentAt: Date }[];
+  for (const conv of conversas) {
+    const msgs = conv.messages ?? [];
     for (const m of msgs) {
       const hora = new Date(m.sentAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
       const autor = m.direction === "OUT" ? "Ederson" : cliente.nome;
@@ -1251,7 +1255,7 @@ Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const res = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: MODEL_TAREFA,
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     });
@@ -1271,14 +1275,47 @@ Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos
 }
 
 export async function gerarResumoConversa(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
-  "use server";
   return gerarResumoClienteIA(clienteId);
+}
+
+// Sugere o perfil DISC do cliente e a abordagem ideal, a partir das
+// conversas de WhatsApp vinculadas, e salva em Cliente.perfilDISC/abordagemIA.
+export async function sugerirAbordagemCliente(
+  clienteId: string
+): Promise<{ ok: boolean; perfil?: string | null; abordagem?: string; erro?: string }> {
+
+  const conversas = await db.whatsAppConversation.findMany({
+    where: { clienteId },
+    select: {
+      messages: {
+        orderBy: { sentAt: "asc" },
+        take: 80,
+        select: { direction: true, body: true, senderName: true },
+      },
+    },
+    take: 3,
+  });
+
+  const textos = conversas
+    .map((c) => c.messages.map((m) => `${m.direction === "OUT" ? "Ederson" : m.senderName ?? "Cliente"}: ${m.body}`).join("\n"))
+    .filter(Boolean);
+
+  if (!textos.length) {
+    return { ok: false, erro: "Sem conversas de WhatsApp suficientes para sugerir um perfil." };
+  }
+
+  const { perfil, abordagem } = await sugerirAbordagemIA(textos);
+  if (!abordagem) return { ok: false, erro: "Não foi possível analisar agora." };
+
+  await db.cliente.update({ where: { id: clienteId }, data: { perfilDISC: perfil, abordagemIA: abordagem } });
+  revalidatePath(`/clientes/${clienteId}`);
+
+  return { ok: true, perfil, abordagem };
 }
 
 // Cria um card a partir do resumo: se a coluna for do funil de negociação,
 // cria uma Negociacao; se for uma coluna de demandas, cria uma TarefaKanban.
 export async function criarCardDeResumo(formData: FormData): Promise<{ ok: boolean; tipo?: string }> {
-  "use server";
   const clienteId = String(formData.get("clienteId") ?? "");
   const coluna = String(formData.get("coluna") ?? "");
   const texto = String(formData.get("texto") ?? "").trim();
@@ -1324,7 +1361,6 @@ export async function agendarDeResumo(
   dataRaw: string,
   observacao: string
 ): Promise<{ ok: boolean; erro?: string }> {
-  "use server";
   if (!clienteId || !dataRaw) return { ok: false, erro: "Informe a data." };
   // Campo type="date" (YYYY-MM-DD) → meio-dia em Brasília para não virar o dia.
   const data = new Date(`${dataRaw}T12:00:00-03:00`);
@@ -1408,7 +1444,6 @@ function dataBR(s?: string): string {
 export async function interpretarComando(
   texto: string
 ): Promise<{ ok: boolean; resposta?: string; plano?: AcaoPlano[]; erro?: string }> {
-  "use server";
   const t = texto.trim();
   if (!t) return { ok: false, erro: "Diga um comando." };
 
@@ -1531,9 +1566,9 @@ export async function interpretarComando(
 // Executa o plano confirmado pelo usuário. Cada ação usa os dados já resolvidos.
 export async function executarPlano(
   plano: AcaoPlano[]
-): Promise<{ ok: boolean; feitos: number; mensagem: string }> {
-  "use server";
+): Promise<{ ok: boolean; feitos: number; mensagem: string; erros?: { tipo: string; erro: string }[] }> {
   let feitos = 0;
+  const erros: { tipo: string; erro: string }[] = [];
   for (const a of plano) {
     if (a.erro) continue;
     const d = a.dados as Record<string, unknown>;
@@ -1585,13 +1620,17 @@ export async function executarPlano(
           data: { titulo: s("titulo"), descricao: s("descricao") || null, coluna: s("colunaId") || "demandas", ordem: (ultima?.ordem ?? 0) + 1 },
         });
       } else if (a.tipo === "agendar_visita") {
+        // Data inválida: reporta o erro em vez de silenciosamente agendar "hoje".
+        const data = parseDataBR(s("data"));
+        if (!data) throw new Error(`Data inválida: "${s("data")}"`);
         await db.visita.create({
-          data: { clienteId: s("clienteId"), data: parseDataBR(s("data")) ?? new Date(), observacao: s("observacao") || "Agendada pelo assistente" },
+          data: { clienteId: s("clienteId"), data, observacao: s("observacao") || "Agendada pelo assistente" },
         });
       }
       feitos++;
     } catch (e) {
       console.error("Falha ao executar ação do assistente:", a.tipo, e);
+      erros.push({ tipo: a.tipo, erro: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -1600,7 +1639,13 @@ export async function executarPlano(
   revalidatePath("/agenda");
   revalidatePath("/dashboard");
 
-  return { ok: feitos > 0, feitos, mensagem: feitos > 0 ? `${feitos} ação(ões) executada(s).` : "Nada foi executado." };
+  const mensagem = feitos > 0
+    ? `${feitos} ação(ões) executada(s).${erros.length ? ` ${erros.length} falharam: ${erros.map((e) => e.tipo).join(", ")}.` : ""}`
+    : erros.length > 0
+      ? `Nenhuma ação foi executada. Falhas: ${erros.map((e) => `${e.tipo} (${e.erro})`).join("; ")}`
+      : "Nada foi executado.";
+
+  return { ok: feitos > 0, feitos, mensagem, erros: erros.length ? erros : undefined };
 }
 
 // ---------- Máquinas usadas (estoque de seminovos) ----------
@@ -1611,7 +1656,6 @@ function numOuNull(v: FormDataEntryValue | null): number | null {
 }
 
 export async function criarMaquinaUsada(formData: FormData) {
-  "use server";
   const marca = String(formData.get("marca") ?? "").trim();
   const modelo = String(formData.get("modelo") ?? "").trim();
   if (!marca || !modelo) return { ok: false };
@@ -1635,7 +1679,6 @@ export async function criarMaquinaUsada(formData: FormData) {
 }
 
 export async function editarMaquinaUsada(id: string, formData: FormData) {
-  "use server";
   const marca = String(formData.get("marca") ?? "").trim();
   const modelo = String(formData.get("modelo") ?? "").trim();
   if (!marca || !modelo) return { ok: false };
@@ -1660,7 +1703,6 @@ export async function editarMaquinaUsada(id: string, formData: FormData) {
 }
 
 export async function definirStatusUsada(id: string, status: string) {
-  "use server";
   const valido = ["disponivel", "reservada", "vendida"].includes(status) ? status : "disponivel";
   await db.maquinaUsada.update({ where: { id }, data: { status: valido } });
   revalidatePath("/usadas");
@@ -1668,7 +1710,6 @@ export async function definirStatusUsada(id: string, status: string) {
 }
 
 export async function excluirMaquinaUsada(id: string) {
-  "use server";
   await db.maquinaUsada.delete({ where: { id } });
   revalidatePath("/usadas");
   return { ok: true };
@@ -1680,7 +1721,6 @@ export async function excluirMaquinaUsada(id: string) {
 // - Com até 13 dígitos (telefone normal) → só remove se não tiver negociação,
 //   para não apagar um prospect real cadastrado automaticamente.
 export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removidos: number }> {
-  "use server";
   const candidatos = await db.cliente.findMany({
     where: { nome: { startsWith: "Contato " } },
     select: { id: true, nome: true, _count: { select: { negociacoes: true } } },
@@ -1694,7 +1734,7 @@ export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removi
     })
     .map((c) => c.id);
   if (ids.length) await db.cliente.deleteMany({ where: { id: { in: ids } } });
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { ok: true, removidos: ids.length };
@@ -1704,7 +1744,6 @@ export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removi
 // Puxa as conversas/mensagens recentes que já existem no número e preenche o CRM,
 // para a conversa não começar "vazia". Idempotente: re-rodar não duplica (zapiId).
 export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas: number; clientes: number; erro?: string }> {
-  "use server";
   if (!zapi.isEnabled()) return { ok: false, conversas: 0, clientes: 0, erro: "Z-API não está conectada." };
 
   const chats = await zapi.listarChats();
@@ -1760,7 +1799,7 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
     });
   }
 
-  revalidatePath("/inbox");
+  revalidatePath("/atendimento");
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { ok: true, conversas: novasConversas, clientes: novosClientes };
@@ -1771,7 +1810,6 @@ export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas:
 // ── CRUD ColunaFunil (colunas dinâmicas do funil de negociações) ──────────
 
 export async function garantirColunasFunil() {
-  "use server";
   const count = await db.colunaFunil.count();
   if (count === 0) {
     // Cria as colunas padrão com base nos estágios fixos do pipeline
@@ -1810,7 +1848,6 @@ export async function garantirColunasFunil() {
 }
 
 export async function criarColunaFunil(titulo: string) {
-  "use server";
   const max = await db.colunaFunil.aggregate({ _max: { ordem: true } });
   await db.colunaFunil.create({
     data: { titulo: titulo.trim() || "Nova coluna", ordem: (max._max.ordem ?? 0) + 1 },
@@ -1819,7 +1856,6 @@ export async function criarColunaFunil(titulo: string) {
 }
 
 export async function excluirColunaFunil(id: string) {
-  "use server";
   const col = await db.colunaFunil.findUnique({ where: { id } });
   if (!col || col.fixa) return; // protege colunas fixas
   // Move negociações desta coluna para "primeiro_contato"
@@ -1832,7 +1868,6 @@ export async function excluirColunaFunil(id: string) {
 }
 
 export async function renomearColunaFunil(id: string, novoTitulo: string) {
-  "use server";
   const col = await db.colunaFunil.findUnique({ where: { id } });
   if (!col) return;
   const titulo = novoTitulo.trim();
@@ -1847,7 +1882,6 @@ export async function renomearColunaFunil(id: string, novoTitulo: string) {
 }
 
 export async function reordenarColunasFunil(ids: string[]) {
-  "use server";
   await Promise.all(ids.map((id, i) => db.colunaFunil.update({ where: { id }, data: { ordem: i + 1 } })));
   revalidatePath("/negociacoes");
 }
@@ -1857,7 +1891,6 @@ export async function reordenarColunasFunil(ids: string[]) {
 // Cria uma negociação completa com marca, máquina, valor formatado, tipo de pagamento
 // e todos os campos condicionais (financiamento, consórcio, CRD PME, à vista).
 export async function criarNegociacaoCompleta(formData: FormData) {
-  "use server";
   let clienteId = String(formData.get("clienteId") ?? "") || null;
   const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
   if (!clienteId && nomeNovo) {
@@ -1868,8 +1901,10 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   if (!clienteId) return { ok: false, erro: "Cliente obrigatório" };
 
   // Valor: remove tudo que não for dígito ou vírgula/ponto, depois converte
+  // (Number.isFinite descarta entradas que só sobraram símbolos, ex: "..").
   const valorRaw = String(formData.get("valor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
-  const valor = valorRaw ? parseFloat(valorRaw) : null;
+  const valorParsed = valorRaw ? parseFloat(valorRaw) : null;
+  const valor = valorParsed != null && Number.isFinite(valorParsed) ? valorParsed : null;
 
   const tipoPagamento = String(formData.get("tipoPagamento") ?? "") || null;
   const estagio = String(formData.get("estagio") ?? "") || "Primeiro contato";
@@ -1888,9 +1923,11 @@ export async function criarNegociacaoCompleta(formData: FormData) {
 
   // Entrada
   const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
-  const entradaValor = entradaValorRaw ? parseFloat(entradaValorRaw) : null;
+  const entradaValorParsed = entradaValorRaw ? parseFloat(entradaValorRaw) : null;
+  const entradaValor = entradaValorParsed != null && Number.isFinite(entradaValorParsed) ? entradaValorParsed : null;
   const entradaPercentualRaw = String(formData.get("entradaPercentual") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
-  const entradaPercentual = entradaPercentualRaw ? parseFloat(entradaPercentualRaw) : null;
+  const entradaPercentualParsed = entradaPercentualRaw ? parseFloat(entradaPercentualRaw) : null;
+  const entradaPercentual = entradaPercentualParsed != null && Number.isFinite(entradaPercentualParsed) ? entradaPercentualParsed : null;
 
   // À vista
   const dataPagamentoRaw = String(formData.get("dataPagamentoAvista") ?? "");

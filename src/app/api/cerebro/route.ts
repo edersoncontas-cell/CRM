@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { resumoAcademia } from "@/lib/academia";
+import { MODEL_CHAT } from "@/lib/ai/config";
 
 const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof MEDIA_TYPES)[number];
@@ -401,7 +402,7 @@ export async function POST(req: NextRequest) {
         const encoder = new TextEncoder();
         try {
           const stream = await anthropicClient().messages.stream({
-            model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5",
+            model: MODEL_CHAT,
             max_tokens: 2048,
             system: systemPrompt,
             messages: msgs,

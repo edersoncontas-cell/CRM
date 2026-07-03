@@ -78,19 +78,31 @@ export async function acharOuCriarConversa(args: {
 
   // Conversa nova: cria com os dados disponíveis
   const clienteId = !args.isGroup ? await acharClienteId(args.phone) : null;
-  conv = await db.whatsAppConversation.create({
-    data: {
-      externalPhone: args.phone,
-      lid: args.isGroup ? null : args.lid,
-      isGroup: args.isGroup,
-      contactName: args.contactName && !pareceNumeroTelefone(args.contactName) ? args.contactName : null,
-      groupName: args.groupName ?? null,
-      contactPhotoUrl: args.photoUrl ?? null,
-      clienteId,
-      lastMessageAt: new Date(),
-    },
-  });
-  return { conv, criada: true };
+  try {
+    conv = await db.whatsAppConversation.create({
+      data: {
+        externalPhone: args.phone,
+        lid: args.isGroup ? null : args.lid,
+        isGroup: args.isGroup,
+        contactName: args.contactName && !pareceNumeroTelefone(args.contactName) ? args.contactName : null,
+        groupName: args.groupName ?? null,
+        contactPhotoUrl: args.photoUrl ?? null,
+        clienteId,
+        lastMessageAt: new Date(),
+      },
+    });
+    return { conv, criada: true };
+  } catch (e) {
+    // Corrida: dois webhooks quase simultâneos para o mesmo contato podem
+    // ambos não encontrar a conversa e tentar criar — @@unique([externalPhone])
+    // rejeita o segundo. Em vez de propagar o erro, busca a conversa que o
+    // outro request acabou de criar e segue normalmente.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const existente = await acharConversa(args.phone, args.lid, args.isGroup);
+      if (existente) return { conv: existente, criada: false };
+    }
+    throw e;
+  }
 }
 
 // Para importação de arquivo (export do WhatsApp): casa pelo NOME, pois o
@@ -119,19 +131,22 @@ export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean
   });
 }
 
-// Insere mensagens importadas, sem duplicar (chave = timestamp|primeiros 60 chars).
+// Insere mensagens importadas, sem duplicar (chave = direção|timestamp|primeiros
+// 60 chars). Ainda pode descartar duas mensagens LEGÍTIMAS iguais no mesmo
+// instante e mesma direção (raro) — aceitável para importação de histórico.
 export async function importarMensagens(
   conversationId: string,
   msgs: Array<{ fromMe: boolean; sender: string | null; body: string; sentAt: string }>,
   isGroup: boolean,
 ): Promise<number> {
   if (!msgs.length) return 0;
-  const existentes = await db.whatsAppMessage.findMany({ where: { conversationId }, select: { sentAt: true, body: true } });
-  const chaves = new Set(existentes.map((e) => `${e.sentAt.getTime()}|${e.body.slice(0, 60)}`));
+  const existentes = await db.whatsAppMessage.findMany({ where: { conversationId }, select: { sentAt: true, body: true, direction: true } });
+  const chaves = new Set(existentes.map((e) => `${e.direction}|${e.sentAt.getTime()}|${e.body.slice(0, 60)}`));
 
   const novas = msgs.filter((m) => {
     const corpo = isGroup && m.sender && !m.fromMe ? `${m.sender}: ${m.body}` : m.body;
-    return !chaves.has(`${new Date(m.sentAt).getTime()}|${corpo.slice(0, 60)}`);
+    const direction = m.fromMe ? "OUT" : "IN";
+    return !chaves.has(`${direction}|${new Date(m.sentAt).getTime()}|${corpo.slice(0, 60)}`);
   });
   if (!novas.length) return 0;
 

@@ -82,11 +82,24 @@ function extractMessageId(data: Record<string, unknown>): string | null {
   return (data.messageId as string) || (data.zaapId as string) || (data.id as string) || null;
 }
 
-export async function sendText(phone: string, message: string, operatorName?: string): Promise<string> {
-  const texto = operatorName ? `*${operatorName}:*\n${message}` : message;
-  const data = await zapiPost("send-text", { phone: normalizePhone(phone), message: texto, delayMessage: 2 });
+// A Z-API respondeu HTTP 200 sem `error`, mas sem messageId reconhecível — a
+// mensagem provavelmente FOI entregue (não houve erro de rede/API), só não dá
+// para confirmar o ID. Distinto de uma falha real (rede/HTTP/erro da Z-API),
+// para não reenviar (duplicar) uma mensagem que talvez já tenha chegado.
+export class EnvioNaoConfirmadoError extends Error {
+  constructor() {
+    super("Envio não confirmado (sem messageId).");
+    this.name = "EnvioNaoConfirmadoError";
+  }
+}
+
+// Nunca prefixa a mensagem com o nome do operador/IA — o cliente não deve ver
+// rótulos internos (ex.: "*Cérebro:*"). Esses rótulos ficam só em
+// WhatsAppMessage.operatorDisplayName, visível apenas dentro do CRM.
+export async function sendText(phone: string, message: string): Promise<string> {
+  const data = await zapiPost("send-text", { phone: normalizePhone(phone), message, delayMessage: 2 });
   const id = extractMessageId(data);
-  if (!id) throw new Error("Envio não confirmado (sem messageId).");
+  if (!id) throw new EnvioNaoConfirmadoError();
   return id;
 }
 
@@ -108,10 +121,16 @@ export async function sendDocument(phone: string, docUrl: string, fileName: stri
 
 // ---------- Webhook ----------
 
+// Nem todo plano/conta da Z-API oferece um "Client-Token" de segurança para
+// carimbar nos webhooks — quando não está disponível, não dá para exigir essa
+// validação sem quebrar o recebimento de mensagens de verdade. Por isso: se
+// ZAPI_WEBHOOK_TOKEN estiver configurado, valida estritamente (fail-closed);
+// se não estiver, aceita o POST (a URL do webhook não é pública/óbvia, e
+// isAllowedInstance() no route.ts confere o instanceId como camada extra).
 export function validateWebhook(clientTokenHeader: string | null): boolean {
   const expected = process.env.ZAPI_WEBHOOK_TOKEN;
-  if (!expected) return true; // sem token → liberado (a URL secreta protege)
-  return clientTokenHeader === expected;
+  if (expected) return clientTokenHeader === expected;
+  return true;
 }
 
 export function expectedZApiInstanceId(): string | null {

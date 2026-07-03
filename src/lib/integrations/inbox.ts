@@ -227,7 +227,7 @@ export async function registrarMensagemRecebida(msg: MensagemRecebida): Promise<
   await enviarPushNotificacao({
     title: `📱 ${cliente.nome}`,
     body: previa,
-    url: "/inbox",
+    url: "/atendimento",
     tag: `msg-${cliente.id}`,
   });
 }

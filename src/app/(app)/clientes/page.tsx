@@ -31,6 +31,9 @@ export default async function ClientesPage({
   const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes] = await Promise.all([
     db.cliente.findMany({
       where: {
+        // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
+        // ficam só na tela de Roteiro/Prospecção até serem confirmados.
+        origem: { not: "prospect_ia" },
         ...(filtro ? { municipioId: filtro } : {}),
         ...(busca
           ? {
@@ -54,9 +57,9 @@ export default async function ClientesPage({
       select: { id: true, marca: true, modelo: true, categoria: true },
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
-    db.cliente.count({ where: { visitado: false } }),
-    db.cliente.count({ where: { visitado: true } }),
-    db.cliente.count(),
+    db.cliente.count({ where: { visitado: false, origem: { not: "prospect_ia" } } }),
+    db.cliente.count({ where: { visitado: true, origem: { not: "prospect_ia" } } }),
+    db.cliente.count({ where: { origem: { not: "prospect_ia" } } }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));

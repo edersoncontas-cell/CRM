@@ -54,7 +54,8 @@ export function EditarClienteForm({
   const [frota, setFrota] = useState<FrotaItem[]>(frotaAtual);
   const [marcaSel, setMarcaSel] = useState("New Holland");
   const [modeloSel, setModeloSel] = useState("");
-  const [, startFrota] = useTransition();
+  const [salvando, startSalvar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
 
   const marcas = ["New Holland", "Dynapac"];
   const modelosPorMarca = maquinas
@@ -90,13 +91,15 @@ export function EditarClienteForm({
           onClick={fechar}
         >
           <form
-            action={async (fd) => {
-              fd.set("status", status);
-              await atualizarCliente(cliente.id, fd);
-              startFrota(async () => {
+            action={(fd) => {
+              setErro(null);
+              startSalvar(async () => {
+                fd.set("status", status);
+                const r = await atualizarCliente(cliente.id, fd);
+                if (!r.ok) { setErro(r.erro ?? "Erro ao salvar."); return; }
                 await gerenciarFrotaCliente(cliente.id, frota.map((f) => ({ marca: f.marca, modelo: f.modelo })));
+                fechar();
               });
-              fechar();
             }}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl my-auto"
@@ -111,7 +114,7 @@ export function EditarClienteForm({
               <Campo label="Nome *">
                 <input name="nome" required defaultValue={cliente.nome} className="campo" />
               </Campo>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Campo label="Telefone">
                   <input name="telefone" defaultValue={cliente.telefone ?? ""} placeholder="28 99999-9999" className="campo" />
                 </Campo>
@@ -233,43 +236,13 @@ export function EditarClienteForm({
               </div>
             </div>
 
-            <button className="mt-5 w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 hover:bg-brand-800">
-              Salvar alterações
+            {erro && <p className="mt-3 text-sm text-red-500">{erro}</p>}
+            <button disabled={salvando} className="mt-5 w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 hover:bg-brand-800 disabled:opacity-60">
+              {salvando ? "Salvando…" : "Salvar alterações"}
             </button>
           </form>
         </div>
       )}
-      <style>{`
-        .campo {
-          width: 100%;
-          border: 1px solid #cbd5e1;
-          border-radius: .5rem;
-          padding: .5rem .75rem;
-          font-size: .875rem;
-          outline: none;
-          box-sizing: border-box;
-          max-width: 100%;
-          -webkit-appearance: none;
-          appearance: none;
-          resize: none;
-          overflow: hidden;
-        }
-        .campo:focus {
-          border-color: #ffb81c;
-          box-shadow: 0 0 0 2px #ffe7a3;
-        }
-        input[type="date"].campo {
-          display: block;
-          width: 100%;
-          box-sizing: border-box;
-          -webkit-appearance: none;
-          appearance: none;
-          overflow: hidden;
-        }
-        select.campo {
-          background-image: none;
-        }
-      `}</style>
     </>
   );
 }

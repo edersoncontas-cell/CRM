@@ -218,7 +218,7 @@ function ConversaItem({
           {/* Não fazer nada */}
           <div className="mt-3 flex items-center justify-between">
             <a
-              href={`/inbox`}
+              href={`/atendimento`}
               className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-brand-600"
             >
               <MessageSquare size={12} /> Abrir conversa

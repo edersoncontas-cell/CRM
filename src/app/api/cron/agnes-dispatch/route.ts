@@ -5,6 +5,7 @@ import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 import Anthropic from "@anthropic-ai/sdk";
 import { resumoAcademia } from "@/lib/academia";
+import { MODEL_CHAT } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -59,7 +60,7 @@ Use esse conhecimento para responder de forma estratégica — mas sem usar jarg
 
   try {
     const msg = await anthropic().messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODEL_CHAT,
       max_tokens: 300,
       system,
       messages: [{ role: "user", content: `Histórico da conversa:\n${args.historico.slice(-3000)}\n\nResponda a última mensagem do cliente acima.` }],
@@ -88,8 +89,6 @@ export async function GET(req: NextRequest) {
 
   let feitos = 0;
   for (const conv of convs) {
-    await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: null } });
-
     const msgs = await db.whatsAppMessage.findMany({
       where: { conversationId: conv.id },
       orderBy: { sentAt: "desc" },
@@ -123,6 +122,8 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
+    // Se a geração falhar/vier vazia, deixa agnesScheduledAt intacto para
+    // tentar de novo no próximo tick — só zera após sucesso.
     const reply = await gerarRespostaCerebro({ historico, clienteNome, clienteStatus, clienteResumo, municipio, estilo });
     if (!reply) continue;
 
@@ -133,15 +134,19 @@ export async function GET(req: NextRequest) {
       });
     } else {
       try {
-        const id = await sendText(conv.externalPhone, reply, "Cérebro");
+        // Sem operatorName: o cliente não deve ver que é uma IA respondendo.
+        // O rótulo "Cérebro" fica só no registro interno (operatorDisplayName).
+        const id = await sendText(conv.externalPhone, reply);
         await inserirMensagem(conv.id, {
           direction: "OUT", body: reply, origin: "CRM",
           operatorDisplayName: "Cérebro", zapiMessageId: id, sendStatus: "SENT",
         });
       } catch (e) {
         console.error("[cerebro-dispatch] envio falhou:", e);
+        continue; // não zera agnesScheduledAt → tenta de novo no próximo tick
       }
     }
+    await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: null } });
     feitos++;
   }
 

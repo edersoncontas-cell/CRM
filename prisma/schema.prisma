@@ -367,7 +367,8 @@ model WhatsAppConversation {
   messages         WhatsAppMessage[]
   @@index([lid])
   @@index([lastMessageAt])
-  @@index([externalPhone])
+  @@index([agnesScheduledAt])
+  @@unique([externalPhone])
 }
 
 model WhatsAppMessage {
@@ -393,6 +394,7 @@ model WhatsAppMessage {
   conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, sentAt])
   @@index([zapiMessageId])
+  @@index([sendStatus])
 }
 
 model WhatsAppSettings {

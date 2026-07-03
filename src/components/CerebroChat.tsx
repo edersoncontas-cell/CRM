@@ -158,7 +158,7 @@ export function CerebroChat() {
   return (
     <div
       className="flex flex-col rounded-2xl overflow-hidden"
-      style={{ background: "#18181b", border: "1px solid #27272a", minHeight: "70vh" }}
+      style={{ background: "#18181b", border: "1px solid #27272a", minHeight: "70dvh" }}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); addArquivos(e.dataTransfer.files); }}

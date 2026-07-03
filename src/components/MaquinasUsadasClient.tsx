@@ -307,7 +307,7 @@ function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () =
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo label="Marca *"><input name="marca" required defaultValue={ed?.marca ?? ""} placeholder="New Holland" className={inp} /></Campo>
           <Campo label="Modelo *"><input name="modelo" required defaultValue={ed?.modelo ?? ""} placeholder="E215C" className={inp} /></Campo>
           <Campo label="Categoria">

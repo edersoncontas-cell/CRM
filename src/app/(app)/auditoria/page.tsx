@@ -78,7 +78,7 @@ export default async function AuditoriaPage({
       />
 
       {/* Resumo */}
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center">
           <Bot size={20} className="mx-auto mb-1 text-blue-500" />
           <div className="text-2xl font-bold text-blue-700">{contIA}</div>

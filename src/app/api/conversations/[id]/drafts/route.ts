@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!conv) return NextResponse.json({ ok: false, erro: "conversa não encontrada" }, { status: 404 });
 
   try {
-    const zapiMessageId = await sendText(conv.externalPhone, texto, "Agnes");
+    const zapiMessageId = await sendText(conv.externalPhone, texto);
     const msg = await db.whatsAppMessage.update({
       where: { id: messageId },
       data: { body: texto, isDraft: false, draftStatus: "APPROVED", sendStatus: "SENT", zapiMessageId, operatorDisplayName: "Agnes", sentAt: new Date() },
