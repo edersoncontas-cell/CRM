@@ -7,6 +7,7 @@ import {
   Handshake, CheckCircle2, Clock, ChevronRight,
 } from "lucide-react";
 import { FinanceiroGraficos } from "@/components/FinanceiroGraficos";
+import { ComissoesPagasSection } from "@/components/ComissoesPagasSection";
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +113,8 @@ export default async function FinanceiroPage() {
   // Receita por mês (2025 e 2026) — agrupado por mesAnoReferencia ou faturadoEm
   const mesesRelatorio: Record<string, { valor: number; negs: any[] }> = {};
   for (const n of todasGanhas as any[]) {
-    const ref = (n.mesAnoReferencia as string | null) ?? 
+    const ref =
+      (n.mesAnoReferencia as string | null) ??
       (n.faturadoEm ? (n.faturadoEm as Date).toISOString().slice(0, 7) : null) ??
       (n.atualizadoEm as Date).toISOString().slice(0, 7);
     if (!mesesRelatorio[ref]) mesesRelatorio[ref] = { valor: 0, negs: [] };
@@ -132,13 +134,40 @@ export default async function FinanceiroPage() {
 
   const receitaMensal = mesesLabels.map((key) => ({
     key,
-    label: new Date(key + "-15").toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).toUpperCase(),
+    label: new Date(key + "-15")
+      .toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
+      .toUpperCase(),
     valor: mesesRelatorio[key]?.valor ?? 0,
     comissao: calcComissao(mesesRelatorio[key]?.valor ?? 0),
     negs: mesesRelatorio[key]?.negs ?? [],
   }));
 
-  const maxMes = Math.max(...receitaMensal.map((m) => m.valor), 1);
+  // ── Comissões Pagas (por ano/período) ───────────────────────────────────────
+  // Agrupar todas negociações ganhas por ano, calcular total de comissões e lista de clientes
+  const comissoesPagasPorAno: Record<string, {
+    total: number;
+    quantidade: number;
+    negs: Array<{ clienteNome: string; clienteId: string; valor: number; comissao: number; faturadoEm: Date | null; maquina: string }>;
+  }> = {};
+
+  for (const n of todasGanhas as any[]) {
+    const dt: Date | null = n.faturadoEm ?? n.atualizadoEm;
+    const ano = dt ? new Date(dt).getFullYear().toString() : "desconhecido";
+    if (!comissoesPagasPorAno[ano]) comissoesPagasPorAno[ano] = { total: 0, quantidade: 0, negs: [] };
+    const comissao = calcComissao(n.valor);
+    comissoesPagasPorAno[ano].total += comissao;
+    comissoesPagasPorAno[ano].quantidade += 1;
+    comissoesPagasPorAno[ano].negs.push({
+      clienteNome: n.cliente.nome,
+      clienteId: n.clienteId,
+      valor: n.valor ?? 0,
+      comissao,
+      faturadoEm: n.faturadoEm,
+      maquina: n.maquinaModelo ?? "?",
+    });
+  }
+
+  const anosComissoes = Object.keys(comissoesPagasPorAno).sort((a, b) => b.localeCompare(a));
 
   return (
     <div>
@@ -198,6 +227,14 @@ export default async function FinanceiroPage() {
           </div>
           <FinanceiroGraficos receitaMensal={receitaMensal} />
         </Card>
+      </div>
+
+      {/* ── Comissões Pagas por Período ── */}
+      <div className="mb-6">
+        <ComissoesPagasSection
+          anosComissoes={anosComissoes}
+          comissoesPagasPorAno={comissoesPagasPorAno}
+        />
       </div>
 
       {/* Grid: Faturadas recentes + Comissões Futuras */}
