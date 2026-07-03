@@ -72,7 +72,48 @@
     performance. Script one-shot de migração de dados úteis de `Conversa` → `WhatsAppMessage` também não foi
     escrito/rodado nesta sessão (nenhum acesso ao Postgres de produção a partir daqui) — ver nota acima sobre
     por que isso deixou de ser bloqueante.
-- ⬜ Fase 3, 4, 5 — pendentes (uma por sessão, nesta ordem).
+- ✅ **Fase 3** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03; mesma branch da Fase 2, ainda
+  não mesclada). `tsc`/`lint`/`build` limpos; testada com Postgres local — não foi possível exercitar o loop
+  agêntico contra a API real da Anthropic nesta sessão (sem `ANTHROPIC_API_KEY` disponível no ambiente), então
+  cada executor de ferramenta foi testado individualmente através de uma rota Next.js real (leitura e escrita,
+  incluindo o fluxo de confirmação de `excluir_negociacao`/`excluir_cliente`), removida ao final dos testes.
+  - **1-2. Ferramentas** (`src/lib/zeus/cerebro-tools.ts`, novo): 8 tools de leitura (`buscar_cliente`,
+    `detalhes_cliente`, `listar_negociacoes`, `agenda`, `buscar_maquina`, `estoque_usadas`, `metricas_funil`,
+    `conversas_aguardando`) e 11 de escrita, reusando as server actions existentes de `actions.ts`
+    (`criarCliente`, `atualizarCliente`, `atualizarResumoCliente`, `criarNegociacao`, `moverNegociacao`,
+    `marcarGanha`, `marcarPerdida`, `criarTarefa`, `adicionarVisita`). `enviar_resposta` NÃO envia direto —
+    cria um rascunho (`isDraft:true`) na fila de `/atendimento`, mesmo padrão do auto-responder. `excluir_cliente`
+    e `excluir_negociacao` são destrutivas: sem `confirmar:true` devolvem `requires_confirmation` com uma
+    mensagem para o modelo repassar ao vendedor — só executam de fato depois da confirmação explícita no chat.
+    Toda escrita grava no `AuditLog` com `origem:"cerebro"` (testado e conferido).
+  - **3. Loop agêntico** (`api/cerebro/route.ts`, reescrito): antes só fazia uma chamada de streaming e
+    devolvia texto; agora processa `tool_use` em rodadas (até 8 por pergunta), executa a ferramenta, devolve
+    `tool_result` e continua o stream, até o modelo parar de pedir ferramentas. Novos eventos SSE `tool`
+    (`{name,status,label}`, para o front mostrar "🔧 Consultando cliente…" em tempo real) e `confirm`
+    (mensagem de confirmação de ação destrutiva).
+  - **4. System prompt honesto**: removida a promessa falsa de "acesso total" sem ferramenta nenhuma por trás;
+    agora lista exatamente as tools disponíveis, inclui data/hora de Brasília (`agoraBrasiliaExtenso`), o
+    `EstiloDeFala` aprendido e o resumo da Academia — igual ao que o system prompt antigo dizia ter mas não tinha.
+  - **5. Persistência** (`CerebroSession`/`CerebroMessage`, novo no schema): o histórico deixou de viver só no
+    `useState` do navegador (perdido no reload, reenviado pelo cliente sem validação a cada request). Cada
+    turno grava os content blocks da Anthropic (texto/tool_use/tool_result) em `CerebroMessage.content`
+    (JSON), na ordem exata — o servidor reconstrói o array `messages` a partir do banco a cada pergunta nova.
+    Rota nova `api/cerebro/sessao`: `GET` carrega a última sessão (cria uma se não houver nenhuma) já filtrada
+    para exibição (some com os turnos que são só `tool_result` interno); `POST` cria uma sessão nova ("Nova
+    conversa"). Anexos de imagem NÃO são persistidos em base64 (evita inchar o Postgres para sempre) — vira um
+    texto-placeholder (`[Anexo enviado: nome.jpg]`) no histórico salvo, mas a imagem real ainda é enviada à IA
+    no turno em que foi anexada.
+  - **`CerebroChat.tsx`**: carrega a sessão ao abrir, botão "Nova conversa", mostra os rótulos de ferramenta em
+    tempo real (`🔧 Consultando…`) durante o "pensando", e um card de confirmação com botões "Sim, confirmar"/
+    "Cancelar" quando uma ação destrutiva pede aval — clicar em confirmar só manda a frase de confirmação como
+    próxima mensagem (o modelo, instruído no system prompt, é quem decide chamar a tool de novo com
+    `confirmar:true`; não há um protocolo especial de retomada de tool_use fora do chat).
+  - **6. AssistenteIA (adiado deliberadamente)**: `interpretarComando`/`executarPlano` (comando de voz rápido)
+    continuam exatamente como estavam — não foram unificados com as tools do Cérebro nesta sessão. É uma
+    consolidação de capacidades (mesma lista de ações, uma implementação só), não uma correção de bug; o fluxo
+    de voz já tem sua própria UX de plano-e-confirmação, diferente da confirmação conversacional do chat, e
+    fica para uma sessão dedicada a essa unificação.
+- ⬜ Fase 4, 5 — pendentes (uma por sessão, nesta ordem).
 
 ---
 

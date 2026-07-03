@@ -409,3 +409,26 @@ model WhatsAppSettings {
   auditMode    Boolean @default(true)
   updatedAt    DateTime @updatedAt
 }
+
+// Cérebro agêntico (Fase 3): histórico persistido no servidor. Cada
+// CerebroMessage guarda o(s) content block(s) da Anthropic (texto, tool_use,
+// tool_result) como JSON em `content`, na ordem exata do turno — permite
+// reconstruir o array `messages` da API a cada nova pergunta sem depender do
+// cliente reenviar o histórico (frágil e sem validação).
+model CerebroSession {
+  id         String          @id @default(cuid())
+  titulo     String?
+  criadoEm   DateTime        @default(now())
+  atualizadoEm DateTime      @updatedAt
+  mensagens  CerebroMessage[]
+}
+
+model CerebroMessage {
+  id         String   @id @default(cuid())
+  session    CerebroSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  role       String   // user | assistant
+  content    String   // JSON: string simples ou array de content blocks da Anthropic
+  criadoEm   DateTime @default(now())
+  @@index([sessionId, criadoEm])
+}

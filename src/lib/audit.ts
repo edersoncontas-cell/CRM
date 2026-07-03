@@ -14,9 +14,10 @@ export type AcaoAudit =
   | "post_gerado"
   | "mensagem_enviada"
   | "perfil_atualizado"
-  | "modo_fim_de_semana";
+  | "modo_fim_de_semana"
+  | "tarefa_criada";
 
-export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus";
+export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 
 interface AuditOpts {
   acao: AcaoAudit;
