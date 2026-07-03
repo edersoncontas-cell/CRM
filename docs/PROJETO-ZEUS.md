@@ -26,7 +26,53 @@
     (`actions.ts`) selecionava um campo `mensagens` que não existe no schema (o campo real é `messages`) —
     o "Gerar resumo pelo Cérebro" quebrava com erro sempre que o cliente tinha conversas de WhatsApp
     vinculadas (o caso mais comum). Corrigido junto com a Fase 1E.
-- ⬜ Fase 2, 3, 4, 5 — pendentes (uma por sessão, nesta ordem).
+- ✅ **Fase 2** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03). Testada conforme a Fase 6
+  (`tsc`/`lint`/`build`, Postgres local, simulação de webhook via `curl` e checagem de autorização dos crons).
+  - **1. Pipeline automático** (`src/lib/zeus/pipeline.ts`, novo): chamado pelo webhook logo após salvar cada
+    mensagem recebida (`IN`, não-grupo) e, como fallback, pelo novo cron `api/cron/zeus-pipeline` (a cada
+    minuto, via campo novo `WhatsAppMessage.processedAt`). Faz tudo que o `inbox.ts` legado fazia — e que
+    ninguém mais chamava — só que no sistema novo: vincula/cria `Cliente` por telefone, transcreve áudio
+    pendente (fallback; o webhook já transcreve em tempo real), roda `analisarConversaIA`, alimenta
+    `Negociacao` (com ajuste de `termometro` pelo sentimento a cada mensagem, não só na criação), registra
+    `Visita` detectada, vincula `Municipio`, atualiza `resumoTexto` incrementalmente, classifica a conversa
+    (`classificarConversaIA`, uma vez até o vendedor confirmar/mudar em `/atendimento`) e audita cada ação
+    automática no `AuditLog` com `origem:"zeus"`.
+  - **2. Push notification com deep-link**: o pipeline notifica o vendedor a cada mensagem 1:1 recebida com
+    `url:"/atendimento?conversa=ID"`. Antes desta fase o webhook novo **não enviava push nenhum** (só o
+    `inbox.ts` morto fazia isso) — bug real corrigido. O link `/atendimento?conversa=ID` já existia em
+    `clientes/[id]` mas não tinha efeito nenhum (a tela nunca lia o parâmetro); agora `AtendimentoClient`
+    recebe `convInicial` da página e abre a conversa certa direto.
+  - **3. Auto-resposta com contexto único**: extraído `src/lib/zeus/cerebro-resposta.ts` com o contexto rico
+    (cliente completo, negociações abertas, visitas, alertas, Academia de Vendas) que só o despacho rápido
+    (debounce de 1s) tinha. O cron de fallback `agnes-dispatch` (debounce de 2min) usava um contexto mais
+    pobre — agora os dois compartilham a mesma função, sem duplicação.
+  - **4. Aposentadoria do legado (parcial e deliberada)**: página `/resumos` reescrita para ler
+    `WhatsAppConversation`/`WhatsAppMessage` em vez do relacionamento morto `Cliente.conversas` (corrige o bug
+    "página sempre vazia" documentado na Fase 1); `enviarResposta` (usada por "Agendar visita") passou a
+    gravar na conversa real de `/atendimento` em vez de uma tabela que o cliente nunca vê nas respostas;
+    `aprenderMeuEstilo` passou a aprender das mensagens `WhatsAppMessage` (`OUT`, excluindo as do próprio
+    Cérebro) em vez de `Conversa`; `importarHistoricoZapi` (morta, sem nenhuma chamada — o import real de
+    `/conexao` já usa `api/whatsapp/import-history`) foi removida; `api/zapi/qr` e `api/zapi/status` passaram
+    a usar `lib/zapi.ts`; deletados `lib/integrations/inbox.ts`, `lib/integrations/zapi.ts` e
+    `lib/integrations/whatsapp.ts` (Meta Cloud API — adaptador morto, nenhum webhook o consumia).
+    **Decisão consciente de escopo**: `/conversas` (colar conversa + `analisarConversaAction`) continua
+    gravando em `Conversa`/`AnaliseIA` — é uma ferramenta de análise ad hoc (texto colado, sem telefone
+    obrigatório), semanticamente diferente de uma thread real de WhatsApp; forçá-la no formato
+    `WhatsAppConversation` exigiria inventar conversas sintéticas e poluiria o inbox de `/atendimento`. Os
+    modelos `Conversa`/`AnaliseIA` continuam no schema (a própria Fase 2 já previa isso: "numa migração
+    posterior"), então nada quebra.
+  - **Bug adicional encontrado e corrigido** (fora da auditoria original): o ramo "recebido" do webhook
+    (`api/webhooks/zapi/route.ts`) não checava `existeZapiId` antes de inserir — só o ramo `fromMe` tinha essa
+    proteção. Um reenvio de webhook da Z-API (comum quando a resposta demora) duplicava a mensagem recebida e,
+    com o pipeline novo, reprocessava a mesma conversa duas vezes (negociação, push e auditoria em dobro).
+    Corrigido com a mesma checagem usada no ramo `fromMe`.
+  - **Adiado deliberadamente**: cache de prompt (Anthropic `cache_control`) nas extrações do pipeline — a
+    função `llmTexto` em `lib/ai/index.ts` é compartilhada por dezenas de funcionalidades; mexer nela agora
+    é uma otimização de custo/latência, não uma correção funcional, e fica para uma sessão dedicada de
+    performance. Script one-shot de migração de dados úteis de `Conversa` → `WhatsAppMessage` também não foi
+    escrito/rodado nesta sessão (nenhum acesso ao Postgres de produção a partir daqui) — ver nota acima sobre
+    por que isso deixou de ser bloqueante.
+- ⬜ Fase 3, 4, 5 — pendentes (uma por sessão, nesta ordem).
 
 ---
 

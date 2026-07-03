@@ -9,35 +9,60 @@ export const dynamic = "force-dynamic";
 export default async function ResumosPage() {
   await garantirColunasDemanda();
 
-  const [clientes, colunasDemanda] = await Promise.all([
-    db.cliente.findMany({
-      where: { conversas: { some: {} } },
+  // WhatsAppConversation não tem relação Prisma direta com Cliente (clienteId
+  // é só uma coluna) — busca as conversas vinculadas e depois os clientes em lote.
+  const [conversasWA, colunasDemanda] = await Promise.all([
+    db.whatsAppConversation.findMany({
+      where: { clienteId: { not: null }, isGroup: false },
+      orderBy: { lastMessageAt: "desc" },
       select: {
         id: true,
-        nome: true,
-        municipio: { select: { nome: true } },
-        aguardandoResposta: true,
-        _count: { select: { conversas: true } },
-        conversas: {
-          orderBy: { criadoEm: "desc" },
+        clienteId: true,
+        lastMessageAt: true,
+        _count: { select: { messages: true } },
+        messages: {
+          orderBy: { sentAt: "desc" },
           take: 1,
-          select: { conteudo: true, criadoEm: true },
+          select: { body: true, direction: true },
         },
       },
     }),
     db.colunaDemanda.findMany({ orderBy: { ordem: "asc" } }),
   ]);
 
-  const conversas: ConversaResumo[] = clientes
-    .map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      municipio: c.municipio?.nome ?? null,
-      aguardando: c.aguardandoResposta,
-      totalMensagens: c._count.conversas,
-      previa: c.conversas[0]?.conteudo ?? "",
-      ultimoContato: (c.conversas[0]?.criadoEm ?? new Date(0)).toISOString(),
-    }))
+  // Uma linha por cliente — mantém a conversa mais recente quando há mais de uma.
+  const conversaPorCliente = new Map<string, (typeof conversasWA)[number]>();
+  for (const c of conversasWA) {
+    if (!c.clienteId) continue;
+    const atual = conversaPorCliente.get(c.clienteId);
+    if (!atual || c.lastMessageAt > atual.lastMessageAt) conversaPorCliente.set(c.clienteId, c);
+  }
+
+  const clienteIds = [...conversaPorCliente.keys()];
+  const clientes = await db.cliente.findMany({
+    where: { id: { in: clienteIds } },
+    select: { id: true, nome: true, aguardandoResposta: true, municipio: { select: { nome: true } } },
+  });
+  const clientePorId = new Map(clientes.map((c) => [c.id, c]));
+
+  const conversas: ConversaResumo[] = clienteIds
+    .map((clienteId): ConversaResumo | null => {
+      const conv = conversaPorCliente.get(clienteId)!;
+      const cliente = clientePorId.get(clienteId);
+      if (!cliente) return null;
+      const ultima = conv.messages[0];
+      return {
+        id: clienteId,
+        conversaId: conv.id,
+        nome: cliente.nome,
+        municipio: cliente.municipio?.nome ?? null,
+        aguardando: cliente.aguardandoResposta,
+        totalMensagens: conv._count.messages,
+        previa: ultima ? `${ultima.direction === "OUT" ? "Você: " : ""}${ultima.body}` : "",
+        ultimoContato: conv.lastMessageAt.toISOString(),
+      };
+    })
+    .filter((c): c is ConversaResumo => c !== null)
     .sort((a, b) => +new Date(b.ultimoContato) - +new Date(a.ultimoContato));
 
   // Opções de coluna para "criar card": demandas (Trello) + funil de negociação.

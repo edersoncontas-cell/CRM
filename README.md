@@ -65,11 +65,11 @@ Edite o `.env` (veja `.env.example`):
 | Integração         | Variáveis                                             |
 | ------------------ | ----------------------------------------------------- |
 | IA Anthropic       | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`                |
-| WhatsApp Business  | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` |
+| WhatsApp (Z-API)   | `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`/`ZAPI_TOKEN`, `ZAPI_CLIENT_TOKEN`, `ZAPI_WEBHOOK_TOKEN` |
 | Google Agenda      | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
 | Login pessoal      | `APP_PASSWORD`, `AUTH_SECRET` (se vazio, sem senha)   |
 
-Webhook do WhatsApp: `POST /api/whatsapp/webhook` (verificação por `GET`).
+Webhook do WhatsApp (Z-API): `POST /api/webhooks/zapi` — configure em `/conexao`.
 
 ## 🏗️ Stack
 

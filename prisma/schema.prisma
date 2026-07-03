@@ -391,10 +391,12 @@ model WhatsAppMessage {
   retryCount           Int       @default(0)
   lastRetryAt          DateTime?
   lastSendError        String?
+  processedAt          DateTime?
   conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, sentAt])
   @@index([zapiMessageId])
   @@index([sendStatus])
+  @@index([processedAt])
 }
 
 model WhatsAppSettings {

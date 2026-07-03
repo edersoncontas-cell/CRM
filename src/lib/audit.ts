@@ -9,13 +9,14 @@ export type AcaoAudit =
   | "negociacao_perdida"
   | "visita_detectada"
   | "conversa_analisada"
+  | "conversa_classificada"
   | "campanha_enviada"
   | "post_gerado"
   | "mensagem_enviada"
   | "perfil_atualizado"
   | "modo_fim_de_semana";
 
-export type OrigemAudit = "ia" | "usuario" | "sistema";
+export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus";
 
 interface AuditOpts {
   acao: AcaoAudit;

@@ -5,6 +5,7 @@ import {
   acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, atualizarStatusEntrega, curarZapiId,
 } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
+import { processarMensagem } from "@/lib/zeus/pipeline";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -162,17 +163,31 @@ export async function POST(req: NextRequest) {
       diag.status = "enviada";
     } else {
       // ── Ramo recebido ──
+      // A Z-API pode reentregar o mesmo evento (retry de webhook lento) — sem
+      // esta checagem, a mensagem duplicava e o pipeline do ZEUS reprocessava
+      // a mesma conversa duas vezes (negociação, push, auditoria repetidos).
+      if (await existeZapiId(zapiMessageId)) { diag.status = "duplicado"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
       const { conv } = await acharOuCriarConversa({
         phone: telefone, lid: tampa, isGroup,
         contactName: nomeRecebido,
         groupName: isGroup ? nomeRecebido : null,
         photoUrl: foto,
       });
-      await inserirMensagem(conv.id, {
+      const msgRecebida = await inserirMensagem(conv.id, {
         direction: "IN", body: c.text, senderName: isGroup ? nomeRecebido : null,
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
         zapiMessageId,
       });
+
+      // Pipeline autônomo do ZEUS (Fase 2): vincula/cria cliente, analisa com
+      // IA, alimenta negociação/agenda/município, classifica e notifica.
+      // Erros aqui nunca derrubam o webhook — a mensagem já está salva.
+      try {
+        await processarMensagem(msgRecebida.id);
+      } catch (e) {
+        console.error("[zeus-pipeline] erro no webhook:", e);
+      }
+
       // Chama o Cérebro IMEDIATAMENTE se a conversa estiver com IA ativa.
       // Usa dispatchWithDebounce: aguarda 3s para agregar mensagens rápidas antes de responder.
       if (conv.aiActive) {
