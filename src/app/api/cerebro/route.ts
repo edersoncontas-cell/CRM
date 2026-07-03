@@ -5,6 +5,7 @@ import { resumoAcademia } from "@/lib/academia";
 import { MODEL_CHAT } from "@/lib/ai/config";
 import { agoraBrasiliaExtenso } from "@/lib/utils";
 import { TOOL_DEFS, executarFerramenta, rotuloFerramenta } from "@/lib/zeus/cerebro-tools";
+import { zeusReport } from "@/lib/zeus/eventos";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -169,6 +170,7 @@ export async function POST(req: NextRequest) {
           emit({ done: true });
         } catch (e) {
           emit({ erro: String(e) });
+          await zeusReport(e, "loop agêntico do Cérebro (api/cerebro/route.ts)");
         } finally {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
@@ -180,6 +182,7 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
     });
   } catch (e) {
+    await zeusReport(e, "api/cerebro/route.ts (requisição)");
     return new Response(JSON.stringify({ erro: String(e) }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }

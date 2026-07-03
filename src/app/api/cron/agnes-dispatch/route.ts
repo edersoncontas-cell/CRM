@@ -4,6 +4,7 @@ import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 import { montarContextoCliente, montarContextoAcademia, gerarRespostaCerebro } from "@/lib/zeus/cerebro-resposta";
+import { tocarHeartbeat } from "@/lib/zeus/estado";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,6 +16,7 @@ export const maxDuration = 60;
 // (cliente, negociações, visitas, alertas, Academia) do despacho rápido.
 export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  await tocarHeartbeat("agnes-dispatch");
   const settings = await getWaSettings();
   const corte = new Date(Date.now() - 2 * 60 * 1000);
 

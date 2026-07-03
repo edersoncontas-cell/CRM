@@ -13,6 +13,7 @@ import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { registrarAudit } from "@/lib/audit";
 import { enviarPushNotificacao } from "@/lib/push";
 import { baixarAudio } from "@/lib/zapi";
+import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer } from "@/lib/integrations/transcription";
 
 const normalizar = (s: string) =>
@@ -286,6 +287,7 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
       }
     } catch (e) {
       console.error("[zeus-pipeline] análise de IA falhou:", e);
+      await zeusReport(e, "pipeline — análise de IA (lib/zeus/pipeline.ts)");
     }
   }
 
@@ -312,6 +314,7 @@ export async function processarPendentes(limit = 25): Promise<{ processadas: num
     } catch (e) {
       erros++;
       console.error("[zeus-pipeline] erro ao processar mensagem", m.id, e);
+      await zeusReport(e, `pipeline — processarMensagem (mensagem ${m.id})`);
     }
   }
   return { processadas, erros };

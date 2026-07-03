@@ -6,6 +6,7 @@ import {
 } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
 import { processarMensagem } from "@/lib/zeus/pipeline";
+import { zeusReport } from "@/lib/zeus/eventos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -215,6 +216,7 @@ export async function POST(req: NextRequest) {
     console.error("Erro [wa webhook]:", e);
     diag.status = "erro:" + String(e).slice(0, 50);
     await registrarDiag(diag);
+    await zeusReport(e, "webhook zapi (api/webhooks/zapi/route.ts)");
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 

@@ -15,7 +15,8 @@ export type AcaoAudit =
   | "mensagem_enviada"
   | "perfil_atualizado"
   | "modo_fim_de_semana"
-  | "tarefa_criada";
+  | "tarefa_criada"
+  | "zeus_ativo_alterado";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

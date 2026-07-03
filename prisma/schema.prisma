@@ -410,6 +410,20 @@ model WhatsAppSettings {
   updatedAt    DateTime @updatedAt
 }
 
+// ZEUS (Fase 4): centro de comando autônomo. Substitui o zapi-diag como
+// registro de eventos (health/fix/alerta/acao/erro) — feed do painel /zeus.
+model ZeusEvent {
+  id         String   @id @default(cuid())
+  tipo       String   // health | fix | alerta | acao | erro
+  severidade String   @default("media") // baixa | media | alta | critica
+  titulo     String
+  detalhe    String?  // JSON livre
+  resolvido  Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+  @@index([tipo, criadoEm])
+  @@index([resolvido])
+}
+
 // Cérebro agêntico (Fase 3): histórico persistido no servidor. Cada
 // CerebroMessage guarda o(s) content block(s) da Anthropic (texto, tool_use,
 // tool_result) como JSON em `content`, na ordem exata do turno — permite

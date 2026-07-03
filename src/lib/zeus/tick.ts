@@ -1,0 +1,399 @@
+// Coração do ZEUS (Fase 4): sequência determinística de saúde, fila de
+// trabalho, higiene de dados, alertas comerciais, auto-reparo e diagnóstico
+// de erros repetidos. Chamado pelo cron `zeus-tick` (5 em 5 min) e pelo botão
+// "Forçar tick" do painel /zeus — por isso vive numa função só, sem depender
+// do contexto HTTP do cron.
+
+import Anthropic from "@anthropic-ai/sdk";
+import { db } from "@/lib/db";
+import { statusConexao } from "@/lib/zapi";
+import { lerDiag } from "@/lib/zapi-diag";
+import { processarPendentes } from "@/lib/zeus/pipeline";
+import { registrarZeusEvent, type TipoZeusEvent, type SeveridadeZeusEvent } from "@/lib/zeus/eventos";
+import { zeusAtivo, tocarHeartbeat, ultimoHeartbeat, orcamentoIADisponivel, consumirOrcamentoIA } from "@/lib/zeus/estado";
+import { registrarAudit } from "@/lib/audit";
+import { enviarPushNotificacao } from "@/lib/push";
+import { MODEL_TAREFA } from "@/lib/ai/config";
+
+const HORA = 60 * 60 * 1000;
+const DIA = 24 * HORA;
+
+export type ResumoTick = {
+  ok: boolean;
+  pausado: boolean;
+  health: { eventosNovos: number };
+  fila: { processadas: number; erros: number };
+  higiene: {
+    telefonesNormalizados: number;
+    municipiosVinculados: number;
+    aguardandoRespostaCorrigido: number;
+    duplicadosDetectados: number;
+    negociacoesPropostasParaArquivar: number;
+  };
+  alertas: { criados: number };
+  autoReparo: { unconfirmedReconciliados: number; rascunhosDescartados: number };
+  diagnostico: { gerados: number };
+};
+
+// Evita repetir o mesmo evento a cada 5 minutos: só cria um novo se não houver
+// um evento igual (mesmo tipo+título) nos últimos `janelaMin` minutos.
+async function eventoSeNovo(tipo: TipoZeusEvent, titulo: string, janelaMin: number, severidade?: SeveridadeZeusEvent, detalhe?: Record<string, unknown>): Promise<boolean> {
+  const desde = new Date(Date.now() - janelaMin * 60 * 1000);
+  const existe = await db.zeusEvent.findFirst({ where: { tipo, titulo, criadoEm: { gte: desde } }, select: { id: true } });
+  if (existe) return false;
+  await registrarZeusEvent({ tipo, titulo, severidade, detalhe });
+  return true;
+}
+
+// ── 1. Health checks ────────────────────────────────────────────────────────
+async function healthChecks(): Promise<number> {
+  let novos = 0;
+
+  const status = await statusConexao().catch(() => null);
+  if (status?.configurado && !status.conectado) {
+    const criado = await eventoSeNovo("health", "WhatsApp desconectado — escaneie o QR em /conexao", 60, "alta", { erro: status.erro ?? null });
+    if (criado) {
+      novos++;
+      await enviarPushNotificacao({ title: "⚠️ ZEUS", body: "WhatsApp desconectado. Escaneie o QR em /conexao.", url: "/conexao", tag: "zeus-wa-desconectado" }).catch(() => {});
+    }
+  }
+
+  if (status?.conectado) {
+    const diag = await lerDiag().catch(() => null);
+    if (diag && diag.totalChamadas > 0 && diag.ultimaChamada) {
+      const horasParado = (Date.now() - new Date(diag.ultimaChamada).getTime()) / HORA;
+      if (horasParado > 3) {
+        if (await eventoSeNovo("health", `Sem mensagens recebidas há ${Math.floor(horasParado)}h`, 180, "baixa")) novos++;
+      }
+    }
+  }
+
+  // Heartbeats dos crons que deveriam rodar com frequência.
+  const cronsEsperados: { nome: string; minutosEsperados: number }[] = [
+    { nome: "zeus-pipeline", minutosEsperados: 1 },
+    { nome: "agnes-dispatch", minutosEsperados: 1 },
+    { nome: "whatsapp-retry", minutosEsperados: 5 },
+  ];
+  for (const c of cronsEsperados) {
+    const ultimo = await ultimoHeartbeat(c.nome);
+    const minutosParado = ultimo ? (Date.now() - ultimo.getTime()) / 60000 : Infinity;
+    if (minutosParado > c.minutosEsperados * 4) {
+      if (await eventoSeNovo("health", `Cron "${c.nome}" parece parado (sem heartbeat há ${Math.floor(minutosParado)} min)`, 60, "media")) novos++;
+    }
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    if (await eventoSeNovo("health", "ANTHROPIC_API_KEY ausente — CRM operando em modo heurístico/Groq", 1440, "baixa")) novos++;
+  }
+
+  return novos;
+}
+
+// ── 2. Fila de trabalho (fallback do webhook) ───────────────────────────────
+async function filaDeTrabalho(): Promise<{ processadas: number; erros: number }> {
+  return processarPendentes(40);
+}
+
+// ── 3. Higiene de dados ──────────────────────────────────────────────────────
+async function higieneDados() {
+  let telefonesNormalizados = 0;
+  let municipiosVinculados = 0;
+  let aguardandoRespostaCorrigido = 0;
+  let duplicadosDetectados = 0;
+  let negociacoesPropostasParaArquivar = 0;
+
+  // Telefones mal formatados (normaliza para só dígitos).
+  const clientesComTelefone = await db.cliente.findMany({ where: { telefone: { not: null } }, select: { id: true, telefone: true } });
+  for (const c of clientesComTelefone) {
+    const limpo = (c.telefone ?? "").replace(/\D/g, "");
+    if (limpo && limpo !== c.telefone) {
+      await db.cliente.update({ where: { id: c.id }, data: { telefone: limpo } });
+      telefonesNormalizados++;
+    }
+  }
+  if (telefonesNormalizados > 0) {
+    await registrarZeusEvent({ tipo: "fix", titulo: `${telefonesNormalizados} telefone(s) de cliente normalizado(s)`, severidade: "baixa" });
+  }
+
+  // Clientes duplicados por telefone (só detecta e alerta — fusão é manual).
+  const porTelefone = new Map<string, { id: string; nome: string }[]>();
+  for (const c of clientesComTelefone) {
+    const chave = (c.telefone ?? "").replace(/\D/g, "").slice(-8);
+    if (chave.length < 8) continue;
+    const nome = (await db.cliente.findUnique({ where: { id: c.id }, select: { nome: true } }))?.nome ?? "?";
+    porTelefone.set(chave, [...(porTelefone.get(chave) ?? []), { id: c.id, nome }]);
+  }
+  for (const [chave, grupo] of porTelefone) {
+    if (grupo.length < 2) continue;
+    duplicadosDetectados++;
+    await eventoSeNovo(
+      "alerta",
+      `Possíveis clientes duplicados (telefone terminado em ${chave})`,
+      1440,
+      "media",
+      { clientes: grupo }
+    );
+  }
+
+  // Conversas duplicadas (defensivo — @@unique(externalPhone) já previne
+  // duplicatas novas desde a Fase 1; aqui só pega sobras de dados antigos).
+  const gruposConv = await db.whatsAppConversation.groupBy({
+    by: ["externalPhone"],
+    where: { isGroup: false },
+    _count: { id: true },
+    having: { id: { _count: { gt: 1 } } },
+  });
+  if (gruposConv.length > 0) {
+    await eventoSeNovo(
+      "alerta",
+      `${gruposConv.length} telefone(s) com conversas de WhatsApp duplicadas`,
+      1440,
+      "media",
+      { detalhe: "Rode scripts/dedupe-whatsapp-conversations.ts --apply para corrigir." }
+    );
+  }
+
+  // Município detectável nas conversas (heurística por substring — a IA já faz
+  // isso via analisarConversaIA no pipeline; aqui é só uma rede de segurança
+  // para clientes cujas conversas nunca passaram pela análise de IA).
+  const semMunicipio = await db.cliente.findMany({ where: { municipioId: null }, select: { id: true }, take: 30 });
+  if (semMunicipio.length > 0) {
+    const municipios = await db.municipio.findMany({ select: { id: true, nome: true } });
+    for (const c of semMunicipio) {
+      const conv = await db.whatsAppConversation.findFirst({
+        where: { clienteId: c.id },
+        select: { messages: { orderBy: { sentAt: "desc" }, take: 30, select: { body: true } } },
+      });
+      if (!conv) continue;
+      const texto = conv.messages.map((m) => m.body).join(" \n ").toLowerCase();
+      const achados = municipios.filter((m) => m.nome.length >= 4 && new RegExp(`\\b${m.nome.toLowerCase()}\\b`).test(texto));
+      if (achados.length === 1) {
+        await db.cliente.update({ where: { id: c.id }, data: { municipioId: achados[0].id } });
+        municipiosVinculados++;
+      }
+    }
+    if (municipiosVinculados > 0) {
+      await registrarZeusEvent({ tipo: "fix", titulo: `${municipiosVinculados} cliente(s) com município detectado automaticamente`, severidade: "baixa" });
+    }
+  }
+
+  // Negociações abertas sem contato há 30+ dias — sugere arquivar (não move sozinho).
+  const paradas = await db.negociacao.findMany({
+    where: { status: "aberta", OR: [{ ultimoContato: null }, { ultimoContato: { lt: new Date(Date.now() - 30 * DIA) } }] },
+    include: { cliente: { select: { nome: true } } },
+    take: 50,
+  });
+  for (const neg of paradas) {
+    const criado = await eventoSeNovo(
+      "alerta",
+      `Negociação de ${neg.cliente.nome} sem contato há 30+ dias — considere arquivar`,
+      7 * 24 * 60,
+      "baixa",
+      { negociacaoId: neg.id, clienteId: neg.clienteId }
+    );
+    if (criado) negociacoesPropostasParaArquivar++;
+  }
+
+  // Cliente.aguardandoResposta "fantasma" — última mensagem já é minha (OUT).
+  const aguardando = await db.cliente.findMany({ where: { aguardandoResposta: true }, select: { id: true }, take: 100 });
+  for (const c of aguardando) {
+    const conv = await db.whatsAppConversation.findFirst({
+      where: { clienteId: c.id },
+      select: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { direction: true } } },
+      orderBy: { lastMessageAt: "desc" },
+    });
+    const ultima = conv?.messages[0];
+    if (ultima?.direction === "OUT") {
+      await db.cliente.update({ where: { id: c.id }, data: { aguardandoResposta: false } });
+      aguardandoRespostaCorrigido++;
+    }
+  }
+  if (aguardandoRespostaCorrigido > 0) {
+    await registrarZeusEvent({ tipo: "fix", titulo: `${aguardandoRespostaCorrigido} cliente(s) com "aguardando resposta" fantasma corrigido`, severidade: "baixa" });
+  }
+
+  return { telefonesNormalizados, municipiosVinculados, aguardandoRespostaCorrigido, duplicadosDetectados, negociacoesPropostasParaArquivar };
+}
+
+// ── 4. Alertas comerciais (tabela Alerta) ───────────────────────────────────
+async function criarAlertaSeNovo(clienteId: string, tipo: string, mensagem: string, diasDesde: number, severidade: string) {
+  const existente = await db.alerta.findFirst({ where: { clienteId, tipo, resolvido: false } });
+  if (existente) {
+    await db.alerta.update({ where: { id: existente.id }, data: { mensagem, diasDesde, severidade } });
+    return false;
+  }
+  await db.alerta.create({ data: { clienteId, tipo, mensagem, diasDesde, severidade } });
+  return true;
+}
+
+async function alertasComerciais(): Promise<number> {
+  let criados = 0;
+
+  // Cliente esfriando: negociação aberta sem contato há 10+ dias.
+  const esfriando = await db.negociacao.findMany({
+    where: { status: "aberta", ultimoContato: { lt: new Date(Date.now() - 10 * DIA) } },
+    include: { cliente: { select: { nome: true } } },
+    take: 50,
+  });
+  for (const neg of esfriando) {
+    const dias = neg.ultimoContato ? Math.floor((Date.now() - neg.ultimoContato.getTime()) / DIA) : 999;
+    const severidade = dias >= 30 ? "alta" : dias >= 20 ? "media" : "baixa";
+    if (await criarAlertaSeNovo(neg.clienteId, "esfriando", `${neg.cliente.nome} sem contato há ${dias} dias (negociação aberta).`, dias, severidade)) criados++;
+  }
+
+  // Visita amanhã.
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(0, 0, 0, 0);
+  const depoisDeAmanha = new Date(amanha); depoisDeAmanha.setDate(depoisDeAmanha.getDate() + 1);
+  const visitasAmanha = await db.visita.findMany({
+    where: { data: { gte: amanha, lt: depoisDeAmanha } },
+    include: { cliente: { select: { nome: true } } },
+    take: 50,
+  });
+  for (const v of visitasAmanha) {
+    if (await criarAlertaSeNovo(v.clienteId, "visita_amanha", `Visita amanhã com ${v.cliente.nome}${v.observacao ? " — " + v.observacao : ""}.`, 0, "media")) criados++;
+  }
+
+  // Concorrente citado recentemente.
+  const comConcorrente = await db.negociacao.findMany({
+    where: { status: "aberta", concorrenteMencionado: { not: null }, ultimoContato: { gte: new Date(Date.now() - 3 * DIA) } },
+    include: { cliente: { select: { nome: true } } },
+    take: 50,
+  });
+  for (const neg of comConcorrente) {
+    if (await criarAlertaSeNovo(neg.clienteId, "concorrente", `${neg.cliente.nome} mencionou o concorrente ${neg.concorrenteMencionado}.`, 0, "media")) criados++;
+  }
+
+  // Aguardando resposta há mais de 4h.
+  const aguardandoHaTempo = await db.cliente.findMany({
+    where: { aguardandoResposta: true, ultimoContato: { lt: new Date(Date.now() - 4 * HORA) } },
+    select: { id: true, nome: true, ultimoContato: true },
+    take: 50,
+  });
+  for (const c of aguardandoHaTempo) {
+    const horas = c.ultimoContato ? Math.floor((Date.now() - c.ultimoContato.getTime()) / HORA) : 999;
+    if (await criarAlertaSeNovo(c.id, "aguardando_resposta", `${c.nome} aguarda retorno há ${horas}h no WhatsApp.`, Math.floor(horas / 24), horas >= 24 ? "alta" : "media")) criados++;
+  }
+
+  return criados;
+}
+
+// ── 5. Auto-reparo ──────────────────────────────────────────────────────────
+async function autoReparo() {
+  const unconfirmed = await db.whatsAppMessage.updateMany({
+    where: { sendStatus: "UNCONFIRMED", sentAt: { lt: new Date(Date.now() - 10 * 60 * 1000) } },
+    data: { sendStatus: "SENT" },
+  });
+  if (unconfirmed.count > 0) {
+    await registrarZeusEvent({ tipo: "fix", titulo: `${unconfirmed.count} mensagem(ns) UNCONFIRMED reconciliada(s) como enviada(s)`, severidade: "baixa" });
+  }
+
+  // Rascunhos pendentes há 48h+ sem ação do vendedor — provavelmente perderam
+  // o timing; descarta (mesmo efeito do botão "Descartar" em /atendimento).
+  const rascunhos = await db.whatsAppMessage.deleteMany({
+    where: { isDraft: true, draftStatus: "PENDING", sentAt: { lt: new Date(Date.now() - 48 * HORA) } },
+  });
+  if (rascunhos.count > 0) {
+    await registrarZeusEvent({ tipo: "fix", titulo: `${rascunhos.count} rascunho(s) órfão(s) descartado(s) (48h+ sem revisão)`, severidade: "baixa" });
+  }
+
+  return { unconfirmedReconciliados: unconfirmed.count, rascunhosDescartados: rascunhos.count };
+}
+
+// ── 6. Diagnóstico de erros repetidos ───────────────────────────────────────
+function assinaturaErro(titulo: string): string {
+  return titulo.replace(/[0-9a-f]{20,}/gi, "<id>").replace(/\d+/g, "<n>").slice(0, 120);
+}
+
+async function diagnosticarErros(): Promise<number> {
+  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!(await orcamentoIADisponivel())) return 0;
+
+  const erros = await db.zeusEvent.findMany({
+    where: { tipo: "erro", resolvido: false, criadoEm: { gte: new Date(Date.now() - 3 * DIA) } },
+    orderBy: { criadoEm: "desc" },
+    take: 200,
+  });
+  if (!erros.length) return 0;
+
+  const grupos = new Map<string, typeof erros>();
+  for (const e of erros) {
+    const chave = assinaturaErro(e.titulo);
+    grupos.set(chave, [...(grupos.get(chave) ?? []), e]);
+  }
+
+  let gerados = 0;
+  for (const [assinatura, ocorrencias] of grupos) {
+    if (ocorrencias.length < 3) continue;
+    const jaExiste = await db.zeusEvent.findFirst({
+      where: { tipo: "fix", titulo: { contains: assinatura.slice(0, 40) }, criadoEm: { gte: new Date(Date.now() - DIA) } },
+    });
+    if (jaExiste) continue;
+    if (!(await orcamentoIADisponivel())) break;
+
+    try {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const exemplos = ocorrencias.slice(0, 3).map((e) => e.detalhe ?? e.titulo).join("\n---\n");
+      const resp = await anthropic.messages.create({
+        model: MODEL_TAREFA,
+        max_tokens: 400,
+        system: "Você analisa erros de runtime de um CRM Next.js 14 (App Router) + Prisma + Postgres. Aponte, de forma BEM curta (3-5 linhas), o arquivo/módulo provável e a causa provável, para o desenvolvedor colar numa sessão do Claude Code e investigar. Não invente arquivos que não aparecem no contexto.",
+        messages: [{ role: "user", content: `Erro ocorreu ${ocorrencias.length}x nas últimas 72h:\n${exemplos}` }],
+      });
+      await consumirOrcamentoIA();
+      const texto = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+      await registrarZeusEvent({
+        tipo: "fix",
+        severidade: "media",
+        titulo: `Diagnóstico: ${assinatura}`,
+        detalhe: { ocorrencias: ocorrencias.length, diagnostico: texto },
+      });
+      gerados++;
+    } catch (e) {
+      console.error("[zeus-tick] falha ao diagnosticar erro:", e);
+    }
+  }
+  return gerados;
+}
+
+// ── Orquestração ─────────────────────────────────────────────────────────────
+export async function executarZeusTick(): Promise<ResumoTick> {
+  const ativo = await zeusAtivo();
+  if (!ativo) {
+    await tocarHeartbeat("zeus-tick");
+    return {
+      ok: true, pausado: true,
+      health: { eventosNovos: 0 }, fila: { processadas: 0, erros: 0 },
+      higiene: { telefonesNormalizados: 0, municipiosVinculados: 0, aguardandoRespostaCorrigido: 0, duplicadosDetectados: 0, negociacoesPropostasParaArquivar: 0 },
+      alertas: { criados: 0 }, autoReparo: { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }, diagnostico: { gerados: 0 },
+    };
+  }
+
+  const eventosNovos = await healthChecks().catch((e) => { console.error("[zeus-tick] health:", e); return 0; });
+  const fila = await filaDeTrabalho().catch((e) => { console.error("[zeus-tick] fila:", e); return { processadas: 0, erros: 0 }; });
+  const higiene = await higieneDados().catch((e) => {
+    console.error("[zeus-tick] higiene:", e);
+    return { telefonesNormalizados: 0, municipiosVinculados: 0, aguardandoRespostaCorrigido: 0, duplicadosDetectados: 0, negociacoesPropostasParaArquivar: 0 };
+  });
+  const alertasCriados = await alertasComerciais().catch((e) => { console.error("[zeus-tick] alertas:", e); return 0; });
+  const reparo = await autoReparo().catch((e) => { console.error("[zeus-tick] auto-reparo:", e); return { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }; });
+  const diagnosticados = await diagnosticarErros().catch((e) => { console.error("[zeus-tick] diagnóstico:", e); return 0; });
+
+  await tocarHeartbeat("zeus-tick");
+
+  if (higiene.telefonesNormalizados + higiene.municipiosVinculados + higiene.aguardandoRespostaCorrigido > 0) {
+    await registrarAudit({
+      acao: "cliente_atualizado", origem: "zeus",
+      descricao: `ZEUS corrigiu dados automaticamente: ${higiene.telefonesNormalizados} telefone(s), ${higiene.municipiosVinculados} município(s), ${higiene.aguardandoRespostaCorrigido} status de resposta.`,
+    });
+  }
+
+  return {
+    ok: true, pausado: false,
+    health: { eventosNovos },
+    fila,
+    higiene,
+    alertas: { criados: alertasCriados },
+    autoReparo: reparo,
+    diagnostico: { gerados: diagnosticados },
+  };
+}

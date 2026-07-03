@@ -113,7 +113,61 @@
     consolidação de capacidades (mesma lista de ações, uma implementação só), não uma correção de bug; o fluxo
     de voz já tem sua própria UX de plano-e-confirmação, diferente da confirmação conversacional do chat, e
     fica para uma sessão dedicada a essa unificação.
-- ⬜ Fase 4, 5 — pendentes (uma por sessão, nesta ordem).
+- ✅ **Fase 4** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03; mesma branch das Fases 2-3,
+  ainda não mesclada). `tsc`/`lint`/`build` limpos. Testado com Postgres local: seed manual de casos de teste
+  (telefone mal formatado, clientes duplicados, `aguardandoResposta` fantasma, negociação parada 40 dias,
+  mensagem `UNCONFIRMED` antiga, rascunho órfão de 72h, visita amanhã) + `curl` no cron `zeus-tick` confirmando
+  cada correção/alerta/evento; segunda chamada confirmou idempotência (zero eventos/alertas duplicados); testado
+  o kill-switch (`zeus.ativo=off` → tick não faz nada); testado `zeus-diario` (degrada bem sem
+  `ZEUS_WHATSAPP_DESTINO`); testado `global-error.tsx` → `api/zeus/report-erro` → `ZeusEvent`; testadas as
+  server actions do painel (toggle ZEUS ativo, toggle modo auditoria, forçar tick, resolver evento) via uma
+  rota Next.js real (removida ao final), confirmando que `revalidatePath` funciona no contexto de produção.
+  `/security-review` rodado ao final, conforme pedido explicitamente pelo plano para a Fase 4.
+  - **1. Modelo de dados**: `ZeusEvent` (tipo `health|fix|alerta|acao|erro`, severidade, título, detalhe JSON,
+    resolvido) — substitui o rolling-log do `zapi-diag` (que continua existindo só para o diagnóstico específico
+    do webhook em `/conexao`). `Configuracao` ganha as chaves `zeus.ativo` (kill-switch), `heartbeat.<nome>`
+    (um por cron) e `zeus.ia_usada.<data>` (orçamento diário de chamadas de IA "extras" do ZEUS) — tudo em
+    `src/lib/zeus/estado.ts`.
+  - **2. Cron `zeus-tick`** (5 em 5 min, `src/lib/zeus/tick.ts`): health checks (Z-API conectada, webhook sem
+    atividade há 3h+, heartbeat de cron parado, `ANTHROPIC_API_KEY` ausente), fila de trabalho (reusa
+    `processarPendentes` da Fase 2), higiene de dados (telefone normalizado — corrige de verdade; clientes/
+    conversas duplicados e negociações paradas 30+ dias — só detecta e alerta, não funde/arquiva sozinho;
+    município detectável por substring nas mensagens — heurística leve, rede de segurança para o que a IA do
+    pipeline não cobriu; `aguardandoResposta` fantasma — corrige de verdade), alertas comerciais na tabela
+    `Alerta` (hoje órfã — esfriando, visita amanhã, concorrente citado, aguardando resposta 4h+, com dedup por
+    cliente+tipo em vez de recriar a cada tick), auto-reparo (`UNCONFIRMED` 10min+ vira `SENT`, rascunhos
+    órfãos 48h+ descartados — mesmo efeito do botão "Descartar") e diagnóstico de erros repetidos (agrupa
+    `ZeusEvent tipo:erro` por assinatura normalizada, gera 1 diagnóstico de IA por grupo a cada 24h, respeitando
+    o orçamento diário). Cada checagem só recria o evento se não houver um igual numa janela de tempo (evita
+    spam a cada 5 min). Roda a mesma função tanto pelo cron quanto pelo botão "Forçar tick" do painel.
+  - **3. Cron `zeus-diario`** (9h UTC = 6h Brasília): briefing matinal via WhatsApp (visitas do dia, quem
+    aguarda resposta, top 3 negociações por score simples de termômetro+valor+urgência, alertas abertos),
+    composto pela IA quando `ANTHROPIC_API_KEY` existe (senão manda a versão bruta formatada). Sem
+    `ZEUS_WHATSAPP_DESTINO` configurado, não envia nada e só registra um `ZeusEvent` — não quebra o cron.
+  - **4. Painel `/zeus`** (`ZeusPainel.tsx`): status ao vivo (Z-API, IA, heartbeats dos crons, ZEUS
+    ativo/pausado), contadores (mensagens processadas hoje, ações automáticas hoje, correções totais, alertas
+    abertos), controles (pausar/reativar ZEUS, alternar modo auditoria da auto-resposta, forçar tick), feed de
+    `ZeusEvent` (com botão "marcar resolvido") + feed de `AuditLog` (origem zeus), e um bloco de "relatório de
+    bugs" com botão copiar — junta os diagnósticos de IA e os erros ainda sem diagnóstico num texto pronto para
+    colar numa sessão do Claude Code.
+  - **5. Captura de erros**: `zeusReport(err, contexto)` em `src/lib/zeus/eventos.ts`, chamado nos catches do
+    webhook Z-API, do loop agêntico do Cérebro e do pipeline da Fase 2. `src/app/global-error.tsx` (novo, App
+    Router) captura erros de renderização que escapam de qualquer boundary local e reporta via
+    `POST /api/zeus/report-erro` (client component não pode chamar o Prisma direto).
+  - **6. Auto-reparo**: além da reconciliação `UNCONFIRMED`→`SENT` e limpeza de rascunhos órfãos (item 2), o
+    cron `whatsapp-retry` ganhou backoff simples (5min → 15min → 45min por tentativa, em vez de tentar a cada
+    5 min fixo) e heartbeat próprio. **Simplificação deliberada**: a "reconciliação consultando a Z-API"
+    descrita no plano original virou uma regra de tempo (`UNCONFIRMED` velho o suficiente quase certamente foi
+    entregue, conforme o próprio comentário já existente no código desde a Fase 1) — a Z-API não expõe um
+    endpoint de "status por ID de mensagem" na camada `lib/zapi.ts` atual para consultar de verdade.
+  - **7. Orçamento e segurança**: kill-switch `zeus.ativo` (Configuracao) desliga a fila de trabalho, higiene,
+    alertas, auto-reparo e diagnóstico (health checks continuam rodando mesmo pausado, para não perder
+    visibilidade); orçamento diário de chamadas de IA (`ZEUS_ORCAMENTO_IA_DIARIO`, padrão 50) só limita as
+    chamadas "extras" do ZEUS (diagnóstico de bugs, briefing), não o pipeline/Cérebro; toda correção/ação
+    automática do ZEUS é auditada com `origem:"zeus"`.
+  - **Novas envs**: `ZEUS_WHATSAPP_DESTINO` (número do vendedor para o briefing) e `ZEUS_ORCAMENTO_IA_DIARIO`
+    (opcional) — documentadas no `.env.example` e no README.
+- ⬜ Fase 5 — pendente.
 
 ---
 
