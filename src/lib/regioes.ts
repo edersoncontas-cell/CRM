@@ -38,6 +38,34 @@ const MUNICIPIOS_GARANTIDOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Alfredo Chaves", lat: -20.6367, lng: -40.7508 },
 ];
 
+// Agrupamento de municípios em regiões, definido pelo Ederson para direcionar
+// rotas de visita. Municípios que não aparecem em nenhuma lista abaixo ficam
+// sem região atribuída (null) — reportados separadamente para confirmação.
+export const REGIOES_MUNICIPIOS: Record<string, string[]> = {
+  "Caparaó": ["Irupi", "Guaçuí", "Iúna", "Ibitirama", "Divino de São Lourenço", "Dores do Rio Preto"],
+  "Litorânea": ["Anchieta", "Piúma", "Itapemirim", "Marataízes"],
+  "Granito": [
+    "Cachoeiro de Itapemirim", "Castelo", "Mimoso do Sul", "Presidente Kennedy",
+    "Rio Novo do Sul", "Iconha", "Muqui", "Atílio Vivácqua", "Jerônimo Monteiro",
+    "Alegre", "Bom Jesus do Norte", "Vargem Alta",
+  ],
+  "Serrana": [
+    "Domingos Martins", "Marechal Floriano", "Alfredo Chaves", "Venda Nova do Imigrante",
+    "Muniz Freire", "Conceição do Castelo", "Ibatiba", "Brejetuba",
+  ],
+  "Das Santas": ["Santa Maria de Jetibá", "Santa Leopoldina", "Afonso Cláudio", "Itarana", "Itaguaçu"],
+};
+
+// Atribui a região correta a cada município (idempotente). Municípios fora
+// da área ou sem região mapeada mantêm o valor default do schema.
+async function garantirRegioesMunicipios(): Promise<void> {
+  for (const [regiao, nomes] of Object.entries(REGIOES_MUNICIPIOS)) {
+    for (const nome of nomes) {
+      await db.municipio.updateMany({ where: { nome: { equals: nome, mode: "insensitive" } }, data: { regiao } }).catch(() => {});
+    }
+  }
+}
+
 let garantido = false;
 
 export async function garantirRegioes(): Promise<void> {
@@ -96,6 +124,9 @@ export async function garantirRegioes(): Promise<void> {
       WHERE telefone ~ '^(\\+55|55)\\d{10,11}$'
     `);
   } catch {}
+
+  // Atribui a região (Caparaó/Litorânea/Granito/Serrana/Das Santas) a cada município
+  await garantirRegioesMunicipios();
 
   // Vincula município automaticamente para clientes cujo nome contém o nome da cidade
   await vincularMunicipiosPorNome();

@@ -1134,7 +1134,6 @@ export async function buscarProspectosIAAction(
       inseridos++;
     }
 
-    revalidatePath("/roteiro");
     revalidatePath("/clientes");
     return { ok: true, inseridos };
   } catch (e) {
@@ -1145,7 +1144,6 @@ export async function buscarProspectosIAAction(
 
 export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean }> {
   await db.cliente.delete({ where: { id: clienteId, origem: "prospect_ia" } });
-  revalidatePath("/roteiro");
   revalidatePath("/clientes");
   return { ok: true };
 }

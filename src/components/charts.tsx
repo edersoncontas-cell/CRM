@@ -34,6 +34,37 @@ function CustomTooltip({ active, payload, label, dark }: any) {
   );
 }
 
+// Barras horizontais genéricas (usado para municípios/regiões mais e menos visitados).
+export function BarrasHorizontais({
+  data, cor = "#BFDE4D", dark = false,
+}: {
+  data: { nome: string; total: number }[];
+  cor?: string;
+  dark?: boolean;
+}) {
+  const altura = Math.max(160, data.length * 32);
+  return (
+    <ResponsiveContainer width="100%" height={altura}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 24, left: 4, bottom: 4 }}>
+        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: dark ? "#71717a" : "#64748b" }} axisLine={false} tickLine={false} />
+        <YAxis
+          type="category"
+          dataKey="nome"
+          width={140}
+          tick={{ fontSize: 11, fill: dark ? "#d4d4d8" : "#334155" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          content={<CustomTooltip dark={dark} />}
+          cursor={{ fill: dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)" }}
+        />
+        <Bar dataKey="total" radius={[0, 6, 6, 0]} maxBarSize={18} fill={cor} fillOpacity={dark ? 0.85 : 1} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function PipelineChart({
   data,
   dark = false,

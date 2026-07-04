@@ -5,8 +5,10 @@ import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ClienteAcoes } from "@/components/ClienteAcoes";
+import { BuscaClientesInstantanea } from "@/components/BuscaClientesInstantanea";
+import { BarrasHorizontais } from "@/components/charts";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +18,10 @@ const DIAS_ESQUECIDO = 15;
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; q?: string; naoVisitado?: string; visitado?: string };
+  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string };
 }) {
   const filtro = searchParams.municipio;
+  const regiaoFiltro = searchParams.regiao;
   const busca = (searchParams.q ?? "").trim();
   const apenasNaoVisitados = searchParams.naoVisitado === "1";
   const apenasVisitados = searchParams.visitado === "1";
@@ -27,13 +30,19 @@ export default async function ClientesPage({
   const corteEsquecido = new Date();
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes] = await Promise.all([
-    db.cliente.findMany({
+  // Só carrega a lista completa quando o vendedor de fato pediu um recorte
+  // (busca, município, região ou uma das abas) — evita mostrar TODOS os
+  // clientes de cara, uma lista enorme sem filtro nenhum.
+  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados;
+
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas] = await Promise.all([
+    mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
         // ficam só na tela de Roteiro/Prospecção até serem confirmados.
         origem: { not: "prospect_ia" },
         ...(filtro ? { municipioId: filtro } : {}),
+        ...(regiaoFiltro ? { municipio: { regiao: regiaoFiltro } } : {}),
         ...(busca
           ? {
               OR: [
@@ -47,7 +56,7 @@ export default async function ClientesPage({
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
-    }),
+    }) : Promise.resolve([]),
     db.municipio.findMany({
       include: { _count: { select: { clientes: true } } },
       orderBy: { nome: "asc" },
@@ -59,15 +68,40 @@ export default async function ClientesPage({
     db.cliente.count({ where: { visitado: false, origem: { not: "prospect_ia" } } }),
     db.cliente.count({ where: { visitado: true, origem: { not: "prospect_ia" } } }),
     db.cliente.count({ where: { origem: { not: "prospect_ia" } } }),
+    // Município -> quantidade de visitas (para o gráfico de mais/menos visitados)
+    db.municipio.findMany({
+      where: { foraDeArea: false },
+      select: { nome: true, clientes: { select: { visitas: { select: { id: true } } } } },
+    }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
+
+  // Regiões: agrupa municípios (Caparaó, Litorânea, Granito, Serrana, Das Santas
+  // + "Sul do Espírito Santo" para os que ainda não têm região definida)
+  const regioesMap = new Map<string, number>();
+  for (const m of municipios) {
+    if (m.foraDeArea) continue;
+    regioesMap.set(m.regiao, (regioesMap.get(m.regiao) ?? 0) + m._count.clientes);
+  }
+  const regioes = Array.from(regioesMap.entries())
+    .map(([nome, total]) => ({ nome, total }))
+    .sort((a, b) => b.total - a.total);
+
+  const visitasPorMunicipio = municipiosComVisitas
+    .map((m) => ({ nome: m.nome, total: m.clientes.reduce((s, c) => s + c.visitas.length, 0) }))
+    .filter((m) => m.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const maisVisitados = visitasPorMunicipio.slice(0, 6);
+  const menosVisitados = visitasPorMunicipio.slice(-6).reverse();
 
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
       <PageHeader
         titulo="Clientes"
-        subtitulo={`${clientes.length} cliente(s)${filtro ? " neste município" : ""}${busca ? ` para "${busca}"` : ""}`}
+        subtitulo={mostrarLista
+          ? `${clientes.length} cliente(s)${filtro ? " neste município" : ""}${regiaoFiltro ? ` na região ${regiaoFiltro}` : ""}${busca ? ` para "${busca}"` : ""}`
+          : `${totalClientes} cliente(s) cadastrado(s) no total`}
         acao={
           <div className="flex gap-2">
             <BotaoAtualizar />
@@ -112,73 +146,93 @@ export default async function ClientesPage({
         </Link>
       </div>
 
-      {/* Busca */}
-      <form method="GET" className="mb-5 flex gap-2">
-        {filtro && <input type="hidden" name="municipio" value={filtro} />}
-        {apenasNaoVisitados && <input type="hidden" name="naoVisitado" value="1" />}
-        {apenasVisitados && <input type="hidden" name="visitado" value="1" />}
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            name="q"
-            defaultValue={busca}
-            placeholder="Buscar cliente por nome ou telefone..."
-            className="w-full rounded-lg border py-2 !pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]" style={{ background: "#18181b", borderColor: "#27272a", color: "#fafafa" }}
-          />
-        </div>
-        <button className="rounded-lg px-4 py-2 text-sm font-semibold text-black transition" style={{ background: "#BFDE4D" }}>
-          Buscar
-        </button>
-        {busca && (
-          <Link
-            href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-            className="flex items-center rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50"
-          >
-            Limpar
-          </Link>
-        )}
-      </form>
+      {/* Busca — filtra automaticamente enquanto digita */}
+      <BuscaClientesInstantanea valorInicial={busca} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 lg:items-start">
-        {/* Mapeamento por município */}
-        <div className="rounded-2xl p-4 lg:col-span-1 lg:sticky lg:top-4 lg:self-start" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
-          <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
-            <MapPin size={18} className="text-brand-600" /> Mapeamento
+        {/* Mapeamento + Regiões — depois da lista no mobile, ao lado no desktop */}
+        <div className="order-2 space-y-4 lg:order-1 lg:col-span-1 lg:sticky lg:top-4 lg:self-start">
+          <div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+            <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
+              <MapPin size={18} className="text-brand-600" /> Mapeamento
+            </div>
+            <Link
+              href="/clientes"
+              className={`mb-2 block rounded px-2 py-1 text-sm ${!filtro && !regiaoFiltro ? "bg-[#BFDE4D]/20 font-medium text-[#BFDE4D]" : "text-zinc-400 hover:bg-zinc-800"}`}
+            >
+              Todos os municípios
+            </Link>
+            <div className="max-h-[40vh] space-y-1 overflow-y-auto pr-1 lg:max-h-[40vh]">
+              {municipios.map((m) => {
+                const intensidade = m._count.clientes / maxClientes;
+                return (
+                  <Link
+                    key={m.id}
+                    href={`/clientes?municipio=${m.id}`}
+                    className={`flex items-center justify-between rounded px-2 py-1 text-sm ${filtro === m.id ? "ring-2 ring-brand-300" : ""}`}
+                    style={{
+                      backgroundColor: `rgba(26, 99, 245, ${0.06 + intensidade * 0.65})`,
+                      color: intensidade > 0.5 ? "white" : undefined,
+                    }}
+                  >
+                    <span className="truncate text-sm">{m.nome}</span>
+                    <span className="ml-2 text-xs font-bold">{m._count.clientes}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <Link
-            href="/clientes"
-            className={`mb-2 block rounded px-2 py-1 text-sm ${!filtro ? "bg-[#BFDE4D]/20 font-medium text-[#BFDE4D]" : "text-zinc-400 hover:bg-zinc-800"}`}
-          >
-            Todos os municípios
-          </Link>
-          <div className="max-h-[40vh] space-y-1 overflow-y-auto pr-1 lg:max-h-[60vh]">
-            {municipios.map((m) => {
-              const intensidade = m._count.clientes / maxClientes;
-              return (
+
+          {/* Regiões (rotas de visita) */}
+          <div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+            <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
+              <Compass size={18} className="text-brand-600" /> Regiões
+            </div>
+            <div className="space-y-1">
+              {regioes.map((r) => (
                 <Link
-                  key={m.id}
-                  href={`/clientes?municipio=${m.id}`}
-                  className={`flex items-center justify-between rounded px-2 py-1 text-sm ${filtro === m.id ? "ring-2 ring-brand-300" : ""}`}
-                  style={{
-                    backgroundColor: `rgba(26, 99, 245, ${0.06 + intensidade * 0.65})`,
-                    color: intensidade > 0.5 ? "white" : undefined,
-                  }}
+                  key={r.nome}
+                  href={`/clientes?regiao=${encodeURIComponent(r.nome)}`}
+                  className={`flex items-center justify-between rounded px-2 py-1 text-sm ${regiaoFiltro === r.nome ? "bg-[#BFDE4D]/20 font-medium text-[#BFDE4D]" : "text-zinc-400 hover:bg-zinc-800"}`}
                 >
-                  <span className="truncate text-sm">{m.nome}</span>
-                  <span className="ml-2 text-xs font-bold">{m._count.clientes}</span>
+                  <span className="truncate">{r.nome}</span>
+                  <span className="ml-2 text-xs font-bold">{r.total}</span>
                 </Link>
-              );
-            })}
+              ))}
+            </div>
           </div>
+
+          {/* Municípios mais/menos visitados */}
+          {visitasPorMunicipio.length > 0 && (
+            <div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a", color: "#fafafa" }}>
+              <div className="mb-3 flex items-center gap-2 font-semibold text-zinc-100">
+                <BarChart3 size={18} className="text-brand-600" /> Mais visitados
+              </div>
+              <BarrasHorizontais data={maisVisitados} cor="#4ade80" dark />
+              {menosVisitados.length > 0 && (
+                <>
+                  <div className="mb-3 mt-5 flex items-center gap-2 font-semibold text-zinc-100">
+                    <BarChart3 size={18} className="text-brand-600" /> Menos visitados
+                  </div>
+                  <BarrasHorizontais data={menosVisitados} cor="#f87171" dark />
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Lista de clientes em ordem alfabética */}
-        <div className="lg:col-span-3">
-          {clientes.length === 0 ? (
+        <div className="order-1 lg:order-2 lg:col-span-3">
+          {!mostrarLista ? (
             <Card>
               <p className="text-center text-sm text-zinc-500">
-                Nenhum cliente ainda. Cadastre o primeiro! 🚜
+                Busque por nome/telefone, ou selecione um município/região ao lado para ver os clientes. 🔍
+              </p>
+            </Card>
+          ) : clientes.length === 0 ? (
+            <Card>
+              <p className="text-center text-sm text-zinc-500">
+                Nenhum cliente encontrado.
               </p>
             </Card>
           ) : (
