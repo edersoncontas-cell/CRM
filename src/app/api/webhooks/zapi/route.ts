@@ -5,6 +5,8 @@ import {
   acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, atualizarStatusEntrega, curarZapiId,
 } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
+import { processarMensagem } from "@/lib/zeus/pipeline";
+import { zeusReport } from "@/lib/zeus/eventos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -162,17 +164,31 @@ export async function POST(req: NextRequest) {
       diag.status = "enviada";
     } else {
       // ── Ramo recebido ──
+      // A Z-API pode reentregar o mesmo evento (retry de webhook lento) — sem
+      // esta checagem, a mensagem duplicava e o pipeline do ZEUS reprocessava
+      // a mesma conversa duas vezes (negociação, push, auditoria repetidos).
+      if (await existeZapiId(zapiMessageId)) { diag.status = "duplicado"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
       const { conv } = await acharOuCriarConversa({
         phone: telefone, lid: tampa, isGroup,
         contactName: nomeRecebido,
         groupName: isGroup ? nomeRecebido : null,
         photoUrl: foto,
       });
-      await inserirMensagem(conv.id, {
+      const msgRecebida = await inserirMensagem(conv.id, {
         direction: "IN", body: c.text, senderName: isGroup ? nomeRecebido : null,
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
         zapiMessageId,
       });
+
+      // Pipeline autônomo do ZEUS (Fase 2): vincula/cria cliente, analisa com
+      // IA, alimenta negociação/agenda/município, classifica e notifica.
+      // Erros aqui nunca derrubam o webhook — a mensagem já está salva.
+      try {
+        await processarMensagem(msgRecebida.id);
+      } catch (e) {
+        console.error("[zeus-pipeline] erro no webhook:", e);
+      }
+
       // Chama o Cérebro IMEDIATAMENTE se a conversa estiver com IA ativa.
       // Usa dispatchWithDebounce: aguarda 3s para agregar mensagens rápidas antes de responder.
       if (conv.aiActive) {
@@ -183,9 +199,8 @@ export async function POST(req: NextRequest) {
         );
         // Dispara o Cérebro de forma assíncrona após 3s de debounce
         // Usa setTimeout para não bloquear o webhook (responde ao Z-API imediatamente)
-        const baseUrl = process.env.NEXTAUTH_URL ?? process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : "http://localhost:3000";
+        const baseUrl = process.env.NEXTAUTH_URL
+          ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
         const cronSecret = process.env.CRON_SECRET ?? "";
         // Dispara sem await — o webhook responde OK imediatamente, Cérebro processa em background
         fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {
@@ -200,6 +215,7 @@ export async function POST(req: NextRequest) {
     console.error("Erro [wa webhook]:", e);
     diag.status = "erro:" + String(e).slice(0, 50);
     await registrarDiag(diag);
+    await zeusReport(e, "webhook zapi (api/webhooks/zapi/route.ts)");
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 

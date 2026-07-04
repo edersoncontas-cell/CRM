@@ -4,7 +4,11 @@ import * as zapi from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 
-export default async function AtendimentoPage() {
+export default async function AtendimentoPage({
+  searchParams,
+}: {
+  searchParams: { conversa?: string };
+}) {
   const conversas = await db.whatsAppConversation.findMany({
     orderBy: { lastMessageAt: "desc" },
     take: 300,
@@ -30,5 +34,5 @@ export default async function AtendimentoPage() {
     };
   });
 
-  return <AtendimentoClient conversas={lista} zapiAtiva={zapi.isEnabled()} />;
+  return <AtendimentoClient conversas={lista} zapiAtiva={zapi.isEnabled()} convInicial={searchParams.conversa ?? null} />;
 }

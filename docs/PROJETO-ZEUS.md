@@ -26,7 +26,162 @@
     (`actions.ts`) selecionava um campo `mensagens` que não existe no schema (o campo real é `messages`) —
     o "Gerar resumo pelo Cérebro" quebrava com erro sempre que o cliente tinha conversas de WhatsApp
     vinculadas (o caso mais comum). Corrigido junto com a Fase 1E.
-- ⬜ Fase 2, 3, 4, 5 — pendentes (uma por sessão, nesta ordem).
+- ✅ **Fase 2** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03). Testada conforme a Fase 6
+  (`tsc`/`lint`/`build`, Postgres local, simulação de webhook via `curl` e checagem de autorização dos crons).
+  - **1. Pipeline automático** (`src/lib/zeus/pipeline.ts`, novo): chamado pelo webhook logo após salvar cada
+    mensagem recebida (`IN`, não-grupo) e, como fallback, pelo novo cron `api/cron/zeus-pipeline` (a cada
+    minuto, via campo novo `WhatsAppMessage.processedAt`). Faz tudo que o `inbox.ts` legado fazia — e que
+    ninguém mais chamava — só que no sistema novo: vincula/cria `Cliente` por telefone, transcreve áudio
+    pendente (fallback; o webhook já transcreve em tempo real), roda `analisarConversaIA`, alimenta
+    `Negociacao` (com ajuste de `termometro` pelo sentimento a cada mensagem, não só na criação), registra
+    `Visita` detectada, vincula `Municipio`, atualiza `resumoTexto` incrementalmente, classifica a conversa
+    (`classificarConversaIA`, uma vez até o vendedor confirmar/mudar em `/atendimento`) e audita cada ação
+    automática no `AuditLog` com `origem:"zeus"`.
+  - **2. Push notification com deep-link**: o pipeline notifica o vendedor a cada mensagem 1:1 recebida com
+    `url:"/atendimento?conversa=ID"`. Antes desta fase o webhook novo **não enviava push nenhum** (só o
+    `inbox.ts` morto fazia isso) — bug real corrigido. O link `/atendimento?conversa=ID` já existia em
+    `clientes/[id]` mas não tinha efeito nenhum (a tela nunca lia o parâmetro); agora `AtendimentoClient`
+    recebe `convInicial` da página e abre a conversa certa direto.
+  - **3. Auto-resposta com contexto único**: extraído `src/lib/zeus/cerebro-resposta.ts` com o contexto rico
+    (cliente completo, negociações abertas, visitas, alertas, Academia de Vendas) que só o despacho rápido
+    (debounce de 1s) tinha. O cron de fallback `agnes-dispatch` (debounce de 2min) usava um contexto mais
+    pobre — agora os dois compartilham a mesma função, sem duplicação.
+  - **4. Aposentadoria do legado (parcial e deliberada)**: página `/resumos` reescrita para ler
+    `WhatsAppConversation`/`WhatsAppMessage` em vez do relacionamento morto `Cliente.conversas` (corrige o bug
+    "página sempre vazia" documentado na Fase 1); `enviarResposta` (usada por "Agendar visita") passou a
+    gravar na conversa real de `/atendimento` em vez de uma tabela que o cliente nunca vê nas respostas;
+    `aprenderMeuEstilo` passou a aprender das mensagens `WhatsAppMessage` (`OUT`, excluindo as do próprio
+    Cérebro) em vez de `Conversa`; `importarHistoricoZapi` (morta, sem nenhuma chamada — o import real de
+    `/conexao` já usa `api/whatsapp/import-history`) foi removida; `api/zapi/qr` e `api/zapi/status` passaram
+    a usar `lib/zapi.ts`; deletados `lib/integrations/inbox.ts`, `lib/integrations/zapi.ts` e
+    `lib/integrations/whatsapp.ts` (Meta Cloud API — adaptador morto, nenhum webhook o consumia).
+    **Decisão consciente de escopo**: `/conversas` (colar conversa + `analisarConversaAction`) continua
+    gravando em `Conversa`/`AnaliseIA` — é uma ferramenta de análise ad hoc (texto colado, sem telefone
+    obrigatório), semanticamente diferente de uma thread real de WhatsApp; forçá-la no formato
+    `WhatsAppConversation` exigiria inventar conversas sintéticas e poluiria o inbox de `/atendimento`. Os
+    modelos `Conversa`/`AnaliseIA` continuam no schema (a própria Fase 2 já previa isso: "numa migração
+    posterior"), então nada quebra.
+  - **Bug adicional encontrado e corrigido** (fora da auditoria original): o ramo "recebido" do webhook
+    (`api/webhooks/zapi/route.ts`) não checava `existeZapiId` antes de inserir — só o ramo `fromMe` tinha essa
+    proteção. Um reenvio de webhook da Z-API (comum quando a resposta demora) duplicava a mensagem recebida e,
+    com o pipeline novo, reprocessava a mesma conversa duas vezes (negociação, push e auditoria em dobro).
+    Corrigido com a mesma checagem usada no ramo `fromMe`.
+  - **Adiado deliberadamente**: cache de prompt (Anthropic `cache_control`) nas extrações do pipeline — a
+    função `llmTexto` em `lib/ai/index.ts` é compartilhada por dezenas de funcionalidades; mexer nela agora
+    é uma otimização de custo/latência, não uma correção funcional, e fica para uma sessão dedicada de
+    performance. Script one-shot de migração de dados úteis de `Conversa` → `WhatsAppMessage` também não foi
+    escrito/rodado nesta sessão (nenhum acesso ao Postgres de produção a partir daqui) — ver nota acima sobre
+    por que isso deixou de ser bloqueante.
+- ✅ **Fase 3** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03; mesma branch da Fase 2, ainda
+  não mesclada). `tsc`/`lint`/`build` limpos; testada com Postgres local — não foi possível exercitar o loop
+  agêntico contra a API real da Anthropic nesta sessão (sem `ANTHROPIC_API_KEY` disponível no ambiente), então
+  cada executor de ferramenta foi testado individualmente através de uma rota Next.js real (leitura e escrita,
+  incluindo o fluxo de confirmação de `excluir_negociacao`/`excluir_cliente`), removida ao final dos testes.
+  - **1-2. Ferramentas** (`src/lib/zeus/cerebro-tools.ts`, novo): 8 tools de leitura (`buscar_cliente`,
+    `detalhes_cliente`, `listar_negociacoes`, `agenda`, `buscar_maquina`, `estoque_usadas`, `metricas_funil`,
+    `conversas_aguardando`) e 11 de escrita, reusando as server actions existentes de `actions.ts`
+    (`criarCliente`, `atualizarCliente`, `atualizarResumoCliente`, `criarNegociacao`, `moverNegociacao`,
+    `marcarGanha`, `marcarPerdida`, `criarTarefa`, `adicionarVisita`). `enviar_resposta` NÃO envia direto —
+    cria um rascunho (`isDraft:true`) na fila de `/atendimento`, mesmo padrão do auto-responder. `excluir_cliente`
+    e `excluir_negociacao` são destrutivas: sem `confirmar:true` devolvem `requires_confirmation` com uma
+    mensagem para o modelo repassar ao vendedor — só executam de fato depois da confirmação explícita no chat.
+    Toda escrita grava no `AuditLog` com `origem:"cerebro"` (testado e conferido).
+  - **3. Loop agêntico** (`api/cerebro/route.ts`, reescrito): antes só fazia uma chamada de streaming e
+    devolvia texto; agora processa `tool_use` em rodadas (até 8 por pergunta), executa a ferramenta, devolve
+    `tool_result` e continua o stream, até o modelo parar de pedir ferramentas. Novos eventos SSE `tool`
+    (`{name,status,label}`, para o front mostrar "🔧 Consultando cliente…" em tempo real) e `confirm`
+    (mensagem de confirmação de ação destrutiva).
+  - **4. System prompt honesto**: removida a promessa falsa de "acesso total" sem ferramenta nenhuma por trás;
+    agora lista exatamente as tools disponíveis, inclui data/hora de Brasília (`agoraBrasiliaExtenso`), o
+    `EstiloDeFala` aprendido e o resumo da Academia — igual ao que o system prompt antigo dizia ter mas não tinha.
+  - **5. Persistência** (`CerebroSession`/`CerebroMessage`, novo no schema): o histórico deixou de viver só no
+    `useState` do navegador (perdido no reload, reenviado pelo cliente sem validação a cada request). Cada
+    turno grava os content blocks da Anthropic (texto/tool_use/tool_result) em `CerebroMessage.content`
+    (JSON), na ordem exata — o servidor reconstrói o array `messages` a partir do banco a cada pergunta nova.
+    Rota nova `api/cerebro/sessao`: `GET` carrega a última sessão (cria uma se não houver nenhuma) já filtrada
+    para exibição (some com os turnos que são só `tool_result` interno); `POST` cria uma sessão nova ("Nova
+    conversa"). Anexos de imagem NÃO são persistidos em base64 (evita inchar o Postgres para sempre) — vira um
+    texto-placeholder (`[Anexo enviado: nome.jpg]`) no histórico salvo, mas a imagem real ainda é enviada à IA
+    no turno em que foi anexada.
+  - **`CerebroChat.tsx`**: carrega a sessão ao abrir, botão "Nova conversa", mostra os rótulos de ferramenta em
+    tempo real (`🔧 Consultando…`) durante o "pensando", e um card de confirmação com botões "Sim, confirmar"/
+    "Cancelar" quando uma ação destrutiva pede aval — clicar em confirmar só manda a frase de confirmação como
+    próxima mensagem (o modelo, instruído no system prompt, é quem decide chamar a tool de novo com
+    `confirmar:true`; não há um protocolo especial de retomada de tool_use fora do chat).
+  - **6. AssistenteIA (adiado deliberadamente)**: `interpretarComando`/`executarPlano` (comando de voz rápido)
+    continuam exatamente como estavam — não foram unificados com as tools do Cérebro nesta sessão. É uma
+    consolidação de capacidades (mesma lista de ações, uma implementação só), não uma correção de bug; o fluxo
+    de voz já tem sua própria UX de plano-e-confirmação, diferente da confirmação conversacional do chat, e
+    fica para uma sessão dedicada a essa unificação.
+- ✅ **Fase 4** — concluída em `claude/projeto-zeus-fase-2-8vxxpr` (2026-07-03; mesma branch das Fases 2-3,
+  ainda não mesclada). `tsc`/`lint`/`build` limpos. Testado com Postgres local: seed manual de casos de teste
+  (telefone mal formatado, clientes duplicados, `aguardandoResposta` fantasma, negociação parada 40 dias,
+  mensagem `UNCONFIRMED` antiga, rascunho órfão de 72h, visita amanhã) + `curl` no cron `zeus-tick` confirmando
+  cada correção/alerta/evento; segunda chamada confirmou idempotência (zero eventos/alertas duplicados); testado
+  o kill-switch (`zeus.ativo=off` → tick não faz nada); testado `zeus-diario` (degrada bem sem
+  `ZEUS_WHATSAPP_DESTINO`); testado `global-error.tsx` → `api/zeus/report-erro` → `ZeusEvent`; testadas as
+  server actions do painel (toggle ZEUS ativo, toggle modo auditoria, forçar tick, resolver evento) via uma
+  rota Next.js real (removida ao final), confirmando que `revalidatePath` funciona no contexto de produção.
+  `/security-review` rodado ao final, conforme pedido explicitamente pelo plano para a Fase 4 — achou e já
+  corrigiu **1 vulnerabilidade real (XSS armazenado)**: `CerebroChat.tsx` renderizava a resposta do Cérebro via
+  `dangerouslySetInnerHTML` sem nunca escapar `&lt;`/`&gt;`/`&amp;` antes das substituições de markdown. O sink
+  já existia antes desta sessão, mas as Fases 2-3 desta sessão (`lib/zeus/pipeline.ts` vinculando automaticamente
+  qualquer remetente de WhatsApp a um `Cliente`, sem revisão humana, e a tool `detalhes_cliente` do Cérebro
+  expondo o corpo bruto dessas mensagens ao modelo) abriram o primeiro caminho de um remetente externo não
+  autenticado até esse sink — um contato mandando `&lt;img src=x onerror=...&gt;` no WhatsApp podia rodar
+  JavaScript na sessão autenticada do Ederson se ele pedisse ao Cérebro para citar a mensagem. Corrigido
+  escapando o texto ANTES das substituições de markdown em `renderMarkdown()`. Outros achados do scan
+  (SSRF via `mediaUrl` do webhook, rotas sem `APP_PASSWORD` configurado) ficaram abaixo do limiar de confiança
+  exigido — dependem de configurações que já são escolhas conscientes de segurança documentadas fora do
+  escopo desta sessão (token opcional da Z-API, senha opcional do app), não bugs introduzidos aqui. Também
+  corrigido de brinde um bug de precedência de operador (não é falha de segurança) em
+  `api/webhooks/zapi/route.ts`: `A ?? B ? X : Y` calculava `(A ?? B) ? X : Y` em vez de `A ?? (B ? X : Y)` —
+  com `NEXTAUTH_URL` definido mas `VERCEL_URL` não, o despacho do Cérebro tentava `https://undefined`.
+  - **1. Modelo de dados**: `ZeusEvent` (tipo `health|fix|alerta|acao|erro`, severidade, título, detalhe JSON,
+    resolvido) — substitui o rolling-log do `zapi-diag` (que continua existindo só para o diagnóstico específico
+    do webhook em `/conexao`). `Configuracao` ganha as chaves `zeus.ativo` (kill-switch), `heartbeat.<nome>`
+    (um por cron) e `zeus.ia_usada.<data>` (orçamento diário de chamadas de IA "extras" do ZEUS) — tudo em
+    `src/lib/zeus/estado.ts`.
+  - **2. Cron `zeus-tick`** (5 em 5 min, `src/lib/zeus/tick.ts`): health checks (Z-API conectada, webhook sem
+    atividade há 3h+, heartbeat de cron parado, `ANTHROPIC_API_KEY` ausente), fila de trabalho (reusa
+    `processarPendentes` da Fase 2), higiene de dados (telefone normalizado — corrige de verdade; clientes/
+    conversas duplicados e negociações paradas 30+ dias — só detecta e alerta, não funde/arquiva sozinho;
+    município detectável por substring nas mensagens — heurística leve, rede de segurança para o que a IA do
+    pipeline não cobriu; `aguardandoResposta` fantasma — corrige de verdade), alertas comerciais na tabela
+    `Alerta` (hoje órfã — esfriando, visita amanhã, concorrente citado, aguardando resposta 4h+, com dedup por
+    cliente+tipo em vez de recriar a cada tick), auto-reparo (`UNCONFIRMED` 10min+ vira `SENT`, rascunhos
+    órfãos 48h+ descartados — mesmo efeito do botão "Descartar") e diagnóstico de erros repetidos (agrupa
+    `ZeusEvent tipo:erro` por assinatura normalizada, gera 1 diagnóstico de IA por grupo a cada 24h, respeitando
+    o orçamento diário). Cada checagem só recria o evento se não houver um igual numa janela de tempo (evita
+    spam a cada 5 min). Roda a mesma função tanto pelo cron quanto pelo botão "Forçar tick" do painel.
+  - **3. Cron `zeus-diario`** (9h UTC = 6h Brasília): briefing matinal via WhatsApp (visitas do dia, quem
+    aguarda resposta, top 3 negociações por score simples de termômetro+valor+urgência, alertas abertos),
+    composto pela IA quando `ANTHROPIC_API_KEY` existe (senão manda a versão bruta formatada). Sem
+    `ZEUS_WHATSAPP_DESTINO` configurado, não envia nada e só registra um `ZeusEvent` — não quebra o cron.
+  - **4. Painel `/zeus`** (`ZeusPainel.tsx`): status ao vivo (Z-API, IA, heartbeats dos crons, ZEUS
+    ativo/pausado), contadores (mensagens processadas hoje, ações automáticas hoje, correções totais, alertas
+    abertos), controles (pausar/reativar ZEUS, alternar modo auditoria da auto-resposta, forçar tick), feed de
+    `ZeusEvent` (com botão "marcar resolvido") + feed de `AuditLog` (origem zeus), e um bloco de "relatório de
+    bugs" com botão copiar — junta os diagnósticos de IA e os erros ainda sem diagnóstico num texto pronto para
+    colar numa sessão do Claude Code.
+  - **5. Captura de erros**: `zeusReport(err, contexto)` em `src/lib/zeus/eventos.ts`, chamado nos catches do
+    webhook Z-API, do loop agêntico do Cérebro e do pipeline da Fase 2. `src/app/global-error.tsx` (novo, App
+    Router) captura erros de renderização que escapam de qualquer boundary local e reporta via
+    `POST /api/zeus/report-erro` (client component não pode chamar o Prisma direto).
+  - **6. Auto-reparo**: além da reconciliação `UNCONFIRMED`→`SENT` e limpeza de rascunhos órfãos (item 2), o
+    cron `whatsapp-retry` ganhou backoff simples (5min → 15min → 45min por tentativa, em vez de tentar a cada
+    5 min fixo) e heartbeat próprio. **Simplificação deliberada**: a "reconciliação consultando a Z-API"
+    descrita no plano original virou uma regra de tempo (`UNCONFIRMED` velho o suficiente quase certamente foi
+    entregue, conforme o próprio comentário já existente no código desde a Fase 1) — a Z-API não expõe um
+    endpoint de "status por ID de mensagem" na camada `lib/zapi.ts` atual para consultar de verdade.
+  - **7. Orçamento e segurança**: kill-switch `zeus.ativo` (Configuracao) desliga a fila de trabalho, higiene,
+    alertas, auto-reparo e diagnóstico (health checks continuam rodando mesmo pausado, para não perder
+    visibilidade); orçamento diário de chamadas de IA (`ZEUS_ORCAMENTO_IA_DIARIO`, padrão 50) só limita as
+    chamadas "extras" do ZEUS (diagnóstico de bugs, briefing), não o pipeline/Cérebro; toda correção/ação
+    automática do ZEUS é auditada com `origem:"zeus"`.
+  - **Novas envs**: `ZEUS_WHATSAPP_DESTINO` (número do vendedor para o briefing) e `ZEUS_ORCAMENTO_IA_DIARIO`
+    (opcional) — documentadas no `.env.example` e no README.
+- ⬜ Fase 5 — pendente.
 
 ---
 

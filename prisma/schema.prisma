@@ -391,10 +391,12 @@ model WhatsAppMessage {
   retryCount           Int       @default(0)
   lastRetryAt          DateTime?
   lastSendError        String?
+  processedAt          DateTime?
   conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, sentAt])
   @@index([zapiMessageId])
   @@index([sendStatus])
+  @@index([processedAt])
 }
 
 model WhatsAppSettings {
@@ -406,4 +408,41 @@ model WhatsAppSettings {
   isActive     Boolean @default(false)
   auditMode    Boolean @default(true)
   updatedAt    DateTime @updatedAt
+}
+
+// ZEUS (Fase 4): centro de comando autônomo. Substitui o zapi-diag como
+// registro de eventos (health/fix/alerta/acao/erro) — feed do painel /zeus.
+model ZeusEvent {
+  id         String   @id @default(cuid())
+  tipo       String   // health | fix | alerta | acao | erro
+  severidade String   @default("media") // baixa | media | alta | critica
+  titulo     String
+  detalhe    String?  // JSON livre
+  resolvido  Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+  @@index([tipo, criadoEm])
+  @@index([resolvido])
+}
+
+// Cérebro agêntico (Fase 3): histórico persistido no servidor. Cada
+// CerebroMessage guarda o(s) content block(s) da Anthropic (texto, tool_use,
+// tool_result) como JSON em `content`, na ordem exata do turno — permite
+// reconstruir o array `messages` da API a cada nova pergunta sem depender do
+// cliente reenviar o histórico (frágil e sem validação).
+model CerebroSession {
+  id         String          @id @default(cuid())
+  titulo     String?
+  criadoEm   DateTime        @default(now())
+  atualizadoEm DateTime      @updatedAt
+  mensagens  CerebroMessage[]
+}
+
+model CerebroMessage {
+  id         String   @id @default(cuid())
+  session    CerebroSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  role       String   // user | assistant
+  content    String   // JSON: string simples ou array de content blocks da Anthropic
+  criadoEm   DateTime @default(now())
+  @@index([sessionId, criadoEm])
 }

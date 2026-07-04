@@ -7,10 +7,11 @@ import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnic
 import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
-import { vincularMunicipio, acharClientePorTelefone } from "./integrations/inbox";
+import { vincularMunicipio } from "./zeus/pipeline";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
-import * as zapi from "./integrations/zapi";
+import * as zapi from "./zapi";
+import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { registrarAudit } from "./audit";
 import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
@@ -224,15 +225,15 @@ export async function definirModoFimDeSemana(
 // Aprende o estilo de fala do Ederson a partir das mensagens que ele já enviou
 // e salva no banco para a IA imitar nas respostas.
 export async function aprenderMeuEstilo(): Promise<{ ok: boolean }> {
-  const minhas = await db.conversa.findMany({
-    where: { remetente: "vendedor", tipo: "texto" },
-    orderBy: { criadoEm: "desc" },
+  const minhas = await db.whatsAppMessage.findMany({
+    where: { direction: "OUT", isDraft: false, operatorDisplayName: { not: "Cérebro" } },
+    orderBy: { sentAt: "desc" },
     take: 40,
-    select: { conteudo: true },
+    select: { body: true },
   });
   if (minhas.length === 0) return { ok: false };
 
-  const guia = await aprenderTomIA(minhas.map((m) => m.conteudo));
+  const guia = await aprenderTomIA(minhas.map((m) => m.body));
   const existente = await db.estiloDeFala.findFirst();
   if (existente) {
     await db.estiloDeFala.update({ where: { id: existente.id }, data: { guia } });
@@ -243,7 +244,9 @@ export async function aprenderMeuEstilo(): Promise<{ ok: boolean }> {
 }
 
 // ---------- WhatsApp: responder direto do CRM ----------
-// Envia a resposta pela Z-API e registra a conversa como minha (vendedor).
+// Envia a resposta pela Z-API e registra na MESMA conversa de /atendimento
+// (WhatsAppConversation/WhatsAppMessage) — assim a resposta do cliente
+// continua a thread normalmente, em vez de cair num sistema paralelo morto.
 export async function enviarResposta(
   clienteId: string,
   texto: string
@@ -253,26 +256,29 @@ export async function enviarResposta(
 
   const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
   if (!cliente?.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
+  if (!zapi.isEnabled()) return { ok: false, erro: "WhatsApp (Z-API) não está conectado. Configure em /conexao." };
 
-  const envio = await zapi.enviarMensagem(cliente.telefone, conteudo);
-  if (!envio.ok) {
-    return {
-      ok: false,
-      erro: envio.modo === "stub"
-        ? "WhatsApp (Z-API) não está conectado. Configure em /conexao."
-        : `Z-API retornou erro ${envio.status}${envio.mensagemErro ? ": " + envio.mensagemErro : " — verifique a conexão em /conexao."}`,
-    };
+  const { conv } = await acharOuCriarConversa({
+    phone: cliente.telefone, lid: null, isGroup: false, contactName: cliente.nome,
+  });
+
+  try {
+    const zapiMessageId = await zapi.sendText(conv.externalPhone, conteudo);
+    await inserirMensagem(conv.id, {
+      direction: "OUT", body: conteudo, origin: "CRM", operatorDisplayName: "Você",
+      zapiMessageId, sendStatus: "SENT",
+    });
+  } catch (e) {
+    const unconfirmed = e instanceof zapi.EnvioNaoConfirmadoError;
+    await inserirMensagem(conv.id, {
+      direction: "OUT", body: conteudo, origin: "CRM", operatorDisplayName: "Você",
+      sendStatus: unconfirmed ? "UNCONFIRMED" : "FAILED",
+    });
+    if (!unconfirmed) {
+      return { ok: false, erro: `Z-API retornou erro: ${String(e).slice(0, 200)} — verifique a conexão em /conexao.` };
+    }
   }
 
-  await db.conversa.create({
-    data: {
-      conteudo,
-      clienteId,
-      canal: "whatsapp",
-      tipo: "texto",
-      remetente: "vendedor",
-    },
-  });
   await db.cliente.update({
     where: { id: clienteId },
     data: { aguardandoResposta: false, ultimoContato: new Date() },
@@ -284,7 +290,7 @@ export async function enviarResposta(
     entidade: "Cliente",
     entidadeId: clienteId,
     clienteId,
-    extra: { chars: conteudo.length, modo: envio.modo },
+    extra: { chars: conteudo.length },
   });
 
   revalidatePath("/atendimento");
@@ -1739,73 +1745,6 @@ export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removi
   revalidatePath("/dashboard");
   return { ok: true, removidos: ids.length };
 }
-
-// ---------- Importar histórico recente do WhatsApp (Z-API) ----------
-// Puxa as conversas/mensagens recentes que já existem no número e preenche o CRM,
-// para a conversa não começar "vazia". Idempotente: re-rodar não duplica (zapiId).
-export async function importarHistoricoZapi(): Promise<{ ok: boolean; conversas: number; clientes: number; erro?: string }> {
-  if (!zapi.isEnabled()) return { ok: false, conversas: 0, clientes: 0, erro: "Z-API não está conectada." };
-
-  const chats = await zapi.listarChats();
-  if (!chats.length) return { ok: false, conversas: 0, clientes: 0, erro: "A Z-API não retornou conversas (verifique a conexão)." };
-
-  const recente = Date.now() - 2 * 24 * 60 * 60 * 1000; // 2 dias
-  let novasConversas = 0;
-  let novosClientes = 0;
-
-  for (const chat of chats.slice(0, 20)) {
-    const msgs = await zapi.mensagensDoChat(chat.phone, 20);
-    if (!msgs.length) continue;
-
-    let cliente = await acharClientePorTelefone(chat.phone);
-    if (!cliente) {
-      const nome = (chat.name || msgs.find((m) => !m.fromMe)?.senderName || `Contato ${chat.phone}`).trim();
-      if (deveDescartarContato(nome)) continue;
-      cliente = await db.cliente.create({ data: { nome, telefone: chat.phone, origem: "whatsapp" } });
-      novosClientes++;
-    }
-
-    const ordenadas = [...msgs].sort((a, b) => a.momentMs - b.momentMs);
-    // Deduplica manualmente: descarta as que já existem (mesmo zapiId).
-    const ids = ordenadas.map((m) => m.messageId);
-    const existentes = new Set(
-      (await db.conversa.findMany({ where: { zapiId: { in: ids } }, select: { zapiId: true } }))
-        .map((c) => c.zapiId)
-    );
-    const novas = ordenadas.filter((m) => !existentes.has(m.messageId));
-    if (novas.length) {
-      await db.conversa.createMany({
-        data: novas.map((m) => ({
-          conteudo: m.texto,
-          clienteId: cliente!.id,
-          canal: "whatsapp",
-          tipo: m.tipo === "audio" ? "audio" : "texto",
-          remetente: m.fromMe ? "vendedor" : "cliente",
-          zapiId: m.messageId,
-          criadoEm: new Date(m.momentMs),
-        })),
-      });
-      novasConversas += novas.length;
-    }
-
-    const ultima = ordenadas[ordenadas.length - 1];
-    await db.cliente.update({
-      where: { id: cliente.id },
-      data: {
-        ultimoContato: new Date(ultima.momentMs),
-        // só marca "aguardando" se a última for do cliente E recente
-        aguardandoResposta: !ultima.fromMe && ultima.momentMs >= recente,
-      },
-    });
-  }
-
-  revalidatePath("/atendimento");
-  revalidatePath("/clientes");
-  revalidatePath("/dashboard");
-  return { ok: true, conversas: novasConversas, clientes: novosClientes };
-}
-
-
 
 // ── CRUD ColunaFunil (colunas dinâmicas do funil de negociações) ──────────
 

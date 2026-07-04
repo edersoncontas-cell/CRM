@@ -70,9 +70,15 @@ function Avatar({ nome, isGroup, photo, size }: { nome: string; isGroup: boolean
   );
 }
 
-export function AtendimentoClient({ conversas, zapiAtiva }: { conversas: ConvLista[]; zapiAtiva: boolean }) {
+export function AtendimentoClient({
+  conversas, zapiAtiva, convInicial,
+}: {
+  conversas: ConvLista[];
+  zapiAtiva: boolean;
+  convInicial?: string | null;
+}) {
   const router = useRouter();
-  const [selId, setSelId] = useState<string | null>(null);
+  const [selId, setSelId] = useState<string | null>(convInicial ?? null);
   const [busca, setBusca] = useState("");
   const [aba, setAba] = useState<"tudo" | "ignoradas">("tudo");
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);

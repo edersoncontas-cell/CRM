@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import * as zapi from "@/lib/integrations/zapi";
+import * as zapi from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 

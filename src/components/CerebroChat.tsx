@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Send, Paperclip, X, Loader2, Brain, User } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; content: string; arquivos?: string[] };
+type FerramentaAtiva = { name: string; label: string; status: "start" | "done" };
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 function renderMarkdown(text: string): string {
   if (!text) return "";
-  return text
+  return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/^### (.+)$/gm, "<h3 class='text-sm font-bold text-white mt-3 mb-1'>$1</h3>")
@@ -27,11 +35,40 @@ export function CerebroChat() {
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [ferramentas, setFerramentas] = useState<FerramentaAtiva[]>([]);
+  const [confirmacaoPendente, setConfirmacaoPendente] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+
+  // Carrega a última sessão do servidor ao abrir (histórico persistido — Fase 3).
+  useEffect(() => {
+    fetch("/api/cerebro/sessao")
+      .then((r) => r.json())
+      .then((d) => {
+        setSessionId(d.sessionId);
+        setMsgs(Array.isArray(d.mensagens) ? d.mensagens : []);
+      })
+      .catch(() => {})
+      .finally(() => setCarregandoSessao(false));
+  }, []);
+
+  async function novaConversa() {
+    if (carregando) return;
+    setCarregandoSessao(true);
+    try {
+      const r = await fetch("/api/cerebro/sessao", { method: "POST" }).then((res) => res.json());
+      setSessionId(r.sessionId);
+      setMsgs([]);
+      setFerramentas([]);
+      setConfirmacaoPendente(null);
+    } catch {}
+    setCarregandoSessao(false);
+  }
 
   function onScroll() {
     const el = containerRef.current;
@@ -55,20 +92,15 @@ export function CerebroChat() {
     setArquivos((prev) => [...prev, ...Array.from(files)]);
   }
 
-  const enviar = useCallback(async () => {
-    const texto = input.trim();
-    if (!texto && arquivos.length === 0) return;
+  const enviar = useCallback(async (textoForcado?: string) => {
+    const texto = (textoForcado ?? input).trim();
+    if ((!texto && arquivos.length === 0) || !sessionId) return;
     setCarregando(true);
+    setConfirmacaoPendente(null);
+    setFerramentas([]);
     const nomesArqs = arquivos.map((f) => f.name);
 
-    let historicoJSON = "[]";
-    setMsgs((prev) => {
-      const historico = prev
-        .filter((m) => m.content && m.content.trim())
-        .map((m) => ({ role: m.role, content: m.content }));
-      historicoJSON = JSON.stringify(historico);
-      return [...prev, { role: "user", content: texto, arquivos: nomesArqs.length ? nomesArqs : undefined }];
-    });
+    setMsgs((prev) => [...prev, { role: "user", content: texto, arquivos: nomesArqs.length ? nomesArqs : undefined }]);
 
     setInput("");
     const arquivosParaEnviar = [...arquivos];
@@ -76,8 +108,8 @@ export function CerebroChat() {
     scrollBottomForced();
 
     const fd = new FormData();
+    fd.set("sessionId", sessionId);
     fd.set("mensagem", texto);
-    fd.set("historico", historicoJSON);
     for (const f of arquivosParaEnviar) fd.append("arquivo", f);
 
     await new Promise((r) => setTimeout(r, 10));
@@ -111,6 +143,16 @@ export function CerebroChat() {
                 return copia;
               });
               scrollBottom();
+            }
+            if (parsed.tool) {
+              const t = parsed.tool as FerramentaAtiva;
+              setFerramentas((prev) => {
+                if (t.status === "start") return [...prev.filter((f) => f.name !== t.name), t];
+                return prev.filter((f) => f.name !== t.name);
+              });
+            }
+            if (parsed.confirm) {
+              setConfirmacaoPendente(String(parsed.confirm.mensagem ?? "Confirma esta ação?"));
             }
             if (parsed.erro) {
               let msgErro = String(parsed.erro);
@@ -150,10 +192,11 @@ export function CerebroChat() {
       });
     } finally {
       setCarregando(false);
+      setFerramentas([]);
       scrollBottom();
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [input, arquivos, scrollBottom]);
+  }, [input, arquivos, scrollBottom, sessionId]);
 
   return (
     <div
@@ -166,7 +209,15 @@ export function CerebroChat() {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
         <Brain size={18} style={{ color: "#BFDE4D" }} />
         <span className="text-sm font-bold text-white">Chat com o Cérebro</span>
-        <span className="ml-auto text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
+        <span className="ml-auto hidden sm:inline text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
+        <button
+          onClick={novaConversa}
+          disabled={carregando || carregandoSessao}
+          title="Nova conversa"
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+        >
+          <Plus size={13} /> Nova conversa
+        </button>
       </div>
       <div ref={containerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
         {msgs.length === 0 && !dragOver && (
@@ -211,7 +262,19 @@ export function CerebroChat() {
                 m.content
               ) : (
                 m.role === "assistant" && carregando && i === msgs.length - 1
-                  ? <span className="flex items-center gap-1 text-zinc-500"><Loader2 size={14} className="animate-spin" /> Pensando…</span>
+                  ? (
+                    <span className="flex flex-col gap-1 text-zinc-500">
+                      {ferramentas.length > 0 ? (
+                        ferramentas.map((f) => (
+                          <span key={f.name} className="flex items-center gap-1.5" style={{ color: "#BFDE4D" }}>
+                            <Wrench size={13} className="animate-pulse" /> {f.label}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Pensando…</span>
+                      )}
+                    </span>
+                  )
                   : null
               )}
             </div>
@@ -224,6 +287,28 @@ export function CerebroChat() {
         ))}
         <div ref={bottomRef} />
       </div>
+      {confirmacaoPendente && (
+        <div className="mx-3 mb-2 rounded-xl border p-3 text-xs" style={{ borderColor: "rgba(248,113,113,0.4)", background: "rgba(248,113,113,0.08)" }}>
+          <div className="mb-2 flex items-start gap-1.5 text-red-300">
+            <ShieldAlert size={14} className="mt-0.5 shrink-0" /> {confirmacaoPendente}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => enviar("Sim, confirmo. Pode executar.")}
+              disabled={carregando}
+              className="rounded-lg bg-red-500/20 px-3 py-1.5 font-semibold text-red-300 hover:bg-red-500/30 disabled:opacity-50"
+            >
+              Sim, confirmar
+            </button>
+            <button
+              onClick={() => setConfirmacaoPendente(null)}
+              className="rounded-lg bg-zinc-800 px-3 py-1.5 font-semibold text-zinc-400 hover:bg-zinc-700"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       {arquivos.length > 0 && (
         <div className="px-4 py-2 flex flex-wrap gap-2 border-t border-zinc-800">
           {arquivos.map((f, i) => (
@@ -249,14 +334,14 @@ export function CerebroChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
-          placeholder="Pergunte qualquer coisa, peça análises, crie, edite, exclua…"
-          disabled={carregando}
+          placeholder={carregandoSessao ? "Carregando conversa…" : "Pergunte qualquer coisa, peça análises, crie, edite, exclua…"}
+          disabled={carregando || carregandoSessao || !sessionId}
           rows={1}
           className="flex-1 resize-none bg-transparent py-2 text-sm text-white outline-none placeholder:text-zinc-600 max-h-32"
         />
         <button
-          onClick={enviar}
-          disabled={carregando || (!input.trim() && arquivos.length === 0)}
+          onClick={() => enviar()}
+          disabled={carregando || carregandoSessao || !sessionId || (!input.trim() && arquivos.length === 0)}
           className="shrink-0 rounded-xl p-2.5 font-bold transition disabled:opacity-40"
           style={{ background: "rgba(191,222,77,0.15)", color: "#BFDE4D" }}
         >

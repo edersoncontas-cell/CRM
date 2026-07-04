@@ -3,78 +3,20 @@ import { db } from "@/lib/db";
 import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
-import Anthropic from "@anthropic-ai/sdk";
-import { resumoAcademia } from "@/lib/academia";
-import { MODEL_CHAT } from "@/lib/ai/config";
+import { montarContextoCliente, montarContextoAcademia, gerarRespostaCerebro } from "@/lib/zeus/cerebro-resposta";
+import { tocarHeartbeat } from "@/lib/zeus/estado";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function anthropic() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
-
-// Gera resposta do Cérebro para uma conversa WhatsApp com contexto completo do CRM.
-async function gerarRespostaCerebro(args: {
-  historico: string;
-  clienteNome: string | null;
-  clienteStatus: string | null;
-  clienteResumo: string | null;
-  municipio: string | null;
-  estilo: string | null;
-}): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) return "";
-
-  const contextoCliente = args.clienteNome
-    ? [
-        `Cliente: ${args.clienteNome}`,
-        args.municipio ? `Cidade: ${args.municipio}` : null,
-        args.clienteStatus ? `Status no CRM: ${args.clienteStatus}` : null,
-        args.clienteResumo ? `Resumo: ${args.clienteResumo}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "Cliente não identificado no CRM.";
-
-  const academiaSummary = resumoAcademia();
-
-  const system = `Você é o **Cérebro** — assistente de vendas do Ederson, vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
-
-Seu papel no WhatsApp: responder mensagens de clientes de forma natural, cordial e estratégica, no estilo do Ederson. Você tem acesso ao histórico da conversa e ao perfil do cliente no CRM.
-
-## Contexto do cliente
-${contextoCliente}
-
-## Base de conhecimento em vendas (Academia)
-${academiaSummary}
-Use esse conhecimento para responder de forma estratégica — mas sem usar jargão técnico com o cliente.
-
-## Regras importantes
-- Responda APENAS a última mensagem do cliente
-- Seja breve (1-3 frases no máximo), como uma mensagem de WhatsApp real
-- Tom: cordial, profissional, direto — como o Ederson fala
-- NUNCA invente preços, prazos ou especificações
-- Se não tiver a informação, peça educadamente ou diga que vai verificar
-- Use linguagem informal mas educada (sem gírias exageradas)
-- Não use emojis em excesso${args.estilo ? `\n\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}`;
-
-  try {
-    const msg = await anthropic().messages.create({
-      model: MODEL_CHAT,
-      max_tokens: 300,
-      system,
-      messages: [{ role: "user", content: `Histórico da conversa:\n${args.historico.slice(-3000)}\n\nResponda a última mensagem do cliente acima.` }],
-    });
-    const bloco = msg.content[0];
-    return bloco.type === "text" ? bloco.text.trim() : "";
-  } catch {
-    return "";
-  }
-}
-
-// Despacho do Cérebro com debounce: responde conversas agendadas e silenciosas há ≥2 min.
+// Despacho do Cérebro com debounce: responde conversas agendadas e silenciosas
+// há ≥2 min. É o FALLBACK do despacho rápido (que responde em ~1s a partir do
+// webhook) — cobre o caso do fetch fire-and-forget do webhook não completar
+// (função serverless encerrada antes da resposta). Usa o MESMO contexto rico
+// (cliente, negociações, visitas, alertas, Academia) do despacho rápido.
 export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  await tocarHeartbeat("agnes-dispatch");
   const settings = await getWaSettings();
   const corte = new Date(Date.now() - 2 * 60 * 1000);
 
@@ -83,48 +25,46 @@ export async function GET(req: NextRequest) {
     take: 10,
   });
 
-  // Busca estilo do vendedor uma vez
   const estiloRecord = await db.estiloDeFala.findFirst().catch(() => null);
   const estilo = estiloRecord?.guia ?? null;
 
   let feitos = 0;
   for (const conv of convs) {
     const msgs = await db.whatsAppMessage.findMany({
-      where: { conversationId: conv.id },
-      orderBy: { sentAt: "desc" },
-      take: 20,
+      where: { conversationId: conv.id, isDraft: false },
+      orderBy: { sentAt: "asc" },
+      take: 120,
     });
-    const historico = msgs.reverse().map((m) => `${m.direction === "OUT" ? "Eu" : "Cliente"}: ${m.body}`).join("\n");
 
-    // Busca dados do cliente no CRM se vinculado
-    let clienteNome: string | null = conv.contactName;
-    let clienteStatus: string | null = null;
-    let clienteResumo: string | null = null;
-    let municipio: string | null = null;
+    const historicoCompleto = msgs
+      .map((m) => {
+        const quem = m.direction === "OUT" ? "Ederson" : "Cliente";
+        const hr = m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        return `[${hr}] ${quem}: ${m.body}`;
+      })
+      .join("\n");
+    const ultimasMensagens = msgs
+      .slice(-5)
+      .map((m) => `${m.direction === "OUT" ? "Ederson" : "Cliente"}: ${m.body}`)
+      .join("\n");
 
-    if (conv.clienteId) {
-      try {
-        type ClienteRow = { nome: string; status: string | null; resumoTexto: string | null; municipioNome: string | null };
-        const rows = await db.$queryRawUnsafe<ClienteRow[]>(`
-          SELECT c.nome, c.status, c."resumoTexto",
-                 m.nome AS "municipioNome"
-          FROM "Cliente" c
-          LEFT JOIN "Municipio" m ON m.id = c."municipioId"
-          WHERE c.id = $1
-          LIMIT 1
-        `, conv.clienteId);
-        if (rows[0]) {
-          clienteNome = rows[0].nome;
-          clienteStatus = rows[0].status;
-          clienteResumo = rows[0].resumoTexto;
-          municipio = rows[0].municipioNome;
-        }
-      } catch {}
-    }
+    const contextoCliente = await montarContextoCliente({
+      id: conv.id,
+      contactName: conv.contactName,
+      clienteId: conv.clienteId,
+      externalPhone: conv.externalPhone,
+    });
+    const contextoAcademia = montarContextoAcademia(historicoCompleto);
 
     // Se a geração falhar/vier vazia, deixa agnesScheduledAt intacto para
     // tentar de novo no próximo tick — só zera após sucesso.
-    const reply = await gerarRespostaCerebro({ historico, clienteNome, clienteStatus, clienteResumo, municipio, estilo });
+    const reply = await gerarRespostaCerebro({
+      historico: historicoCompleto.slice(-2500),
+      ultimasMensagens,
+      contextoCliente,
+      contextoAcademia,
+      estilo,
+    });
     if (!reply) continue;
 
     if (settings.auditMode) {

@@ -65,11 +65,11 @@ Edite o `.env` (veja `.env.example`):
 | Integração         | Variáveis                                             |
 | ------------------ | ----------------------------------------------------- |
 | IA Anthropic       | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`                |
-| WhatsApp Business  | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` |
+| WhatsApp (Z-API)   | `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`/`ZAPI_TOKEN`, `ZAPI_CLIENT_TOKEN`, `ZAPI_WEBHOOK_TOKEN` |
 | Google Agenda      | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
 | Login pessoal      | `APP_PASSWORD`, `AUTH_SECRET` (se vazio, sem senha)   |
 
-Webhook do WhatsApp: `POST /api/whatsapp/webhook` (verificação por `GET`).
+Webhook do WhatsApp (Z-API): `POST /api/webhooks/zapi` — configure em `/conexao`.
 
 ## 🏗️ Stack
 
@@ -93,6 +93,8 @@ Postgres em produção) · Anthropic SDK · dnd-kit · Recharts.
 | `CRON_SECRET`         | Rotas `/api/cron/*` retornam 401. A Vercel envia automaticamente `Authorization: Bearer $CRON_SECRET` nas chamadas agendadas quando esta env existe — não precisa configurar nada além da variável. |
 | `ZAPI_WEBHOOK_TOKEN`  | **Opcional.** Só configure se sua conta Z-API tiver um "Token de segurança da conta" (nem todo plano tem — nesse caso, use o mesmo valor de `ZAPI_CLIENT_TOKEN`). Sem essa env, o webhook aceita o POST normalmente (a URL não é pública e o `instanceId` do payload é conferido). Se configurar com um valor que a Z-API não carimba nas chamadas, o webhook passa a rejeitar TODAS as mensagens — não invente um valor por conta própria. |
 | `GROQ_API_KEY`        | Sem ela, sem transcrição de áudio do WhatsApp e sem IA de texto gratuita (fallback heurístico continua funcionando). Grátis em console.groq.com. |
+| `ZEUS_WHATSAPP_DESTINO` | **Opcional (Fase 4).** Sem ela, o briefing matinal (`/api/cron/zeus-diario`) não é enviado — fica só registrado como evento no painel `/zeus`. Defina com o número do próprio vendedor (formato `55DDDNÚMERO`) para receber o briefing por WhatsApp às 6h (Brasília). |
+| `ZEUS_ORCAMENTO_IA_DIARIO` | **Opcional.** Limite de chamadas de IA "extras" do ZEUS por dia (diagnóstico de bugs repetidos, etc. — não conta o pipeline/Cérebro). Padrão: 50. |
 
 4. Se qualquer token de acesso à Vercel/GitHub tiver sido exposto (ex.: em logs,
    chat, commit), revogue-o e gere um novo antes de seguir.
