@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { MaquinasClient } from "@/components/MaquinasClient";
-import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { Star } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function MaquinasPage() {
-  await garantirMaquinasNovas();
+  await garantirManutencaoSeNecessario();
   const maquinas = await db.maquina.findMany({
     where: { proprio: true },
     select: {

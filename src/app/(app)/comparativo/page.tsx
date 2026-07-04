@@ -1,12 +1,10 @@
 import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { MaquinaPicker } from "@/components/MaquinaPicker";
-import { ComparativoIA } from "@/components/ComparativoIA";
-import { ComparativoCombustivel } from "@/components/ComparativoCombustivel";
-import {
-  concorrentesSimilares, vantagemContra, delta, CATEGORIAS, type MaquinaComparavel,
-} from "@/lib/comparativo";
-import { Swords, Trophy, Weight, Gauge } from "lucide-react";
+import { ComparativoConcorrentes } from "@/components/ComparativoConcorrentes";
+import { NotasMaquina } from "@/components/NotasMaquina";
+import { concorrentesSimilares, CATEGORIAS, type MaquinaComparavel } from "@/lib/comparativo";
+import { Swords, Weight, Gauge } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +17,10 @@ export default async function ComparativoPage({
 }: {
   searchParams: { maquina?: string; modelo?: string; vs?: string };
 }) {
-  const todas = (await db.maquina.findMany({ orderBy: [{ categoria: "asc" }, { pesoOperacional: "asc" }] })) as MaquinaComparavel[];
+  const [todas, notasRaw] = await Promise.all([
+    db.maquina.findMany({ orderBy: [{ categoria: "asc" }, { pesoOperacional: "asc" }] }) as Promise<MaquinaComparavel[]>,
+    db.notaMaquina.findMany({ orderBy: { criadoEm: "desc" } }),
+  ]);
   const minhas = todas.filter((m) => m.proprio);
 
   const porModelo = searchParams.modelo
@@ -38,38 +39,39 @@ export default async function ComparativoPage({
   }
 
   const vsParam = (searchParams.vs ?? "").toLowerCase().trim();
-  const concorrentes = concorrentesSimilares(minha, todas);
-  // Se vier ?vs=NomeConcorrente, coloca esse primeiro na lista
-  const concorrentesOrdenados = vsParam
-    ? [
-        ...concorrentes.filter((c) =>
-          `${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) ||
-          vsParam.includes(c.marca.toLowerCase())
-        ),
-        ...concorrentes.filter(
-          (c) =>
-            !`${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) &&
-            !vsParam.includes(c.marca.toLowerCase())
-        ),
-      ]
-    : concorrentes;
+  const todosConcorrentes = todas.filter((m) => !m.proprio);
+  const concorrentesAuto = concorrentesSimilares(minha, todas);
+
+  // ?vs=NomeConcorrente (deep link do funil/ficha do cliente): garante que o
+  // concorrente citado entre na seleção inicial, mesmo fora da faixa de peso.
   const vsDestaque = vsParam
-    ? concorrentesOrdenados.find(
-        (c) =>
-          `${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) ||
-          vsParam.includes(c.marca.toLowerCase())
+    ? todosConcorrentes.find(
+        (c) => `${c.marca} ${c.modelo}`.toLowerCase().includes(vsParam) || vsParam.includes(c.marca.toLowerCase())
       )
     : undefined;
+
+  const concorrentesAutoIds = concorrentesAuto.map((c) => c.id);
+  if (vsDestaque && !concorrentesAutoIds.includes(vsDestaque.id)) {
+    concorrentesAutoIds.unshift(vsDestaque.id);
+  }
+
+  const notas = notasRaw.map((n) => ({
+    id: n.id,
+    maquinaId: n.maquinaId,
+    concorrenteId: n.concorrenteId,
+    texto: n.texto,
+    criadoEm: n.criadoEm.toISOString(),
+  }));
 
   return (
     <div>
       <PageHeader
         titulo="Comparativo de máquinas"
-        subtitulo="Sua máquina vs concorrentes da mesma categoria e faixa de peso — com argumentos prontos"
+        subtitulo="Sua máquina vs concorrentes — sugestão automática por categoria/peso ou escolha manual, com argumentos prontos"
       />
 
       {vsDestaque && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 print:hidden">
           <Swords size={16} className="shrink-0 text-red-500" />
           <span className="text-sm text-red-700">
             Modo batalha ativado — mostrando <b>{minha.modelo}</b> vs{" "}
@@ -78,8 +80,8 @@ export default async function ComparativoPage({
         </div>
       )}
 
-      <div className="mb-6">
-        <label className="mb-1 block text-sm font-medium text-slate-700">Selecione sua máquina</label>
+      <div className="mb-6 print:hidden">
+        <label className="mb-1 block text-sm font-medium text-slate-700">Selecione sua máquina (Marca → Modelo)</label>
         <MaquinaPicker minhas={minhas} selecionada={minha.id} />
       </div>
 
@@ -117,88 +119,41 @@ export default async function ComparativoPage({
         )}
       </Card>
 
-      {/* Tabela comparativa */}
-      <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
-        <Swords size={18} className="text-red-500" /> Concorrentes na mesma faixa ({concorrentes.length})
-      </h2>
+      <NotasMaquina
+        minhas={minhas.map((m) => ({ id: m.id, marca: m.marca, modelo: m.modelo }))}
+        concorrentes={todosConcorrentes.map((m) => ({ id: m.id, marca: m.marca, modelo: m.modelo }))}
+        notasIniciais={notas}
+        minhaAtualId={minha.id}
+      />
 
-      {concorrentesOrdenados.length === 0 ? (
-        <Card><p className="text-sm text-slate-400">Nenhum concorrente cadastrado nesta faixa ainda.</p></Card>
-      ) : (
-        <>
-          <Card className="mb-6 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase text-slate-400">
-                  <th className="py-2">Marca / Modelo</th>
-                  <th className="py-2">Peso</th>
-                  <th className="py-2">Potência</th>
-                  <th className="py-2">Δ Peso vs {minha.modelo}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b bg-brand-50 font-semibold">
-                  <td className="py-2 text-brand-800">⭐ {minha.marca} {minha.modelo}</td>
-                  <td className="py-2">{peso(minha.pesoOperacional)}</td>
-                  <td className="py-2">{minha.potencia ? `${minha.potencia} cv` : "—"}</td>
-                  <td className="py-2 text-slate-400">—</td>
-                </tr>
-                {concorrentesOrdenados.map((c) => {
-                  const emDestaque = vsDestaque?.id === c.id;
-                  return (
-                    <tr
-                      key={c.id}
-                      className={`border-b transition-colors ${emDestaque ? "bg-red-50 font-semibold" : "hover:bg-brand-50"}`}
-                    >
-                      <td className="py-2.5 font-medium text-slate-700">
-                        {emDestaque && <span className="mr-1 text-red-500">⚔️</span>}
-                        {c.marca} {c.modelo}
-                        {emDestaque && <span className="ml-2"><Badge tom="red">foco</Badge></span>}
-                      </td>
-                      <td className="py-2.5">{peso(c.pesoOperacional)}</td>
-                      <td className="py-2.5">{c.potencia ? `${c.potencia} cv` : "—"}</td>
-                      <td className="py-2.5 font-mono text-slate-500">{delta(minha.pesoOperacional, c.pesoOperacional)} kg</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Card>
-
-          {/* Comparativo de combustível (cálculo local, offline) */}
-          <ComparativoCombustivel
-            minhaModelo={minha.modelo}
-            minhaConsumo={minha.consumoLitrosHora ?? null}
-            concorrentes={concorrentesOrdenados.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo, consumo: c.consumoLitrosHora ?? null }))}
-          />
-
-          {/* Análise da IA usando as fichas técnicas */}
-          <ComparativoIA
-            minhaId={minha.id}
-            minhaModelo={minha.modelo}
-            concorrentes={concorrentesOrdenados.map((c) => ({ id: c.id, marca: c.marca, modelo: c.modelo }))}
-          />
-
-          {/* Battlecards */}
-          <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
-            <Trophy size={18} className="text-agro-600" /> Argumentos prontos (por que a {minha.modelo} ganha)
-          </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {concorrentesOrdenados.map((c) => {
-              const emDestaque = vsDestaque?.id === c.id;
-              return (
-                <Card key={c.id} className={emDestaque ? "border-red-300 ring-2 ring-red-100" : ""}>
-                  <div className="mb-1 flex items-center gap-2">
-                    <Badge tom="red">vs {c.marca} {c.modelo}</Badge>
-                    {emDestaque && <Badge tom="yellow">⚔️ batalha atual</Badge>}
-                  </div>
-                  <p className="text-sm text-slate-600">{vantagemContra(minha, c)}</p>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
+      <ComparativoConcorrentes
+        minha={{
+          id: minha.id,
+          marca: minha.marca,
+          modelo: minha.modelo,
+          categoria: minha.categoria,
+          pesoOperacional: minha.pesoOperacional,
+          potencia: minha.potencia,
+          consumoLitrosHora: minha.consumoLitrosHora ?? null,
+          descricao: minha.descricao,
+          pontosFortes: minha.pontosFortes,
+          diferenciais: minha.diferenciais,
+          especificacoes: minha.especificacoes ?? null,
+          argumentos: minha.argumentos ?? null,
+          imagemUrl: minha.imagemUrl ?? null,
+        }}
+        concorrentesAutoIds={concorrentesAutoIds}
+        todosConcorrentes={todosConcorrentes.map((c) => ({
+          id: c.id,
+          marca: c.marca,
+          modelo: c.modelo,
+          categoria: c.categoria,
+          pesoOperacional: c.pesoOperacional,
+          potencia: c.potencia,
+          consumoLitrosHora: c.consumoLitrosHora ?? null,
+        }))}
+        destaqueId={vsDestaque?.id}
+      />
     </div>
   );
 }

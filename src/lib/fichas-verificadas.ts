@@ -65,7 +65,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   // ── Escavadeira hidráulica ────────────────────────────────────────────────
   {
     marca: "New Holland",
-    modelo: "E145C EVO",
+    modelo: "E145C",
     especificacoes: [
       "Motor: FPT",
       "Potência líquida: 95 cv",
@@ -76,7 +76,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "E175C EVO",
+    modelo: "E175C",
     especificacoes: [
       "Motor: FPT",
       "Potência líquida: 120 cv",
@@ -87,7 +87,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "E215C EVO",
+    modelo: "E215C",
     especificacoes: [
       "Motor: FPT NEF6",
       "Potência: 148 cv",
@@ -99,7 +99,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "E245C EVO",
+    modelo: "E245C",
     especificacoes: [
       "Motor: FPT",
       "Potência: 173 cv",
@@ -283,7 +283,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   // ── Motoniveladora ────────────────────────────────────────────────────────
   {
     marca: "New Holland",
-    modelo: "RG140.B EVO",
+    modelo: "RG140",
     especificacoes: [
       "Motor: FPT (Tier 3)",
       "Potência líquida: 140 – 160 cv",
@@ -294,7 +294,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "RG170.B EVO",
+    modelo: "RG170",
     especificacoes: [
       "Motor: NH/FPT 6.7L (Tier 3)",
       "Potência líquida: 178 / 190 / 205 cv",
@@ -304,7 +304,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "New Holland",
-    modelo: "RG200.B EVO",
+    modelo: "RG200",
     especificacoes: [
       "Motor: NH/FPT 6.7L (Tier 3)",
       "Potência líquida: 205 / 219 cv",

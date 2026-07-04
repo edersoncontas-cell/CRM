@@ -38,6 +38,14 @@ interface CardData {
 
 type Cliente = { id: string; nome: string };
 type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean };
+type MaquinaPropria = { marca: string; modelo: string };
+
+// Agrupa as máquinas próprias (banco) por marca, para os dropdowns Marca → Modelo.
+function agruparPorMarca(maquinas: MaquinaPropria[]): Record<string, string[]> {
+  const grupos: Record<string, string[]> = {};
+  for (const m of maquinas) (grupos[m.marca] ??= []).push(m.modelo);
+  return grupos;
+}
 
 function temaCalor(t: number): string {
   if (t >= 70) return "from-orange-500/25 to-rose-600/10 border-orange-400/40";
@@ -56,10 +64,12 @@ export function FunilNegociacoes({
   cards: cardsIniciais,
   clientes,
   colunas: colunasIniciais,
+  maquinasProprias,
 }: {
   cards: CardData[];
   clientes: Cliente[];
   colunas: ColunaFunil[];
+  maquinasProprias: MaquinaPropria[];
 }) {
   const [cards, setCards] = useState(cardsIniciais);
   const [colunas, setColunas] = useState(colunasIniciais);
@@ -178,9 +188,17 @@ export function FunilNegociacoes({
           <div className="flex gap-3 min-w-max">
             {colunas.map((col) => {
               const tituloCol = col.titulo.toLowerCase();
-              const colunaGanha = tituloCol.includes("faturad") || tituloCol.includes("ganho") || tituloCol.includes("confirm") || tituloCol.includes("vendid");
+              const isFaturado = tituloCol.includes("faturad");
+              const colunaGanha = isFaturado || tituloCol.includes("ganho") || tituloCol.includes("confirm") || tituloCol.includes("vendid");
+              // FATURADO é a coluna "chão-de-fábrica" do dinheiro faturado: mostra
+              // TODOS os cards ganha (mesmo padrão da coluna Perdidos), não só os
+              // que têm estagio === "FATURADO" — senão negociações ganhas por um
+              // caminho legado (ex.: marcar_ganha da IA) somem do funil mas
+              // continuam aparecendo no Financeiro, ficando as duas telas inconsistentes.
               const lista = tituloCol.includes("perdid")
                 ? cardsFiltrados.filter((c) => c.status === "perdida")
+                : isFaturado
+                ? cardsFiltrados.filter((c) => c.status === "ganha")
                 : colunaGanha
                 ? cardsFiltrados.filter((c) => c.status === "ganha" && c.estagio === col.titulo)
                 : cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo);
@@ -192,6 +210,7 @@ export function FunilNegociacoes({
                   cards={lista}
                   total={totalCol}
                   clientes={clientes}
+                  maquinasProprias={maquinasProprias}
                   onEditar={setEditando}
                   onRenomear={async (novoTitulo) => {
                     setColunas((cs) => cs.map((c) => c.id === col.id ? { ...c, titulo: novoTitulo } : c));
@@ -375,12 +394,13 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, clientes, onEditar, onRenomear, onExcluir,
+  coluna, cards, total, clientes, maquinasProprias, onEditar, onRenomear, onExcluir,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
   clientes: Cliente[];
+  maquinasProprias: MaquinaPropria[];
   onEditar: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
@@ -522,7 +542,7 @@ function ColunaFunilView({
             />
           )}
           {adicionando ? (
-            <FormAdicionar estagio={coluna.titulo} clientes={clientes} onFechar={() => setAdicionando(false)} />
+            <FormAdicionar estagio={coluna.titulo} clientes={clientes} maquinasProprias={maquinasProprias} onFechar={() => setAdicionando(false)} />
           ) : (
             <button
               onClick={() => setAdicionando(true)}
@@ -622,10 +642,12 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
 function FormAdicionar({
   estagio,
   clientes,
+  maquinasProprias,
   onFechar,
 }: {
   estagio: string;
   clientes: Cliente[];
+  maquinasProprias: MaquinaPropria[];
   onFechar: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -694,12 +716,10 @@ function FormAdicionar({
     "Sicredi", "Itaú", "Safra", "BV Financeira", "Outro",
   ];
 
-  const MARCAS: Record<string, string[]> = {
-    "CASE": ["CX130D","CX145C","CX145D","CX160D","CX210D","CX220D","CX240D","E145C","E215C","821G","851L","621G","RG140B","B110B","SV280"],
-    "New Holland": ["E115C","E135B","E145C","E215C","W130C","W80C","RG140B"],
-    "Outro": [],
-  };
-
+  // Marcas/modelos vêm do banco (máquinas próprias, proprio: true) — nunca
+  // mais hardcoded. CASE, CAT, Komatsu etc. são só concorrentes e nunca
+  // aparecem aqui. "Outro" mantém um campo livre para casos fora do catálogo.
+  const MARCAS = agruparPorMarca(maquinasProprias);
   const [marca, setMarca] = useState("");
   const maquinasDisp = MARCAS[marca] ?? [];
 
@@ -755,6 +775,7 @@ function FormAdicionar({
               <select value={marca} onChange={(e) => setMarca(e.target.value)} name="marca" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
                 <option value="">— Selecionar —</option>
                 {Object.keys(MARCAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value="Outro">Outro</option>
               </select>
             </div>
             <div>

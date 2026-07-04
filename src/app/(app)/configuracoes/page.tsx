@@ -5,8 +5,9 @@ import * as zapi from "@/lib/zapi";
 import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
-import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight } from "lucide-react";
+import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
+import { BotaoManutencao } from "@/components/BotaoManutencao";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -115,6 +116,17 @@ export default async function ConfiguracoesPage() {
         <p className="text-sm text-slate-600">
           {estilo?.guia ?? "Ainda não aprendido. Quando você conectar suas conversas, a IA aprende o seu jeito de falar."}
         </p>
+      </Card>
+
+      <Card className="mt-6">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
+          <Wrench size={18} className="text-brand-600" /> Manutenção do sistema
+        </div>
+        <p className="mb-3 text-sm text-slate-600">
+          Aplica migrações de schema pendentes e reexecuta as rotinas de manutenção (regiões, colunas do funil/demandas,
+          catálogo de máquinas, fichas verificadas) sem esperar o próximo carregamento de página.
+        </p>
+        <BotaoManutencao />
       </Card>
     </div>
   );

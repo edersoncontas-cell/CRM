@@ -5,7 +5,7 @@ import { EditarClienteForm } from "@/components/EditarClienteForm";
 import { VisitasCliente } from "@/components/VisitasCliente";
 import { AgendarVisitaDialog } from "@/components/AgendarVisitaDialog";
 import { ResumoClienteForm } from "@/components/ResumoClienteForm";
-import { garantirRegioes } from "@/lib/regioes";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck } from "lucide-react";
@@ -13,7 +13,7 @@ import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck } from
 export const dynamic = "force-dynamic";
 
 export default async function ClienteDetalhe({ params }: { params: { id: string } }) {
-  await garantirRegioes();
+  await garantirManutencaoSeNecessario();
 
   const [cliente, municipios, maquinas] = await Promise.all([
     db.cliente.findUnique({
@@ -27,7 +27,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
       },
     }),
     db.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, foraDeArea: true } }),
-    db.maquina.findMany({ select: { id: true, marca: true, modelo: true, categoria: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
+    db.maquina.findMany({ select: { id: true, marca: true, modelo: true, categoria: true, proprio: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
   ]);
   if (!cliente) notFound();
 
@@ -205,6 +205,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
         perfilDISC={perfilDISC}
         abordagemIA={abordagemIA}
         temConversa={!!waConv}
+        maquinasProprias={maquinas.filter((m) => m.proprio).map((m) => ({ marca: m.marca, modelo: m.modelo }))}
         negociacoes={cliente.negociacoes.map((n) => ({
           id: n.id,
           maquinaModelo: n.maquinaModelo,

@@ -60,23 +60,29 @@ const MINHAS: MaquinaSeed[] = [
     descricao: "Mini escavadeira ágil para áreas urbanas, demolição leve e espaços reduzidos.",
     pontosFortes: "Compacta e versátil; raio traseiro reduzido; fácil transporte em prancha; baixo custo operacional.",
     diferenciais: "Robustez New Holland em tamanho compacto e rede nacional de peças." },
-  // New Holland — escavadeiras hidráulicas
-  { marca: "New Holland", modelo: "E145C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 14500, potencia: 110,
+  // New Holland — escavadeiras hidráulicas (nomenclatura oficial do portfólio, sem sufixo EVO)
+  { marca: "New Holland", modelo: "E145C", categoria: "escavadeira", proprio: true, pesoOperacional: 14500, potencia: 110,
     descricao: "Escavadeira de 14,5 t para obras urbanas e médias.",
     pontosFortes: "Ágil e econômica; ótima para saneamento e infraestrutura urbana.",
     diferenciais: "Maior caçamba da categoria e motor FPT econômico." },
-  { marca: "New Holland", modelo: "E175C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 17500, potencia: 128,
+  { marca: "New Holland", modelo: "E175C", categoria: "escavadeira", proprio: true, pesoOperacional: 17500, potencia: 128,
     descricao: "Escavadeira de porte médio para terraplenagem e infraestrutura.",
     pontosFortes: "Equilíbrio entre força e consumo; cabine confortável; ideal para obras médias.",
     diferenciais: "Motor FPT econômico e durabilidade reconhecida." },
-  { marca: "New Holland", modelo: "E215C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 21500, potencia: 158,
+  { marca: "New Holland", modelo: "E215C", categoria: "escavadeira", proprio: true, pesoOperacional: 21500, potencia: 158,
     descricao: "Escavadeira de 21,5 t com caçamba de 1,1 a 1,7 m³.",
     pontosFortes: "Alta produtividade; sistema hidráulico eficiente; cabine ROPS; câmera de ré.",
     diferenciais: "Motor FPT, baixo consumo por m³ movimentado e ótima revenda." },
-  { marca: "New Holland", modelo: "E245C EVO", categoria: "escavadeira", proprio: true, pesoOperacional: 24000, potencia: 158,
+  { marca: "New Holland", modelo: "E245C", categoria: "escavadeira", proprio: true, pesoOperacional: 24000, potencia: 158,
     descricao: "Escavadeira de 24 t para mineração, terraplenagem pesada e infraestrutura.",
     pontosFortes: "Força de escavação superior; estrutura reforçada; produtividade em ciclo longo.",
     diferenciais: "Robustez para serviço pesado com suporte nacional." },
+  // Linha pesada do portfólio — cadastradas sem specs numéricas (evita
+  // inventar peso/potência); completar em /maquinas/fichas quando disponível.
+  { marca: "New Holland", modelo: "E385C", categoria: "escavadeira", proprio: true },
+  { marca: "New Holland", modelo: "E405C", categoria: "escavadeira", proprio: true },
+  { marca: "New Holland", modelo: "E485C", categoria: "escavadeira", proprio: true },
+  { marca: "New Holland", modelo: "E505C", categoria: "escavadeira", proprio: true },
   // New Holland — retroescavadeiras
   { marca: "New Holland", modelo: "B95C", categoria: "retroescavadeira", proprio: true, pesoOperacional: 7000, potencia: 81,
     descricao: "Retroescavadeira versátil para obras urbanas, saneamento e agro.",
@@ -91,19 +97,11 @@ const MINHAS: MaquinaSeed[] = [
     descricao: "Minicarregadeira Série 300 de entrada, ágil para obras compactas e paisagismo.",
     pontosFortes: "Elevação vertical Super Boom; compacta e econômica.",
     diferenciais: "Robustez New Holland com baixo custo operacional." },
-  { marca: "New Holland", modelo: "L325", categoria: "minicarregadeira", proprio: true, pesoOperacional: 3700, potencia: 74,
-    descricao: "Minicarregadeira Série 300, robusta e versátil para obras compactas.",
-    pontosFortes: "Capacidade de carga e altura de elevação líderes; troca rápida de implementos.",
-    diferenciais: "Robustez New Holland com baixo custo operacional." },
   { marca: "New Holland", modelo: "L330", categoria: "minicarregadeira", proprio: true, pesoOperacional: 3765, potencia: 90,
     descricao: "Minicarregadeira Série 300 topo de linha, maior potência e capacidade de carga.",
     pontosFortes: "90 cv e ROC de 1.360 kg; elevação vertical para trabalhos pesados.",
     diferenciais: "Robustez New Holland com baixo custo operacional." },
   // New Holland — pás carregadeiras
-  { marca: "New Holland", modelo: "W12D", categoria: "pacarregadeira", proprio: true, pesoOperacional: 4800, potencia: 75,
-    descricao: "Mini pá carregadeira para espaços compactos e agro.",
-    pontosFortes: "Agilidade; baixo custo; ideal para armazéns, agro e obras pequenas.",
-    diferenciais: "Versatilidade com a confiabilidade New Holland." },
   { marca: "New Holland", modelo: "W130B", categoria: "pacarregadeira", proprio: true, pesoOperacional: 12500, potencia: 173,
     descricao: "Pá carregadeira de 12,5 t para carga geral, agro e construção.",
     pontosFortes: "Força de arranque; baldes para fertilizante e cana; conforto e visibilidade.",
@@ -116,24 +114,19 @@ const MINHAS: MaquinaSeed[] = [
     descricao: "Pá carregadeira de 19 t para mineração e grandes volumes.",
     pontosFortes: "Força e capacidade superiores; cabine premium; durabilidade.",
     diferenciais: "Custo por tonelada competitivo com a rede New Holland." },
-  // New Holland — motoniveladoras
-  { marca: "New Holland", modelo: "RG140.B EVO", categoria: "motoniveladora", proprio: true, pesoOperacional: 13500, potencia: 140,
+  // New Holland — motoniveladoras (nomenclatura oficial do portfólio)
+  { marca: "New Holland", modelo: "RG140", categoria: "motoniveladora", proprio: true, pesoOperacional: 13500, potencia: 140,
     descricao: "Motoniveladora de 140 cv para manutenção de estradas e terraplenagem.",
     pontosFortes: "Controles hidráulicos de precisão; articulação à frente da cabine; lâmina Roll Away.",
     diferenciais: "Transmissão eletrônica inteligente e fabricação nacional." },
-  { marca: "New Holland", modelo: "RG170.B EVO", categoria: "motoniveladora", proprio: true, pesoOperacional: 15000, potencia: 170,
+  { marca: "New Holland", modelo: "RG170", categoria: "motoniveladora", proprio: true, pesoOperacional: 15000, potencia: 170,
     descricao: "Motoniveladora de 170 cv, versátil e produtiva.",
     pontosFortes: "Tecnologia avançada; precisão de acabamento; conforto.",
     diferenciais: "Tradição e suporte New Holland em obras públicas." },
-  { marca: "New Holland", modelo: "RG200.B EVO", categoria: "motoniveladora", proprio: true, pesoOperacional: 17000, potencia: 200,
+  { marca: "New Holland", modelo: "RG200", categoria: "motoniveladora", proprio: true, pesoOperacional: 17000, potencia: 200,
     descricao: "Motoniveladora de 200 cv para serviço pesado e mineração.",
     pontosFortes: "Maior potência e estabilidade; produtividade em pista longa.",
     diferenciais: "Robustez para serviço severo com revenda forte." },
-  // New Holland — trator de esteira
-  { marca: "New Holland", modelo: "D140B", categoria: "tratoresteira", proprio: true, pesoOperacional: 14000, potencia: 140,
-    descricao: "Trator de esteira para terraplenagem e empurro de material.",
-    pontosFortes: "Força de tração; lâmina robusta; fabricado em Contagem-MG.",
-    diferenciais: "Produção nacional e rede de peças consolidada." },
 
   // Dynapac — rolos de solo (CA)
   { marca: "Dynapac", modelo: "CA1500", categoria: "rolo_solo", proprio: true, pesoOperacional: 7000,
@@ -478,11 +471,11 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
 
   // Mídia
   if ((await db.midiaPost.count()) === 0) {
-    const maq = await db.maquina.findFirst({ where: { marca: "New Holland", modelo: "E215C EVO" } });
+    const maq = await db.maquina.findFirst({ where: { marca: "New Holland", modelo: "E215C" } });
     await db.midiaPost.create({
       data: {
         maquinaId: maq?.id,
-        titulo: "Você conhece a New Holland E215C EVO?",
+        titulo: "Você conhece a New Holland E215C?",
         conteudo: "🚜 21,5 toneladas de produtividade com o motor FPT econômico! Caçamba de até 1,7 m³, cabine ROPS e câmera de ré. Quer um comparativo com a concorrência? Me chama! 👇",
         status: "agendado",
         agendadoPara: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3),
@@ -496,8 +489,8 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
       data: [
         {
           tipo: "diario",
-          titulo: "💡 Sabia disso sobre a New Holland E245C EVO?",
-          conteudo: "🔧 Dica do dia!\n\nA New Holland E245C EVO tem capacidade de escavação de até 7,2 metros de profundidade — ideal para fundações profundas e obras de saneamento!\n\nIsso significa MAIS OBRA com MENOS reposicionamento. 💪\n\nQuer um comparativo técnico? Me chama! 👇",
+          titulo: "💡 Sabia disso sobre a New Holland E245C?",
+          conteudo: "🔧 Dica do dia!\n\nA New Holland E245C tem capacidade de escavação de até 7,2 metros de profundidade — ideal para fundações profundas e obras de saneamento!\n\nIsso significa MAIS OBRA com MENOS reposicionamento. 💪\n\nQuer um comparativo técnico? Me chama! 👇",
           hashtags: "#NewHolland #E245C #Escavadeira #Construção #SulES",
           canalAlvo: "ambos",
           status: "rascunho",

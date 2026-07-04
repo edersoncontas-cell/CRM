@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA, sugerirAbordagemIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA } from "./ai";
 import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
@@ -525,9 +525,14 @@ export async function marcarPerdida(id: string, motivo: string) {
 }
 
 export async function marcarGanha(id: string) {
+  // Normaliza para o título REAL da coluna FATURADO (pode ter sido renomeada
+  // pelo usuário) — sem isso, a negociação vira "ganha" com um estagio legado
+  // que não bate com nenhuma coluna do funil (some do funil, mas continua
+  // aparecendo no Financeiro, que lista todo status "ganha").
+  const colFaturado = await db.colunaFunil.findFirst({ where: { titulo: { contains: "faturad", mode: "insensitive" } } });
   const neg = await db.negociacao.update({
     where: { id },
-    data: { status: "ganha", estagio: "proposta_aprovada" },
+    data: { status: "ganha", estagio: colFaturado?.titulo ?? "FATURADO", faturadoEm: new Date() },
     include: { cliente: true },
   });
   await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
@@ -664,10 +669,14 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
   const ehPdf = arquivo.type === "application/pdf" || nome.endsWith(".pdf");
   const ehImagem = arquivo.type.startsWith("image/");
   const ehTexto = arquivo.type.startsWith("text/") || /\.(txt|html?|md|csv)$/.test(nome);
-  // Limite: PDF até 32MB (limite da Anthropic), imagem até 8MB, texto até 2MB.
-  const limite = ehPdf ? 32 * 1024 * 1024 : ehImagem ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
+  // Limite prático: a Vercel corta requests em ~4.5MB independente do que o
+  // Next configura — 4MB dá margem de segurança para PDF/imagem. Texto é
+  // sempre pequeno, mas mantemos 2MB de teto por segurança.
+  const limite = ehTexto ? 2 * 1024 * 1024 : 4 * 1024 * 1024;
   if (arquivo.size > limite) {
-    return { ok: false, erro: `Arquivo muito grande (máx. ${ehPdf ? "32MB" : ehImagem ? "8MB" : "2MB"}).` };
+    const tamanhoMb = (arquivo.size / (1024 * 1024)).toFixed(1);
+    const limiteMb = limite / (1024 * 1024);
+    return { ok: false, erro: `Arquivo de ${tamanhoMb}MB — o limite é ${limiteMb}MB. Comprima o PDF ou envie por partes.` };
   }
 
   const maq = await db.maquina.findUnique({
@@ -689,26 +698,6 @@ export async function extrairFichaDeArquivo(maquinaId: string, formData: FormDat
 
   const base64 = Buffer.from(await arquivo.arrayBuffer()).toString("base64");
   return extrairFichaDeArquivoIA(maq, { base64, mediaType: ehPdf ? "application/pdf" : arquivo.type });
-}
-
-// Análise de categoria (Super Trunfo): minhas máquinas vs concorrentes.
-export async function gerarAnaliseCategoriaIAAction(
-  categoria: string
-): Promise<{ ok: boolean; texto?: string; erro?: string }> {
-  const maquinas = await db.maquina.findMany({
-    where: { categoria },
-    select: { marca: true, modelo: true, proprio: true, especificacoes: true },
-  });
-  const minhas = maquinas.filter((m) => m.proprio);
-  const concorrentes = maquinas.filter((m) => !m.proprio);
-  if (minhas.length === 0) return { ok: false, erro: "Sem máquinas próprias nesta categoria." };
-
-  const { CATEGORIAS } = await import("./comparativo");
-  const texto = await gerarAnaliseCategoriaIA(CATEGORIAS[categoria] ?? categoria, minhas, concorrentes);
-  if (!texto.trim()) {
-    return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
-  }
-  return { ok: true, texto };
 }
 
 // Preenche em lote as fichas técnicas ainda vazias com a IA. Retorna quantas
@@ -738,7 +727,6 @@ export async function preencherFichasVaziasIA(
       preenchidas++;
     }
   }
-  revalidatePath("/super-trunfo");
   revalidatePath("/maquinas/fichas");
   return { ok: true, preenchidas };
 }
@@ -773,6 +761,82 @@ export async function gerarBattlecardsComparativoIA(
     console.error("Erro nos battlecards:", e);
     return { ok: false, erro: "Erro ao gerar argumentos" };
   }
+}
+
+// ---------- Comparativo 2.0 — Notas de conhecimento do vendedor ----------
+export async function criarNotaMaquina(formData: FormData): Promise<{ ok: boolean; erro?: string }> {
+  const maquinaId = String(formData.get("maquinaId") ?? "");
+  const concorrenteId = String(formData.get("concorrenteId") ?? "") || null;
+  const texto = String(formData.get("texto") ?? "").trim();
+  if (!maquinaId || !texto) return { ok: false, erro: "Máquina e texto são obrigatórios." };
+  await db.notaMaquina.create({ data: { maquinaId, concorrenteId, texto } });
+  revalidatePath("/comparativo");
+  return { ok: true };
+}
+
+export async function editarNotaMaquina(id: string, texto: string): Promise<{ ok: boolean }> {
+  const t = texto.trim();
+  if (!t) return { ok: false };
+  await db.notaMaquina.update({ where: { id }, data: { texto: t } }).catch(() => {});
+  revalidatePath("/comparativo");
+  return { ok: true };
+}
+
+export async function excluirNotaMaquina(id: string): Promise<{ ok: boolean }> {
+  await db.notaMaquina.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/comparativo");
+  return { ok: true };
+}
+
+// Resumo de diferenciais COM benefício prático — alimentado pelas fichas
+// técnicas + notas do vendedor da(s) máquina(s) envolvidas. Nunca inventa specs.
+export async function gerarResumoDiferenciaisAction(
+  minhaId: string,
+  concorrentesIds: string[]
+): Promise<{ ok: boolean; texto?: string; erro?: string }> {
+  const minha = await db.maquina.findUnique({
+    where: { id: minhaId },
+    select: { marca: true, modelo: true, especificacoes: true, pontosFortes: true, diferenciais: true, argumentos: true },
+  });
+  if (!minha) return { ok: false, erro: "Máquina não encontrada" };
+
+  const [concs, notas] = await Promise.all([
+    db.maquina.findMany({ where: { id: { in: concorrentesIds } }, select: { id: true, marca: true, modelo: true, especificacoes: true } }),
+    db.notaMaquina.findMany({
+      where: { maquinaId: minhaId, OR: [{ concorrenteId: null }, { concorrenteId: { in: concorrentesIds } }] },
+      orderBy: { criadoEm: "desc" },
+    }),
+  ]);
+
+  const texto = await gerarResumoDiferenciaisIA(minha, concs, notas.map((n) => n.texto));
+  if (!texto.trim()) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+  return { ok: true, texto };
+}
+
+// Comparativo profissional completo multi-concorrente — evolução do
+// "Gerar argumentos com IA" (battlecards), aceita múltiplos concorrentes.
+export async function gerarComparativoCompletoAction(
+  minhaId: string,
+  concorrentesIds: string[]
+): Promise<{ ok: boolean; texto?: string; erro?: string }> {
+  const minha = await db.maquina.findUnique({
+    where: { id: minhaId },
+    select: { marca: true, modelo: true, especificacoes: true, pontosFortes: true, diferenciais: true, argumentos: true, imagemUrl: true },
+  });
+  if (!minha) return { ok: false, erro: "Máquina não encontrada" };
+  if (concorrentesIds.length === 0) return { ok: false, erro: "Selecione ao menos um concorrente." };
+
+  const [concs, notas] = await Promise.all([
+    db.maquina.findMany({ where: { id: { in: concorrentesIds } }, select: { id: true, marca: true, modelo: true, especificacoes: true } }),
+    db.notaMaquina.findMany({
+      where: { maquinaId: minhaId, OR: [{ concorrenteId: null }, { concorrenteId: { in: concorrentesIds } }] },
+      orderBy: { criadoEm: "desc" },
+    }),
+  ]);
+
+  const texto = await gerarComparativoCompletoIA(minha, concs, notas.map((n) => n.texto));
+  if (!texto.trim()) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+  return { ok: true, texto };
 }
 
 // ---------- Conversas + IA ----------

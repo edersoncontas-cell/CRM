@@ -14,6 +14,9 @@ export interface MaquinaComparavel {
   pontosFortes: string | null;
   diferenciais: string | null;
   consumoLitrosHora?: number | null;
+  especificacoes?: string | null;
+  argumentos?: string | null;
+  imagemUrl?: string | null;
 }
 
 export const CATEGORIAS: Record<string, string> = {
@@ -98,7 +101,10 @@ const VANTAGENS_POR_MARCA: Record<string, string> = {
     "Dynapac agrega compactação inteligente, telemetria Dyn@Link e acabamento premium no asfalto, com tecnologia sueca.",
 };
 
-export function vantagemContra(minha: MaquinaComparavel, conc: MaquinaComparavel): string {
+export function vantagemContra(
+  minha: { modelo: string; pontosFortes: string | null },
+  conc: { marca: string }
+): string {
   const base =
     VANTAGENS_POR_MARCA[conc.marca] ??
     "Melhor custo-benefício, revenda e rede de assistência, com a confiabilidade da nossa marca.";

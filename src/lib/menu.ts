@@ -2,10 +2,10 @@
 // Configurações (visibilidade dos itens). Mantém ícones e rótulos num só lugar.
 
 import {
-  LayoutDashboard, Users, KanbanSquare, MessagesSquare, Calendar,
+  LayoutDashboard, Users, KanbanSquare, Calendar,
   TrendingDown, Sparkles, Megaphone, Settings, Calculator,
   Swords, Route, Send, Map, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText, Trophy,
+  Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText,
   Truck, Brain, Handshake, ListTodo, ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -32,9 +32,7 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
-      { href: "/super-trunfo", label: "Super Trunfo", icon: Trophy },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
-      { href: "/conversas", label: "Conversas + IA", icon: MessagesSquare },
       { href: "/resumos", label: "Resumos IA", icon: ClipboardList },
       { href: "/agenda", label: "Agenda", icon: Calendar },
       { href: "/roteiro", label: "Roteiro", icon: Route },

@@ -31,6 +31,63 @@ export async function aplicarMigracoes(): Promise<void> {
           FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE
       )
     `);
+
+    // Fases 2-4 do PROJETO ZEUS (pipeline, Cérebro agêntico, ZEUS 24/7) e a
+    // Fase 2B (Comparativo 2.0) criaram modelos novos no schema.prisma, mas o
+    // build não roda mais `prisma db push` — sem isto, as tabelas nunca
+    // seriam criadas em produção e todas as rotas que as usam quebrariam.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ZeusEvent" (
+        "id"         TEXT NOT NULL,
+        "tipo"       TEXT NOT NULL,
+        "severidade" TEXT NOT NULL DEFAULT 'media',
+        "titulo"     TEXT NOT NULL,
+        "detalhe"    TEXT,
+        "resolvido"  BOOLEAN NOT NULL DEFAULT false,
+        "criadoEm"   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "ZeusEvent_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ZeusEvent_tipo_criadoEm_idx" ON "ZeusEvent" ("tipo", "criadoEm")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ZeusEvent_resolvido_idx" ON "ZeusEvent" ("resolvido")`);
+
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CerebroSession" (
+        "id"           TEXT NOT NULL,
+        "titulo"       TEXT,
+        "criadoEm"     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "atualizadoEm" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "CerebroSession_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CerebroMessage" (
+        "id"        TEXT NOT NULL,
+        "sessionId" TEXT NOT NULL,
+        "role"      TEXT NOT NULL,
+        "content"   TEXT NOT NULL,
+        "criadoEm"  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "CerebroMessage_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "CerebroMessage_sessionId_fkey"
+          FOREIGN KEY ("sessionId") REFERENCES "CerebroSession"("id") ON DELETE CASCADE
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CerebroMessage_sessionId_criadoEm_idx" ON "CerebroMessage" ("sessionId", "criadoEm")`);
+
+    // Fase 2B — Comparativo 2.0: conhecimento do vendedor por máquina/concorrente.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "NotaMaquina" (
+        "id"            TEXT NOT NULL,
+        "maquinaId"     TEXT NOT NULL,
+        "concorrenteId" TEXT,
+        "texto"         TEXT NOT NULL,
+        "criadoEm"      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "NotaMaquina_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "NotaMaquina_maquinaId_fkey"
+          FOREIGN KEY ("maquinaId") REFERENCES "Maquina"("id") ON DELETE CASCADE
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "NotaMaquina_maquinaId_idx" ON "NotaMaquina" ("maquinaId")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

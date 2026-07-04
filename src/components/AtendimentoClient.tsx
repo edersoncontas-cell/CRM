@@ -71,11 +71,12 @@ function Avatar({ nome, isGroup, photo, size }: { nome: string; isGroup: boolean
 }
 
 export function AtendimentoClient({
-  conversas, zapiAtiva, convInicial,
+  conversas, zapiAtiva, convInicial, maquinasProprias,
 }: {
   conversas: ConvLista[];
   zapiAtiva: boolean;
   convInicial?: string | null;
+  maquinasProprias: { marca: string; modelo: string }[];
 }) {
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(convInicial ?? null);
@@ -671,7 +672,7 @@ export function AtendimentoClient({
           </>
         )}
       </section>
-      {novaNegoConv && <NovaNegoModal conv={novaNegoConv} onClose={() => setNovaNegoConv(null)} />}
+      {novaNegoConv && <NovaNegoModal conv={novaNegoConv} maquinasProprias={maquinasProprias} onClose={() => setNovaNegoConv(null)} />}
       {vincularConv && <VincularContatoModal conv={vincularConv} onClose={() => setVincularConv(null)} onVinculado={(clienteId) => { patchConv(vincularConv, { clienteId }); setVincularConv(null); }} />}
     </div>
   );
@@ -760,21 +761,8 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
 }
 
 // ── MARCAS E MODELOS ───────────────────────────────────────────────────
-const MODELOS_NEW_HOLLAND = [
-  "E20C","E22C","E30C","E35C","E50C","E57C","E80C","E115C","E135C","E145C","E175C","E215C","E265C","E305C","E385C","E485C",
-  "B95C","B110C","B115C","B115CTC","B95BTC","LB90","LB110","B110TC",
-  "W50C","W70C","W80C","W110C","W130C","W170C",
-  "D120B","D150B","D180B",
-  "RG140B","RG170B",
-  "WE150C","WE170C",
-];
-const MODELOS_DYNAPAC = [
-  "CA1500","CA2500","CA3500","CA4500","CA6000","CA8000",
-  "CC900","CC1000","CC1100","CC1200","CC1300","CC5200","CC6200",
-  "CP142","CP144","CP274","CP275","CP374","CP375",
-  "F1000C","F1200C","F1500C","F1800C","F2000C",
-  "CG2300","CG2600",
-];
+// Vêm do banco (máquinas próprias, proprio: true) via prop — nunca mais
+// hardcoded (a lista antiga tinha modelos que a New Holland não vende aqui).
 const BANCOS_OPCOES = [
   "Banco CNH","Sicoob","Sicredi","Bradesco","Banestes",
   "Banco do Nordeste","Banco do Brasil","Banco Itaú","Outros Bancos",
@@ -798,10 +786,12 @@ function calcValorDePerc(perc: number, total: number): string {
 
 type NovaNegoModalProps = {
   conv: ConvLista;
+  maquinasProprias: { marca: string; modelo: string }[];
   onClose: () => void;
 };
 
-function NovaNegoModal({ conv, onClose }: NovaNegoModalProps) {
+function NovaNegoModal({ conv, maquinasProprias, onClose }: NovaNegoModalProps) {
+  const modelosPorMarca = (m: string) => maquinasProprias.filter((x) => x.marca === m).map((x) => x.modelo);
   const router = useRouter();
   const [marca, setMarca] = useState<"New Holland" | "Dynapac" | "">("");
   const [tipoPagamento, setTipoPagamento] = useState("");
@@ -888,7 +878,7 @@ function NovaNegoModal({ conv, onClose }: NovaNegoModalProps) {
               <span className={labelCls}>Máquina</span>
               <select name="maquinaModelo" className={selectCls} disabled={!marca}>
                 <option value="">{marca ? "— Selecionar —" : "Selecione a marca"}</option>
-                {(marca === "New Holland" ? MODELOS_NEW_HOLLAND : marca === "Dynapac" ? MODELOS_DYNAPAC : []).map(m => (
+                {(marca ? modelosPorMarca(marca) : []).map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>

@@ -2,12 +2,12 @@ import { db } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui";
 import { ResumosClient, type ConversaResumo, type ColunaOpcao } from "@/components/ResumosClient";
 import { ESTAGIOS } from "@/lib/pipeline";
-import { garantirColunasDemanda } from "@/lib/demandas";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
 export default async function ResumosPage() {
-  await garantirColunasDemanda();
+  await garantirManutencaoSeNecessario();
 
   // WhatsAppConversation não tem relação Prisma direta com Cliente (clienteId
   // é só uma coluna) — busca as conversas vinculadas e depois os clientes em lote.

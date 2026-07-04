@@ -9,11 +9,14 @@ export default async function AtendimentoPage({
 }: {
   searchParams: { conversa?: string };
 }) {
-  const conversas = await db.whatsAppConversation.findMany({
-    orderBy: { lastMessageAt: "desc" },
-    take: 300,
-    include: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { body: true, direction: true, sentAt: true, mediaType: true } } },
-  });
+  const [conversas, maquinasProprias] = await Promise.all([
+    db.whatsAppConversation.findMany({
+      orderBy: { lastMessageAt: "desc" },
+      take: 300,
+      include: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { body: true, direction: true, sentAt: true, mediaType: true } } },
+    }),
+    db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
+  ]);
 
   const lista: ConvLista[] = conversas.map((c) => {
     const ult = c.messages[0];
@@ -34,5 +37,5 @@ export default async function AtendimentoPage({
     };
   });
 
-  return <AtendimentoClient conversas={lista} zapiAtiva={zapi.isEnabled()} convInicial={searchParams.conversa ?? null} />;
+  return <AtendimentoClient conversas={lista} zapiAtiva={zapi.isEnabled()} convInicial={searchParams.conversa ?? null} maquinasProprias={maquinasProprias} />;
 }
