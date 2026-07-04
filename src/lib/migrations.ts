@@ -91,6 +91,15 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "NotaMaquina_maquinaId_idx" ON "NotaMaquina" ("maquinaId")`);
+
+    // Fase 2 — pipeline automático do WhatsApp: marca cada mensagem recebida
+    // como processada (webhook em tempo real + cron de fallback). Sem esta
+    // coluna, toda leitura/escrita em WhatsAppMessage quebra (e com ela o
+    // pipeline inteiro e o ZEUS, que dependem de processar mensagens).
+    await db.$executeRawUnsafe(`ALTER TABLE "WhatsAppMessage" ADD COLUMN IF NOT EXISTS "processedAt" TIMESTAMP WITH TIME ZONE`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppMessage_sendStatus_idx" ON "WhatsAppMessage" ("sendStatus")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppMessage_processedAt_idx" ON "WhatsAppMessage" ("processedAt")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppConversation_agnesScheduledAt_idx" ON "WhatsAppConversation" ("agnesScheduledAt")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -273,15 +273,26 @@
      áudio), `ZAPI_WEBHOOK_TOKEN` (opcional — só se a conta Z-API tiver token de segurança; não inventar valor),
      `ZEUS_WHATSAPP_DESTINO` (opcional — briefing matinal) e `ZEUS_ORCAMENTO_IA_DIARIO` (opcional, padrão 50);
      manter as já existentes (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `ZAPI_*`, VAPID).
-  2. **Gap de schema da Fase 2 ainda aberto (pré-existente, não é da Fase 5 nem da Fase 2B)**:
-     `WhatsAppMessage.processedAt` + índices `sendStatus`/`processedAt`/`agnesScheduledAt` e
-     `@@unique([externalPhone])` em `WhatsAppConversation` existem no `schema.prisma` desde a Fase 2, mas nunca
-     ganharam `ALTER TABLE`/`CREATE INDEX` em `aplicarMigracoes()` — o banco de produção ainda não tem essas
-     colunas/índices/constraint. A `@@unique` em especial não é um `ADD COLUMN IF NOT EXISTS` trivial: se já
-     existirem conversas duplicadas por `externalPhone` em produção, a constraint falha ao aplicar (por isso já
-     existe `scripts/dedupe-whatsapp-conversations.ts`, feito para rodar antes). Não mexi nisto agora — avise se
-     quiser que eu resolva (aplico o mesmo padrão de `CREATE INDEX IF NOT EXISTS`/`ADD COLUMN IF NOT EXISTS` e
-     deixo a dedupe + `@@unique` condicionados a rodar o script primeiro).
+  2. **Gap de schema da Fase 2 — encontrado e corrigido (2026-07-04)**: era a causa raiz de "o Zeus não está
+     funcionando" e "o WhatsApp parou de atualizar mensagens" reportados pelo usuário após o merge. Diagnóstico
+     feito direto no Postgres de produção (projeto Neon correto identificado como `neon-aqua-pendant`, org
+     "Vercel: GRUPO E-UNION" — havia um projeto Neon homônimo "de brinde" (`crm-new-holland`, só com a tabela
+     de exemplo `playing_with_neon`) que gerou confusão inicial). `aplicarMigracoes()` (`src/lib/migrations.ts`)
+     já cobria automaticamente `ZeusEvent`, `CerebroSession`, `CerebroMessage`, `NotaMaquina` e até
+     `Cliente.leadScore` (por isso essas partes já funcionavam) — mas **esqueceu de incluir
+     `WhatsAppMessage.processedAt`**, a coluna que o pipeline do ZEUS (Fase 2) lê/escreve em toda mensagem
+     recebida (`src/lib/zeus/pipeline.ts:145,294,302`). Sem ela, `db.whatsAppMessage.update({ data:
+     { processedAt: ... } })` quebrava com "column does not exist" a cada mensagem — travando o pipeline
+     inteiro (cliente não vinculado, negociação não alimentada, push não enviado) e, por consequência, o ZEUS
+     (que depende do mesmo pipeline). Corrigido adicionando `processedAt` + os índices
+     `sendStatus`/`processedAt`/`agnesScheduledAt` em `aplicarMigracoes()` (mesmo padrão `ADD COLUMN IF NOT
+     EXISTS`/`CREATE INDEX IF NOT EXISTS` já usado ali) e aplicado manualmente uma vez direto no Postgres de
+     produção via SQL Editor do Neon (sem downtime, sem precisar de novo deploy — o código já esperava essas
+     colunas desde a Fase 2). **Ainda pendente, não bloqueante**: `@@unique([externalPhone])` em
+     `WhatsAppConversation` (schema.prisma) não está em `aplicarMigracoes()` nem foi aplicada em produção —
+     hoje existem **9 pares de conversas duplicadas** por telefone (confirmado por query direta). Diferente das
+     colunas acima, um `CREATE UNIQUE INDEX` falha na presença de duplicados; requer decidir como mesclar essas
+     9 conversas antes de aplicar. Fica para uma sessão dedicada de limpeza de dados.
 
 ---
 
