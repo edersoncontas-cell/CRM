@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { formatCurrency, mesAnoAtualBrasilia } from "@/lib/utils";
 import { definirComissaoPaga, definirFaturadoEm } from "@/lib/actions";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, CalendarDays } from "lucide-react";
+import { WheelDatePicker, WheelMonthPicker } from "@/components/WheelDatePicker";
 
 type Linha = {
   id: string;
@@ -32,9 +33,24 @@ const TIPO_PGT_CLASS: Record<string, string> = {
   consorcio: "bg-violet-100 text-violet-700",
 };
 
+const MESES_LABEL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+function formatDataBR(iso: string): string {
+  const d = new Date(iso.slice(0, 10) + "T12:00:00");
+  return d.toLocaleDateString("pt-BR");
+}
+
+function formatMesAno(mesAno: string): string {
+  const [ano, mes] = mesAno.split("-").map(Number);
+  if (!ano || !mes) return mesAno;
+  return `${MESES_LABEL[mes - 1]} de ${ano}`;
+}
+
 export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number }) {
   const [rows, setRows] = useState(linhas);
   const [pending, startTransition] = useTransition();
+  const [pickerFaturadoId, setPickerFaturadoId] = useState<string | null>(null);
+  const [pickerMesId, setPickerMesId] = useState<string | null>(null);
 
   function togglePaga(id: string, paga: boolean) {
     const mes = paga ? (rows.find((r) => r.id === id)?.comissaoPagaMes || mesAnoAtualBrasilia()) : null;
@@ -104,13 +120,14 @@ export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number
                 <td className="px-4 py-3 text-right font-bold text-slate-800">{formatCurrency(n.valor)}</td>
                 <td className="px-4 py-3 text-right text-emerald-600 font-semibold">+{formatCurrency((n.valor ?? 0) * taxa)}</td>
                 <td className="px-4 py-3">
-                  <input
-                    type="date"
-                    value={n.faturadoEm.slice(0, 10)}
-                    onChange={(e) => mudarFaturadoEm(n.id, e.target.value)}
+                  <button
+                    onClick={() => setPickerFaturadoId(n.id)}
                     disabled={pending}
-                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 outline-none focus:border-emerald-400 disabled:opacity-60"
-                  />
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 disabled:opacity-60"
+                  >
+                    <CalendarDays size={12} className="text-slate-400" />
+                    {formatDataBR(n.faturadoEm)}
+                  </button>
                 </td>
                 <td className="px-4 py-3 text-slate-500">{n.mesAnoReferencia ?? "—"}</td>
                 <td className="px-4 py-3 text-center">
@@ -127,12 +144,13 @@ export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number
                 </td>
                 <td className="px-4 py-3">
                   {n.comissaoPaga ? (
-                    <input
-                      type="month"
-                      value={n.comissaoPagaMes ?? mesAnoAtualBrasilia()}
-                      onChange={(e) => mudarMes(n.id, e.target.value)}
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs outline-none focus:border-emerald-400"
-                    />
+                    <button
+                      onClick={() => setPickerMesId(n.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+                    >
+                      <CalendarDays size={12} className="text-slate-400" />
+                      {formatMesAno(n.comissaoPagaMes ?? mesAnoAtualBrasilia())}
+                    </button>
                   ) : (
                     <span className="text-slate-300 text-xs">—</span>
                   )}
@@ -152,6 +170,23 @@ export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number
           )}
         </table>
       </div>
+
+      {pickerFaturadoId && (
+        <WheelDatePicker
+          title="Faturado em"
+          valueISO={rows.find((r) => r.id === pickerFaturadoId)!.faturadoEm.slice(0, 10)}
+          onClose={() => setPickerFaturadoId(null)}
+          onConfirm={(iso) => { mudarFaturadoEm(pickerFaturadoId, iso); setPickerFaturadoId(null); }}
+        />
+      )}
+      {pickerMesId && (
+        <WheelMonthPicker
+          title="Mês pago"
+          valueMes={rows.find((r) => r.id === pickerMesId)!.comissaoPagaMes ?? mesAnoAtualBrasilia()}
+          onClose={() => setPickerMesId(null)}
+          onConfirm={(mesAno) => { mudarMes(pickerMesId, mesAno); setPickerMesId(null); }}
+        />
+      )}
     </div>
   );
 }

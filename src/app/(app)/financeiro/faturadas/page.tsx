@@ -19,19 +19,26 @@ export default async function FaturadasPage() {
   const total = negs.reduce((s, n) => s + (n.valor ?? 0), 0);
   const comissaoTotal = total * TAXA;
 
-  const linhas = negs.map((n) => ({
-    id: n.id,
-    clienteId: n.clienteId,
-    clienteNome: n.cliente.nome,
-    municipio: n.cliente.municipio?.nome ?? null,
-    maquina: n.maquinaModelo,
-    tipoPagamento: n.tipoPagamento,
-    valor: n.valor,
-    faturadoEm: (n.faturadoEm ?? n.atualizadoEm).toISOString(),
-    mesAnoReferencia: n.mesAnoReferencia,
-    comissaoPaga: n.comissaoPaga,
-    comissaoPagaMes: n.comissaoPagaMes,
-  }));
+  const linhas = negs
+    .map((n) => ({
+      id: n.id,
+      clienteId: n.clienteId,
+      clienteNome: n.cliente.nome,
+      municipio: n.cliente.municipio?.nome ?? null,
+      maquina: n.maquinaModelo,
+      tipoPagamento: n.tipoPagamento,
+      valor: n.valor,
+      faturadoEm: (n.faturadoEm ?? n.atualizadoEm).toISOString(),
+      mesAnoReferencia: n.mesAnoReferencia,
+      comissaoPaga: n.comissaoPaga,
+      comissaoPagaMes: n.comissaoPagaMes,
+    }))
+    // Reordena pelo valor efetivamente exibido: o `orderBy` do Prisma acima
+    // não basta sozinho porque negociações sem `faturadoEm` (campo recente;
+    // registros antigos ainda não têm) usam `atualizadoEm` como fallback só
+    // na exibição — e no Postgres, NULL em ORDER BY DESC vai para o topo por
+    // padrão, empurrando essas negociações antigas para o início da lista.
+    .sort((a, b) => new Date(b.faturadoEm).getTime() - new Date(a.faturadoEm).getTime());
 
   return (
     <div>

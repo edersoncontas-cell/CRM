@@ -27,11 +27,34 @@ export function AssistenteIA() {
   const dragRef = useRef<{ startX: number; startY: number; offX: number; offY: number; moved: boolean } | null>(null);
   const BTN = 56;
 
+  // Mantém o botão dentro da tela: uma posição salva numa tela maior (ou
+  // antes de um redimensionamento/rotação) pode cair fora dos limites da
+  // tela atual e ficar cortada/sobreposta ao conteúdo.
+  function clampPos(p: { x: number; y: number }): { x: number; y: number } {
+    return {
+      x: Math.max(8, Math.min(window.innerWidth - BTN - 8, p.x)),
+      y: Math.max(8, Math.min(window.innerHeight - BTN - 8, p.y)),
+    };
+  }
+
   useEffect(() => {
     try {
       const s = localStorage.getItem("assistente_pos");
-      if (s) { const p = JSON.parse(s); setPos(p); posRef.current = p; }
+      if (s) {
+        const p = clampPos(JSON.parse(s));
+        setPos(p);
+        posRef.current = p;
+      }
     } catch {}
+
+    function onResize() {
+      if (!posRef.current) return;
+      const p = clampPos(posRef.current);
+      posRef.current = p;
+      setPos(p);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   function onPointerDown(e: React.PointerEvent) {

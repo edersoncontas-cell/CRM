@@ -61,6 +61,15 @@ body {
     @apply bg-slate-400;
 }
 
+/* Some a scrollbar mas mantém o scroll funcionando (usado no seletor de data estilo iOS) */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
 /* Focus ring global */
 :focus-visible {
     @apply outline-none ring-2 ring-brand-500 ring-offset-2;
