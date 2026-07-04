@@ -14,10 +14,11 @@ import {
 } from "@/lib/actions";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
+import { WheelMonthPicker } from "@/components/WheelDatePicker";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
-  AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check,
+  AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check, Bell,
 } from "lucide-react";
 
 interface CardData {
@@ -928,8 +929,17 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>{children}</label>;
 }
 
+const MESES_LABEL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+function formatMesAnoLabel(mesAno: string): string {
+  const [ano, mes] = mesAno.split("-").map(Number);
+  if (!ano || !mes) return mesAno;
+  return `${MESES_LABEL[mes - 1]} de ${ano}`;
+}
+
 function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () => void; colunas: ColunaFunil[] }) {
   const [isPending, startTransition] = useTransition();
+  const [interesseFuturoMes, setInteresseFuturoMes] = useState("");
+  const [pickerAberto, setPickerAberto] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -973,11 +983,30 @@ function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () =
             <Campo label="Data da visita"><input type="datetime-local" name="dataVisita" defaultValue={paraInputLocal(card.dataVisita)} className={inputCls} /></Campo>
             <Campo label="Concorrente"><input name="concorrenteMencionado" defaultValue={card.concorrente ?? ""} className={inputCls} placeholder="Ex: CAT, Komatsu..." /></Campo>
             <Campo label="Próxima ação"><input name="proximaAcao" defaultValue={card.proximaAcao ?? ""} className={inputCls} placeholder="Ex: Ligar terça para follow-up" /></Campo>
+            <Campo label="Interesse futuro — retomar em">
+              <input type="hidden" name="interesseFuturoMes" value={interesseFuturoMes} />
+              <button
+                type="button"
+                onClick={() => setPickerAberto(true)}
+                className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+              >
+                <Bell size={14} className="text-slate-400" />
+                {interesseFuturoMes ? formatMesAnoLabel(interesseFuturoMes) : "Definir mês/ano para entrar em contato de novo"}
+              </button>
+            </Campo>
             <button disabled={isPending} className="w-full rounded-xl bg-slate-900 py-3 font-bold text-agro-400 hover:bg-slate-800 transition-all disabled:opacity-50 shadow-lg">
               {isPending ? "Salvando..." : "Salvar alterações"}
             </button>
           </form>
           </div>
+          {pickerAberto && (
+            <WheelMonthPicker
+              title="Interesse futuro — retomar em"
+              valueMes={interesseFuturoMes}
+              onClose={() => setPickerAberto(false)}
+              onConfirm={(mesAno) => { setInteresseFuturoMes(mesAno); setPickerAberto(false); }}
+            />
+          )}
           <div className="border-t border-slate-100 pt-3">
             <form action={async () => { await excluirNegociacao(card.id); onClose(); }}>
               <button

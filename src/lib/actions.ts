@@ -423,7 +423,7 @@ export async function editarNegociacao(id: string, formData: FormData) {
   const dataVisitaRaw = String(formData.get("dataVisita") ?? "");
   // O input datetime-local vem sem fuso; interpretamos como horário de Brasília (-03:00).
   const dataVisita = dataVisitaRaw ? new Date(`${dataVisitaRaw}:00-03:00`) : null;
-  await db.negociacao.update({
+  const neg = await db.negociacao.update({
     where: { id },
     data: {
       maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
@@ -435,6 +435,24 @@ export async function editarNegociacao(id: string, formData: FormData) {
       ultimoContato: new Date(),
     },
   });
+
+  // Interesse futuro: mês/ano para retomar contato (reaproveita os mesmos
+  // campos já usados no cadastro do cliente e no widget do dashboard).
+  const interesseFuturoMes = String(formData.get("interesseFuturoMes") ?? "");
+  if (interesseFuturoMes) {
+    const [ano, mes] = interesseFuturoMes.split("-").map(Number);
+    if (ano && mes) {
+      await db.cliente.update({
+        where: { id: neg.clienteId },
+        data: {
+          interesseFuturo: true,
+          interesseFuturoData: new Date(ano, mes - 1, 1),
+          interesseFuturoNota: neg.maquinaModelo ? `Retomar negociação — ${neg.maquinaModelo}` : "Retomar negociação",
+        },
+      });
+    }
+  }
+
   revalidatePath("/pipeline");
   revalidatePath("/agenda");
   revalidatePath("/dashboard");
