@@ -1767,6 +1767,39 @@ export async function interpretarComando(
         descricao: `Criar card de negociação para ${c.nome} em "${rotuloEstagio}"${str("maquina") ? ` · ${str("maquina")}` : ""}${valor ? ` · R$ ${valor.toLocaleString("pt-BR")}` : ""}`,
         dados: { clienteId: c.id, estagio, maquina: str("maquina") || null, valor },
       });
+    } else if (tipo === "mover_negociacao") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "mover_negociacao", descricao: `Mover negociação de "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const neg = await db.negociacao.findFirst({ where: { clienteId: c.id, status: "aberta" }, orderBy: { ultimoContato: "desc" } });
+      if (!neg) { plano.push({ tipo: "mover_negociacao", descricao: `Mover negociação de ${c.nome}`, dados: {}, erro: `${c.nome} não tem negociação aberta.` }); continue; }
+      const estagio = resolverEstagioAssist(str("estagio"));
+      if (!estagio) { plano.push({ tipo: "mover_negociacao", descricao: `Mover negociação de ${c.nome}`, dados: {}, erro: `Estágio "${str("estagio")}" não reconhecido.` }); continue; }
+      const rotuloEstagio = ESTAGIOS.find((e) => e.id === estagio)?.titulo ?? estagio;
+      plano.push({
+        tipo: "mover_negociacao",
+        descricao: `Mover negociação de ${c.nome} para "${rotuloEstagio}"`,
+        dados: { negociacaoId: neg.id, estagio },
+      });
+    } else if (tipo === "marcar_venda_ganha") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "marcar_venda_ganha", descricao: `Marcar venda ganha de "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const neg = await db.negociacao.findFirst({ where: { clienteId: c.id, status: "aberta" }, orderBy: { ultimoContato: "desc" } });
+      if (!neg) { plano.push({ tipo: "marcar_venda_ganha", descricao: `Marcar venda ganha de ${c.nome}`, dados: {}, erro: `${c.nome} não tem negociação aberta.` }); continue; }
+      plano.push({
+        tipo: "marcar_venda_ganha",
+        descricao: `Marcar venda de ${c.nome}${neg.maquinaModelo ? ` (${neg.maquinaModelo})` : ""} como ganha`,
+        dados: { negociacaoId: neg.id },
+      });
+    } else if (tipo === "marcar_venda_perdida") {
+      const c = await acharClientePorNomeAprox(str("cliente"));
+      if (!c) { plano.push({ tipo: "marcar_venda_perdida", descricao: `Marcar venda perdida de "${str("cliente")}"`, dados: {}, erro: `Cliente "${str("cliente")}" não encontrado.` }); continue; }
+      const neg = await db.negociacao.findFirst({ where: { clienteId: c.id, status: "aberta" }, orderBy: { ultimoContato: "desc" } });
+      if (!neg) { plano.push({ tipo: "marcar_venda_perdida", descricao: `Marcar venda perdida de ${c.nome}`, dados: {}, erro: `${c.nome} não tem negociação aberta.` }); continue; }
+      plano.push({
+        tipo: "marcar_venda_perdida",
+        descricao: `Marcar venda de ${c.nome} como perdida${str("motivo") ? ` · ${str("motivo")}` : ""}`,
+        dados: { negociacaoId: neg.id, motivo: str("motivo") || "Não informado" },
+      });
     } else if (tipo === "criar_tarefa") {
       const titulo = str("titulo");
       if (!titulo) { plano.push({ tipo: "criar_tarefa", descricao: "Criar demanda", dados: {}, erro: "Título não informado." }); continue; }
@@ -1847,6 +1880,12 @@ export async function executarPlano(
             ultimoContato: new Date(),
           },
         });
+      } else if (a.tipo === "mover_negociacao") {
+        await moverNegociacao(s("negociacaoId"), s("estagio"));
+      } else if (a.tipo === "marcar_venda_ganha") {
+        await marcarGanha(s("negociacaoId"));
+      } else if (a.tipo === "marcar_venda_perdida") {
+        await marcarPerdida(s("negociacaoId"), s("motivo") || "Não informado");
       } else if (a.tipo === "criar_tarefa") {
         const ultima = await db.tarefaKanban.findFirst({ where: { coluna: s("colunaId") }, orderBy: { ordem: "desc" }, select: { ordem: true } });
         await db.tarefaKanban.create({

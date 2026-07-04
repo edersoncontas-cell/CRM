@@ -6,6 +6,9 @@ export type TipoAcao =
   | "editar_cliente"
   | "editar_resumo"
   | "criar_card"
+  | "mover_negociacao"
+  | "marcar_venda_ganha"
+  | "marcar_venda_perdida"
   | "criar_tarefa"
   | "agendar_visita";
 
