@@ -136,3 +136,10 @@ export function iniciais(nome: string) {
     .map((p) => p[0]?.toUpperCase())
     .join("");
 }
+
+// Remove o código do país (+55/55) de um telefone brasileiro, deixando só
+// DDD+número — mesma regra usada em atualizarCliente() ao salvar, aqui usada
+// para EXIBIR o valor já correto antes de salvar (ex.: pré-preencher um campo).
+export function semCodigoPais(telefone: string): string {
+  return telefone.replace(/^(\+55|55)(?=\d{10,11}$)/, "");
+}

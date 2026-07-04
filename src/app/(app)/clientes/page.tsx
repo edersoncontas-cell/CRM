@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
-import { iniciais, diasDesde } from "@/lib/utils";
+import { iniciais, diasDesde, semCodigoPais } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ClienteAcoes } from "@/components/ClienteAcoes";
 import { BuscaClientesInstantanea } from "@/components/BuscaClientesInstantanea";
 import { BarrasHorizontais } from "@/components/charts";
+import { PopupContatoSemNome } from "@/components/PopupContatoSemNome";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
@@ -35,7 +36,7 @@ export default async function ClientesPage({
   // clientes de cara, uma lista enorme sem filtro nenhum.
   const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
@@ -73,6 +74,14 @@ export default async function ClientesPage({
       where: { foraDeArea: false },
       select: { nome: true, clientes: { select: { visitas: { select: { id: true } } } } },
     }),
+    // Contatos do WhatsApp vinculados automaticamente sem nome real (o pipeline
+    // cria como "Contato <telefone>" quando a Z-API não manda o nome do contato)
+    db.cliente.findMany({
+      where: { nome: { startsWith: "Contato ", mode: "insensitive" } },
+      select: { id: true, telefone: true },
+      orderBy: { criadoEm: "desc" },
+      take: 15,
+    }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -94,6 +103,8 @@ export default async function ClientesPage({
     .sort((a, b) => b.total - a.total);
   const maisVisitados = visitasPorMunicipio.slice(0, 6);
   const menosVisitados = visitasPorMunicipio.slice(-6).reverse();
+
+  const filaContatosSemNome = contatosSemNome.map((c) => ({ id: c.id, telefone: semCodigoPais(c.telefone ?? "") }));
 
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
@@ -310,6 +321,8 @@ export default async function ClientesPage({
           )}
         </div>
       </div>
+
+      <PopupContatoSemNome contatos={filaContatosSemNome} municipios={municipios} />
     </div>
   );
 }
