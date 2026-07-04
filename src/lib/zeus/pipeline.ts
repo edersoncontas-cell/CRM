@@ -56,7 +56,7 @@ function ajusteTermometro(sentimento: string | null): number {
 
 // Alimenta a negociação aberta do cliente (ou cria uma nova se for prospect
 // real), incluindo o ajuste do termômetro conforme o sentimento detectado.
-async function alimentarNegociacao(
+export async function alimentarNegociacao(
   clienteId: string,
   ex: ExtracaoConversa
 ): Promise<{ id: string; criada: boolean } | null> {
@@ -109,7 +109,7 @@ async function alimentarNegociacao(
 }
 
 // Registra a visita detectada na agenda do cliente, evitando duplicar a mesma data.
-async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null) {
+export async function registrarVisitaAgenda(clienteId: string, dataVisita: Date | null) {
   if (!dataVisita) return;
   const jaExiste = await db.visita.findFirst({
     where: {

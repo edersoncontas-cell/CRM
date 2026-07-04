@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA } from "./config";
+import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
+export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
@@ -795,6 +797,38 @@ e uma frase de fechamento ideal para o perfil.`,
   } catch (e) {
     console.error("Falha ao sugerir abordagem:", e);
     return { perfil: null, abordagem: "Não foi possível analisar agora." };
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// Next Best Action (Fase 5, item 2): próxima ação concreta sugerida pela IA
+// a partir do contexto completo do cliente (mesmo contexto rico do Cérebro).
+// ────────────────────────────────────────────────────────────
+
+export async function sugerirProximaAcaoIA(
+  contexto: string,
+  sinais: SinaisProximaAcao
+): Promise<{ acao: string; motivo: string }> {
+  const fallback = sugerirProximaAcaoHeuristica(sinais);
+  if (!iaHabilitada()) return fallback;
+  try {
+    const raw = await llmTexto(
+      `Você é o Cérebro, assistente de vendas de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do Espírito Santo).
+Com base no contexto completo do cliente abaixo, sugira a PRÓXIMA AÇÃO CONCRETA que o vendedor deve tomar HOJE
+(ex: "Ligar e oferecer test-drive da E215B — ele citou o concorrente Caterpillar e o prazo de safra").
+Seja específico: cite a máquina, o concorrente, a visita ou o valor quando existirem no contexto — nunca genérico como "entrar em contato".
+Devolva SOMENTE JSON: {"acao": string (máx. 140 caracteres), "motivo": string (1 frase, por que essa ação agora)}.
+NUNCA invente dados que não estejam no contexto — se não houver nada específico, sugira uma ação genérica mas honesta.`,
+      `Contexto do cliente:\n${contexto}`,
+      { maxTokens: 300, json: true }
+    );
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    const acao = typeof parsed.acao === "string" && parsed.acao.trim() ? parsed.acao.trim().slice(0, 200) : fallback.acao;
+    const motivo = typeof parsed.motivo === "string" && parsed.motivo.trim() ? parsed.motivo.trim() : fallback.motivo;
+    return { acao, motivo };
+  } catch (e) {
+    console.error("Falha ao sugerir próxima ação:", e);
+    return fallback;
   }
 }
 

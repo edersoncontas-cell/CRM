@@ -181,7 +181,107 @@
     automática do ZEUS é auditada com `origem:"zeus"`.
   - **Novas envs**: `ZEUS_WHATSAPP_DESTINO` (número do vendedor para o briefing) e `ZEUS_ORCAMENTO_IA_DIARIO`
     (opcional) — documentadas no `.env.example` e no README.
-- ⬜ Fase 5 — pendente.
+- ✅ **Fase 5** — concluída em `claude/projeto-zeus-fase-5-pzjz4l` (2026-07-04; branch recriada a partir de
+  `claude/projeto-zeus-fase-2-8vxxpr`, que tinha as Fases 2-4 ainda não mescladas). Testada conforme a Fase 6:
+  `tsc`/`lint`/`build` limpos; Postgres local com cenários seedados manualmente (negociação quente parada 7 dias
+  com concorrente citado, cliente aguardando resposta, cliente "sumido" há 40 dias já-cliente); `zeus-tick`
+  chamado via `curl` e conferido no banco; fluxo completo testado ponta a ponta no navegador via Playwright
+  (desktop 1280×900 e mobile 390×844 — screenshots antes/depois de cada tela nova).
+  - **1. Lead scoring** (`src/lib/zeus/leadscore.ts`, novo): `Cliente.leadScore` (0-100) + `leadScoreAtualizadoEm`
+    novos no schema. `calcularLeadScore` combina termômetro (proxy de sentimento acumulado, 35%), valor da
+    negociação, probabilidade do estágio (`PROB_ESTAGIO` de `lib/insights.ts`, reaproveitado), recência de
+    contato e sinais de compra (visita agendada, concorrente mencionado, aguardando resposta); clientes sem
+    nenhum sinal comercial ativo caem no ramo "frio", que só decai com os dias sem contato — é esse ramo que
+    alimenta o Radar de Silêncio. `recalcularLeadScores()` roda a cada `zeus-tick`: sempre para clientes com
+    sinal ativo (negociação aberta/aguardando resposta/interesse futuro) e, para não varrer a base inteira a
+    cada 5 min, em lotes de até 200 clientes "frios" com score desatualizado há 1+ dia. Substitui o termômetro
+    fixo como critério de priorização (o termômetro em si continua existindo por negociação — usado como um dos
+    fatores do score; removê-lo do schema tocaria Kanban/funil/actions em vários arquivos e fica fora de escopo
+    desta sessão); widget **"Top 5 para Atacar Hoje"** novo
+    no dashboard, ordenado por `leadScore` desc, mostrando a próxima ação (item 2) ou o motivo (aguardando
+    resposta/máquina de interesse). Testado: score recalculado corretamente a cada tick e reagindo a mudanças
+    reais (o score de um cliente subiu de 60 para 71 no tick seguinte a um registro de visita por voz, porque
+    `ultimoContato` virou "hoje" — confirma que os itens 1 e 5 se alimentam corretamente um do outro).
+  - **2. Next Best Action** (`sugerirProximaAcaoIA` em `lib/ai/index.ts`, fallback heurístico em
+    `lib/zeus/nextbestaction.ts`, ação `sugerirProximaAcaoCliente` em `actions.ts`, componente
+    `NextBestAction.tsx`): botão "Sugerir próxima ação" na ficha do cliente lê o mesmo contexto rico do
+    Cérebro (`montarContextoCliente`, reaproveitado de `cerebro-resposta.ts`) e devolve uma ação concreta e
+    específica (cita máquina/concorrente/visita quando existirem no contexto) + o motivo; grava direto em
+    `Negociacao.proximaAcao` (campo que já existia e já aparecia no funil — sem migração nova) e audita como
+    `origem:"cerebro"`. Botão "Criar tarefa" (`criarTarefaDeAcao`) grava a sugestão como `TarefaKanban` vinculada
+    ao cliente. O mesmo fallback heurístico (sem custo de IA extra) foi ligado ao briefing diário do
+    `zeus-diario`: cada uma das top-3 negociações do briefing agora vem com "próxima ação" (usa
+    `Negociacao.proximaAcao` se já tiver sido gerado pelo botão; senão cai na heurística) — sem chamada de IA
+    adicional, a mesma reescrita final do briefing já paga por isso. Testado no navegador: gerou "Ligar para
+    [cliente] e reforçar diferenciais frente a Caterpillar" corretamente a partir do `concorrenteMencionado` da
+    negociação seedada, e "Criar tarefa" gravou a `TarefaKanban` (conferido no banco).
+  - **3. Follow-up automático inteligente** (novo passo `followUpInteligente()` em `lib/zeus/tick.ts`,
+    `gerarMensagemFollowUp` em `cerebro-resposta.ts`): a cada tick, negociações abertas com termômetro ≥55 e
+    5-15 dias sem contato (antes do alerta "esfriando" de 10+ dias virar cobrança) recebem um RASCUNHO de
+    mensagem de retomada gerado pela IA no estilo do vendedor (mesmo contexto rico do item 2), criado direto na
+    fila de `/atendimento` (`isDraft:true`, nunca enviado sozinho — mesmo padrão de segurança do
+    `enviar_resposta` do Cérebro da Fase 3). Dedup por negociação (1x por semana) e respeita o orçamento diário
+    de IA do ZEUS. **Bug pego e corrigido durante o teste**: a primeira versão usava `eventoSeNovo` (que já
+    CRIA o evento de dedup) antes de saber se a chamada de IA ia funcionar — uma falha transitória da API
+    "queimaria" a janela de uma semana sem gerar rascunho nenhum. Corrigido para só checar (sem criar) antes,
+    e só registrar o `ZeusEvent`/`AuditLog` depois que o rascunho é criado de verdade. Testado com uma chave da
+    Anthropic falsa: tick não quebrou, `followUp.preparados` ficou em 0 e nenhum `ZeusEvent`/rascunho órfão
+    foi criado — a próxima tentativa não é bloqueada.
+  - **4. Radar de Silêncio** (`/radar-silencio`, novo, com entrada no menu lateral): lista clientes com
+    `ultimoContato` 15+ dias atrás (excluindo `status:"nao_cliente"`), ordenada por `leadScore` asc (o mais frio
+    primeiro) — reaproveita o mesmo score do item 1. Serve para reativação de carteira: quem já teve contato
+    (ou já comprou) e esfriou aparece antes de virar perda de fato. Testado com um cliente seedado "sumido" há
+    40 dias (score 10, badge "já é cliente").
+  - **5. Modo Campo por voz** (`RegistroVisitaVoz.tsx`, novo, na ficha do cliente; ação
+    `registrarVisitaPorVoz` em `actions.ts`): o vendedor fala o que aconteceu na visita ("visitei o João, quer
+    trocar a retro, orcei 480 mil") e a IA (mesma `analisarConversaIA` do pipeline da Fase 2, com fallback
+    heurístico sem IA) atualiza o resumo do cliente, alimenta a negociação aberta (reaproveita
+    `alimentarNegociacao`/`registrarVisitaAgenda`, exportadas de `lib/zeus/pipeline.ts` sem alterar seu
+    comportamento), registra a visita (data = agora) e agenda um follow-up (`TarefaKanban` com prazo na próxima
+    visita detectada, ou em 3 dias por padrão). O ditado por voz foi extraído do `AssistenteIA.tsx` para um
+    hook compartilhado (`src/lib/useDitadoVoz.ts`) — o próprio `AssistenteIA` foi migrado para usá-lo, em vez de
+    duplicar a lógica do `SpeechRecognition`. Testado ponta a ponta (texto digitado simulando o ditado): extraiu
+    valor R$ 480.000, criou a `Visita`, atualizou `Cliente.resumoTexto`/`ultimoContato`/`visitado`, e agendou o
+    follow-up — tudo conferido direto no banco.
+  - **6. Detecção de sinais de compra em áudios (confirmado, não reimplementado)**: já coberto pelo pipeline da
+    Fase 2. Todo áudio recebido no WhatsApp sem `transcript` é baixado (`baixarAudio`) e transcrito via Whisper
+    (`transcreverBuffer`, `lib/integrations/transcription.ts`) tanto no webhook em tempo real quanto no cron de
+    fallback `zeus-pipeline`; o texto transcrito (`🎤 {texto}`) vira o `body`/`corpoAnalise` da mensagem e passa
+    pelo MESMO `analisarConversaIA` usado em texto puro — ou seja, extrai máquina/valor/condição/concorrente/
+    data de visita/sentimento de qualquer áudio, automaticamente, sem depender de o cliente escrever
+    (`src/lib/zeus/pipeline.ts`, função `processarMensagem`, passos 2 e 5). Nenhum código novo necessário.
+  - **7. Backlog pós-MVP** (simulador de financiamento compartilhável, QR de indicação): mantido fora de escopo,
+    conforme o próprio plano já previa.
+  - **Novo campo no schema**: `Cliente.leadScore Int @default(50)` + `Cliente.leadScoreAtualizadoEm DateTime?`
+    (`@@index([leadScore])`). Originalmente sem migration formal — resolvido no merge para a base de deploy (ver
+    item abaixo): `leadScore`/`leadScoreAtualizadoEm`/índice agora são criados automaticamente via
+    `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` em `aplicarMigracoes()` (`src/lib/migrations.ts`), no mesmo padrão
+    já usado pela Fase 2B — **não precisa rodar `prisma db push` manualmente** para este campo.
+- ✅ **Merge Fases 0-5 → base de deploy** — concluído em duas etapas: `claude/projeto-zeus-merge-deploy-jc6p7x`
+  mesclou a Fase 5 no tip de `claude/relaxed-cori-5c3g4l` (2026-07-04); a sessão da Fase 2B então resolveu os 3
+  conflitos textuais (`src/lib/actions.ts`, `src/lib/menu.ts`, `src/app/(app)/clientes/[id]/page.tsx` — imports
+  duplicados/divergentes, nada semântico) contra o tip já atualizado (que incluía a Fase 2B), adicionou a
+  migração automática do `leadScore` acima, e mesclou tudo em `claude/relaxed-cori-5c3g4l` via PR. Verificado
+  pós-merge: `npx tsc --noEmit`, `npm run lint` e `npm run build` limpos; testado localmente com Postgres de
+  teste simulando produção (dropei `leadScore`/`ZeusEvent`/`CerebroSession`/`CerebroMessage`/`NotaMaquina`,
+  rodei a manutenção e confirmei via `psql` que tudo voltou; naveguei por `/dashboard` — widget "Top 5 para
+  Atacar Hoje" —, `/radar-silencio` e a ficha do cliente — "Next Best Action" + "Modo Campo por voz" — sem
+  erros no console).
+  **Pendências reais para o deploy (decisão do usuário, não executadas sozinho):**
+  1. **Env vars na Vercel** (ver tabela "Segurança em produção" no README): `APP_PASSWORD`, `AUTH_SECRET`,
+     `CRON_SECRET` (sem ela, TODOS os 6 crons do `vercel.json` retornam 401), `GROQ_API_KEY` (transcrição de
+     áudio), `ZAPI_WEBHOOK_TOKEN` (opcional — só se a conta Z-API tiver token de segurança; não inventar valor),
+     `ZEUS_WHATSAPP_DESTINO` (opcional — briefing matinal) e `ZEUS_ORCAMENTO_IA_DIARIO` (opcional, padrão 50);
+     manter as já existentes (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `ZAPI_*`, VAPID).
+  2. **Gap de schema da Fase 2 ainda aberto (pré-existente, não é da Fase 5 nem da Fase 2B)**:
+     `WhatsAppMessage.processedAt` + índices `sendStatus`/`processedAt`/`agnesScheduledAt` e
+     `@@unique([externalPhone])` em `WhatsAppConversation` existem no `schema.prisma` desde a Fase 2, mas nunca
+     ganharam `ALTER TABLE`/`CREATE INDEX` em `aplicarMigracoes()` — o banco de produção ainda não tem essas
+     colunas/índices/constraint. A `@@unique` em especial não é um `ADD COLUMN IF NOT EXISTS` trivial: se já
+     existirem conversas duplicadas por `externalPhone` em produção, a constraint falha ao aplicar (por isso já
+     existe `scripts/dedupe-whatsapp-conversations.ts`, feito para rodar antes). Não mexi nisto agora — avise se
+     quiser que eu resolva (aplico o mesmo padrão de `CREATE INDEX IF NOT EXISTS`/`ADD COLUMN IF NOT EXISTS` e
+     deixo a dedupe + `@@unique` condicionados a rodar o script primeiro).
 
 ---
 
