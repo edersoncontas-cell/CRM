@@ -79,6 +79,8 @@ export function FunilNegociacoes({
   const [filtro, setFiltro] = useState("");
   const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
   const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
+  const [novaNegociacaoAberta, setNovaNegociacaoAberta] = useState(false);
+  const colunasParaNova = colunas.filter((c) => !c.titulo.toLowerCase().includes("perdid"));
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -183,6 +185,15 @@ export function FunilNegociacoes({
         <BotaoNovaColuna />
       </div>
 
+      {/* Nova Negociação — botão único no topo, abre modal central */}
+      <button
+        onClick={() => setNovaNegociacaoAberta(true)}
+        className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-black shadow-sm transition hover:brightness-95"
+        style={{ background: "#BFDE4D" }}
+      >
+        <Plus size={16} /> Nova Negociação
+      </button>
+
       {/* Funil Kanban com DnD suave */}
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="overflow-x-auto pb-4">
@@ -211,7 +222,6 @@ export function FunilNegociacoes({
                   cards={lista}
                   total={totalCol}
                   clientes={clientes}
-                  maquinasProprias={maquinasProprias}
                   onEditar={setEditando}
                   onRenomear={async (novoTitulo) => {
                     setColunas((cs) => cs.map((c) => c.id === col.id ? { ...c, titulo: novoTitulo } : c));
@@ -232,6 +242,15 @@ export function FunilNegociacoes({
       </DndContext>
 
       {editando && <ModalEditar card={editando} onClose={() => setEditando(null)} colunas={colunas} />}
+
+      {novaNegociacaoAberta && (
+        <FormAdicionar
+          colunas={colunasParaNova}
+          clientes={clientes}
+          maquinasProprias={maquinasProprias}
+          onFechar={() => setNovaNegociacaoAberta(false)}
+        />
+      )}
 
       {confirmFaturamento && (
         <PopupConfirmarFaturamento
@@ -395,19 +414,17 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, clientes, maquinasProprias, onEditar, onRenomear, onExcluir,
+  coluna, cards, total, clientes, onEditar, onRenomear, onExcluir,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
   clientes: Cliente[];
-  maquinasProprias: MaquinaPropria[];
   onEditar: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: coluna.id });
-  const [adicionando, setAdicionando] = useState(false);
   const [adicionandoAntiga, setAdicionandoAntiga] = useState(false);
   const [renomeando, setRenomeando] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -532,26 +549,14 @@ function ColunaFunilView({
         )}
       </div>
 
-      {/* Adicionar card */}
-      {!isPerdido && (
+      {/* Negociação antiga (só na coluna FATURADO) */}
+      {!isPerdido && adicionandoAntiga && (
         <div className="mt-2">
-          {adicionandoAntiga && (
-            <FormAntigaNegociacao
-              estagio={coluna.titulo}
-              clientes={clientes}
-              onFechar={() => setAdicionandoAntiga(false)}
-            />
-          )}
-          {adicionando ? (
-            <FormAdicionar estagio={coluna.titulo} clientes={clientes} maquinasProprias={maquinasProprias} onFechar={() => setAdicionando(false)} />
-          ) : (
-            <button
-              onClick={() => setAdicionando(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-600 py-2.5 text-xs font-semibold text-slate-400 transition hover:border-agro-400 hover:text-agro-400 hover:bg-agro-400/5"
-            >
-              <Plus size={14} /> Nova negociação
-            </button>
-          )}
+          <FormAntigaNegociacao
+            estagio={coluna.titulo}
+            clientes={clientes}
+            onFechar={() => setAdicionandoAntiga(false)}
+          />
         </div>
       )}
     </div>
@@ -641,17 +646,18 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
 
 // ── Formulário de nova negociação ────────────────────────────────────────
 function FormAdicionar({
-  estagio,
+  colunas,
   clientes,
   maquinasProprias,
   onFechar,
 }: {
-  estagio: string;
+  colunas: ColunaFunil[];
   clientes: Cliente[];
   maquinasProprias: MaquinaPropria[];
   onFechar: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [estagio, setEstagio] = useState(colunas[0]?.titulo ?? "");
   const [pagamento, setPagamento] = useState("");
   const [entradaValor, setEntradaValor] = useState("");
   const [valorMaquina, setValorMaquina] = useState("");
@@ -730,7 +736,6 @@ function FormAdicionar({
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-white">Nova Negociação</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Coluna: {estagio}</p>
           </div>
           <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
             <X size={18} />
@@ -754,7 +759,12 @@ function FormAdicionar({
           }}
           className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
         >
-          <input type="hidden" name="estagio" value={estagio} />
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Coluna</label>
+            <select value={estagio} onChange={(e) => setEstagio(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
+              {colunas.map((c) => <option key={c.id} value={c.titulo}>{c.titulo}</option>)}
+            </select>
+          </div>
           {/* Cliente */}
           <div className="grid grid-cols-2 gap-3">
             <div>
