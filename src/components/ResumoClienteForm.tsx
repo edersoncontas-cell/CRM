@@ -53,6 +53,7 @@ export function ResumoClienteForm({
   temConversa = false,
   perfilDISC = null,
   abordagemIA = null,
+  maquinasProprias = [],
 }: {
   clienteId: string;
   resumo: Resumo;
@@ -60,6 +61,7 @@ export function ResumoClienteForm({
   temConversa?: boolean;
   perfilDISC?: string | null;
   abordagemIA?: string | null;
+  maquinasProprias?: { marca: string; modelo: string }[];
 }) {
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
@@ -190,7 +192,7 @@ export function ResumoClienteForm({
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Máquinas de interesse</label>
-              <input value={maquinas} onChange={(e) => setMaquinas(e.target.value)} placeholder="Ex: E215B; E145C EVO"
+              <input value={maquinas} onChange={(e) => setMaquinas(e.target.value)} placeholder="Ex: E215C; E145C"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500" />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -298,7 +300,7 @@ export function ResumoClienteForm({
         )}
       </div>
       {novaNegoOpen && (
-        <NovaNegoModalInline clienteId={clienteId} onClose={() => setNovaNegoOpen(false)} />
+        <NovaNegoModalInline clienteId={clienteId} maquinasProprias={maquinasProprias} onClose={() => setNovaNegoOpen(false)} />
       )}
     </div>
   );
@@ -306,8 +308,8 @@ export function ResumoClienteForm({
 
 // ─── Modal Gerar Negociação (no cadastro do cliente) ─────────────────────────
 const BANCOS_OPCOES = ["Banco CNH","Sicoob","Sicredi","Bradesco","Banestes","Banco do Nordeste","Banco do Brasil","Banco Itaú","Outros Bancos"];
-const NH_MODELS = ["E145C","E215C","E265C","E305C","E385C","W130C","W170C","B95C","B110C","B115C","RG140B","RG170B","D150B","D180B"];
-const DY_MODELS = ["CC1200","CC1300","CC900","CP1200","CA1500","CA3500","CS1400","F141C","F181C"];
+// Modelos vêm do banco (máquinas próprias, proprio: true) via prop — nunca
+// mais hardcoded (a lista antiga tinha modelos que a New Holland não vende aqui).
 
 function fmtBRL(v: string): string {
   const n = v.replace(/\D/g, "");
@@ -315,7 +317,7 @@ function fmtBRL(v: string): string {
   return parseInt(n, 10).toLocaleString("pt-BR");
 }
 
-function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClose: () => void }) {
+function NovaNegoModalInline({ clienteId, maquinasProprias, onClose }: { clienteId: string; maquinasProprias: { marca: string; modelo: string }[]; onClose: () => void }) {
   const [marca, setMarca] = useState("");
   const [maquina, setMaquina] = useState("");
   const [valor, setValor] = useState("");
@@ -324,7 +326,7 @@ function NovaNegoModalInline({ clienteId, onClose }: { clienteId: string; onClos
   const [entradaValor, setEntradaValor] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  const models = marca === "New Holland" ? NH_MODELS : marca === "Dynapac" ? DY_MODELS : [];
+  const models = marca ? maquinasProprias.filter((m) => m.marca === marca).map((m) => m.modelo) : [];
   const inputCls = "w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400";
 
   async function submit(e: React.FormEvent) {

@@ -93,8 +93,9 @@ export function Sidebar() {
           "fixed inset-y-0 left-0 z-50 flex w-72 flex-col",
           // Visual
           "bg-brand-900 text-brand-100 shadow-2xl",
-          // Desktop: sticky normal
-          "md:sticky md:top-0 md:z-30 md:w-64 md:min-h-screen md:shadow-none md:bg-gradient-to-b md:from-brand-900 md:to-brand-950",
+          // Desktop: sticky, com altura travada na viewport para o <nav> interno
+          // rolar sozinho (sem isso, o menu rolava junto com a página).
+          "md:sticky md:top-0 md:z-30 md:h-screen md:max-h-screen md:w-64 md:overflow-hidden md:shadow-none md:bg-gradient-to-b md:from-brand-900 md:to-brand-950",
           // Animação mobile
           "transition-transform duration-300 ease-in-out md:translate-x-0",
           aberto ? "translate-x-0" : "-translate-x-full"

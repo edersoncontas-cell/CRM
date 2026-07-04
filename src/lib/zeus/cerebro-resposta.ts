@@ -102,6 +102,32 @@ export async function montarContextoCliente(conv: {
       linhas.push(`Alertas: ${cliente.alertas.map((a) => a.mensagem).join("; ")}`);
     }
 
+    // Notas de conhecimento do vendedor (Comparativo 2.0) sobre a(s)
+    // máquina(s) que o cliente demonstrou interesse — resumo/negociações.
+    const modelosInteresse = new Set<string>();
+    if (cliente.resumoMaquinas) modelosInteresse.add(cliente.resumoMaquinas);
+    for (const neg of negociacoes) if (neg.maquinaModelo) modelosInteresse.add(neg.maquinaModelo);
+    if (modelosInteresse.size > 0) {
+      const maquinasInteresse = await db.maquina.findMany({
+        where: { proprio: true, OR: Array.from(modelosInteresse).map((m) => ({ modelo: { contains: m, mode: "insensitive" as const } })) },
+        select: { id: true, modelo: true },
+      });
+      if (maquinasInteresse.length > 0) {
+        const notas = await db.notaMaquina.findMany({
+          where: { maquinaId: { in: maquinasInteresse.map((m) => m.id) } },
+          orderBy: { criadoEm: "desc" },
+          take: 10,
+        });
+        if (notas.length > 0) {
+          linhas.push(`--- Notas do vendedor sobre a(s) máquina(s) de interesse ---`);
+          for (const nt of notas) {
+            const maq = maquinasInteresse.find((m) => m.id === nt.maquinaId);
+            linhas.push(`• [${maq?.modelo ?? "?"}] ${nt.texto}`);
+          }
+        }
+      }
+    }
+
     return linhas.join("\n");
   } catch {
     return `Cliente: ${conv.contactName ?? conv.externalPhone}`;

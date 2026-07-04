@@ -150,7 +150,21 @@ model Maquina {
   curiosidades      String?
   imagemUrl         String?
   midiaPosts        MidiaPost[]
+  notas             NotaMaquina[]
   @@unique([marca, modelo])
+}
+
+// Comparativo 2.0 (Fase 2B): conhecimento do vendedor sobre uma máquina
+// própria, opcionalmente contra um concorrente específico. Alimenta o resumo
+// de diferenciais com IA e o comparativo completo — nunca specs inventadas.
+model NotaMaquina {
+  id            String   @id @default(cuid())
+  maquina       Maquina  @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+  maquinaId     String
+  concorrenteId String?  // opcional: nota específica contra um concorrente
+  texto         String
+  criadoEm      DateTime @default(now())
+  @@index([maquinaId])
 }
 
 model Conversa {

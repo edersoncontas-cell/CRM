@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
-import { garantirRegioes } from "@/lib/regioes";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { CerebroChat } from "@/components/CerebroChat";
 import { Brain } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function CerebroPage() {
-  await garantirRegioes();
+  await garantirManutencaoSeNecessario();
 
   const [totalClientes, negsAbertas, negsGanhas, negsPerdidas, audits] = await Promise.all([
     db.cliente.count(),

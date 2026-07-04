@@ -4,12 +4,80 @@
 
 ## Estado de execução
 
-- ⬜ Fase 2B — pendente.
+- ✅ Fase 2B — concluída (todos os itens A–J + Passo 0, na ordem, com verificação local em Postgres de teste).
+
+**Passo 0 (schema em produção):** implementado com a preferência indicada — `NotaMaquina`, `ZeusEvent`, `CerebroSession` e
+`CerebroMessage` agora são criadas via `CREATE TABLE IF NOT EXISTS` em `aplicarMigracoes()` (`src/lib/migrations.ts`), disparada
+automaticamente pela rota `POST /api/admin/manutencao` (`src/lib/manutencao.ts`) e/ou na primeira renderização de qualquer página
+pesada (guard `manutencao.v1` em `Configuracao`, 1 SELECT memoizado por request via `React.cache`). **Não é preciso rodar
+`prisma db push` manualmente em produção** — basta fazer o redeploy; a manutenção completa dispara sozinha no primeiro acesso, ou
+pode ser disparada na hora pelo botão "Rodar manutenção" em Configurações. Testado localmente: dropei as 4 tabelas do Postgres de
+teste, chamei a rota autenticada e confirmei via `psql` que as 4 voltaram a existir.
+
+**A (performance):** rota `/api/admin/manutencao` + botão em Configurações; `garantir*` removidas de todas as páginas
+(clientes, clientes/[id], negociações, pipeline, resumos, máquinas, cérebro) e substituídas por
+`garantirManutencaoSeNecessario()`; `loading.tsx` genérico + específicos (dashboard, clientes, negociações, atendimento). O
+dashboard já consolidava tudo em um único `Promise.all` (feito em fase anterior) — nada a mudar ali. Medição local (Postgres
+de teste, dev server, 2ª chamada): com o guard já setado, `/clientes` ~0,06-0,08s. Simulando o "antes" (removendo a chave de
+guarda para forçar a manutenção completa rodar de novo) o mesmo request subiu para ~0,17s nesta máquina local — a diferença
+real em produção é maior porque cada uma das dezenas de queries do pipeline antigo tinha ida-e-volta de rede até o Neon (o
+"~5s" relatado), que não existe rodando contra Postgres local.
+
+**B/C (CSS/scroll):** removido `[class*="overflow-x"]` do scroll-snap (mantido só `.kanban-scroll`, agora `x proximity`),
+removido `will-change` permanente do `aside` e `scroll-behavior: smooth` do `html`. Sidebar desktop ganhou
+`md:h-screen md:max-h-screen md:overflow-hidden` para o `<nav>` interno rolar sozinho — testado com Playwright: rolar a página
+não move a sidebar; rolar sobre a sidebar não move a página.
+
+**D (error boundaries):** `global-error.tsx` já existia (Fase 4, reporta ao ZEUS); criado `src/app/(app)/error.tsx` no mesmo
+padrão. Testado abrindo a ficha de todos os clientes do seed (incluindo sem município/telefone) — sem erros.
+
+**E (Financeiro):** "FATURADO EM" editável (`<input type="date">` + `definirFaturadoEm`, já existia como action, só faltava a
+UI) — testado end-to-end (edição refletida no Postgres). Coluna FATURADO do funil agora lista todo `status: "ganha"` (mesmo
+padrão da coluna Perdidos); `marcarGanha` normaliza `estagio` para o título real da coluna FATURADO. Testado inserindo uma
+negociação "ganha" com `estagio` legado (não batia com nenhuma coluna) — passou a aparecer no funil E no Financeiro.
+
+**F (catálogo):** `MARCAS` hardcoded removida de `FunilNegociacoes`, `AtendimentoClient` e `ResumoClienteForm` — os 3 modais de
+Nova Negociação agora recebem `maquinasProprias` do banco; dropdown Marca mostra só New Holland/Dynapac (+ "Outro" com campo
+livre). `seed-core.ts` harmonizado com o portfólio oficial (renomeados os EVO/pontuados, removidos L325/W12D/D140B do próprio,
+adicionados E385C/E405C/E485C/E505C sem inventar specs). `scripts/corrigir-catalogo.ts` criado e testado (dry-run limpo no
+catálogo correto; testado também sujando o banco de propósito — EVO antigo, marca errada como próprio, modelo oficial faltando
+— e confirmado que `--apply` corrige tudo e preserva vínculos como `NotaMaquina` no rename). Grep final por
+`E115C|E135B|W80C|W130C|B115C|EVO` limpo em `src/`.
+
+**G (fichas técnicas):** `bodySizeLimit: "10mb"` no `next.config.mjs`; validação client de tamanho (4MB arquivo/2MB texto,
+mensagem clara) antes de enviar; textos da action alinhados ao novo limite. Durante o teste encontrei e corrigi um bug real:
+upload de TXT sem nenhuma chave de IA configurada mostrava "Erro ao ler o arquivo" (mensagem errada) em vez de "IA não
+habilitada" — `llmTexto` lança exceção quando não há provedor, e o caminho de texto de `extrairFichaDeArquivoIA` não checava
+`iaHabilitada()` antes de chamá-la como os outros ~15 call sites do arquivo já fazem. Corrigido e testado (TXT pequeno, PDF
+5MB acima do teto).
+
+**H/I (exclusões):** Super Trunfo e Conversas + IA removidos (páginas, componentes, entradas de menu, actions/funções
+exclusivas — `gerarAnaliseCategoriaIAAction`/`gerarAnaliseCategoriaIA`). `garantirFichasVerificadas` foi mantida (preenche
+`especificacoes`, usada pelo Comparativo/Fichas Técnicas) e passou a rodar via rota de manutenção. Grep final por
+`super-trunfo|SuperTrunfo|Trofeu|conversas|ConversaAnaliser` limpo.
+
+**J (Comparativo 2.0):** modelo `NotaMaquina` + CRUD (criar/editar/excluir); seleção Marca→Modelo para minha máquina
+(`MaquinaPicker` reescrito); seletor manual Marca→Modelo de QUALQUER concorrente com múltipla seleção simultânea (sugestão
+automática por categoria/peso mantida como estado inicial); seção "Meu conhecimento" com notas por máquina/concorrente
+opcional; resumo de diferenciais com benefício (IA, nunca inventa specs); "Gerar comparativo completo" multi-concorrente com
+cabeçalho (imagem quando existir), tabela, pontos fortes com benefício, objeções e conclusão, com botão imprimir/PDF
+(`window.print()` + classes `print:hidden`); battlecards e argumentos-template existentes mantidos. Notas alimentam também o
+Cérebro: tool `buscar_maquina` devolve `notasVendedor`, e `montarContextoCliente` (despacho-rápido/agnes-dispatch) inclui
+notas da(s) máquina(s) de interesse do cliente.
+
+**Verificação:** `npx tsc --noEmit`, `npm run lint` e `npm run build` limpos. Testado localmente com Postgres de teste (seed
+completo): naveguei por todas as páginas alteradas sem erros no console do servidor; Playwright em 1280×800 e 390×844
+confirmou rolagem independente da sidebar, card faturado consistente no funil, modal Nova Negociação sem CASE, e o
+Comparativo 2.0 completo (nota salva, erros de IA claros com `ANTHROPIC_API_KEY`/`GROQ_API_KEY` ausentes). Observação (não
+corrigida, fora do escopo desta fase): o modal "Nova Negociação" do funil renderiza com `position: fixed` escopado à coluna
+(não à viewport) porque a coluna tem `backdrop-blur-sm`, que cria containing block para elementos fixed — bug de CSS
+pré-existente, anterior a esta sessão, sem relação com os itens pedidos aqui. Também aparece um warning de hydration do
+`@dnd-kit/core` (`aria-describedby DndDescribedBy-N`) em `/negociacoes`, também pré-existente e não introduzido nesta fase.
 
 ## Passo 0 — Pré-requisitos operacionais (fazer PRIMEIRO)
 
 1. **Base do branch**: crie/reinicie o branch de trabalho a partir do `claude/relaxed-cori-5c3g4l` mais recente (`git fetch origin claude/relaxed-cori-5c3g4l && git checkout -B <branch> origin/claude/relaxed-cori-5c3g4l`). Se a Fase 2 do PROJETO ZEUS já tiver sido mesclada, este doc assume prioridade em caso de conflito nos itens abaixo (são áreas distintas — conflitos são improváveis, exceto talvez em `menu.ts` e `actions.ts`).
-2. **Banco de produção**: o build NÃO roda mais `prisma db push` (mudança da Fase 0). Toda alteração de schema desta fase (novo modelo `NotaMaquina`, item J) exige rodar `npx prisma db push` manualmente com a `DATABASE_URL` de produção ao final — documente esse passo na entrega para o usuário executar (ou instrua-o a rodar `npm run db:push` localmente com o .env de produção).
+2. **Banco de produção**: o build NÃO roda mais `prisma db push` (mudança da Fase 0). Como as Fases 2-4 mescladas criaram `ZeusEvent`/`CerebroSession`/`CerebroMessage` que ainda não existem em produção, e esta fase acrescenta `NotaMaquina` (item J), a solução adotada foi `CREATE TABLE IF NOT EXISTS` para as 4 tabelas em `aplicarMigracoes()` (`src/lib/migrations.ts`), disparado automaticamente por `POST /api/admin/manutencao` — que roda sozinho no primeiro acesso a qualquer página pesada após o deploy (guard `manutencao.v1`), ou pode ser disparado na hora pelo botão "Rodar manutenção" em Configurações. **Não é necessário rodar `prisma db push` manualmente** para este deploy.
 3. Para testes locais: Postgres local + `.env` de teste (padrão usado nas fases anteriores; ver `docs/PROJETO-ZEUS.md`).
 
 ## A. Performance — páginas levando ~5s para abrir

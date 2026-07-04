@@ -187,7 +187,7 @@ const agenda: CerebroTool = {
 const buscarMaquina: CerebroTool = {
   def: {
     name: "buscar_maquina",
-    description: "Busca uma ou mais máquinas (próprias ou concorrentes) pelo modelo, com ficha técnica.",
+    description: "Busca uma ou mais máquinas (próprias ou concorrentes) pelo modelo, com ficha técnica e notas de conhecimento do vendedor.",
     input_schema: {
       type: "object",
       properties: { modelo: { type: "string" } },
@@ -201,11 +201,16 @@ const buscarMaquina: CerebroTool = {
       where: { modelo: { contains: modelo, mode: "insensitive" } },
       take: 10,
     });
+    const proprias = maquinas.filter((m) => m.proprio).map((m) => m.id);
+    const notas = proprias.length
+      ? await db.notaMaquina.findMany({ where: { maquinaId: { in: proprias } }, orderBy: { criadoEm: "desc" }, take: 20 })
+      : [];
     return {
       resultados: maquinas.map((m) => ({
         marca: m.marca, modelo: m.modelo, categoria: m.categoria, proprio: m.proprio,
         valorInicial: m.valorInicial, especificacoes: m.especificacoes, pontosFortes: m.pontosFortes,
         diferenciais: m.diferenciais, descricao: m.descricao,
+        notasVendedor: m.proprio ? notas.filter((n) => n.maquinaId === m.id).map((n) => n.texto) : undefined,
       })),
     };
   },

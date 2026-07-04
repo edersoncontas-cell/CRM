@@ -2,15 +2,14 @@ import { db } from "@/lib/db";
 import { normalizarEstagio } from "@/lib/pipeline";
 import { FunilNegociacoes } from "@/components/FunilNegociacoes";
 import { PageHeader } from "@/components/ui";
-import { garantirColunasFunil } from "@/lib/actions";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
 export default async function NegociacoesPage() {
-  // Garante que as colunas padrão existem no banco
-  await garantirColunasFunil();
+  await garantirManutencaoSeNecessario();
 
-  const [negociacoes, clientes, colunasFunil] = await Promise.all([
+  const [negociacoes, clientes, colunasFunil, maquinasProprias] = await Promise.all([
     db.negociacao.findMany({
       where: { status: { in: ["aberta", "perdida", "ganha"] } },
       include: { cliente: { include: { municipio: true } } },
@@ -18,6 +17,7 @@ export default async function NegociacoesPage() {
     }),
     db.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     db.colunaFunil.findMany({ orderBy: { ordem: "asc" } }),
+    db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
   ]);
 
   const cards = negociacoes.map((n) => ({
@@ -50,7 +50,7 @@ export default async function NegociacoesPage() {
         titulo="Negociações"
         subtitulo="Funil de vendas — arraste os cards entre os estágios e gerencie suas oportunidades"
       />
-      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} />
+      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} />
     </div>
   );
 }

@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { garantirColunasDemanda } from "@/lib/demandas";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage() {
-  await garantirColunasDemanda();
+  await garantirManutencaoSeNecessario();
 
   const [clientes, colunasDemanda, tarefas] = await Promise.all([
     db.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),

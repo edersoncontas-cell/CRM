@@ -19,12 +19,14 @@ export interface ExtracaoConversa {
   fonte: "ia" | "heuristica";
 }
 
-// Modelos da minha linha (New Holland Construction + Dynapac).
+// Modelos da minha linha (New Holland Construction + Dynapac) — portfólio oficial.
 const MODELOS_NEW_HOLLAND = [
   // New Holland Construction
-  "E35D", "E145C", "E175C", "E215C", "E245C", "B95C", "B110C", "B95", "B110",
-  "L325", "W12D", "W130B", "W170B", "W190B", "W130", "W170", "W190",
-  "RG140.B", "RG170.B", "RG200.B", "RG140", "RG170", "RG200", "D140B",
+  "E35D", "E145C", "E175C", "E215C", "E245C", "E385C", "E405C", "E485C", "E505C",
+  "B95C", "B110C", "B95", "B110",
+  "L320", "L330",
+  "W130B", "W170B", "W190B", "W130", "W170", "W190",
+  "RG140", "RG170", "RG200",
   // Dynapac
   "CA1500", "CA2500", "CA3500", "CA4000", "CA5000", "CA6500",
   "CC1300", "CC2200", "CC4200", "CC6200", "CP2100", "CP2700",

@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { formatCurrency, formatDate, mesAnoAtualBrasilia } from "@/lib/utils";
-import { definirComissaoPaga } from "@/lib/actions";
+import { formatCurrency, mesAnoAtualBrasilia } from "@/lib/utils";
+import { definirComissaoPaga, definirFaturadoEm } from "@/lib/actions";
 import { CheckCircle2, Circle } from "lucide-react";
 
 type Linha = {
@@ -51,6 +51,14 @@ export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number
     });
   }
 
+  function mudarFaturadoEm(id: string, dataISO: string) {
+    if (!dataISO) return;
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, faturadoEm: dataISO + "T12:00:00-03:00" } : r)));
+    startTransition(async () => {
+      await definirFaturadoEm(id, dataISO);
+    });
+  }
+
   const total = rows.reduce((s, n) => s + (n.valor ?? 0), 0);
   const comissaoTotal = total * taxa;
 
@@ -95,7 +103,15 @@ export function FaturadasTable({ linhas, taxa }: { linhas: Linha[]; taxa: number
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-slate-800">{formatCurrency(n.valor)}</td>
                 <td className="px-4 py-3 text-right text-emerald-600 font-semibold">+{formatCurrency((n.valor ?? 0) * taxa)}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(n.faturadoEm)}</td>
+                <td className="px-4 py-3">
+                  <input
+                    type="date"
+                    value={n.faturadoEm.slice(0, 10)}
+                    onChange={(e) => mudarFaturadoEm(n.id, e.target.value)}
+                    disabled={pending}
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 outline-none focus:border-emerald-400 disabled:opacity-60"
+                  />
+                </td>
                 <td className="px-4 py-3 text-slate-500">{n.mesAnoReferencia ?? "—"}</td>
                 <td className="px-4 py-3 text-center">
                   <button

@@ -81,6 +81,11 @@ function EditModal({
   const [aviso, setAviso] = useState<string | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
 
+  // Limite prático de upload na Vercel é ~4.5MB por request — avisa ANTES de
+  // enviar (arquivos de texto são sempre pequenos, usam teto menor).
+  const LIMITE_MB = 4;
+  const LIMITE_TEXTO_MB = 2;
+
   // Lê VÁRIOS arquivos (PDF, imagem, texto, HTML) e mescla as informações.
   function aoEscolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -90,6 +95,13 @@ function EditModal({
       let okCount = 0, lastErr = "";
       let accSpecs = specs, accDesc = desc, accPontos = pontos, accDifs = difs;
       for (const file of files) {
+        const ehTexto = file.type.startsWith("text/") || /\.(txt|html?|md|csv)$/.test(file.name.toLowerCase());
+        const limite = (ehTexto ? LIMITE_TEXTO_MB : LIMITE_MB) * 1024 * 1024;
+        if (file.size > limite) {
+          const tamanhoMb = (file.size / (1024 * 1024)).toFixed(1);
+          lastErr = `Arquivo "${file.name}" tem ${tamanhoMb}MB — o limite é ${ehTexto ? LIMITE_TEXTO_MB : LIMITE_MB}MB. Comprima o PDF ou envie por partes.`;
+          continue;
+        }
         const fd = new FormData();
         fd.set("arquivo", file);
         const r = await extrairFichaDeArquivo(m.id, fd);

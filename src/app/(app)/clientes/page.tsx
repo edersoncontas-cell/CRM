@@ -5,7 +5,7 @@ import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ClienteAcoes } from "@/components/ClienteAcoes";
-import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { MapPin, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -22,8 +22,7 @@ export default async function ClientesPage({
   const busca = (searchParams.q ?? "").trim();
   const apenasNaoVisitados = searchParams.naoVisitado === "1";
   const apenasVisitados = searchParams.visitado === "1";
-  await garantirRegioes();
-  await limparContatosDescartados();
+  await garantirManutencaoSeNecessario();
 
   const corteEsquecido = new Date();
   corteEsquecido.setDate(corteEsquecido.getDate() - DIAS_ESQUECIDO);

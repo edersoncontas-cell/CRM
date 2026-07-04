@@ -86,7 +86,7 @@ const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máqui
 (New Holland Construction e Dynapac) no sul do Espírito Santo. O vendedor NÃO trabalha com máquinas
 agrícolas nem tratores (não existe T7, TL, colheitadeira, etc. no portfólio dele).
 Os equipamentos são: escavadeiras (ex: E215C), retroescavadeiras (ex: B95C), pás-carregadeiras (ex: W190B),
-motoniveladoras (ex: RG170.B) e rolos compactadores Dynapac (ex: CA2500, CC2200).
+motoniveladoras (ex: RG170) e rolos compactadores Dynapac (ex: CA2500, CC2200).
 
 Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto antes ou depois, com as chaves:
 {
@@ -409,9 +409,12 @@ ${campos}`;
 
   try {
     // Caminho de TEXTO/HTML — usa o LLM de texto (Groq ou Anthropic).
+    // Checa iaHabilitada() ANTES de chamar llmTexto: sem nenhum provedor
+    // configurado, llmTexto lança erro (não retorna vazio), e cairia no catch
+    // genérico abaixo — escondendo a mensagem clara de "configure uma chave".
     if (ehTexto) {
+      if (!iaHabilitada()) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
       const raw = await llmTexto(system, `Conteúdo do arquivo:\n\n${arquivo.texto}`, { maxTokens: 1500, json: true });
-      if (!raw) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
       return finalizar(JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)));
     }
 
@@ -470,38 +473,83 @@ Ficha: ${conc.especificacoes ?? "—"}`,
   }
 }
 
-// Análise completa de uma CATEGORIA no estilo "Super Trunfo": compara minhas
-// máquinas (New Holland/Dynapac) com os concorrentes da categoria e devolve um
-// resumo com argumentos de venda prontos. Usa as fichas técnicas para precisão.
-export async function gerarAnaliseCategoriaIA(
-  categoriaLabel: string,
-  minhas: { marca: string; modelo: string; especificacoes?: string | null }[],
-  concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[]
+// Ficha de uma máquina, para os prompts do Comparativo 2.0.
+type FichaMaquina = {
+  marca: string;
+  modelo: string;
+  especificacoes?: string | null;
+  pontosFortes?: string | null;
+  diferenciais?: string | null;
+  argumentos?: string | null;
+};
+
+// Resumo de diferenciais COM benefício prático (Comparativo 2.0, item J.3):
+// para cada diferencial real da minha máquina, explica o benefício e a
+// melhor aplicação — nunca inventa specs, só usa o que está no banco/notas.
+export async function gerarResumoDiferenciaisIA(
+  minha: FichaMaquina,
+  concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[],
+  notas: string[]
 ): Promise<string> {
   if (!iaHabilitada()) return "";
-  const ficha = (m: { marca: string; modelo: string; especificacoes?: string | null }) =>
-    `${m.marca} ${m.modelo}:\n${m.especificacoes ?? "(ficha não preenchida)"}`;
+  try {
+    return await llmTexto(
+      `Você é consultor de vendas de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo.
+Para cada diferencial REAL da MINHA máquina frente aos concorrentes listados, explique o BENEFÍCIO PRÁTICO e a melhor aplicação —
+use SOMENTE os dados fornecidos (especificações, pontos fortes, diferenciais, argumentos e notas do vendedor).
+Formato: bullets curtos "Diferencial → benefício prático (melhor aplicação)". Ex.: "Tanque maior → mais horas de trabalho sem parar para reabastecer".
+NUNCA invente números ou recursos que não estejam nos dados — se não houver dado suficiente para sustentar um diferencial, não o cite.
+Máximo 6 bullets, direto ao ponto, sem enrolação, sem títulos.`,
+      `MINHA MÁQUINA: ${minha.marca} ${minha.modelo}
+Especificações: ${minha.especificacoes ?? "—"}
+Pontos fortes: ${minha.pontosFortes ?? "—"}
+Diferenciais: ${minha.diferenciais ?? "—"}
+Argumentos de negociação: ${minha.argumentos ?? "—"}
+${notas.length ? `Notas do vendedor sobre esta máquina:\n${notas.join("\n")}` : ""}
+
+CONCORRENTES SELECIONADOS:
+${concorrentes.map((c) => `${c.marca} ${c.modelo}: ${c.especificacoes ?? "(ficha não preenchida)"}`).join("\n\n")}`,
+      { maxTokens: 700 }
+    );
+  } catch (err) {
+    console.error("Falha ao gerar resumo de diferenciais:", err);
+    return "";
+  }
+}
+
+// Comparativo profissional completo multi-concorrente (Comparativo 2.0, item
+// J.5) — evolução do battlecard: tabela de specs, pontos fortes com
+// benefício, respostas a objeções prováveis e conclusão. Nunca inventa specs.
+export async function gerarComparativoCompletoIA(
+  minha: FichaMaquina,
+  concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[],
+  notas: string[]
+): Promise<string> {
+  if (!iaHabilitada()) return "";
   try {
     return await llmTexto(
       `Você é consultor sênior de vendas de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo.
-Escreva uma análise comercial PROFISSIONAL e COMPLETA da categoria "${categoriaLabel}", comparando as MINHAS máquinas com os CONCORRENTES.
-Estruture assim (use estes títulos com markdown):
-**Panorama da categoria** — 2-3 frases situando onde minhas máquinas se posicionam (peso, potência, faixa de aplicação).
-**Onde eu ganho** — bullets objetivos com vantagens reais (números das fichas quando houver: peso, potência, força, capacidade) + pós-venda, rede de peças, Finame, revenda.
-**Pontos de atenção** — seja honesto: onde o concorrente leva vantagem e como contornar no discurso.
-**Argumentos prontos de venda** — 3 a 5 frases de impacto que o vendedor pode usar direto com o cliente.
-Use linguagem do dia a dia da obra, direta e confiante. Não invente números que não estejam nas fichas.`,
-      `CATEGORIA: ${categoriaLabel}
+Escreva um COMPARATIVO PROFISSIONAL COMPLETO da minha máquina contra os concorrentes selecionados, para o vendedor apresentar/imprimir ao cliente.
+Use SOMENTE os dados fornecidos (especificações, pontos fortes, diferenciais, argumentos, notas do vendedor) — NUNCA invente números ou recursos.
+Estruture em markdown com estes títulos, nesta ordem:
+**Tabela comparativa** — tabela markdown com as especificações disponíveis de todas as máquinas (linhas = atributos, colunas = máquinas). Só inclua atributos com dado em pelo menos uma máquina.
+**Pontos fortes com benefício** — para cada diferencial real, o benefício prático e a melhor aplicação.
+**Respostas às objeções prováveis** — 2-4 objeções que o cliente pode levantar (preço, marca do concorrente, disponibilidade) com a resposta pronta.
+**Por que New Holland/Dynapac é a melhor compra** — conclusão de 3-4 frases fechando a venda.
+Linguagem direta, confiante, do dia a dia da obra.`,
+      `MINHA MÁQUINA: ${minha.marca} ${minha.modelo}
+Especificações: ${minha.especificacoes ?? "—"}
+Pontos fortes: ${minha.pontosFortes ?? "—"}
+Diferenciais: ${minha.diferenciais ?? "—"}
+Argumentos de negociação: ${minha.argumentos ?? "—"}
+${notas.length ? `Notas do vendedor sobre esta máquina:\n${notas.join("\n")}` : ""}
 
-MINHAS MÁQUINAS:
-${minhas.map(ficha).join("\n\n")}
-
-CONCORRENTES:
-${concorrentes.map(ficha).join("\n\n")}`,
-      { maxTokens: 1100 }
+CONCORRENTES SELECIONADOS:
+${concorrentes.map((c) => `${c.marca} ${c.modelo}: ${c.especificacoes ?? "(ficha não preenchida)"}`).join("\n\n")}`,
+      { maxTokens: 1800 }
     );
   } catch (err) {
-    console.error("Falha na análise de categoria:", err);
+    console.error("Falha ao gerar comparativo completo:", err);
     return "";
   }
 }
