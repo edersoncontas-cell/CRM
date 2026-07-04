@@ -17,8 +17,11 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "resumoValor"       DOUBLE PRECISION,
         ADD COLUMN IF NOT EXISTS "resumoEntrada"     DOUBLE PRECISION,
         ADD COLUMN IF NOT EXISTS "resumoCondicao"    TEXT,
-        ADD COLUMN IF NOT EXISTS "resumoTexto"       TEXT
+        ADD COLUMN IF NOT EXISTS "resumoTexto"       TEXT,
+        ADD COLUMN IF NOT EXISTS "leadScore"         INTEGER NOT NULL DEFAULT 50,
+        ADD COLUMN IF NOT EXISTS "leadScoreAtualizadoEm" TIMESTAMP WITH TIME ZONE
     `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cliente_leadScore_idx" ON "Cliente" ("leadScore")`);
     await db.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "ClienteMaquina" (
         "id"        TEXT NOT NULL,

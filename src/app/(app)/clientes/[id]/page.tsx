@@ -6,6 +6,8 @@ import { VisitasCliente } from "@/components/VisitasCliente";
 import { AgendarVisitaDialog } from "@/components/AgendarVisitaDialog";
 import { ResumoClienteForm } from "@/components/ResumoClienteForm";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
+import { NextBestAction } from "@/components/NextBestAction";
+import { RegistroVisitaVoz } from "@/components/RegistroVisitaVoz";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck } from "lucide-react";
@@ -196,6 +198,12 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             observacao: v.observacao,
           }))}
         />
+      </div>
+
+      {/* Fase 5: Next Best Action + Modo Campo por voz */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <NextBestAction clienteId={cliente.id} />
+        <RegistroVisitaVoz clienteId={cliente.id} />
       </div>
 
       {/* Resumo do Cliente (substitui Negociações) */}
