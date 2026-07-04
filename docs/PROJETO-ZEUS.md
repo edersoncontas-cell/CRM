@@ -255,6 +255,26 @@
   - **Novo campo no schema**: `Cliente.leadScore Int @default(50)` + `Cliente.leadScoreAtualizadoEm DateTime?`
     (`@@index([leadScore])`). Sem migration formal (o projeto usa `prisma db push` manual — ver Fase 0, item 4);
     rodar `npx prisma db push` (ou `npm run db:push`) contra o Postgres de produção antes do deploy.
+- ✅ **Merge Fases 0-5 → base de deploy** — concluído em `claude/projeto-zeus-merge-deploy-jc6p7x` (2026-07-04).
+  A branch foi criada exatamente no tip de `claude/relaxed-cori-5c3g4l` (`9203198`, que já continha as Fases 0-4
+  via PRs #1 e #3 + docs da Fase 2B) e recebeu o merge de `claude/projeto-zeus-fase-5-pzjz4l` (`7849bc1`) —
+  **sem nenhum conflito** (desde o ancestral comum `a2261b9`, o lado do deploy só tinha adicionado
+  `docs/PROJETO-ZEUS-FASE-2B.md`). Verificado pós-merge: `npx tsc --noEmit`, `npm run lint` e `npm run build`
+  limpos (a rota nova `/radar-silencio` aparece no build). **Pendências para o deploy real (decisão do usuário,
+  não executar sozinho):**
+  1. **Env vars na Vercel** (ver tabela "Segurança em produção" no README): `APP_PASSWORD`, `AUTH_SECRET`,
+     `CRON_SECRET` (sem ela, TODOS os 6 crons do `vercel.json` retornam 401), `GROQ_API_KEY` (transcrição de
+     áudio), `ZAPI_WEBHOOK_TOKEN` (opcional — só se a conta Z-API tiver token de segurança; não inventar valor),
+     `ZEUS_WHATSAPP_DESTINO` (opcional — briefing matinal) e `ZEUS_ORCAMENTO_IA_DIARIO` (opcional, padrão 50);
+     manter as já existentes (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `ZAPI_*`, VAPID).
+  2. **`npx prisma db push` no Postgres de produção ANTES do deploy** — desde a Fase 0 o build não roda mais
+     `db push` automático, então o banco de produção ainda não tem NADA das Fases 2-5: `Cliente.leadScore` +
+     `leadScoreAtualizadoEm` + índice (Fase 5), `WhatsAppMessage.processedAt` + índices `sendStatus`/`processedAt`/
+     `agnesScheduledAt` + `@@unique([externalPhone])` em `WhatsAppConversation` (Fase 2 — o unique exige deduplicar
+     conversas antes se houver telefone repetido), `ZeusEvent` (Fase 4) e `CerebroSession`/`CerebroMessage` (Fase 3).
+     Um único `db push` cobre tudo (ele diffa o banco vivo contra o schema).
+  3. Empurrar o merge para `claude/relaxed-cori-5c3g4l` (é o que dispara o deploy da Vercel) — aguardando
+     confirmação do usuário.
 
 ---
 
