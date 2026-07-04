@@ -7,6 +7,7 @@ import { registrarZeusEvent } from "@/lib/zeus/eventos";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
 import { MODEL_CHAT } from "@/lib/ai/config";
 import { agoraBrasiliaExtenso } from "@/lib/utils";
+import { sugerirProximaAcaoHeuristica } from "@/lib/zeus/nextbestaction";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +31,7 @@ async function montarDados() {
     db.cliente.findMany({ where: { aguardandoResposta: true }, select: { nome: true, ultimoContato: true }, take: 20 }),
     db.negociacao.findMany({
       where: { status: "aberta" },
-      include: { cliente: { select: { nome: true } } },
+      include: { cliente: { select: { nome: true, aguardandoResposta: true, proximaVisita: true, ultimoContato: true } } },
       take: 100,
     }),
     db.alerta.findMany({ where: { resolvido: false }, orderBy: { diasDesde: "desc" }, take: 10 }),
@@ -54,7 +55,18 @@ async function gerarTexto(dados: Awaited<ReturnType<typeof montarDados>>): Promi
       ? `Aguardando seu retorno no WhatsApp (${dados.aguardando.length}): ${dados.aguardando.slice(0, 8).map((c) => c.nome).join(", ")}.`
       : "Ninguém aguardando retorno no WhatsApp.",
     dados.top3.length
-      ? `Top ${dados.top3.length} negociações para atacar hoje: ${dados.top3.map((n) => `${n.cliente.nome} (${n.maquinaModelo ?? "?"}, R$ ${(n.valor ?? 0).toLocaleString("pt-BR")})`).join("; ")}.`
+      ? `Top ${dados.top3.length} negociações para atacar hoje:\n${dados.top3.map((n) => {
+          const diasSemContato = n.cliente.ultimoContato ? Math.floor((Date.now() - n.cliente.ultimoContato.getTime()) / 86400000) : null;
+          const proximaAcao = n.proximaAcao || sugerirProximaAcaoHeuristica({
+            nome: n.cliente.nome,
+            aguardandoResposta: n.cliente.aguardandoResposta,
+            diasSemContato,
+            concorrenteMencionado: n.concorrenteMencionado,
+            temVisitaAgendada: !!(n.dataVisita || n.cliente.proximaVisita),
+            estagio: n.estagio,
+          }).acao;
+          return `• ${n.cliente.nome} (${n.maquinaModelo ?? "?"}, R$ ${(n.valor ?? 0).toLocaleString("pt-BR")}) — próxima ação: ${proximaAcao}`;
+        }).join("\n")}`
       : "Sem negociações abertas priorizadas.",
     dados.alertasAbertos.length ? `Alertas abertos: ${dados.alertasAbertos.length}.` : "Sem alertas abertos.",
   ];

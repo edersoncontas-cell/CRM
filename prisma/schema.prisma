@@ -53,6 +53,8 @@ model Cliente {
   resumoEntrada   Float?
   resumoCondicao  String?
   resumoTexto     String?
+  leadScore       Int       @default(50) // Fase 5: score 0-100 recalculado pelo ZEUS (recência+sentimento+valor+estágio+sinais de compra)
+  leadScoreAtualizadoEm DateTime?
   indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId   String?
   indicados       Cliente[] @relation("Indicacoes")
@@ -65,6 +67,7 @@ model Cliente {
   tarefas        TarefaKanban[]
   visitas        Visita[]
   frota          ClienteMaquina[]
+  @@index([leadScore])
 }
 
 model ClienteMaquina {

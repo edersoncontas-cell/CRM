@@ -3,18 +3,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { interpretarComando, executarPlano } from "@/lib/actions";
 import type { AcaoPlano } from "@/lib/assistente";
+import { useDitadoVoz } from "@/lib/useDitadoVoz";
 import { ExcavatorIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { X, Mic, MicOff, Send, Loader2, Check, AlertTriangle } from "lucide-react";
 
 type Fase = "idle" | "interpretando" | "confirmando" | "executando" | "feito";
-
-type RecEvent = { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }>> };
-type RecLike = {
-  lang: string; continuous: boolean; interimResults: boolean;
-  onresult: (e: RecEvent) => void; onend: () => void;
-  start: () => void; stop: () => void;
-};
 
 export function AssistenteIA() {
   const [aberto, setAberto] = useState(false);
@@ -23,9 +17,8 @@ export function AssistenteIA() {
   const [resposta, setResposta] = useState<string>("");
   const [plano, setPlano] = useState<AcaoPlano[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [ouvindo, setOuvindo] = useState(false);
+  const { ouvindo, alternar: toggleVoz } = useDitadoVoz((t) => setTexto((prev) => (prev ? prev + " " : "") + t));
   const [, startT] = useTransition();
-  const recRef = useRef<unknown>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -89,25 +82,6 @@ export function AssistenteIA() {
 
   function reset() {
     setTexto(""); setFase("idle"); setResposta(""); setPlano([]); setFeedback(null);
-  }
-
-  function toggleVoz() {
-    const SR = (typeof window !== "undefined" &&
-      ((window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition)) || null;
-    if (!SR) { alert("Seu navegador não suporta ditado por voz. Use o Chrome."); return; }
-    if (ouvindo) { (recRef.current as RecLike | null)?.stop(); setOuvindo(false); return; }
-    const rec = new (SR as { new (): RecLike })();
-    rec.lang = "pt-BR"; rec.continuous = true; rec.interimResults = false;
-    rec.onresult = (e: RecEvent) => {
-      let t = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
-      if (t) setTexto((prev) => (prev ? prev + " " : "") + t);
-    };
-    rec.onend = () => setOuvindo(false);
-    rec.start();
-    recRef.current = rec;
-    setOuvindo(true);
   }
 
   function enviar() {

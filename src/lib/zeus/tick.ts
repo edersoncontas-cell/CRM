@@ -14,6 +14,9 @@ import { zeusAtivo, tocarHeartbeat, ultimoHeartbeat, orcamentoIADisponivel, cons
 import { registrarAudit } from "@/lib/audit";
 import { enviarPushNotificacao } from "@/lib/push";
 import { MODEL_TAREFA } from "@/lib/ai/config";
+import { recalcularLeadScores } from "@/lib/zeus/leadscore";
+import { montarContextoCliente, gerarMensagemFollowUp } from "@/lib/zeus/cerebro-resposta";
+import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -33,6 +36,8 @@ export type ResumoTick = {
   alertas: { criados: number };
   autoReparo: { unconfirmedReconciliados: number; rascunhosDescartados: number };
   diagnostico: { gerados: number };
+  leadScore: { atualizados: number };
+  followUp: { preparados: number };
 };
 
 // Evita repetir o mesmo evento a cada 5 minutos: só cria um novo se não houver
@@ -299,7 +304,97 @@ async function autoReparo() {
   return { unconfirmedReconciliados: unconfirmed.count, rascunhosDescartados: rascunhos.count };
 }
 
-// ── 6. Diagnóstico de erros repetidos ───────────────────────────────────────
+// ── 6. Lead scoring (Fase 5.1) ──────────────────────────────────────────────
+async function leadScoring(): Promise<number> {
+  const { atualizados } = await recalcularLeadScores();
+  return atualizados;
+}
+
+// ── 7. Follow-up automático inteligente (Fase 5.3) ─────────────────────────
+// Detecta negociação ABERTA e QUENTE cujo contato esfriou (5-15 dias sem
+// contato — antes do alerta "esfriando" de 10+ dias virar cobrança) e prepara
+// um RASCUNHO de mensagem de retomada no estilo do vendedor, na fila de
+// /atendimento (nunca envia direto — mesmo padrão de segurança do
+// enviar_resposta do Cérebro). Cada negociação só gera um rascunho por
+// semana (dedup via ZeusEvent) e respeita o orçamento diário de IA.
+async function followUpInteligente(): Promise<number> {
+  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  let preparados = 0;
+
+  const candidatas = await db.negociacao.findMany({
+    where: {
+      status: "aberta",
+      termometro: { gte: 55 },
+      ultimoContato: { lt: new Date(Date.now() - 5 * DIA), gte: new Date(Date.now() - 15 * DIA) },
+    },
+    include: { cliente: { select: { id: true, nome: true, telefone: true } } },
+    orderBy: { termometro: "desc" },
+    take: 20,
+  });
+
+  for (const neg of candidatas) {
+    if (!neg.cliente.telefone) continue;
+    if (!(await orcamentoIADisponivel())) break;
+
+    const conv = await db.whatsAppConversation.findFirst({
+      where: { clienteId: neg.cliente.id },
+      select: { id: true, contactName: true, externalPhone: true },
+    });
+    if (!conv) continue; // só faz follow-up de quem já tem conversa de WhatsApp
+
+    const rascunhoExistente = await db.whatsAppMessage.findFirst({
+      where: { conversationId: conv.id, isDraft: true, draftStatus: "PENDING" },
+      select: { id: true },
+    });
+    if (rascunhoExistente) continue;
+
+    // Dedup por negociação, sem efeito colateral — só registra o ZeusEvent
+    // depois que o rascunho é criado de verdade (uma falha transitória de IA
+    // não pode "queimar" a janela de uma semana sem gerar nada).
+    const jaPreparado = await db.zeusEvent.findFirst({
+      where: {
+        tipo: "acao",
+        titulo: `Follow-up preparado para ${neg.cliente.nome}`,
+        criadoEm: { gte: new Date(Date.now() - 7 * DIA) },
+      },
+      select: { id: true },
+    });
+    if (jaPreparado) continue;
+
+    try {
+      const [estilo, contextoCliente] = await Promise.all([
+        db.estiloDeFala.findFirst(),
+        montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: neg.cliente.id, externalPhone: conv.externalPhone }),
+      ]);
+      const texto = await gerarMensagemFollowUp({ contextoCliente, estilo: estilo?.guia ?? null });
+      await consumirOrcamentoIA();
+      if (!texto) continue;
+
+      const { conv: convAtual } = await acharOuCriarConversa({ phone: neg.cliente.telefone, lid: null, isGroup: false, contactName: neg.cliente.nome });
+      await inserirMensagem(convAtual.id, {
+        direction: "OUT", body: texto, origin: "CRM", operatorDisplayName: "Cérebro (rascunho)",
+        isDraft: true, draftStatus: "PENDING",
+      });
+      await registrarZeusEvent({
+        tipo: "acao", severidade: "baixa",
+        titulo: `Follow-up preparado para ${neg.cliente.nome}`,
+        detalhe: { negociacaoId: neg.id, clienteId: neg.cliente.id },
+      });
+      await registrarAudit({
+        acao: "mensagem_enviada", origem: "zeus",
+        descricao: `ZEUS preparou um rascunho de follow-up para ${neg.cliente.nome} (negociação esfriando) — aguardando revisão em /atendimento.`,
+        entidade: "Negociacao", entidadeId: neg.id, clienteId: neg.cliente.id,
+      });
+      preparados++;
+    } catch (e) {
+      console.error("[zeus-tick] follow-up:", e);
+    }
+  }
+
+  return preparados;
+}
+
+// ── 8. Diagnóstico de erros repetidos ───────────────────────────────────────
 function assinaturaErro(titulo: string): string {
   return titulo.replace(/[0-9a-f]{20,}/gi, "<id>").replace(/\d+/g, "<n>").slice(0, 120);
 }
@@ -365,6 +460,7 @@ export async function executarZeusTick(): Promise<ResumoTick> {
       health: { eventosNovos: 0 }, fila: { processadas: 0, erros: 0 },
       higiene: { telefonesNormalizados: 0, municipiosVinculados: 0, aguardandoRespostaCorrigido: 0, duplicadosDetectados: 0, negociacoesPropostasParaArquivar: 0 },
       alertas: { criados: 0 }, autoReparo: { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }, diagnostico: { gerados: 0 },
+      leadScore: { atualizados: 0 }, followUp: { preparados: 0 },
     };
   }
 
@@ -376,6 +472,8 @@ export async function executarZeusTick(): Promise<ResumoTick> {
   });
   const alertasCriados = await alertasComerciais().catch((e) => { console.error("[zeus-tick] alertas:", e); return 0; });
   const reparo = await autoReparo().catch((e) => { console.error("[zeus-tick] auto-reparo:", e); return { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }; });
+  const leadScoreAtualizados = await leadScoring().catch((e) => { console.error("[zeus-tick] lead scoring:", e); return 0; });
+  const followUpPreparados = await followUpInteligente().catch((e) => { console.error("[zeus-tick] follow-up:", e); return 0; });
   const diagnosticados = await diagnosticarErros().catch((e) => { console.error("[zeus-tick] diagnóstico:", e); return 0; });
 
   await tocarHeartbeat("zeus-tick");
@@ -395,5 +493,7 @@ export async function executarZeusTick(): Promise<ResumoTick> {
     alertas: { criados: alertasCriados },
     autoReparo: reparo,
     diagnostico: { gerados: diagnosticados },
+    leadScore: { atualizados: leadScoreAtualizados },
+    followUp: { preparados: followUpPreparados },
   };
 }
