@@ -221,3 +221,42 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
     return "";
   }
 }
+
+// Follow-up automático inteligente (Fase 5, item 3): mensagem de RETOMADA de
+// contato para uma negociação quente que esfriou — não responde a mensagem
+// nenhuma do cliente (diferente de gerarRespostaCerebro), então o prompt é
+// deliberadamente mais cauteloso para não soar como cobrança/robô.
+export async function gerarMensagemFollowUp(args: {
+  contextoCliente: string;
+  estilo: string | null;
+}): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) return "";
+
+  const system = `Você é o Cérebro, assistente de vendas do Ederson (New Holland Construction / Dynapac, sul do Espírito Santo).
+O cliente abaixo tem uma negociação ABERTA e QUENTE, mas o contato esfriou (alguns dias sem resposta).
+
+## Contexto completo do cliente
+${args.contextoCliente}
+${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
+
+## Regras absolutas
+- Escreva uma mensagem de WhatsApp CURTA (1-3 frases) para RETOMAR o contato de forma natural
+- Use um gancho real do contexto acima (a máquina de interesse, a visita combinada, o que ficou pendente)
+- NUNCA soe como cobrança, robô ou mensagem automática de disparo em massa
+- NUNCA invente preço, prazo ou informação que não esteja no contexto
+- NUNCA use emojis — linguagem 100% profissional e direta
+- Responda APENAS com o texto da mensagem, sem aspas nem comentários`;
+
+  try {
+    const msg = await anthropic().messages.create({
+      model: MODEL_CHAT,
+      max_tokens: 150,
+      system,
+      messages: [{ role: "user", content: "Escreva a mensagem de retomada de contato." }],
+    });
+    const bloco = msg.content[0];
+    return bloco.type === "text" ? bloco.text.trim() : "";
+  } catch {
+    return "";
+  }
+}

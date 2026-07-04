@@ -126,6 +126,17 @@ const faturadoMes = (faturadas as any[]).filter(n => {
 const valorFaturadoMes = faturadoMes.reduce((s: number, n: any) => s + (n.valor ?? 0), 0);
 const comissoesMes = valorFaturadoMes * 0.005;
 
+// Top 5 para atacar hoje (Fase 5.1 — lead scoring recalculado pelo ZEUS)
+const topAtacar = await db.cliente.findMany({
+where: { OR: [{ negociacoes: { some: { status: "aberta" } } }, { aguardandoResposta: true }] },
+orderBy: { leadScore: "desc" },
+take: 5,
+select: {
+id: true, nome: true, leadScore: true, aguardandoResposta: true,
+municipio: { select: { nome: true } },
+negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
+},
+});
 
 // "Chegou a hora": interesse futuro dentro de 30 dias
 const em30Dias = new Date(hoje);
@@ -179,6 +190,33 @@ return (
 </div>
 
 <MotivacaoWidget />
+
+{/* ── Top 5 para Atacar Hoje (Fase 5 — lead scoring) ── */}
+{topAtacar.length > 0 && (
+<section>
+<SectionLabel icone={<Target size={16} />} cor="#f87171">Top 5 para Atacar Hoje</SectionLabel>
+<div className="space-y-2">
+{topAtacar.map((c) => {
+const neg = c.negociacoes[0];
+return (
+<Link key={c.id} href={"/clientes/" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>
+{c.leadScore}
+</span>
+<div className="min-w-0 flex-1">
+<p className="text-sm font-semibold text-white truncate">{c.nome}</p>
+<p className="text-xs text-zinc-500 truncate">
+{neg?.proximaAcao ?? (c.aguardandoResposta ? "Aguardando seu retorno no WhatsApp" : (neg?.maquinaModelo ?? "Definir próxima ação"))}
+{c.municipio ? ` · ${c.municipio.nome}` : ""}
+</p>
+</div>
+<ArrowRight size={14} className="text-zinc-600" />
+</Link>
+);
+})}
+</div>
+</section>
+)}
 
 {/* ── BLOCO 1: Visitas ── */}
 <Section titulo="🚗 Visitas Realizadas" cor="#60a5fa">

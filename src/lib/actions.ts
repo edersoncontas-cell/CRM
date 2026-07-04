@@ -3,11 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA, sugerirAbordagemIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarAnaliseCategoriaIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
 import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
-import { vincularMunicipio } from "./zeus/pipeline";
+import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
+import { montarContextoCliente } from "./zeus/cerebro-resposta";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./zapi";
@@ -1317,6 +1318,150 @@ export async function sugerirAbordagemCliente(
   revalidatePath(`/clientes/${clienteId}`);
 
   return { ok: true, perfil, abordagem };
+}
+
+// Next Best Action (Fase 5, item 2): sugere a próxima ação concreta para o
+// cliente a partir do mesmo contexto rico usado pelo Cérebro no WhatsApp, e
+// salva na negociação aberta mais quente (campo Negociacao.proximaAcao, que
+// já existe e já é exibido no funil).
+export async function sugerirProximaAcaoCliente(
+  clienteId: string
+): Promise<{ ok: boolean; acao?: string; motivo?: string; erro?: string }> {
+  const cliente = await db.cliente.findUnique({
+    where: { id: clienteId },
+    include: { negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1 } },
+  });
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+
+  const conv = await db.whatsAppConversation.findFirst({
+    where: { clienteId },
+    select: { id: true, contactName: true, externalPhone: true },
+  });
+  const contexto = conv
+    ? await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId, externalPhone: conv.externalPhone })
+    : `Nome: ${cliente.nome}\nStatus CRM: ${cliente.status}${cliente.resumoTexto ? `\nResumo: ${cliente.resumoTexto}` : ""}`;
+
+  const neg = cliente.negociacoes[0] ?? null;
+  const diasSemContato = cliente.ultimoContato ? Math.floor((Date.now() - cliente.ultimoContato.getTime()) / 86_400_000) : null;
+
+  const { acao, motivo } = await sugerirProximaAcaoIA(contexto, {
+    nome: cliente.nome,
+    aguardandoResposta: cliente.aguardandoResposta,
+    diasSemContato,
+    concorrenteMencionado: neg?.concorrenteMencionado ?? null,
+    temVisitaAgendada: !!(neg?.dataVisita || cliente.proximaVisita),
+    estagio: neg?.estagio ?? null,
+  });
+
+  if (neg) await db.negociacao.update({ where: { id: neg.id }, data: { proximaAcao: acao } });
+  await registrarAudit({
+    acao: "negociacao_atualizada", origem: "cerebro",
+    descricao: `Cérebro sugeriu a próxima ação para ${cliente.nome}: ${acao}`,
+    entidade: "Cliente", entidadeId: clienteId, clienteId,
+  });
+
+  revalidatePath(`/clientes/${clienteId}`);
+  if (neg) revalidatePath("/pipeline");
+
+  return { ok: true, acao, motivo };
+}
+
+// Cria uma tarefa/demanda a partir de uma sugestão de próxima ação (Next Best
+// Action ou registro de visita por voz), já vinculada ao cliente.
+export async function criarTarefaDeAcao(clienteId: string, acao: string): Promise<{ ok: boolean }> {
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } });
+  const ultima = await db.tarefaKanban.findFirst({ where: { coluna: "demandas" }, orderBy: { ordem: "desc" }, select: { ordem: true } });
+  await db.tarefaKanban.create({
+    data: {
+      titulo: acao.slice(0, 140),
+      descricao: cliente ? `Cliente: ${cliente.nome}` : null,
+      coluna: "demandas",
+      clienteId,
+      ordem: (ultima?.ordem ?? 0) + 1,
+    },
+  });
+  await registrarAudit({
+    acao: "tarefa_criada", origem: "usuario",
+    descricao: `Tarefa criada a partir de uma sugestão de próxima ação: "${acao}".`,
+    entidade: "TarefaKanban", clienteId,
+  });
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// Modo Campo por voz (Fase 5, item 5): o vendedor relata em voz alta o que
+// aconteceu numa visita ("visitei o João, quer trocar a retro, orcei 480
+// mil") e a IA (mesma extração usada no pipeline do WhatsApp,
+// `analisarConversaIA`) atualiza o resumo do cliente, alimenta a negociação
+// aberta e agenda um follow-up — sem exigir nenhum formulário.
+export async function registrarVisitaPorVoz(
+  clienteId: string,
+  transcript: string
+): Promise<{ ok: boolean; resumo?: string; followUp?: string | null; erro?: string }> {
+  const texto = transcript.trim();
+  if (!texto) return { ok: false, erro: "Nada para processar — fale ou digite o relato da visita." };
+
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+
+  const [estilo, modelosDestaque] = await Promise.all([
+    db.estiloDeFala.findFirst(),
+    db.maquina.findMany({
+      where: { maisComercializado: true, proprio: true },
+      select: { marca: true, modelo: true, categoria: true },
+      orderBy: [{ volumeVendas: "desc" }, { modelo: "asc" }],
+    }),
+  ]);
+
+  const extracao = await analisarConversaIA(texto, { estiloDeFala: estilo?.guia, modelosDestaque });
+
+  // 1) Registra a visita que acabou de acontecer (data = agora).
+  await db.visita.create({ data: { clienteId, data: new Date(), observacao: extracao.resumo || texto.slice(0, 200) } });
+
+  // 2) Se uma próxima visita/data futura for citada no relato, agenda também.
+  await registrarVisitaAgenda(clienteId, extracao.dataVisita);
+
+  // 3) Alimenta a negociação aberta (ou cria uma nova, mesma regra do pipeline do WhatsApp).
+  const negResult = await alimentarNegociacao(clienteId, extracao);
+
+  // 4) Atualiza o resumo do cliente incrementalmente.
+  const novaLinha = `[${new Date().toLocaleDateString("pt-BR")}] (visita em campo) ${extracao.resumo || texto}`;
+  const resumoAtualizado = [cliente.resumoTexto, novaLinha].filter(Boolean).join("\n").split("\n").slice(-12).join("\n");
+  await db.cliente.update({
+    where: { id: clienteId },
+    data: { resumoTexto: resumoAtualizado, visitado: true, ultimoContato: new Date() },
+  });
+
+  // 5) Agenda o follow-up: tarefa no quadro, com prazo na data da próxima visita
+  //    detectada (se houver) ou em 3 dias por padrão.
+  const followUpTitulo = `Follow-up: ${cliente.nome}`;
+  const dueDate = extracao.dataVisita && extracao.dataVisita.getTime() > Date.now()
+    ? extracao.dataVisita
+    : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const ultima = await db.tarefaKanban.findFirst({ where: { coluna: "demandas" }, orderBy: { ordem: "desc" }, select: { ordem: true } });
+  await db.tarefaKanban.create({
+    data: {
+      titulo: followUpTitulo,
+      descricao: extracao.rascunhoResposta || `Retomar contato sobre ${extracao.maquina ?? "a negociação"}.`,
+      coluna: "demandas",
+      clienteId,
+      dueDate,
+      ordem: (ultima?.ordem ?? 0) + 1,
+    },
+  });
+
+  await registrarAudit({
+    acao: "visita_detectada", origem: "usuario",
+    descricao: `Visita registrada por voz para ${cliente.nome}.`,
+    entidade: "Cliente", entidadeId: clienteId, clienteId,
+    extra: { transcript: texto, maquina: extracao.maquina, valor: extracao.valor, negociacaoId: negResult?.id ?? null },
+  });
+
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/agenda");
+  revalidatePath("/pipeline");
+
+  return { ok: true, resumo: extracao.resumo || undefined, followUp: followUpTitulo };
 }
 
 // Cria um card a partir do resumo: se a coluna for do funil de negociação,
