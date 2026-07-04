@@ -21,16 +21,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (typeof body.contactName === "string" && body.contactName.trim()) {
     data.contactName = body.contactName.trim();
   }
+  if (typeof body.clienteId === "string" && body.clienteId) data.clienteId = body.clienteId;
 
-  if (!Object.keys(data).length) return NextResponse.json({ ok: false, erro: "nada a atualizar" }, { status: 400 });
+  // "Atendimento encerrado": o cliente vinculado deixa de contar como
+  // aguardando resposta (some das listas/contadores de pendência do CRM).
+  const encerrarAtendimento = body.encerrarAtendimento === true;
 
-  const conv = await db.whatsAppConversation.update({ where: { id: params.id }, data });
+  if (!Object.keys(data).length && !encerrarAtendimento) {
+    return NextResponse.json({ ok: false, erro: "nada a atualizar" }, { status: 400 });
+  }
+
+  const conv = Object.keys(data).length
+    ? await db.whatsAppConversation.update({ where: { id: params.id }, data })
+    : await db.whatsAppConversation.findUnique({ where: { id: params.id } });
+
+  if (!conv) return NextResponse.json({ ok: false, erro: "conversa não encontrada" }, { status: 404 });
 
   // Sincroniza o nome no cadastro do cliente vinculado — só quando o front
   // manda a flag explícita (checkbox "Atualizar também o cadastro"), para não
   // sobrescrever o nome do Cliente sem confirmação a cada rename de contato.
   if (data.contactName && conv.clienteId && body.syncCliente === true) {
     await db.cliente.update({ where: { id: conv.clienteId }, data: { nome: data.contactName as string } }).catch(() => {});
+  }
+
+  if (encerrarAtendimento && conv.clienteId) {
+    await db.cliente.update({ where: { id: conv.clienteId }, data: { aguardandoResposta: false } }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, conversation: conv });

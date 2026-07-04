@@ -94,7 +94,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
               <Clock size={12} />
               {cliente.ultimoContato ? `último contato há ${diasSemContato}d` : "sem contato registrado"}
             </span>
-            {cliente.aguardandoResposta && <Badge tom="red">aguardando seu retorno</Badge>}
+            {cliente.aguardandoResposta ? <Badge tom="red">aguardando seu retorno</Badge> : <Badge tom="green">sem pendências</Badge>}
             {cliente.interesseFuturo && (
               <Badge tom="yellow">
                 ⏳ interesse futuro{cliente.interesseFuturoNota ? ` — ${cliente.interesseFuturoNota}` : ""}

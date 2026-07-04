@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
 Search, Send, ArrowLeft, Check, CheckCheck, User, MoreVertical, MessageCircle, Users,
 DownloadCloud, Loader2, Brain, Trash2, Pencil, X, FileText, Handshake, RefreshCw, Link2,
+CheckCircle2,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -150,6 +151,18 @@ export function AtendimentoClient({
       return;
     }
     if (selId === c.id) { setSelId(null); setMensagens([]); }
+    router.refresh();
+  }
+
+  async function encerrarAtendimento(c: ConvLista) {
+    setMenuAberto(false);
+    try {
+      await fetch(`/api/conversations/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ encerrarAtendimento: true }),
+      });
+    } catch {}
     router.refresh();
   }
 
@@ -587,6 +600,10 @@ export function AtendimentoClient({
                       <button onClick={() => abrirModalNegociacao(sel)}
                         className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
                         <Handshake size={15} style={{ color: "#60a5fa" }} /> Gerar Negociação
+                      </button>
+                      <button onClick={() => encerrarAtendimento(sel)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
+                        <CheckCircle2 size={15} style={{ color: "#4ade80" }} /> Atendimento encerrado
                       </button>
                       <div className="my-1 border-t" style={{ borderColor: "#2a3942" }} />
                       <button onClick={() => excluirConversa(sel)}
