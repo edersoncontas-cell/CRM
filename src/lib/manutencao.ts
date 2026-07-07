@@ -15,10 +15,14 @@ import { garantirColunasDemanda } from "@/lib/demandas";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 
-// v2: adiciona o agrupamento de municípios em regiões (Caparaó/Litorânea/
-// Granito/Serrana/Das Santas) -- precisa rodar de novo mesmo em bancos que já
-// tinham manutencao.v1 feita antes desse agrupamento existir.
-const CHAVE_MANUTENCAO = "manutencao.v2";
+// v3: adiciona as tabelas do Orientador de Vendas (OrientadorAnalise), do
+// Setor de Pós-venda (PosVendaContato) e a coluna Maquina.aplicacoes -- sem
+// bumpar aqui, bancos que já tinham manutencao.v2 feita NUNCA rodariam a
+// migração de novo sozinhos, e toda página que usa essas tabelas quebra
+// (era o caso: "Algo deu errado" ao abrir o cadastro de cliente/Orientador/
+// Pós-venda/Aplicações em produção). Bump aqui sempre que uma migração nova
+// precisar rodar em bancos que já passaram pela versão anterior.
+export const CHAVE_MANUTENCAO = "manutencao.v3";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

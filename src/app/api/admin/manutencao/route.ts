@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { rodarManutencao } from "@/lib/manutencao";
+import { rodarManutencao, CHAVE_MANUTENCAO } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function POST() {
   const relatorio = await rodarManutencao();
   await db.configuracao
-    .upsert({ where: { chave: "manutencao.v1" }, update: { valor: "ok" }, create: { chave: "manutencao.v1", valor: "ok" } })
+    .upsert({ where: { chave: CHAVE_MANUTENCAO }, update: { valor: "ok" }, create: { chave: CHAVE_MANUTENCAO, valor: "ok" } })
     .catch(() => {});
   const ok = relatorio.every((r) => r.ok);
   return NextResponse.json({ ok, relatorio });
