@@ -100,6 +100,30 @@ export async function aplicarMigracoes(): Promise<void> {
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppMessage_sendStatus_idx" ON "WhatsAppMessage" ("sendStatus")`);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppMessage_processedAt_idx" ON "WhatsAppMessage" ("processedAt")`);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WhatsAppConversation_agnesScheduledAt_idx" ON "WhatsAppConversation" ("agnesScheduledAt")`);
+
+    // Orientador de Vendas: snapshot mais recente da análise de coaching
+    // comercial de IA por cliente (estágio, objeções, temperatura, etc.).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "OrientadorAnalise" (
+        "id"                      TEXT NOT NULL,
+        "clienteId"               TEXT NOT NULL,
+        "estagioVenda"            TEXT NOT NULL,
+        "perfilComprador"         TEXT,
+        "objecoes"                TEXT[] NOT NULL DEFAULT '{}',
+        "probabilidadeFechamento" INTEGER,
+        "probabilidadeExplicacao" TEXT,
+        "temperatura"             TEXT NOT NULL,
+        "proximaAcao"             TEXT,
+        "melhorResposta"          TEXT,
+        "oportunidadesPerdidas"   TEXT[] NOT NULL DEFAULT '{}',
+        "resumoNegociacao"        TEXT,
+        "atualizadoEm"            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "OrientadorAnalise_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "OrientadorAnalise_clienteId_key" UNIQUE ("clienteId"),
+        CONSTRAINT "OrientadorAnalise_clienteId_fkey"
+          FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }
