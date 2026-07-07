@@ -320,6 +320,20 @@
   automática — o Cérebro agora avisa isso ao vendedor em vez de fingir que leu.
   **Ainda não implementado**: integração OAuth direta com a conta Google Contacts do usuário (pedido alternativo
   do usuário) — não iniciada nesta sessão; o caminho via upload de arquivo no Cérebro cobre o caso relatado.
+- ✅ **WhatsApp parou de receber mensagens de novo, mesmo após o fix do `processedAt` (2026-07-07)** — usuário
+  reportou que o `/atendimento` mostrava só conversas de dias antes, nada novo chegando. Diagnóstico feito em
+  conjunto com o usuário direto pelo painel: (1) confirmado que a sessão do WhatsApp estava conectada; (2) `GET
+  /api/webhooks/zapi` respondendo 200 de fora (descartada proteção de acesso da Vercel); (3) confirmado no
+  painel da Z-API que a URL do webhook "Ao receber" estava correta e o toggle "Ignorar webhook de recebimento"
+  estava desligado; (4) a pista definitiva veio dos **Registros da Vercel**: havia uma chamada real da Z-API,
+  `POST /api/webhooks/zapi` retornando **401**. Causa raiz: a variável `ZAPI_WEBHOOK_TOKEN` estava configurada
+  na Vercel com um valor que não batia com o Client-Token que a Z-API realmente envia — `validateWebhook()`
+  (`src/lib/zapi.ts`) rejeitava toda chamada antes mesmo de registrar no diagnóstico (por isso `/conexao`
+  mostrava "a Z-API nunca chamou", o que era enganoso: ela chamava, mas era barrada na validação). Resolvido
+  removendo `ZAPI_WEBHOOK_TOKEN` da Vercel e fazendo redeploy — o código já tratava essa variável como opcional
+  (fail-open, com `isAllowedInstance()` conferindo o instanceId como camada extra de proteção). Confirmado pelo
+  usuário que voltou a funcionar. **Fica de nota para o futuro**: se quiser reativar a validação por token, o
+  valor certo precisa ser copiado exatamente da aba de segurança do painel da Z-API, não inventado.
 
 ---
 
