@@ -1,15 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
-import { MODEL_TAREFA } from "./config";
+import { MODEL_TAREFA, OPENAI_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-// Provedor de IA disponível, em ordem de preferência: Anthropic > Groq.
-function provedorIA(): "anthropic" | "groq" | null {
+// Provedor de IA disponível, em ordem de preferência: OpenAI > Anthropic > Groq.
+// OpenAI primeiro porque o Orientador de Vendas foi pedido especificamente
+// com ela; manter Anthropic/Groq como fallback automático evita que a IA
+// inteira fique muda se um único provedor ficar sem crédito (já aconteceu).
+function provedorIA(): "openai" | "anthropic" | "groq" | null {
+  if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (process.env.GROQ_API_KEY) return "groq";
   return null;
@@ -22,6 +27,7 @@ export function iaHabilitada() {
 // Nome amigável do provedor de IA ativo (para exibir na interface).
 export function provedorIANome(): string | null {
   const p = provedorIA();
+  if (p === "openai") return "OpenAI";
   if (p === "anthropic") return "Anthropic";
   if (p === "groq") return "Groq (grátis)";
   return null;
@@ -31,15 +37,34 @@ function client() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
-// Chamada unificada de LLM: usa Anthropic se houver chave, senão Groq (grátis).
-// Retorna o texto bruto da resposta. Lança erro se nenhum provedor existir.
-async function llmTexto(
+function openaiClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+// Chamada unificada de LLM: usa OpenAI se houver chave, senão Anthropic, senão
+// Groq (grátis). Retorna o texto bruto da resposta. Lança erro se nenhum
+// provedor existir. Exportada para uso fora deste arquivo (ex: Orientador de
+// Vendas em lib/zeus/orientador.ts) — mesmo fallback de provedor pra todo mundo.
+export async function llmTexto(
   system: string,
   user: string,
   opts?: { maxTokens?: number; json?: boolean }
 ): Promise<string> {
   const prov = provedorIA();
   const maxTokens = opts?.maxTokens ?? 1024;
+
+  if (prov === "openai") {
+    const resp = await openaiClient().chat.completions.create({
+      model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      ...(opts?.json ? { response_format: { type: "json_object" as const } } : {}),
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    return resp.choices[0]?.message?.content ?? "";
+  }
 
   if (prov === "anthropic") {
     const resp = await client().messages.create({

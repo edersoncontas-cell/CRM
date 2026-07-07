@@ -67,7 +67,28 @@ model Cliente {
   tarefas        TarefaKanban[]
   visitas        Visita[]
   frota          ClienteMaquina[]
+  orientador     OrientadorAnalise?
   @@index([leadScore])
+}
+
+// Painel "Orientador de Vendas" — snapshot mais recente da análise de
+// coaching comercial (IA) para o cliente, gerado a cada mensagem de WhatsApp
+// com contexto completo (histórico + cadastro + negociações + financiamento).
+model OrientadorAnalise {
+  id                      String   @id @default(cuid())
+  cliente                 Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId               String   @unique
+  estagioVenda            String
+  perfilComprador         String?
+  objecoes                String[]
+  probabilidadeFechamento Int?
+  probabilidadeExplicacao String?
+  temperatura             String
+  proximaAcao             String?
+  melhorResposta          String?
+  oportunidadesPerdidas   String[]
+  resumoNegociacao        String?
+  atualizadoEm            DateTime @updatedAt
 }
 
 model ClienteMaquina {

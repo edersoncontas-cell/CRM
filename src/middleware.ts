@@ -5,6 +5,11 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // Rotas públicas: login, auth e SOMENTE os webhooks de WhatsApp (Meta e Z-API).
   // A Meta/Z-API não enviam cookie; os webhooks se protegem pelo payload da origem.
+  // /api/cerebro/despacho-rapido também é chamado servidor-a-servidor (sem
+  // cookie) pelo webhook via waitUntil — sem estar aqui, o fetch era
+  // redirecionado para /login (200 OK, silencioso) e o Orientador nunca
+  // rodava em produção. Protegido pelo próprio CRON_SECRET (x-cron-secret),
+  // igual às rotas /api/cron/*.
   // As demais rotas /api/zapi/* (status, qr) exigem login — o navegador do
   // Ederson manda o cookie, então funcionam normalmente para ele.
   const rotaPublica =
@@ -12,6 +17,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks/zapi") ||
     pathname.startsWith("/api/zapi/webhook") ||
+    pathname.startsWith("/api/cerebro/despacho-rapido") ||
     pathname.startsWith("/api/cron/");
 
   // Fail-closed: em produção, sem APP_PASSWORD o CRM ficaria público. Bloqueia

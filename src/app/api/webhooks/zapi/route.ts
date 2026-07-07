@@ -191,9 +191,11 @@ export async function POST(req: NextRequest) {
         await zeusReport(e, "processarMensagem (pipeline do webhook)");
       }
 
-      // Chama o Cérebro IMEDIATAMENTE se a conversa estiver com IA ativa.
-      // Debounce de 1s (agrega mensagens rápidas antes de responder).
-      if (conv.aiActive) {
+      // Chama o Orientador de Vendas IMEDIATAMENTE para toda conversa com
+      // cliente vinculado (não só com o Cérebro/auto-resposta ligado — o
+      // painel de coaching deve existir mesmo quando o vendedor responde
+      // manualmente). Debounce de 1s (agrega mensagens rápidas antes de analisar).
+      if (conv.clienteId) {
         // Registra o agendamento para o debounce (1s)
         const agendadoEm = new Date();
         await import("@/lib/db").then(({ db }) =>
@@ -213,8 +215,8 @@ export async function POST(req: NextRequest) {
             headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
             body: JSON.stringify({ conversationId: conv.id, agendadoEm: agendadoEm.toISOString() }),
           }).catch((e) => {
-            console.error("[cerebro-dispatch] erro:", e);
-            return zeusReport(e, "dispatch do Cérebro (webhook → despacho-rapido)");
+            console.error("[orientador-dispatch] erro:", e);
+            return zeusReport(e, "dispatch do Orientador (webhook → despacho-rapido)");
           })
         );
       }

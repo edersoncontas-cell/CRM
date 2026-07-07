@@ -5,15 +5,10 @@
 // uma montava um contexto diferente; agora as duas usam o MESMO contexto rico
 // (cliente, negociações abertas, visitas, alertas, tarefas, Academia).
 
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia";
-import { MODEL_CHAT } from "@/lib/ai/config";
+import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { zeusReport } from "@/lib/zeus/eventos";
-
-function anthropic() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
 
 // Monta contexto rico do cliente para o Cérebro entender tudo antes de responder.
 export async function montarContextoCliente(conv: {
@@ -83,6 +78,12 @@ export async function montarContextoCliente(conv: {
           neg.termometro !== undefined ? `Termômetro: ${neg.termometro}/100` : null,
           neg.proximaAcao ? `Próxima ação: ${neg.proximaAcao}` : null,
           neg.concorrenteMencionado ? `Concorrente: ${neg.concorrenteMencionado}` : null,
+          neg.tipoPagamento ? `Condição de pagamento: ${neg.tipoPagamento}` : null,
+          neg.bancoFinanciamento ? `Banco: ${neg.bancoFinanciamento}` : null,
+          neg.entradaValor ? `Entrada: R$ ${neg.entradaValor.toLocaleString("pt-BR")}${neg.entradaPercentual ? ` (${neg.entradaPercentual}%)` : ""}` : null,
+          neg.consorcioTipo ? `Consórcio: ${neg.consorcioTipo}${neg.consorcioCotas ? ` — ${neg.consorcioCotas} cotas` : ""}` : null,
+          neg.crdSaldoParcelasQtd ? `CRD PME: ${neg.crdSaldoParcelasQtd}x de R$ ${(neg.crdParcelaValor ?? 0).toLocaleString("pt-BR")}` : null,
+          neg.faturadoEm ? `Faturado em: ${neg.faturadoEm.toLocaleDateString("pt-BR")}` : null,
         ].filter(Boolean).join(" | ");
         linhas.push(`• ${partes}`);
       }
@@ -202,72 +203,23 @@ export function montarContextoAcademia(historico: string): string {
   return linhas.join("\n");
 }
 
-// Gera resposta do Cérebro com contexto completo do cliente e histórico integral.
-export async function gerarRespostaCerebro(args: {
-  historico: string;           // histórico completo da conversa
-  ultimasMensagens: string;    // últimas 5 msgs para foco imediato
-  contextoCliente: string;     // dados completos do cliente no CRM
-  contextoAcademia: string;    // técnicas de venda relevantes
-  estilo: string | null;       // estilo de comunicação do Ederson
-}): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) return "";
-
-  const system = `Você é o **Cérebro** — assistente de vendas do Ederson, vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
-
-## Contexto completo do cliente
-${args.contextoCliente}
-
-${args.contextoAcademia}
-${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
-
-## Regras absolutas
-- Leia o HISTÓRICO COMPLETO da conversa para entender o contexto, onde estão na negociação e o que já foi discutido
-- Responda APENAS à última mensagem do cliente de forma natural e coerente com todo o histórico
-- Seja breve (1-3 frases), como mensagem real de WhatsApp
-- Tom: cordial, direto, profissional — como o Ederson fala
-- NUNCA invente preços, prazos ou especificações
-- Se não tiver a informação, diga que vai verificar
-- Use as técnicas de venda da Academia quando fizer sentido NATURAL — nunca de forma mecânica
-- NUNCA use emojis — linguagem 100% profissional e direta
-- Seja ULTRA-CONCISO: max 2-3 frases. Sem longas explicacoes
-- Resposta direta e acionavel. Sem enrolacao`;
-
-  try {
-    const msg = await anthropic().messages.create({
-      model: MODEL_CHAT,
-      max_tokens: 150,
-      system,
-      messages: [{
-        role: "user",
-        content: `=== HISTÓRICO COMPLETO DA CONVERSA ===\n${args.historico}\n\n=== ÚLTIMAS MENSAGENS (foco aqui) ===\n${args.ultimasMensagens}\n\nResponda a última mensagem do cliente de forma natural e coerente com todo o histórico acima.`,
-      }],
-    });
-    const bloco = msg.content[0];
-    return bloco.type === "text" ? bloco.text.trim() : "";
-  } catch (e) {
-    // Nunca pode falhar em silêncio: sem isso, o cliente fica sem resposta E
-    // sem ninguém saber o motivo (ex: crédito da Anthropic zerado).
-    await zeusReport(e, "gerarRespostaCerebro (auto-resposta do WhatsApp)");
-    return "";
-  }
-}
-
 // Follow-up automático inteligente (Fase 5, item 3): mensagem de RETOMADA de
 // contato para uma negociação quente que esfriou — não responde a mensagem
-// nenhuma do cliente (diferente de gerarRespostaCerebro), então o prompt é
-// deliberadamente mais cauteloso para não soar como cobrança/robô.
+// nenhuma do cliente (diferente do Orientador de Vendas, que roda por
+// mensagem), então o prompt é deliberadamente mais cauteloso para não soar
+// como cobrança/robô. Roteado por llmTexto (OpenAI > Anthropic > Groq).
 export async function gerarMensagemFollowUp(args: {
   contextoCliente: string;
   estilo: string | null;
 }): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) return "";
+  if (!iaHabilitada()) return "";
 
-  const system = `Você é o Cérebro, assistente de vendas do Ederson (New Holland Construction / Dynapac, sul do Espírito Santo).
+  const system = `Você é o Orientador de Vendas, assistente comercial do vendedor (New Holland Construction / Dynapac, sul do Espírito Santo).
 O cliente abaixo tem uma negociação ABERTA e QUENTE, mas o contato esfriou (alguns dias sem resposta).
 
 ## Contexto completo do cliente
 ${args.contextoCliente}
-${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
+${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
 
 ## Regras absolutas
 - Escreva uma mensagem de WhatsApp CURTA (1-3 frases) para RETOMAR o contato de forma natural
@@ -278,14 +230,7 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
 - Responda APENAS com o texto da mensagem, sem aspas nem comentários`;
 
   try {
-    const msg = await anthropic().messages.create({
-      model: MODEL_CHAT,
-      max_tokens: 150,
-      system,
-      messages: [{ role: "user", content: "Escreva a mensagem de retomada de contato." }],
-    });
-    const bloco = msg.content[0];
-    return bloco.type === "text" ? bloco.text.trim() : "";
+    return (await llmTexto(system, "Escreva a mensagem de retomada de contato.", { maxTokens: 150 })).trim();
   } catch (e) {
     await zeusReport(e, "gerarMensagemFollowUp (retomada de contato)");
     return "";

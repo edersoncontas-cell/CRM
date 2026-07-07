@@ -11,6 +11,8 @@ CheckCircle2,
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
 import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
+import { buscarOrientadorAnalise } from "@/lib/actions";
+import { Compass, Flame, ThermometerSun, Snowflake } from "lucide-react";
 
 export type ConvLista = {
   id: string;
@@ -293,6 +295,14 @@ export function AtendimentoClient({
   }, [router]);
 
   const sel = conversas.find((c) => c.id === selId) ?? null;
+
+  const [orientador, setOrientador] = useState<Awaited<ReturnType<typeof buscarOrientadorAnalise>>>(null);
+  useEffect(() => {
+    if (!sel?.clienteId) { setOrientador(null); return; }
+    let vivo = true;
+    buscarOrientadorAnalise(sel.clienteId).then((d) => { if (vivo) setOrientador(d); });
+    return () => { vivo = false; };
+  }, [sel?.clienteId]);
 
   const mergeMsgs = useCallback((novas: Mensagem[]) => {
     setMensagens((prev) => {
@@ -617,6 +627,28 @@ export function AtendimentoClient({
                 )}
               </div>
             </div>
+
+            {orientador && (
+              <Link href={`/clientes/${sel.clienteId}`}
+                className="flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs"
+                style={{ background: "#0b1014", borderBottom: "1px solid #2a3942" }}>
+                <Compass size={13} style={{ color: "#BFDE4D" }} />
+                {orientador.temperatura === "muito_quente" || orientador.temperatura === "quente" ? (
+                  <Flame size={12} className="text-orange-400" />
+                ) : orientador.temperatura === "fria" ? (
+                  <Snowflake size={12} className="text-sky-400" />
+                ) : (
+                  <ThermometerSun size={12} className="text-amber-400" />
+                )}
+                <span style={{ color: "#e9edef" }}>{orientador.estagioVenda}</span>
+                {orientador.probabilidadeFechamento != null && (
+                  <span className="font-bold" style={{ color: "#BFDE4D" }}>{orientador.probabilidadeFechamento}%</span>
+                )}
+                {orientador.proximaAcao && (
+                  <span className="truncate" style={{ color: "#8696a0" }}>— {orientador.proximaAcao}</span>
+                )}
+              </Link>
+            )}
 
             {/* Mensagens — rola sozinho, flex-1 com overflow-y-auto */}
             <div ref={chatRef} onScroll={() => {

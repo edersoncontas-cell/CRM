@@ -10,7 +10,7 @@ import { NextBestAction } from "@/components/NextBestAction";
 import { RegistroVisitaVoz } from "@/components/RegistroVisitaVoz";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +37,10 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };
   type ConvRow = { id: string };
-  const [frotaRows, waConv] = await Promise.all([
+  const [frotaRows, waConv, orientador] = await Promise.all([
     db.$queryRawUnsafe<FrotaRow[]>(`SELECT id, marca, modelo FROM "ClienteMaquina" WHERE "clienteId" = $1 ORDER BY "criadoEm" ASC`, cliente.id).catch(() => [] as FrotaRow[]),
     db.whatsAppConversation.findFirst({ where: { clienteId: cliente.id }, select: { id: true } }).catch(() => null as ConvRow | null),
+    db.orientadorAnalise.findUnique({ where: { clienteId: cliente.id } }),
   ]);
 
   const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
@@ -147,6 +148,28 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
               <span className="text-slate-700">⭐ Já indicou <b>{cliente.indicados.length}</b> cliente(s)</span>
             )}
           </div>
+        </Card>
+      )}
+
+      {/* Orientador de Vendas */}
+      {orientador && (
+        <Card className="mb-6 border-slate-200">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Compass size={17} className="text-brand-600" />
+            <span className="font-semibold text-slate-700">Orientador de Vendas</span>
+            <Badge tom="slate">{orientador.estagioVenda}</Badge>
+            {orientador.probabilidadeFechamento != null && (
+              <Badge tom="green">{orientador.probabilidadeFechamento}% de chance de fechar</Badge>
+            )}
+            <Link href="/orientador" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">ver painel completo</Link>
+          </div>
+          {orientador.resumoNegociacao && <p className="mb-2 text-sm text-slate-600">{orientador.resumoNegociacao}</p>}
+          {orientador.proximaAcao && (
+            <div className="flex items-start gap-1.5 rounded-lg bg-brand-50 p-2 text-sm text-brand-800">
+              <Target size={14} className="mt-0.5 shrink-0" />
+              <span>{orientador.proximaAcao}</span>
+            </div>
+          )}
         </Card>
       )}
 

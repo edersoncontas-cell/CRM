@@ -2551,3 +2551,50 @@ export async function calcularPrevisaoComissaoCrdPme(
   previsao.setMonth(previsao.getMonth() + meses);
   return previsao;
 }
+
+// ---------- Orientador de Vendas ----------
+
+// Lista todas as análises do Orientador, mais quentes/prováveis primeiro —
+// alimenta o painel /orientador.
+export async function listarOrientadorAnalises() {
+  const analises = await db.orientadorAnalise.findMany({
+    include: { cliente: { select: { id: true, nome: true, municipio: { select: { nome: true } } } } },
+    orderBy: [{ probabilidadeFechamento: "desc" }, { atualizadoEm: "desc" }],
+  });
+  return analises.map((a) => ({
+    clienteId: a.clienteId,
+    clienteNome: a.cliente.nome,
+    municipio: a.cliente.municipio?.nome ?? null,
+    estagioVenda: a.estagioVenda,
+    perfilComprador: a.perfilComprador,
+    temperatura: a.temperatura,
+    probabilidadeFechamento: a.probabilidadeFechamento,
+    proximaAcao: a.proximaAcao,
+    atualizadoEm: a.atualizadoEm.toISOString(),
+  }));
+}
+
+// Análise completa de um cliente (drill-down do painel + badge compacto em
+// Atendimento/Cadastro do cliente).
+export async function buscarOrientadorAnalise(clienteId: string) {
+  const a = await db.orientadorAnalise.findUnique({
+    where: { clienteId },
+    include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+  });
+  if (!a) return null;
+  return {
+    clienteNome: a.cliente.nome,
+    municipio: a.cliente.municipio?.nome ?? null,
+    estagioVenda: a.estagioVenda,
+    perfilComprador: a.perfilComprador,
+    objecoes: a.objecoes,
+    probabilidadeFechamento: a.probabilidadeFechamento,
+    probabilidadeExplicacao: a.probabilidadeExplicacao,
+    temperatura: a.temperatura,
+    proximaAcao: a.proximaAcao,
+    melhorResposta: a.melhorResposta,
+    oportunidadesPerdidas: a.oportunidadesPerdidas,
+    resumoNegociacao: a.resumoNegociacao,
+    atualizadoEm: a.atualizadoEm.toISOString(),
+  };
+}

@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getWaSettings } from "@/lib/whatsapp-settings";
-import { sendText } from "@/lib/zapi";
-import { inserirMensagem } from "@/lib/whatsapp-store";
-import { montarContextoCliente, montarContextoAcademia, gerarRespostaCerebro } from "@/lib/zeus/cerebro-resposta";
+import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
+import { processarOrientador } from "@/lib/zeus/orientador";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // POST /api/cerebro/despacho-rapido
-// Chamado pelo webhook Z-API. Debounce de 1s (era 3s) para resposta mais rápida.
+// Chamado pelo webhook Z-API para TODA conversa com cliente vinculado (não só
+// com o Cérebro/auto-resposta ligado — o Orientador de Vendas analisa e gera
+// o painel de coaching mesmo quando o vendedor prefere responder manualmente).
+// Debounce de 1s para agregar mensagens rápidas antes de analisar.
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-cron-secret") ?? "";
   const cronSecret = process.env.CRON_SECRET ?? "";
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
   await new Promise((r) => setTimeout(r, 1000));
 
   const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId } });
-  if (!conv || !conv.aiActive) return NextResponse.json({ ok: true, ignorado: "conversa sem IA ativa" });
+  if (!conv || !conv.clienteId) return NextResponse.json({ ok: true, ignorado: "conversa sem cliente vinculado" });
   if (!conv.agnesScheduledAt) return NextResponse.json({ ok: true, ignorado: "já processada" });
 
   if (agendadoEm) {
@@ -42,13 +44,13 @@ export async function POST(req: NextRequest) {
     db.whatsAppMessage.findMany({
       where: { conversationId: conv.id, isDraft: false },
       orderBy: { sentAt: "asc" },
-      take: 120, // histórico amplo — o Cérebro precisa ver toda a conversa
+      take: 120, // histórico amplo — o Orientador precisa ver toda a negociação
     }),
   ]);
 
   const estilo = estiloRecord?.guia ?? null;
 
-  // Monta histórico completo (não invertido — ordem cronológica para o Cérebro ler)
+  // Monta histórico completo (não invertido — ordem cronológica para a IA ler)
   const historicoCompleto = msgs
     .map((m) => {
       const quem = m.direction === "OUT" ? "Ederson" : "Cliente";
@@ -63,42 +65,18 @@ export async function POST(req: NextRequest) {
     .map((m) => `${m.direction === "OUT" ? "Ederson" : "Cliente"}: ${m.body}`)
     .join("\n");
 
-  // Contexto completo do cliente (em paralelo com tudo mais)
   const contextoCliente = await montarContextoCliente({
     id: conv.id,
     contactName: conv.contactName,
     clienteId: conv.clienteId,
     externalPhone: conv.externalPhone,
   });
-
   const contextoAcademia = montarContextoAcademia(historicoCompleto);
 
-  const reply = await gerarRespostaCerebro({
-    historico: historicoCompleto.slice(-2500), // mais histórico para 120 msgs // máximo 6000 chars de histórico
-    ultimasMensagens,
-    contextoCliente,
-    contextoAcademia,
-    estilo,
+  const { respondido } = await processarOrientador({
+    conv, historicoCompleto, ultimasMensagens, contextoCliente, contextoAcademia, estilo,
+    aiActive: conv.aiActive, auditMode: settings.auditMode,
   });
 
-  if (!reply) return NextResponse.json({ ok: true, ignorado: "sem resposta da IA" });
-
-  if (settings.auditMode) {
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: reply, origin: "CRM", operatorDisplayName: "Cérebro (rascunho)",
-      isDraft: true, draftStatus: "PENDING",
-    });
-  } else {
-    try {
-      const id = await sendText(conv.externalPhone, reply);
-      await inserirMensagem(conv.id, {
-        direction: "OUT", body: reply, origin: "CRM",
-        operatorDisplayName: "Cérebro", zapiMessageId: id, sendStatus: "SENT",
-      });
-    } catch (e) {
-      console.error("[cerebro-despacho-rapido] envio falhou:", e);
-    }
-  }
-
-  return NextResponse.json({ ok: true, respondido: true });
+  return NextResponse.json({ ok: true, respondido });
 }

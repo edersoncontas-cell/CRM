@@ -22,11 +22,11 @@ export default async function ConfiguracoesPage() {
 
   const integracoes = [
     {
-      nome: iaHabilitada() ? `Cérebro de IA (${provedorIANome()})` : "Cérebro de IA",
+      nome: iaHabilitada() ? `Orientador de Vendas (${provedorIANome()})` : "Orientador de Vendas",
       icon: Bot,
       ativo: iaHabilitada(),
-      desc: "Analisa conversas, identifica perfil, extrai dados e escreve no seu tom.",
-      comoAtivar: "Defina GROQ_API_KEY (grátis) ou ANTHROPIC_API_KEY no ambiente.",
+      desc: "Analisa toda a negociação (histórico completo, cadastro, visitas, financiamento) e sugere estágio, objeções, temperatura, probabilidade de fechamento e a melhor resposta.",
+      comoAtivar: "Defina OPENAI_API_KEY (recomendado), ANTHROPIC_API_KEY ou GROQ_API_KEY (grátis) no ambiente.",
     },
     {
       nome: "WhatsApp via Z-API (número fica no celular)",

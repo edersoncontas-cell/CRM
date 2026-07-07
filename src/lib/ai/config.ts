@@ -8,3 +8,7 @@
 // modelo mais barato se o custo apertar.
 export const MODEL_CHAT = process.env.MODEL_CHAT || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 export const MODEL_TAREFA = process.env.MODEL_TAREFA || process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+
+// Modelo da OpenAI usado pelo Orientador de Vendas (e por qualquer chamada de
+// texto quando OPENAI_API_KEY é o provedor ativo — ver provedorIA() em index.ts).
+export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o";

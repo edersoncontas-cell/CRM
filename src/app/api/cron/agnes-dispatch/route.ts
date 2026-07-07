@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
-import { sendText } from "@/lib/zapi";
-import { inserirMensagem } from "@/lib/whatsapp-store";
-import { montarContextoCliente, montarContextoAcademia, gerarRespostaCerebro } from "@/lib/zeus/cerebro-resposta";
+import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
+import { processarOrientador } from "@/lib/zeus/orientador";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Despacho do Cérebro com debounce: responde conversas agendadas e silenciosas
-// há ≥2 min. É o FALLBACK do despacho rápido (que responde em ~1s a partir do
-// webhook) — cobre o caso do fetch fire-and-forget do webhook não completar
-// (função serverless encerrada antes da resposta). Usa o MESMO contexto rico
-// (cliente, negociações, visitas, alertas, Academia) do despacho rápido.
+// Despacho do Orientador com debounce: analisa/responde conversas agendadas e
+// silenciosas há ≥2 min. É o FALLBACK do despacho rápido (que processa em ~1s
+// a partir do webhook) — cobre o caso do fetch fire-and-forget do webhook não
+// completar (função serverless encerrada antes da resposta). Usa o MESMO
+// contexto rico (cliente, negociações, visitas, alertas, Academia) do despacho rápido.
 export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   await tocarHeartbeat("agnes-dispatch");
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
   const corte = new Date(Date.now() - 2 * 60 * 1000);
 
   const convs = await db.whatsAppConversation.findMany({
-    where: { agnesScheduledAt: { not: null }, aiActive: true, lastMessageAt: { lte: corte } },
+    where: { agnesScheduledAt: { not: null }, clienteId: { not: null }, lastMessageAt: { lte: corte } },
     take: 10,
   });
 
@@ -58,34 +57,12 @@ export async function GET(req: NextRequest) {
 
     // Se a geração falhar/vier vazia, deixa agnesScheduledAt intacto para
     // tentar de novo no próximo tick — só zera após sucesso.
-    const reply = await gerarRespostaCerebro({
-      historico: historicoCompleto.slice(-2500),
-      ultimasMensagens,
-      contextoCliente,
-      contextoAcademia,
-      estilo,
+    const { respondido } = await processarOrientador({
+      conv, historicoCompleto, ultimasMensagens, contextoCliente, contextoAcademia, estilo,
+      aiActive: conv.aiActive, auditMode: settings.auditMode,
     });
-    if (!reply) continue;
+    if (!respondido) continue;
 
-    if (settings.auditMode) {
-      await inserirMensagem(conv.id, {
-        direction: "OUT", body: reply, origin: "CRM", operatorDisplayName: "Cérebro (rascunho)",
-        isDraft: true, draftStatus: "PENDING",
-      });
-    } else {
-      try {
-        // Sem operatorName: o cliente não deve ver que é uma IA respondendo.
-        // O rótulo "Cérebro" fica só no registro interno (operatorDisplayName).
-        const id = await sendText(conv.externalPhone, reply);
-        await inserirMensagem(conv.id, {
-          direction: "OUT", body: reply, origin: "CRM",
-          operatorDisplayName: "Cérebro", zapiMessageId: id, sendStatus: "SENT",
-        });
-      } catch (e) {
-        console.error("[cerebro-dispatch] envio falhou:", e);
-        continue; // não zera agnesScheduledAt → tenta de novo no próximo tick
-      }
-    }
     await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: null } });
     feitos++;
   }
