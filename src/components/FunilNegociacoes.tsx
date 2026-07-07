@@ -8,14 +8,15 @@ import {
 } from "@dnd-kit/core";
 import {
   moverNegociacao, marcarPerdida, marcarGanha,
-  criarNegociacaoCard, editarNegociacao, excluirNegociacao,
+  editarNegociacao, excluirNegociacao,
   criarColunaFunil, excluirColunaFunil, renomearColunaFunil,
-  criarNegociacaoCompleta, definirFaturadoEm,
+  definirFaturadoEm,
 } from "@/lib/actions";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
 import { WheelMonthPicker } from "@/components/WheelDatePicker";
+import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
@@ -41,13 +42,6 @@ interface CardData {
 type Cliente = { id: string; nome: string };
 type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean };
 type MaquinaPropria = { marca: string; modelo: string };
-
-// Agrupa as máquinas próprias (banco) por marca, para os dropdowns Marca → Modelo.
-function agruparPorMarca(maquinas: MaquinaPropria[]): Record<string, string[]> {
-  const grupos: Record<string, string[]> = {};
-  for (const m of maquinas) (grupos[m.marca] ??= []).push(m.modelo);
-  return grupos;
-}
 
 function temaCalor(t: number): string {
   if (t >= 70) return "from-orange-500/25 to-rose-600/10 border-orange-400/40";
@@ -81,6 +75,7 @@ export function FunilNegociacoes({
   const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
   const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
   const [novaNegociacaoAberta, setNovaNegociacaoAberta] = useState(false);
+  const [estagioPreSelecionado, setEstagioPreSelecionado] = useState<string | null>(null);
   const colunasParaNova = colunas.filter((c) => !c.titulo.toLowerCase().includes("perdid"));
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
@@ -197,7 +192,7 @@ export function FunilNegociacoes({
 
       {/* Nova Negociação — botão único no topo, abre modal central */}
       <button
-        onClick={() => setNovaNegociacaoAberta(true)}
+        onClick={() => { setEstagioPreSelecionado(null); setNovaNegociacaoAberta(true); }}
         className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-black shadow-sm transition hover:brightness-95"
         style={{ background: "#BFDE4D" }}
       >
@@ -231,7 +226,6 @@ export function FunilNegociacoes({
                   coluna={col}
                   cards={lista}
                   total={totalCol}
-                  clientes={clientes}
                   onEditar={setEditando}
                   onRenomear={async (novoTitulo) => {
                     setColunas((cs) => cs.map((c) => c.id === col.id ? { ...c, titulo: novoTitulo } : c));
@@ -241,6 +235,7 @@ export function FunilNegociacoes({
                     setColunas((cs) => cs.filter((c) => c.id !== col.id));
                     await excluirColunaFunil(col.id);
                   }}
+                  onNovaAntiga={() => { setEstagioPreSelecionado(col.titulo); setNovaNegociacaoAberta(true); }}
                 />
               );
             })}
@@ -254,11 +249,13 @@ export function FunilNegociacoes({
       {editando && <ModalEditar card={editando} onClose={() => setEditando(null)} colunas={colunas} />}
 
       {novaNegociacaoAberta && (
-        <FormAdicionar
+        <FormNovaNegociacao
+          titulo={estagioPreSelecionado ? "Venda Antiga" : "Nova Negociação"}
           colunas={colunasParaNova}
+          estagioInicial={estagioPreSelecionado ?? undefined}
           clientes={clientes}
           maquinasProprias={maquinasProprias}
-          onFechar={() => setNovaNegociacaoAberta(false)}
+          onFechar={() => { setNovaNegociacaoAberta(false); setEstagioPreSelecionado(null); }}
         />
       )}
 
@@ -424,18 +421,17 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, clientes, onEditar, onRenomear, onExcluir,
+  coluna, cards, total, onEditar, onRenomear, onExcluir, onNovaAntiga,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
-  clientes: Cliente[];
   onEditar: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
+  onNovaAntiga: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: coluna.id });
-  const [adicionandoAntiga, setAdicionandoAntiga] = useState(false);
   const [renomeando, setRenomeando] = useState(false);
   const [menu, setMenu] = useState(false);
   const [, startTransition] = useTransition();
@@ -507,7 +503,7 @@ function ColunaFunilView({
                 <button
                   onClick={() => {
                     setMenu(false);
-                    setAdicionandoAntiga(true);
+                    onNovaAntiga();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-xs text-amber-300 hover:bg-slate-700 transition-colors"
                 >
@@ -559,16 +555,6 @@ function ColunaFunilView({
         )}
       </div>
 
-      {/* Negociação antiga (só na coluna FATURADO) */}
-      {!isPerdido && adicionandoAntiga && (
-        <div className="mt-2">
-          <FormAntigaNegociacao
-            estagio={coluna.titulo}
-            clientes={clientes}
-            onFechar={() => setAdicionandoAntiga(false)}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -650,290 +636,6 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
           <Pencil size={11} /> Editar
         </button>
       )}
-    </div>
-  );
-}
-
-// ── Formulário de nova negociação ────────────────────────────────────────
-function FormAdicionar({
-  colunas,
-  clientes,
-  maquinasProprias,
-  onFechar,
-}: {
-  colunas: ColunaFunil[];
-  clientes: Cliente[];
-  maquinasProprias: MaquinaPropria[];
-  onFechar: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [estagio, setEstagio] = useState(colunas[0]?.titulo ?? "");
-  const [pagamento, setPagamento] = useState("");
-  const [entradaValor, setEntradaValor] = useState("");
-  const [valorMaquina, setValorMaquina] = useState("");
-  const [crdEntradaValor, setCrdEntradaValor] = useState("");
-  const [crdEntradaPercentual, setCrdEntradaPercentual] = useState("");
-  const [crdParcelasQtd, setCrdParcelasQtd] = useState("1");
-  const [crdDataFaturamento, setCrdDataFaturamento] = useState("");
-
-  function parseNum(s: string): number {
-    const n = parseFloat(s.replace(/[^0-9,.-]/g, "").replace(",", "."));
-    return isNaN(n) ? 0 : n;
-  }
-
-  // Valor da máquina mudou: recalcula a entrada CRD PME mantendo o que já
-  // estava fixado (percentual, se preenchido; senão o valor em R$).
-  function onValorChange(v: string) {
-    setValorMaquina(v);
-    const valorNum = parseNum(v);
-    if (crdEntradaPercentual) {
-      const novoValor = (valorNum * parseNum(crdEntradaPercentual)) / 100;
-      setCrdEntradaValor(novoValor ? novoValor.toFixed(0) : "");
-    } else if (crdEntradaValor && valorNum > 0) {
-      const pct = (parseNum(crdEntradaValor) / valorNum) * 100;
-      setCrdEntradaPercentual(pct ? pct.toFixed(1) : "");
-    }
-  }
-
-  // Entrada em R$ da CRD PME: recalcula o percentual automaticamente.
-  function onCrdEntradaValorChange(v: string) {
-    setCrdEntradaValor(v);
-    const valorNum = parseNum(valorMaquina);
-    if (valorNum > 0) {
-      const pct = (parseNum(v) / valorNum) * 100;
-      setCrdEntradaPercentual(v ? pct.toFixed(1) : "");
-    }
-  }
-
-  // Entrada em % da CRD PME: recalcula o valor em R$ automaticamente.
-  function onCrdEntradaPercentualChange(v: string) {
-    setCrdEntradaPercentual(v);
-    const valorNum = parseNum(valorMaquina);
-    if (valorNum > 0) {
-      const val = (valorNum * parseNum(v)) / 100;
-      setCrdEntradaValor(v ? val.toFixed(0) : "");
-    }
-  }
-
-  const crdSaldoRestante = Math.max(0, parseNum(valorMaquina) - parseNum(crdEntradaValor));
-  const crdParcelaValorCalc = crdParcelasQtd ? crdSaldoRestante / Number(crdParcelasQtd) : 0;
-
-  const CONDICAO_OPTS = [
-    { value: "pesquisa_preco", label: "Pesquisa de Preço" },
-    { value: "interesse_real", label: "Interesse Real" },
-    { value: "avista", label: "À Vista" },
-    { value: "financiamento", label: "Financiamento Banco" },
-    { value: "crd_pme", label: "CRD PME" },
-    { value: "consorcio", label: "Consórcio" },
-    { value: "outro", label: "Outro" },
-  ];
-
-  const BANCOS = [
-    "Banco do Brasil", "CNH Industrial Capital", "Bradesco", "Sicoob",
-    "Sicredi", "Itaú", "Safra", "BV Financeira", "Outro",
-  ];
-
-  // Marcas/modelos vêm do banco (máquinas próprias, proprio: true) — nunca
-  // mais hardcoded. CASE, CAT, Komatsu etc. são só concorrentes e nunca
-  // aparecem aqui. "Outro" mantém um campo livre para casos fora do catálogo.
-  const MARCAS = agruparPorMarca(maquinasProprias);
-  const [marca, setMarca] = useState("");
-  const maquinasDisp = MARCAS[marca] ?? [];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-white">Nova Negociação</h3>
-          </div>
-          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
-            <X size={18} />
-          </button>
-        </div>
-        <form
-          action={async (fd) => {
-            fd.set("estagio", estagio);
-            if (pagamento === "financiamento" && entradaValor) fd.set("entradaValor", entradaValor);
-            if (pagamento === "crd_pme") {
-              if (crdEntradaValor) fd.set("entradaValor", crdEntradaValor);
-              if (crdEntradaPercentual) fd.set("entradaPercentual", crdEntradaPercentual);
-              fd.set("crdSaldoParcelasQtd", crdParcelasQtd);
-              fd.set("crdParcelaValor", crdParcelaValorCalc.toFixed(2));
-              if (crdDataFaturamento) fd.set("dataFaturamento", crdDataFaturamento);
-            }
-            startTransition(async () => {
-              await criarNegociacaoCompleta(fd);
-              onFechar();
-            });
-          }}
-          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
-        >
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Coluna</label>
-            <select value={estagio} onChange={(e) => setEstagio(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-              {colunas.map((c) => <option key={c.id} value={c.titulo}>{c.titulo}</option>)}
-            </select>
-          </div>
-          {/* Cliente */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Cliente</label>
-              <select name="clienteId" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-                <option value="">— Selecionar —</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Novo cliente</label>
-              <input name="nomeNovo" placeholder="ou digitar nome" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
-            </div>
-          </div>
-          {/* Marca + Máquina */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Marca</label>
-              <select value={marca} onChange={(e) => setMarca(e.target.value)} name="marca" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-                <option value="">— Selecionar —</option>
-                {Object.keys(MARCAS).map((m) => <option key={m} value={m}>{m}</option>)}
-                <option value="Outro">Outro</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Máquina</label>
-              {maquinasDisp.length > 0 ? (
-                <select name="maquinaModelo" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-                  <option value="">Selecione</option>
-                  {maquinasDisp.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              ) : (
-                <input name="maquinaModelo" placeholder="Ex: E215C" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
-              )}
-            </div>
-          </div>
-          {/* Valor */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
-            <input
-              value={valorMaquina}
-              onChange={(e) => onValorChange(e.target.value)}
-              name="valor"
-              placeholder="0"
-              inputMode="numeric"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
-            />
-          </div>
-          {/* Pagamento */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Condição de Pagamento</label>
-            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} name="tipoPagamento" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-              <option value="">—</option>
-              {CONDICAO_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          {/* Financiamento: mantém Banco + Entrada simples */}
-          {pagamento === "financiamento" && (
-            <div className="rounded-xl p-3 space-y-3 bg-blue-50 border border-blue-200">
-              <p className="text-xs font-bold uppercase text-blue-700">Financiamento</p>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Banco</label>
-                <select name="bancoFinanciamento" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400">
-                  <option value="">— Selecionar banco —</option>
-                  {BANCOS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (R$)</label>
-                <input
-                  value={entradaValor}
-                  onChange={(e) => setEntradaValor(e.target.value)}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* CRD PME: sem banco — entrada em R$/% com cálculo automático,
-              saldo restante, parcelas (30 em 30 dias) e data de faturamento manual */}
-          {pagamento === "crd_pme" && (
-            <div className="rounded-xl p-3 space-y-3 bg-emerald-50 border border-emerald-200">
-              <p className="text-xs font-bold uppercase text-emerald-700">CRD PME</p>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (R$)</label>
-                <input
-                  value={crdEntradaValor}
-                  onChange={(e) => onCrdEntradaValorChange(e.target.value)}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Entrada (%)</label>
-                <input
-                  value={crdEntradaPercentual}
-                  onChange={(e) => onCrdEntradaPercentualChange(e.target.value)}
-                  placeholder="0"
-                  inputMode="decimal"
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-white px-3 py-2">
-                <span className="text-xs font-semibold text-emerald-700">Saldo Restante</span>
-                <span className="text-sm font-bold text-emerald-800">{formatCurrency(crdSaldoRestante)}</span>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Parcelas (30 em 30 dias)</label>
-                <select
-                  value={crdParcelasQtd}
-                  onChange={(e) => setCrdParcelasQtd(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>{n}x de {formatCurrency(crdSaldoRestante / n)}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Data de Faturamento (opcional)</label>
-                <input
-                  type="date"
-                  value={crdDataFaturamento}
-                  onChange={(e) => setCrdDataFaturamento(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-emerald-400"
-                />
-              </div>
-            </div>
-          )}
-          {/* Data da visita + Concorrente */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Data da Visita</label>
-              <input type="datetime-local" name="dataVisita" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Concorrente</label>
-              <input name="concorrenteMencionado" placeholder="Ex: CAT, Komatsu..." className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
-            </div>
-          </div>
-          {/* Próxima ação */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Próxima Ação</label>
-            <input name="proximaAcao" placeholder="Ex: Ligar terça para follow-up" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400" />
-          </div>
-          {/* Buttons */}
-          <div className="flex items-center gap-2 pt-2">
-            <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors">
-              Cancelar
-            </button>
-            <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
-              {isPending ? "Criando..." : "Criar Negociação"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -1042,62 +744,3 @@ function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () =
   );
 }
 
-
-// ── Formulário de negociação antiga (modal — mesmo padrão de "Nova Negociação") ──
-function FormAntigaNegociacao({ estagio, clientes, onFechar }: { estagio: string; clientes: { id: string; nome: string }[]; onFechar: () => void }) {
-  const [isPending, startTransition] = useTransition();
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-white">Venda Antiga</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Coluna: {estagio}</p>
-          </div>
-          <button onClick={onFechar} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
-            <X size={18} />
-          </button>
-        </div>
-        <form
-          action={(fd) => {
-            fd.set("negociacaoAntiga", "true");
-            fd.set("estagio", estagio);
-            startTransition(async () => {
-              await criarNegociacaoCompleta(fd);
-              onFechar();
-            });
-          }}
-          className="p-5 space-y-4 max-h-[70vh] overflow-y-auto"
-        >
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Cliente</label>
-            <select name="clienteId" className="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-blue-400">
-              <option value="">— Selecionar cliente —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Máquina</label>
-            <input name="maquinaModelo" placeholder="Ex: E215C" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Valor (R$)</label>
-            <input name="valor" placeholder="0" inputMode="numeric" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Mês/Ano da venda</label>
-            <input type="month" name="mesAnoReferencia" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
-          </div>
-          <div className="flex items-center gap-2 pt-2">
-            <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-gray-50 transition-colors">
-              Cancelar
-            </button>
-            <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
-              {isPending ? "Registrando..." : "Registrar Venda Antiga"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}

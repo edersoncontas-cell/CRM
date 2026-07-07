@@ -133,6 +133,54 @@ export function WheelDatePicker({ valueISO, onConfirm, onClose, title }: {
   );
 }
 
+// ── Seletor de data + hora (dia/mês/ano/hora/minuto) — ex: "Data da Visita" ──
+export function WheelDateTimePicker({ valueLocal, onConfirm, onClose, title }: {
+  // valueLocal no formato "YYYY-MM-DDTHH:mm" (mesmo shape de <input type="datetime-local">)
+  valueLocal: string; onConfirm: (local: string) => void; onClose: () => void; title?: string;
+}) {
+  const base = valueLocal ? new Date(valueLocal) : new Date();
+  const [dia, setDia] = useState(base.getDate());
+  const [mes, setMes] = useState(base.getMonth() + 1);
+  const [ano, setAno] = useState(base.getFullYear());
+  const [hora, setHora] = useState(base.getHours());
+  const [minuto, setMinuto] = useState(Math.round(base.getMinutes() / 5) * 5 % 60);
+
+  const maxDia = diasNoMes(mes, ano);
+  useEffect(() => { if (dia > maxDia) setDia(maxDia); }, [mes, ano, dia, maxDia]);
+
+  const diaOpts: Opcao[] = Array.from({ length: maxDia }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
+  const mesOpts: Opcao[] = MESES.map((m, i) => ({ value: i + 1, label: m.slice(0, 3) }));
+  const anoAtual = new Date().getFullYear();
+  const anoOpts: Opcao[] = Array.from({ length: 15 }, (_, i) => anoAtual - 5 + i).map((a) => ({ value: a, label: String(a) }));
+  const horaOpts: Opcao[] = Array.from({ length: 24 }, (_, i) => ({ value: i, label: String(i).padStart(2, "0") }));
+  const minutoOpts: Opcao[] = Array.from({ length: 12 }, (_, i) => ({ value: i * 5, label: String(i * 5).padStart(2, "0") }));
+
+  function confirmar() {
+    const d = String(Math.min(dia, maxDia)).padStart(2, "0");
+    const m = String(mes).padStart(2, "0");
+    const h = String(hora).padStart(2, "0");
+    const min = String(minuto).padStart(2, "0");
+    onConfirm(`${ano}-${m}-${d}T${h}:${min}`);
+  }
+
+  return (
+    <Folha title={title ?? "Selecione data e hora"} onClose={onClose}>
+      <div className="relative flex justify-center">
+        <CentroDestaque />
+        <WheelColumn options={diaOpts} value={Math.min(dia, maxDia)} onChange={setDia} width={44} />
+        <WheelColumn options={mesOpts} value={mes} onChange={setMes} width={68} />
+        <WheelColumn options={anoOpts} value={ano} onChange={setAno} width={60} />
+        <WheelColumn options={horaOpts} value={hora} onChange={setHora} width={44} />
+        <WheelColumn options={minutoOpts} value={minuto} onChange={setMinuto} width={44} />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button onClick={onClose} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200">Cancelar</button>
+        <button onClick={confirmar} className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600">Confirmar</button>
+      </div>
+    </Folha>
+  );
+}
+
 // ── Seletor de mês/ano — "Mês pago" ──
 export function WheelMonthPicker({ valueMes, onConfirm, onClose, title }: {
   valueMes: string; onConfirm: (mesAno: string) => void; onClose: () => void; title?: string;

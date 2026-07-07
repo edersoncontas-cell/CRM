@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { atualizarResumoCliente, criarNegociacaoCompleta, gerarResumoClienteIA, sugerirAbordagemCliente } from "@/lib/actions";
+import { atualizarResumoCliente, gerarResumoClienteIA, sugerirAbordagemCliente } from "@/lib/actions";
 import { Save, ChevronDown, ChevronUp, Pencil, Swords, Brain, Loader2, PlusCircle, Compass } from "lucide-react";
 import Link from "next/link";
+import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 
 const CONDICAO_OPTS = [
   { value: "pesquisando", label: "Só pesquisando preço" },
@@ -54,6 +55,7 @@ export function ResumoClienteForm({
   perfilDISC = null,
   abordagemIA = null,
   maquinasProprias = [],
+  colunasFunil,
 }: {
   clienteId: string;
   resumo: Resumo;
@@ -62,6 +64,7 @@ export function ResumoClienteForm({
   perfilDISC?: string | null;
   abordagemIA?: string | null;
   maquinasProprias?: { marca: string; modelo: string }[];
+  colunasFunil: { id: string; titulo: string }[];
 }) {
   const [editando, setEditando] = useState(false);
   const [maquinas, setMaquinas] = useState(resumo.maquinas ?? "");
@@ -300,129 +303,14 @@ export function ResumoClienteForm({
         )}
       </div>
       {novaNegoOpen && (
-        <NovaNegoModalInline clienteId={clienteId} maquinasProprias={maquinasProprias} onClose={() => setNovaNegoOpen(false)} />
+        <FormNovaNegociacao
+          titulo="Gerar Negociação"
+          clienteIdFixo={clienteId}
+          colunas={colunasFunil}
+          maquinasProprias={maquinasProprias}
+          onFechar={() => setNovaNegoOpen(false)}
+        />
       )}
-    </div>
-  );
-}
-
-// ─── Modal Gerar Negociação (no cadastro do cliente) ─────────────────────────
-const BANCOS_OPCOES = ["Banco CNH","Sicoob","Sicredi","Bradesco","Banestes","Banco do Nordeste","Banco do Brasil","Banco Itaú","Outros Bancos"];
-// Modelos vêm do banco (máquinas próprias, proprio: true) via prop — nunca
-// mais hardcoded (a lista antiga tinha modelos que a New Holland não vende aqui).
-
-function fmtBRL(v: string): string {
-  const n = v.replace(/\D/g, "");
-  if (!n) return "";
-  return parseInt(n, 10).toLocaleString("pt-BR");
-}
-
-function NovaNegoModalInline({ clienteId, maquinasProprias, onClose }: { clienteId: string; maquinasProprias: { marca: string; modelo: string }[]; onClose: () => void }) {
-  const [marca, setMarca] = useState("");
-  const [maquina, setMaquina] = useState("");
-  const [valor, setValor] = useState("");
-  const [pagamento, setPagamento] = useState("");
-  const [banco, setBanco] = useState("");
-  const [entradaValor, setEntradaValor] = useState("");
-  const [salvando, setSalvando] = useState(false);
-
-  const models = marca ? maquinasProprias.filter((m) => m.marca === marca).map((m) => m.modelo) : [];
-  const inputCls = "w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400";
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSalvando(true);
-    try {
-      const valorNum = parseFloat(valor.replace(/\./g,"").replace(",",".")) || 0;
-      const entradaNum = parseFloat(entradaValor.replace(/\./g,"").replace(",",".")) || 0;
-      const fd = new FormData();
-      fd.set("clienteId", clienteId);
-      fd.set("marca", marca);
-      fd.set("maquinaModelo", maquina);
-      fd.set("valor", String(valorNum));
-      fd.set("tipoPagamento", pagamento);
-      if (banco) fd.set("bancoFinanciamento", banco);
-      if (entradaNum) fd.set("entradaValor", String(entradaNum));
-      await criarNegociacaoCompleta(fd);
-      onClose();
-      window.location.reload();
-    } catch {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between sticky top-0">
-          <h3 className="text-lg font-bold text-white">Gerar Negociação</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-        <form onSubmit={submit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">MARCA</label>
-              <select value={marca} onChange={(e) => { setMarca(e.target.value); setMaquina(""); }} className={inputCls} required>
-                <option value="">Selecionar marca...</option>
-                <option>New Holland</option>
-                <option>Dynapac</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">MÁQUINA</label>
-              <select value={maquina} onChange={(e) => setMaquina(e.target.value)} className={inputCls} required>
-                <option value="">Selecionar...</option>
-                {models.map((m) => <option key={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">VALOR (R$)</label>
-            <input value={valor} onChange={(e) => setValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">PAGAMENTO</label>
-            <select value={pagamento} onChange={(e) => setPagamento(e.target.value)} className={inputCls}>
-              <option value="">—</option>
-              <option value="avista">À vista</option>
-              <option value="financiamento">Financiamento</option>
-              <option value="consorcio">Consórcio</option>
-              <option value="crd_pme">CRD PME</option>
-            </select>
-          </div>
-          {pagamento === "financiamento" && (
-            <div className="rounded-xl bg-violet-50 border border-violet-200 p-4 space-y-3">
-              <p className="text-xs font-bold text-violet-700 uppercase">Financiamento</p>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">BANCO</label>
-                <select value={banco} onChange={(e) => setBanco(e.target.value)} className={inputCls}>
-                  <option value="">— Selecionar —</option>
-                  {BANCOS_OPCOES.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">ENTRADA (R$)</label>
-                <input value={entradaValor} onChange={(e) => setEntradaValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
-              </div>
-            </div>
-          )}
-          {pagamento === "crd_pme" && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
-              <p className="text-xs font-bold text-emerald-700 uppercase">CRD PME</p>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">ENTRADA (R$)</label>
-                <input value={entradaValor} onChange={(e) => setEntradaValor(fmtBRL(e.target.value))} placeholder="0" className={inputCls} />
-              </div>
-            </div>
-          )}
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={salvando} className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-              {salvando ? "Criando..." : "Criar Negociação"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }

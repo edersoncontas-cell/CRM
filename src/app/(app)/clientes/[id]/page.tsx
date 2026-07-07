@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function ClienteDetalhe({ params }: { params: { id: string } }) {
   await garantirManutencaoSeNecessario();
 
-  const [cliente, municipios, maquinas] = await Promise.all([
+  const [cliente, municipios, maquinas, colunasFunil] = await Promise.all([
     db.cliente.findUnique({
       where: { id: params.id },
       include: {
@@ -30,6 +30,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
     }),
     db.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, foraDeArea: true } }),
     db.maquina.findMany({ select: { id: true, marca: true, modelo: true, categoria: true, proprio: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
+    db.colunaFunil.findMany({ where: { NOT: { titulo: { contains: "perdid", mode: "insensitive" } } }, orderBy: { ordem: "asc" }, select: { id: true, titulo: true } }),
   ]);
   if (!cliente) notFound();
 
@@ -214,6 +215,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
         abordagemIA={abordagemIA}
         temConversa={!!waConv}
         maquinasProprias={maquinas.filter((m) => m.proprio).map((m) => ({ marca: m.marca, modelo: m.modelo }))}
+        colunasFunil={colunasFunil}
         negociacoes={cliente.negociacoes.map((n) => ({
           id: n.id,
           maquinaModelo: n.maquinaModelo,
