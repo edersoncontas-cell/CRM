@@ -8,19 +8,16 @@ import {
 } from "@dnd-kit/core";
 import {
   moverNegociacao, marcarPerdida, marcarGanha,
-  editarNegociacao, excluirNegociacao,
   criarColunaFunil, excluirColunaFunil, renomearColunaFunil,
   definirFaturadoEm,
 } from "@/lib/actions";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
-import { Termometro } from "@/components/ui";
-import { WheelMonthPicker } from "@/components/WheelDatePicker";
 import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
-  AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check, Bell,
+  AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check,
 } from "lucide-react";
 
 interface CardData {
@@ -37,6 +34,17 @@ interface CardData {
   condicaoPagamento: string | null;
   dataVisita: string | null;
   proximaAcao: string | null;
+  marca: string | null;
+  bancoFinanciamento: string | null;
+  entradaValor: number | null;
+  entradaPercentual: number | null;
+  dataPagamentoAvista: string | null;
+  pagamentoNaEntrega: boolean;
+  consorcioTipo: string | null;
+  consorcioCotas: number | null;
+  consorcioCredito: number | null;
+  crdSaldoParcelasQtd: number | null;
+  faturadoEm: string | null;
 }
 
 type Cliente = { id: string; nome: string };
@@ -246,7 +254,37 @@ export function FunilNegociacoes({
         </DragOverlay>
       </DndContext>
 
-      {editando && <ModalEditar card={editando} onClose={() => setEditando(null)} colunas={colunas} />}
+      {editando && (
+        <FormNovaNegociacao
+          titulo="Editar Negociação"
+          clienteIdFixo={editando.clienteId}
+          clienteNomeFixo={editando.cliente}
+          colunas={colunasParaNova}
+          estagioInicial={editando.estagio}
+          maquinasProprias={maquinasProprias}
+          negociacaoId={editando.id}
+          valoresIniciais={{
+            marca: editando.marca,
+            maquinaModelo: editando.maquina,
+            valor: editando.valor,
+            tipoPagamento: editando.condicaoPagamento,
+            bancoFinanciamento: editando.bancoFinanciamento,
+            entradaValor: editando.entradaValor,
+            entradaPercentual: editando.entradaPercentual,
+            dataPagamentoAvista: editando.dataPagamentoAvista,
+            pagamentoNaEntrega: editando.pagamentoNaEntrega,
+            consorcioTipo: editando.consorcioTipo,
+            consorcioCotas: editando.consorcioCotas,
+            consorcioCredito: editando.consorcioCredito,
+            crdSaldoParcelasQtd: editando.crdSaldoParcelasQtd,
+            dataVisita: editando.dataVisita,
+            dataFaturamento: editando.faturadoEm,
+            concorrenteMencionado: editando.concorrente,
+            proximaAcao: editando.proximaAcao,
+          }}
+          onFechar={() => setEditando(null)}
+        />
+      )}
 
       {novaNegociacaoAberta && (
         <FormNovaNegociacao
@@ -604,7 +642,6 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
           </div>
         )}
         <div className="text-base font-bold text-emerald-300 mb-2">{formatCurrency(card.valor)}</div>
-        <Termometro valor={card.termometro} />
         {card.dataVisita && (
           <div className="mt-2 flex items-center gap-1 text-xs text-sky-300">
             <Calendar size={11} />{formatDateTime(card.dataVisita)}
@@ -637,110 +674,6 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
         </button>
       )}
     </div>
-  );
-}
-
-// ── Modal de edição ──────────────────────────────────────────────────────
-const inputCls = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all";
-function paraInputLocal(iso: string | null): string {
-  if (!iso) return "";
-  const fmt = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
-  return fmt.format(new Date(iso)).replace(" ", "T");
-}
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>{children}</label>;
-}
-
-const MESES_LABEL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-function formatMesAnoLabel(mesAno: string): string {
-  const [ano, mes] = mesAno.split("-").map(Number);
-  if (!ano || !mes) return mesAno;
-  return `${MESES_LABEL[mes - 1]} de ${ano}`;
-}
-
-function ModalEditar({ card, onClose, colunas }: { card: CardData; onClose: () => void; colunas: ColunaFunil[] }) {
-  const [isPending, startTransition] = useTransition();
-  const [interesseFuturoMes, setInteresseFuturoMes] = useState("");
-  const [pickerAberto, setPickerAberto] = useState(false);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white">{card.cliente}</h3>
-              {card.municipio && <p className="text-xs text-slate-400 mt-0.5">{card.municipio}</p>}
-            </div>
-            <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-all"><X size={18} /></button>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <div className="text-2xl font-bold text-emerald-300">{formatCurrency(card.valor)}</div>
-            <Termometro valor={card.termometro} />
-          </div>
-        </div>
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-          <form action={async (fd) => { await editarNegociacao(card.id, fd); onClose(); }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Campo label="Máquina"><input name="maquinaModelo" defaultValue={card.maquina ?? ""} className={inputCls} /></Campo>
-              <Campo label="Valor (R$)"><input name="valor" inputMode="numeric" defaultValue={card.valor ?? ""} className={inputCls} /></Campo>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Campo label="Coluna (estágio)">
-                <select name="estagio" defaultValue={card.estagio} className={inputCls}>
-                  {colunas.filter((c) => !c.titulo.toLowerCase().includes("perdid")).map((c) => (
-                    <option key={c.id} value={c.titulo}>{c.titulo}</option>
-                  ))}
-                </select>
-              </Campo>
-              <Campo label="Pagamento">
-                <select name="condicaoPagamento" defaultValue={card.condicaoPagamento ?? ""} className={inputCls}>
-                  <option value="">—</option>
-                  <option value="avista">À vista</option>
-                  <option value="financiamento">Financiamento</option>
-                  <option value="consorcio">Consórcio</option>
-                  <option value="outro">Outro</option>
-                </select>
-              </Campo>
-            </div>
-            <Campo label="Data da visita"><input type="datetime-local" name="dataVisita" defaultValue={paraInputLocal(card.dataVisita)} className={inputCls} /></Campo>
-            <Campo label="Concorrente"><input name="concorrenteMencionado" defaultValue={card.concorrente ?? ""} className={inputCls} placeholder="Ex: CAT, Komatsu..." /></Campo>
-            <Campo label="Próxima ação"><input name="proximaAcao" defaultValue={card.proximaAcao ?? ""} className={inputCls} placeholder="Ex: Ligar terça para follow-up" /></Campo>
-            <Campo label="Interesse futuro — retomar em">
-              <input type="hidden" name="interesseFuturoMes" value={interesseFuturoMes} />
-              <button
-                type="button"
-                onClick={() => setPickerAberto(true)}
-                className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
-              >
-                <Bell size={14} className="text-slate-400" />
-                {interesseFuturoMes ? formatMesAnoLabel(interesseFuturoMes) : "Definir mês/ano para entrar em contato de novo"}
-              </button>
-            </Campo>
-            <button disabled={isPending} className="w-full rounded-xl bg-slate-900 py-3 font-bold text-agro-400 hover:bg-slate-800 transition-all disabled:opacity-50 shadow-lg">
-              {isPending ? "Salvando..." : "Salvar alterações"}
-            </button>
-          </form>
-          </div>
-          {pickerAberto && (
-            <WheelMonthPicker
-              title="Interesse futuro — retomar em"
-              valueMes={interesseFuturoMes}
-              onClose={() => setPickerAberto(false)}
-              onConfirm={(mesAno) => { setInteresseFuturoMes(mesAno); setPickerAberto(false); }}
-            />
-          )}
-          <div className="border-t border-slate-100 pt-3">
-            <form action={async () => { await excluirNegociacao(card.id); onClose(); }}>
-              <button
-                onClick={(e) => { if (!confirm(`Excluir negociação de ${card.cliente}?`)) e.preventDefault(); }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all"
-              >
-                <Trash2 size={13} /> Excluir negociação
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
   );
 }
 

@@ -1,13 +1,42 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { X, Calendar } from "lucide-react";
-import { criarNegociacaoCompleta } from "@/lib/actions";
-import { WheelDatePicker, WheelDateTimePicker } from "@/components/WheelDatePicker";
+import { X, Calendar, Bell, Trash2 } from "lucide-react";
+import { criarNegociacaoCompleta, editarNegociacaoCompleta, excluirNegociacao } from "@/lib/actions";
+import { WheelDatePicker, WheelDateTimePicker, WheelMonthPicker } from "@/components/WheelDatePicker";
 
 type Cliente = { id: string; nome: string };
 type ColunaOpcao = { id: string; titulo: string };
 type MaquinaPropria = { marca: string; modelo: string };
+
+// Valores de uma negociação já existente — usados para pré-preencher o
+// formulário em modo de edição (mesmo card usado para criar e editar).
+export type ValoresNegociacao = {
+  marca?: string | null;
+  maquinaModelo?: string | null;
+  valor?: number | null;
+  tipoPagamento?: string | null;
+  bancoFinanciamento?: string | null;
+  entradaValor?: number | null;
+  entradaPercentual?: number | null;
+  dataPagamentoAvista?: string | null;
+  pagamentoNaEntrega?: boolean;
+  consorcioTipo?: string | null;
+  consorcioCotas?: number | null;
+  consorcioCredito?: number | null;
+  crdSaldoParcelasQtd?: number | null;
+  dataVisita?: string | null;
+  dataFaturamento?: string | null;
+  concorrenteMencionado?: string | null;
+  proximaAcao?: string | null;
+};
+
+const MESES_LABEL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+function formatMesAnoLabel(mesAno: string): string {
+  const [ano, mes] = mesAno.split("-").map(Number);
+  if (!ano || !mes) return mesAno;
+  return `${MESES_LABEL[mes - 1]} de ${ano}`;
+}
 
 function agruparPorMarca(maquinas: MaquinaPropria[]): Record<string, string[]> {
   const grupos: Record<string, string[]> = {};
@@ -52,11 +81,25 @@ function formatarData(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+// Converte um ISO (com hora) vindo do banco para o formato local usado pelos
+// pickers ("YYYY-MM-DDTHH:mm" ou "YYYY-MM-DD"), já no fuso de Brasília.
+function paraLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const fmt = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  return fmt.format(new Date(iso)).replace(" ", "T");
+}
+function paraData(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return paraLocal(iso).slice(0, 10);
+}
+
 // Card padronizado de negociação — usado em Negociações (nova ou venda
 // antiga), no cadastro do cliente e ao gerar negociação por uma conversa de
 // WhatsApp. Único ponto de manutenção para os campos/condições de pagamento.
 // Quando a coluna selecionada é a de FATURADO, "Data da Visita" vira "Data de
 // Faturamento" — não faz sentido agendar visita pra uma venda já fechada.
+// Em modo de edição (negociacaoId presente), o mesmo formulário pré-preenche
+// os valores atuais e salva via editarNegociacaoCompleta em vez de criar.
 export function FormNovaNegociacao({
   titulo = "Nova Negociação",
   clienteIdFixo,
@@ -67,6 +110,8 @@ export function FormNovaNegociacao({
   maquinasProprias,
   onFechar,
   onSucesso,
+  negociacaoId,
+  valoresIniciais,
 }: {
   titulo?: string;
   clienteIdFixo?: string;
@@ -77,27 +122,31 @@ export function FormNovaNegociacao({
   maquinasProprias: MaquinaPropria[];
   onFechar: () => void;
   onSucesso?: () => void;
+  negociacaoId?: string;
+  valoresIniciais?: ValoresNegociacao;
 }) {
+  const vi = valoresIniciais;
   const [isPending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
   const [estagio, setEstagio] = useState(estagioInicial ?? colunas[0]?.titulo ?? "");
-  const [pagamento, setPagamento] = useState("");
-  const [marca, setMarca] = useState("");
-  const [valorStr, setValorStr] = useState("");
-  const [entradaValorStr, setEntradaValorStr] = useState("");
-  const [entradaPercStr, setEntradaPercStr] = useState("");
-  const [pagamentoNaEntrega, setPagamentoNaEntrega] = useState(false);
-  const [dataPagamentoAvista, setDataPagamentoAvista] = useState("");
-  const [banco, setBanco] = useState("");
-  const [consorcioTipo, setConsorcioTipo] = useState("");
-  const [consorcioCotas, setConsorcioCotas] = useState("");
-  const [consorcioCredito, setConsorcioCredito] = useState("");
-  const [crdParcelasQtd, setCrdParcelasQtd] = useState("1");
-  const [dataVisita, setDataVisita] = useState("");
-  const [dataFaturamento, setDataFaturamento] = useState("");
-  const [concorrente, setConcorrente] = useState("");
-  const [proximaAcao, setProximaAcao] = useState("");
-  const [pickerAberto, setPickerAberto] = useState<"visita" | "faturamento" | "avista" | null>(null);
+  const [pagamento, setPagamento] = useState(vi?.tipoPagamento ?? "");
+  const [marca, setMarca] = useState(vi?.marca ?? "");
+  const [valorStr, setValorStr] = useState(vi?.valor ? formatBRL(String(vi.valor)) : "");
+  const [entradaValorStr, setEntradaValorStr] = useState(vi?.entradaValor ? formatBRL(String(vi.entradaValor)) : "");
+  const [entradaPercStr, setEntradaPercStr] = useState(vi?.entradaPercentual ? String(vi.entradaPercentual) : "");
+  const [pagamentoNaEntrega, setPagamentoNaEntrega] = useState(vi?.pagamentoNaEntrega ?? false);
+  const [dataPagamentoAvista, setDataPagamentoAvista] = useState(paraData(vi?.dataPagamentoAvista));
+  const [banco, setBanco] = useState(vi?.bancoFinanciamento ?? "");
+  const [consorcioTipo, setConsorcioTipo] = useState(vi?.consorcioTipo ?? "");
+  const [consorcioCotas, setConsorcioCotas] = useState(vi?.consorcioCotas ? String(vi.consorcioCotas) : "");
+  const [consorcioCredito, setConsorcioCredito] = useState(vi?.consorcioCredito ? formatBRL(String(vi.consorcioCredito)) : "");
+  const [crdParcelasQtd, setCrdParcelasQtd] = useState(vi?.crdSaldoParcelasQtd ? String(vi.crdSaldoParcelasQtd) : "1");
+  const [dataVisita, setDataVisita] = useState(paraLocal(vi?.dataVisita));
+  const [dataFaturamento, setDataFaturamento] = useState(paraData(vi?.dataFaturamento));
+  const [concorrente, setConcorrente] = useState(vi?.concorrenteMencionado ?? "");
+  const [proximaAcao, setProximaAcao] = useState(vi?.proximaAcao ?? "");
+  const [interesseFuturoMes, setInteresseFuturoMes] = useState("");
+  const [pickerAberto, setPickerAberto] = useState<"visita" | "faturamento" | "avista" | "interesse" | null>(null);
 
   const isFaturado = estagio.toLowerCase().includes("faturad");
   const valorNum = parseNum(valorStr);
@@ -131,6 +180,7 @@ export function FormNovaNegociacao({
     if (clienteIdFixo) fd.set("clienteId", clienteIdFixo);
     fd.set("estagio", estagio);
     fd.set("valor", String(valorNum || ""));
+    fd.set("tipoPagamento", pagamento);
     if (pagamento === "avista") {
       if (dataPagamentoAvista) fd.set("dataPagamentoAvista", dataPagamentoAvista);
       fd.set("pagamentoNaEntrega", pagamentoNaEntrega ? "true" : "false");
@@ -157,13 +207,24 @@ export function FormNovaNegociacao({
     }
     if (concorrente) fd.set("concorrenteMencionado", concorrente);
     if (proximaAcao) fd.set("proximaAcao", proximaAcao);
+    if (interesseFuturoMes) fd.set("interesseFuturoMes", interesseFuturoMes);
 
     startTransition(async () => {
-      const r = await criarNegociacaoCompleta(fd);
+      const r = negociacaoId ? await editarNegociacaoCompleta(negociacaoId, fd) : await criarNegociacaoCompleta(fd);
       if (r && typeof r === "object" && "ok" in r && !r.ok) {
-        setErro((r as { erro?: string }).erro ?? "Erro ao criar negociação.");
+        setErro((r as { erro?: string }).erro ?? "Erro ao salvar negociação.");
         return;
       }
+      onSucesso?.();
+      onFechar();
+    });
+  }
+
+  function excluir() {
+    if (!negociacaoId) return;
+    if (!confirm(`Excluir negociação de ${clienteNomeFixo ?? "este cliente"}?`)) return;
+    startTransition(async () => {
+      await excluirNegociacao(negociacaoId);
       onSucesso?.();
       onFechar();
     });
@@ -220,12 +281,15 @@ export function FormNovaNegociacao({
             <div>
               <label className={labelCls}>Máquina</label>
               {maquinasDisp.length > 0 ? (
-                <select name="maquinaModelo" className={inputCls}>
+                <select name="maquinaModelo" defaultValue={vi?.maquinaModelo ?? ""} className={inputCls}>
                   <option value="">Selecione</option>
                   {maquinasDisp.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {vi?.maquinaModelo && !maquinasDisp.includes(vi.maquinaModelo) && (
+                    <option value={vi.maquinaModelo}>{vi.maquinaModelo}</option>
+                  )}
                 </select>
               ) : (
-                <input name="maquinaModelo" placeholder="Ex: E215C" className={inputCls} />
+                <input name="maquinaModelo" defaultValue={vi?.maquinaModelo ?? ""} placeholder="Ex: E215C" className={inputCls} />
               )}
             </div>
           </div>
@@ -347,6 +411,14 @@ export function FormNovaNegociacao({
             <input value={proximaAcao} onChange={(e) => setProximaAcao(e.target.value)} placeholder="Ex: Ligar terça para follow-up" className={inputCls} />
           </div>
 
+          <div>
+            <label className={labelCls}>Interesse futuro — retomar em</label>
+            <button type="button" onClick={() => setPickerAberto("interesse")} className={botaoDataCls}>
+              <Bell size={14} className="text-slate-400" />
+              {interesseFuturoMes ? formatMesAnoLabel(interesseFuturoMes) : "Definir mês/ano para entrar em contato de novo"}
+            </button>
+          </div>
+
           {erro && <p className="text-xs font-semibold text-red-600">{erro}</p>}
 
           <div className="flex items-center gap-2 pt-2">
@@ -354,12 +426,31 @@ export function FormNovaNegociacao({
               Cancelar
             </button>
             <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
-              {isPending ? "Salvando..." : "Criar Negociação"}
+              {isPending ? "Salvando..." : negociacaoId ? "Salvar Alterações" : "Criar Negociação"}
             </button>
           </div>
+
+          {negociacaoId && (
+            <button
+              type="button"
+              onClick={excluir}
+              disabled={isPending}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all"
+            >
+              <Trash2 size={13} /> Excluir negociação
+            </button>
+          )}
         </form>
       </div>
 
+      {pickerAberto === "interesse" && (
+        <WheelMonthPicker
+          title="Interesse futuro — retomar em"
+          valueMes={interesseFuturoMes}
+          onClose={() => setPickerAberto(null)}
+          onConfirm={(mesAno) => { setInteresseFuturoMes(mesAno); setPickerAberto(null); }}
+        />
+      )}
       {pickerAberto === "visita" && (
         <WheelDateTimePicker
           title="Data da Visita"

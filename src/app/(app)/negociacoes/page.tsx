@@ -66,6 +66,17 @@ export default async function NegociacoesPage({
     condicaoPagamento: n.condicaoPagamento,
     dataVisita: n.dataVisita ? n.dataVisita.toISOString() : null,
     proximaAcao: n.proximaAcao,
+    marca: n.marca,
+    bancoFinanciamento: n.bancoFinanciamento,
+    entradaValor: n.entradaValor,
+    entradaPercentual: n.entradaPercentual,
+    dataPagamentoAvista: n.dataPagamentoAvista ? n.dataPagamentoAvista.toISOString() : null,
+    pagamentoNaEntrega: n.pagamentoNaEntrega,
+    consorcioTipo: n.consorcioTipo,
+    consorcioCotas: n.consorcioCotas,
+    consorcioCredito: n.consorcioCredito,
+    crdSaldoParcelasQtd: n.crdSaldoParcelasQtd,
+    faturadoEm: n.faturadoEm ? n.faturadoEm.toISOString() : null,
   }));
 
   const colunas = colunasFunil.map((c) => ({

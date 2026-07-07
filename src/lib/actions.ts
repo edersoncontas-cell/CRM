@@ -2359,7 +2359,7 @@ export async function criarNegociacaoCompleta(formData: FormData) {
       consorcioCredito: formData.get("consorcioCredito") ? parseFloat(String(formData.get("consorcioCredito") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".")) : null,
       crdSaldoParcelasQtd: crdQtdRaw ? parseInt(crdQtdRaw) : null,
       crdParcelaValor: crdParcelaRaw ? parseFloat(crdParcelaRaw) : null,
-      concorrenteMencionado: String(formData.get("concorrente") ?? "") || null,
+      concorrenteMencionado: String(formData.get("concorrenteMencionado") ?? "") || null,
       proximaAcao: String(formData.get("proximaAcao") ?? "") || null,
       dataVisita: String(formData.get("dataVisita") ?? "") ? new Date(String(formData.get("dataVisita")) + ":00-03:00") : null,
       estagio,
@@ -2381,6 +2381,97 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Edita uma negociação já existente com o mesmo conjunto completo de campos
+// de criarNegociacaoCompleta (usado pelo formulário unificado FormNovaNegociacao
+// em modo de edição — mesmo card para criar e editar, em todo o CRM).
+export async function editarNegociacaoCompleta(id: string, formData: FormData) {
+  const antes = await db.negociacao.findUnique({ where: { id }, select: { clienteId: true } });
+  if (!antes) return { ok: false, erro: "Negociação não encontrada" };
+
+  const valorRaw = String(formData.get("valor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const valorParsed = valorRaw ? parseFloat(valorRaw) : null;
+  const valor = valorParsed != null && Number.isFinite(valorParsed) ? valorParsed : null;
+
+  const tipoPagamento = String(formData.get("tipoPagamento") ?? "") || null;
+  const estagio = String(formData.get("estagio") ?? "") || undefined;
+  const isFaturadoEstagio = !!estagio && estagio.toLowerCase().includes("faturad");
+
+  const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
+  const faturadoEmFinal = dataFaturamentoRaw
+    ? new Date(dataFaturamentoRaw + "T12:00:00-03:00")
+    : isFaturadoEstagio
+    ? new Date()
+    : null;
+
+  const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const entradaValorParsed = entradaValorRaw ? parseFloat(entradaValorRaw) : null;
+  const entradaValor = entradaValorParsed != null && Number.isFinite(entradaValorParsed) ? entradaValorParsed : null;
+  const entradaPercentualRaw = String(formData.get("entradaPercentual") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+  const entradaPercentualParsed = entradaPercentualRaw ? parseFloat(entradaPercentualRaw) : null;
+  const entradaPercentual = entradaPercentualParsed != null && Number.isFinite(entradaPercentualParsed) ? entradaPercentualParsed : null;
+
+  const dataPagamentoRaw = String(formData.get("dataPagamentoAvista") ?? "");
+  const pagamentoNaEntrega = formData.get("pagamentoNaEntrega") === "true";
+
+  const crdQtdRaw = String(formData.get("crdSaldoParcelasQtd") ?? "");
+  const crdParcelaRaw = String(formData.get("crdParcelaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
+
+  const dataVisitaRaw = String(formData.get("dataVisita") ?? "");
+
+  const neg = await db.negociacao.update({
+    where: { id },
+    data: {
+      marca: String(formData.get("marca") ?? "") || null,
+      maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
+      valor,
+      tipoPagamento,
+      condicaoPagamento: tipoPagamento,
+      bancoFinanciamento: String(formData.get("bancoFinanciamento") ?? "") || null,
+      entradaValor,
+      entradaPercentual,
+      dataPagamentoAvista: dataPagamentoRaw && !pagamentoNaEntrega ? new Date(dataPagamentoRaw + "T12:00:00-03:00") : null,
+      pagamentoNaEntrega,
+      consorcioTipo: String(formData.get("consorcioTipo") ?? "") || null,
+      consorcioCotas: formData.get("consorcioCotas") ? parseInt(String(formData.get("consorcioCotas"))) : null,
+      consorcioCredito: formData.get("consorcioCredito") ? parseFloat(String(formData.get("consorcioCredito") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".")) : null,
+      crdSaldoParcelasQtd: crdQtdRaw ? parseInt(crdQtdRaw) : null,
+      crdParcelaValor: crdParcelaRaw ? parseFloat(crdParcelaRaw) : null,
+      concorrenteMencionado: String(formData.get("concorrenteMencionado") ?? "") || null,
+      proximaAcao: String(formData.get("proximaAcao") ?? "") || null,
+      dataVisita: dataVisitaRaw ? new Date(dataVisitaRaw + ":00-03:00") : null,
+      estagio,
+      ultimoContato: new Date(),
+      ...(isFaturadoEstagio ? { status: "ganha" as const, faturadoEm: faturadoEmFinal } : {}),
+    } as any,
+  });
+
+  if (isFaturadoEstagio) {
+    await db.cliente.update({ where: { id: antes.clienteId }, data: { jaComprou: true } });
+  }
+
+  // Interesse futuro: mês/ano para retomar contato.
+  const interesseFuturoMes = String(formData.get("interesseFuturoMes") ?? "");
+  if (interesseFuturoMes) {
+    const [ano, mes] = interesseFuturoMes.split("-").map(Number);
+    if (ano && mes) {
+      await db.cliente.update({
+        where: { id: antes.clienteId },
+        data: {
+          interesseFuturo: true,
+          interesseFuturoData: new Date(ano, mes - 1, 1),
+          interesseFuturoNota: neg.maquinaModelo ? `Retomar negociação — ${neg.maquinaModelo}` : "Retomar negociação",
+        },
+      });
+    }
+  }
+
+  revalidatePath("/negociacoes");
+  revalidatePath("/pipeline");
+  revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
   return { ok: true };
 }
 
