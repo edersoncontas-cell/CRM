@@ -398,6 +398,36 @@ const atualizarResumoCliente: CerebroTool = {
   },
 };
 
+const atualizarEstiloFala: CerebroTool = {
+  def: {
+    name: "atualizar_estilo_fala",
+    description: "Salva/atualiza o guia de estilo de fala do vendedor (usado para imitar o jeito dele de escrever nas respostas de WhatsApp e no rascunho automático). Chame quando, no modo de treinamento, o vendedor te ensinar como ele fala com clientes (exemplos de pergunta/resposta, gírias, formalidade, saudações). Envie o guia JÁ COMPLETO e atualizado (incorporando o que já existia antes com o que acabou de aprender), não só o trecho novo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        guiaAtualizado: { type: "string", description: "Texto completo do guia de estilo, pronto para substituir o anterior." },
+      },
+      required: ["guiaAtualizado"],
+    },
+  },
+  async executar(input) {
+    const guia = s(input.guiaAtualizado).trim();
+    if (!guia) return { erro: "Guia vazio." };
+    const existente = await db.estiloDeFala.findFirst();
+    if (existente) {
+      await db.estiloDeFala.update({ where: { id: existente.id }, data: { guia } });
+    } else {
+      await db.estiloDeFala.create({ data: { guia } });
+    }
+    await registrarAudit({
+      acao: "cliente_atualizado", origem: "cerebro",
+      descricao: "Cérebro atualizou o guia de estilo de fala (modo treinamento).",
+      entidade: "EstiloDeFala",
+    });
+    return { ok: true };
+  },
+};
+
 const importarContatos: CerebroTool = {
   def: {
     name: "importar_contatos",
@@ -688,7 +718,7 @@ const excluirNegociacao: CerebroTool = {
 
 export const CEREBRO_TOOLS: CerebroTool[] = [
   buscarCliente, detalhesCliente, listarNegociacoes, agenda, buscarMaquina, estoqueUsadas, metricasFunil, conversasAguardando,
-  criarCliente, atualizarCliente, atualizarResumoCliente, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
+  criarCliente, atualizarCliente, atualizarResumoCliente, atualizarEstiloFala, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
   criarTarefa, adicionarVisita, enviarResposta, excluirCliente, excluirNegociacao,
 ];
 
@@ -709,6 +739,7 @@ export function rotuloFerramenta(nome: string, input: Record<string, unknown>): 
     criar_cliente: `Cadastrando cliente "${s(input.nome)}"…`,
     atualizar_cliente: "Atualizando cadastro do cliente…",
     atualizar_resumo_cliente: "Atualizando resumo do cliente…",
+    atualizar_estilo_fala: "Aprendendo seu jeito de falar…",
     importar_contatos: "Importando contatos em lote…",
     criar_negociacao: "Abrindo negociação…",
     mover_negociacao: `Movendo negociação para "${s(input.estagio)}"…`,

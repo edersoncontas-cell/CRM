@@ -29,13 +29,23 @@ function anthropicClient() {
 }
 
 // ── System prompt honesto: descreve exatamente as tools disponíveis ─────────
-async function montarSystemPrompt(): Promise<string> {
+async function montarSystemPrompt(modoTreinamento: boolean): Promise<string> {
   const estilo = await db.estiloDeFala.findFirst().catch(() => null);
   const academiaTxt = resumoAcademia();
 
   return `Você é o CÉREBRO — agente do CRM de Ederson, vendedor de máquinas pesadas da linha amarela/construção
 (New Holland Construction: escavadeiras, retroescavadeiras, pás-carregadeiras, motoniveladoras; Dynapac: rolos
 compactadores) no sul do Espírito Santo.
+${modoTreinamento ? `
+## MODO TREINAMENTO DE ESTILO — ATIVO AGORA
+O vendedor está te ensinando como ele fala com os clientes, para você aprender e reproduzir depois nas respostas
+automáticas de WhatsApp. Preste atenção em CADA exemplo que ele der (perguntas típicas de cliente + como ele
+responde, gírias, nível de formalidade, uso ou não de emojis, jeito de cumprimentar/fechar, expressões que ele
+repete). Quando reconhecer um padrão claro (não precisa esperar ele mandar "salva agora" — se ele já te deu um
+bom exemplo, aja), chame atualizar_estilo_fala com o guia COMPLETO e atualizado (o que já existia + o que você
+acabou de aprender, nunca só o trecho novo). Confirme brevemente ao vendedor o que você entendeu/salvou, sem
+emojis, e continue a conversa pedindo mais exemplos se fizer sentido.
+` : ""}
 
 Data/hora atual (Brasília): ${agoraBrasiliaExtenso()}.
 
@@ -87,6 +97,7 @@ export async function POST(req: NextRequest) {
     const fd = await req.formData();
     const sessionId = (fd.get("sessionId") as string) ?? "";
     const mensagem = (fd.get("mensagem") as string) ?? "";
+    const modoTreinamento = fd.get("modoTreinamento") === "true";
     const arquivos: File[] = fd.getAll("arquivo") as File[];
     if (!sessionId) {
       return new Response(JSON.stringify({ erro: "sessionId obrigatório." }), { status: 400 });
@@ -136,7 +147,7 @@ export async function POST(req: NextRequest) {
     // placeholder do anexo) — substitui pela versão com a imagem real.
     const messages: Anthropic.MessageParam[] = [...historico.slice(0, -1), { role: "user", content: contentParaApi }];
 
-    const system = await montarSystemPrompt();
+    const system = await montarSystemPrompt(modoTreinamento);
 
     const readable = new ReadableStream({
       async start(controller) {

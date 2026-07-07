@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus, GraduationCap } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; content: string; arquivos?: string[] };
 type FerramentaAtiva = { name: string; label: string; status: "start" | "done" };
@@ -39,6 +39,7 @@ export function CerebroChat() {
   const [carregandoSessao, setCarregandoSessao] = useState(true);
   const [ferramentas, setFerramentas] = useState<FerramentaAtiva[]>([]);
   const [confirmacaoPendente, setConfirmacaoPendente] = useState<string | null>(null);
+  const [modoTreinamento, setModoTreinamento] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -110,6 +111,7 @@ export function CerebroChat() {
     const fd = new FormData();
     fd.set("sessionId", sessionId);
     fd.set("mensagem", texto);
+    fd.set("modoTreinamento", modoTreinamento ? "true" : "false");
     for (const f of arquivosParaEnviar) fd.append("arquivo", f);
 
     await new Promise((r) => setTimeout(r, 10));
@@ -196,7 +198,7 @@ export function CerebroChat() {
       scrollBottom();
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [input, arquivos, scrollBottom, sessionId]);
+  }, [input, arquivos, scrollBottom, sessionId, modoTreinamento]);
 
   return (
     <div
@@ -211,6 +213,15 @@ export function CerebroChat() {
         <span className="text-sm font-bold text-white">Chat com o Cérebro</span>
         <span className="ml-auto hidden sm:inline text-[10px] text-zinc-600">Arraste arquivos · PDF · imagens · textos</span>
         <button
+          onClick={() => setModoTreinamento((v) => !v)}
+          title="Modo treinamento: ensine como você fala com os clientes"
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition"
+          style={modoTreinamento ? { background: "rgba(191,222,77,0.15)", color: "#BFDE4D" } : undefined}
+        >
+          <GraduationCap size={13} className={modoTreinamento ? "" : "text-zinc-400"} />
+          <span className={modoTreinamento ? "" : "text-zinc-400"}>Treinar estilo{modoTreinamento ? ": ativo" : ""}</span>
+        </button>
+        <button
           onClick={novaConversa}
           disabled={carregando || carregandoSessao}
           title="Nova conversa"
@@ -219,6 +230,11 @@ export function CerebroChat() {
           <Plus size={13} /> Nova conversa
         </button>
       </div>
+      {modoTreinamento && (
+        <div className="px-4 py-2 text-[11px]" style={{ background: "rgba(191,222,77,0.08)", color: "#BFDE4D", borderBottom: "1px solid rgba(191,222,77,0.2)" }}>
+          Modo treinamento ativo — mostre exemplos de como você responde aos clientes (pergunta do cliente + sua resposta) que o Cérebro vai aprender e salvar o estilo.
+        </div>
+      )}
       <div ref={containerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
         {msgs.length === 0 && !dragOver && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
