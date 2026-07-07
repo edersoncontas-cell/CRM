@@ -528,33 +528,39 @@ export async function gerarAplicacoesMaquinaIA(maquina: {
   if (!iaHabilitada()) return "";
   try {
     return await llmTexto(
-      `Você é um especialista sênior em aplicações de máquinas pesadas do ramo construction (linha amarela) no
-Brasil, com profundo conhecimento de TODOS os setores que usam esse tipo de equipamento — não só os óbvios.
+      `Você é um consultor sênior de inteligência de mercado para máquinas pesadas do ramo construction (linha
+amarela) no Brasil, redigindo um DOSSIÊ TÉCNICO-COMERCIAL para o time comercial de uma concessionária —
+o tom é o de um relatório profissional de consultoria (objetivo, denso em informação, zero enrolação),
+não uma lista solta de ideias. Você tem profundo conhecimento de TODOS os setores que usam esse tipo de
+equipamento — não só os óbvios.
 Segmentos possíveis a considerar (use somente os que realmente fazem sentido para a categoria da máquina,
 não force um segmento onde ela não se aplica): ${SEGMENTOS_APLICACAO.join("; ")}.
 
-Para a máquina informada, mapeie TODOS os segmentos de mercado onde ela é realmente útil e, para cada um,
-liste as operações/tarefas concretas que ela realiza nesse segmento (seja específico: não diga "trabalha na
-construção", diga o que ela faz na construção). Baseie-se em como esse tipo de máquina é usado de fato no
-mercado brasileiro — pode usar seu conhecimento geral do setor, mas NUNCA invente números técnicos ou dados
-que não foram informados.
+Para a máquina informada, mapeie TODOS os segmentos de mercado onde ela é realmente útil. Baseie-se em como
+esse tipo de máquina é usado de fato no mercado brasileiro — pode usar seu conhecimento geral do setor, mas
+NUNCA invente números técnicos ou dados que não foram informados.
 
-Termine com uma seção "Nichos pouco explorados" com 2-4 sugestões de tipo de cliente/segmento que o vendedor
-provavelmente não está prospectando hoje, mas que essa máquina atenderia bem.
+Formato exato (markdown, sem preâmbulo, sem repetir o nome da máquina no topo):
 
-Formato (markdown, sem preâmbulo):
-## [Nome do segmento]
-- Operação/tarefa concreta — por que essa máquina se encaixa (1 frase, cite um diferencial real se houver)
-(repita para cada segmento aplicável)
+## Resumo executivo
+Um parágrafo (3-4 frases) posicionando a máquina no mercado: para que perfil de operação ela é mais
+competitiva, seu principal diferencial de venda, e o potencial geral de expansão de carteira que ela oferece.
+
+## [Nome do segmento 1]
+- **Aplicação:** operação/tarefa concreta que a máquina realiza nesse segmento (seja específico, nunca genérico)
+- **Diferencial competitivo:** por que ESSA máquina (e não uma concorrente) se encaixa aqui — cite um
+  diferencial real do cadastro quando houver, ou uma característica técnica plausível da categoria
+(repita o bloco "## [Nome do segmento]" com as 2 linhas acima para cada segmento aplicável — normalmente 4 a 7 segmentos)
 
 ## Nichos pouco explorados
-- ...`,
+- **[Tipo de cliente/segmento]:** por que esse nicho é uma oportunidade de expansão de carteira ainda pouco prospectada
+(2-4 itens)`,
       `Máquina: ${maquina.marca} ${maquina.modelo} (categoria: ${maquina.categoria}).
 ${maquina.descricao ? `Descrição: ${maquina.descricao}` : ""}
 ${maquina.especificacoes ? `Especificações:\n${maquina.especificacoes}` : ""}
 ${maquina.pontosFortes ? `Pontos fortes: ${maquina.pontosFortes}` : ""}
 ${maquina.diferenciais ? `Diferenciais: ${maquina.diferenciais}` : ""}`,
-      { maxTokens: 1400 }
+      { maxTokens: 1700 }
     );
   } catch (err) {
     console.error("Falha ao gerar aplicações da máquina:", err);

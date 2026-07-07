@@ -28,24 +28,58 @@ const CAT_LABEL: Record<string, string> = {
   leve: "Leve",
 };
 
-// Renderização leve do texto gerado (## segmento, - bullet) sem dependência
-// de biblioteca de markdown — o formato é sempre o mesmo (ver prompt em lib/ai).
-function RenderAplicacoes({ texto }: { texto: string }) {
-  return (
-    <div className="space-y-0.5">
-      {texto.split("\n").map((linhaBruta, i) => {
-        const l = linhaBruta.trim();
-        if (!l) return null;
-        if (l.startsWith("## ")) {
-          return <div key={i} className="mt-3 mb-1 text-sm font-bold text-brand-700 first:mt-0">{l.slice(3)}</div>;
-        }
-        if (l.startsWith("- ")) {
-          return <div key={i} className="ml-1 text-sm leading-relaxed text-slate-600">• {l.slice(2)}</div>;
-        }
-        return <div key={i} className="text-sm text-slate-600">{l}</div>;
-      })}
-    </div>
+// Converte **negrito** inline em <strong>, sem depender de lib de markdown —
+// usado nos rótulos "Aplicação:"/"Diferencial competitivo:" do dossiê gerado.
+function renderInlineBold(texto: string, keyBase: string) {
+  const partes = texto.split(/(\*\*[^*]+\*\*)/g);
+  return partes.map((parte, i) =>
+    parte.startsWith("**") && parte.endsWith("**") ? (
+      <strong key={`${keyBase}-${i}`} className="font-semibold text-slate-800">{parte.slice(2, -2)}</strong>
+    ) : (
+      <span key={`${keyBase}-${i}`}>{parte}</span>
+    )
   );
+}
+
+// Renderização leve do texto gerado (## segmento, - bullet, **negrito**) sem
+// dependência de biblioteca de markdown — o formato é sempre o mesmo (ver
+// prompt em lib/ai). A seção "Resumo executivo" ganha um destaque visual à
+// parte, como abertura de um dossiê técnico-comercial.
+function RenderAplicacoes({ texto }: { texto: string }) {
+  const linhas = texto.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let i = 0;
+  while (i < linhas.length) {
+    const l = linhas[i].trim();
+    if (!l) { i++; continue; }
+    if (l.toLowerCase() === "## resumo executivo") {
+      const paragrafo: string[] = [];
+      i++;
+      while (i < linhas.length && !linhas[i].trim().startsWith("## ")) {
+        if (linhas[i].trim()) paragrafo.push(linhas[i].trim());
+        i++;
+      }
+      nodes.push(
+        <div key="resumo" className="mb-4 rounded-lg border border-brand-100 bg-brand-50/60 p-3 text-sm leading-relaxed text-slate-700">
+          {renderInlineBold(paragrafo.join(" "), "resumo")}
+        </div>
+      );
+      continue;
+    }
+    if (l.startsWith("## ")) {
+      nodes.push(<div key={i} className="mt-3 mb-1 text-sm font-bold text-brand-700 first:mt-0">{l.slice(3)}</div>);
+      i++;
+      continue;
+    }
+    if (l.startsWith("- ")) {
+      nodes.push(<div key={i} className="ml-1 text-sm leading-relaxed text-slate-600">• {renderInlineBold(l.slice(2), `l${i}`)}</div>);
+      i++;
+      continue;
+    }
+    nodes.push(<div key={i} className="text-sm text-slate-600">{renderInlineBold(l, `p${i}`)}</div>);
+    i++;
+  }
+  return <div className="space-y-0.5">{nodes}</div>;
 }
 
 function MaquinaCard({ m }: { m: Maquina }) {
@@ -136,8 +170,17 @@ function MaquinaCard({ m }: { m: Maquina }) {
 
 export function AplicacoesClient({ maquinas }: { maquinas: Maquina[] }) {
   const [busca, setBusca] = useState("");
+  const [marcaSel, setMarcaSel] = useState("");
+  const [modeloSel, setModeloSel] = useState("");
+
+  const marcas = Array.from(new Set(maquinas.map((m) => m.marca))).sort();
+  const modelos = Array.from(
+    new Set(maquinas.filter((m) => !marcaSel || m.marca === marcaSel).map((m) => m.modelo))
+  ).sort();
 
   const filtradas = maquinas.filter((m) => {
+    if (marcaSel && m.marca !== marcaSel) return false;
+    if (modeloSel && m.modelo !== modeloSel) return false;
     if (!busca.trim()) return true;
     const q = busca.toLowerCase();
     return (
@@ -150,14 +193,32 @@ export function AplicacoesClient({ maquinas }: { maquinas: Maquina[] }) {
 
   return (
     <div>
-      <div className="relative mb-6 max-w-md">
-        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nicho, segmento ou modelo (ex: agricultura, mineração)…"
-          className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-        />
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative max-w-md flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nicho, segmento ou modelo (ex: agricultura, mineração)…"
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+          />
+        </div>
+        <select
+          value={marcaSel}
+          onChange={(e) => { setMarcaSel(e.target.value); setModeloSel(""); }}
+          className="rounded-lg border border-slate-300 py-2 pl-3 pr-8 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+        >
+          <option value="">Todas as marcas</option>
+          {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <select
+          value={modeloSel}
+          onChange={(e) => setModeloSel(e.target.value)}
+          className="rounded-lg border border-slate-300 py-2 pl-3 pr-8 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+        >
+          <option value="">Todos os modelos</option>
+          {modelos.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
       </div>
 
       {filtradas.length === 0 ? (

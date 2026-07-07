@@ -1,9 +1,16 @@
 // Orientador de Vendas — copiloto comercial de IA (unifica o antigo
 // gerarRespostaCerebro com a análise de coaching pedida pelo usuário: estágio,
 // perfil do comprador, objeções, temperatura, probabilidade de fechamento,
-// próxima ação, oportunidades perdidas e alertas). Uma ÚNICA chamada de IA,
-// roteada por llmTexto() (OpenAI > Anthropic > Groq, com fallback automático
-// de provedor) — em vez de duas chamadas fragmentadas como antes.
+// próxima ação, oportunidades perdidas e alertas). Roteada por llmTexto()
+// (OpenAI > Anthropic > Groq, com fallback automático de provedor).
+//
+// IMPORTANTE (velocidade): a resposta que vai pro cliente é gerada por uma
+// chamada RÁPIDA e SEPARADA (gerarRespostaRapida — só texto, ~200 tokens de
+// saída) e enviada IMEDIATAMENTE. A análise completa do painel (11 campos,
+// JSON estruturado, ~1200 tokens de saída) roda DEPOIS, sem bloquear o
+// envio — pedir tudo numa chamada só fazia o cliente esperar a análise
+// inteira terminar de ser GERADA (token a token) antes de receber a
+// resposta, que era a causa raiz da lentidão reportada.
 
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { db } from "@/lib/db";
@@ -22,7 +29,6 @@ export type AnaliseOrientador = {
   probabilidadeExplicacao: string;
   temperatura: Temperatura;
   proximaAcao: string;
-  melhorResposta: string;
   oportunidadesPerdidas: string[];
   alertas: string[];
 };
@@ -44,13 +50,12 @@ function fallback(motivo: string): AnaliseOrientador {
     probabilidadeExplicacao: motivo,
     temperatura: "morna",
     proximaAcao: motivo,
-    melhorResposta: "",
     oportunidadesPerdidas: [],
     alertas: [],
   };
 }
 
-const SYSTEM_BASE = `Você é o Orientador de Vendas — um gerente comercial sênior, com décadas de experiência em venda
+const PERSONA = `Você é o Orientador de Vendas — um gerente comercial sênior, com décadas de experiência em venda
 consultiva de máquinas pesadas da LINHA AMARELA / CONSTRUCTION (New Holland Construction e Dynapac) no
 Brasil. Você domina SPIN Selling, Challenger Sale, venda consultiva, negociação baseada em valor,
 psicologia da decisão, técnicas de fechamento e tratamento de objeções. Seu objetivo é aumentar a taxa
@@ -60,7 +65,9 @@ Você conhece profundamente a linha New Holland Construction (escavadeiras, retr
 pás-carregadeiras, motoniveladoras) e os rolos compactadores Dynapac, seus concorrentes (Caterpillar,
 Komatsu, Volvo, JCB, Case, XCMG, Sany) e suas aplicações em terraplenagem, construção e mineração.
 Quando comparar marcas, seja ético e técnico, baseado nas necessidades do cliente — NUNCA deprecie um
-concorrente.
+concorrente.`;
+
+const SYSTEM_BASE = `${PERSONA}
 
 Analise a NEGOCIAÇÃO COMPLETA abaixo (histórico integral da conversa + cadastro do cliente + negociações
 abertas + visitas + condições de pagamento/financiamento + alertas já existentes) — nunca considere
@@ -74,19 +81,55 @@ apenas a última mensagem isolada. Devolva SOMENTE um JSON válido, sem texto an
   "probabilidadeExplicacao": string,       // 1 frase explicando o número
   "temperatura": "muito_quente"|"quente"|"morna"|"fria",
   "proximaAcao": string,                   // ação CONCRETA e específica pro vendedor tomar agora (cite máquina/concorrente/valor quando existirem)
-  "melhorResposta": string,                // resposta pronta para a ÚLTIMA mensagem do cliente, no tom do vendedor, em português, natural e consultiva — NUNCA parecer um robô, NUNCA usar emojis
   "oportunidadesPerdidas": string[],       // perguntas que faltaram, objeções ignoradas, sinais de compra desperdiçados (vazio se não houver)
   "alertas": string[]                      // alertas curtos e acionáveis (ex: "Cliente esfriou", "Existe outro decisor", "Momento ideal para fechamento") — vazio se não houver nada digno de alerta
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto fornecido.
-- "objecoes" só pode conter itens da lista permitida, e só se realmente aparecerem na conversa.
-- "melhorResposta" deve responder à ÚLTIMA mensagem do cliente, coerente com todo o histórico.`;
+- "objecoes" só pode conter itens da lista permitida, e só se realmente aparecerem na conversa.`;
 
-// Gera a análise completa do Orientador de Vendas para uma negociação — uma
-// ÚNICA chamada de IA que substitui o antigo gerarRespostaCerebro (o campo
-// melhorResposta cumpre o mesmo papel) e adiciona toda a inteligência de
-// coaching pedida pelo usuário.
+// Gera SÓ a resposta pro cliente — chamada curta e rápida (texto puro, sem
+// JSON, ~200 tokens de saída) para não fazer o cliente esperar a análise
+// completa (abaixo) terminar de ser gerada. É isso que vai pro WhatsApp.
+export async function gerarRespostaRapida(args: {
+  historico: string;
+  ultimasMensagens: string;
+  contextoCliente: string;
+  estilo: string | null;
+}): Promise<string> {
+  if (!iaHabilitada()) return "";
+
+  const system = `${PERSONA}
+
+## Contexto do cliente
+${args.contextoCliente}
+${args.estilo ? `\n## Estilo de comunicação do vendedor (imite)\n${args.estilo}` : ""}
+
+## Regras absolutas
+- Leia o HISTÓRICO COMPLETO pra entender onde estão na negociação, mas responda APENAS a ÚLTIMA mensagem do cliente.
+- AVANCE a conversa: nunca repita uma pergunta que o cliente já respondeu antes no histórico, nem repita uma informação que você (ou o vendedor) já deu a ele. Releia o histórico antes de responder para checar isso.
+- Só cumprimente ("bom dia", "boa tarde", etc.) se NINGUÉM do lado do vendedor já cumprimentou nesta conversa — se já houve saudação, vá direto ao ponto.
+- Não repita a mesma abertura/frase de efeito usada em mensagens suas anteriores no histórico — varie a forma de começar a resposta.
+- Se o cliente já deixou claro o que quer (ex: já disse qual máquina/modelo/opção específica lhe interessa), trate isso como resolvido e siga para o próximo passo da negociação — não peça de novo nem generalize a resposta.
+- Seja breve (1-3 frases), como mensagem real de WhatsApp — natural e coerente com o histórico.
+- NUNCA invente preços, prazos ou especificações que não estejam no contexto. Se faltar info, diga que vai verificar.
+- NUNCA use emojis. Responda APENAS com o texto da mensagem, sem aspas nem comentários.`;
+
+  try {
+    const raw = await llmTexto(
+      system,
+      `=== HISTÓRICO ===\n${args.historico}\n\n=== ÚLTIMAS MENSAGENS (responda a última) ===\n${args.ultimasMensagens}`,
+      { maxTokens: 220 }
+    );
+    return raw.trim();
+  } catch (e) {
+    await zeusReport(e, "gerarRespostaRapida (auto-resposta do WhatsApp)");
+    return "";
+  }
+}
+
+// Gera a análise completa do Orientador de Vendas (painel) — mais lenta
+// (JSON estruturado, 10 campos), NÃO deve bloquear o envio da resposta.
 export async function gerarAnaliseOrientador(args: {
   historico: string;
   ultimasMensagens: string;
@@ -104,13 +147,13 @@ export async function gerarAnaliseOrientador(args: {
 ${args.contextoCliente}
 
 ${args.contextoAcademia}
-${args.estilo ? `\n## Estilo de comunicação do vendedor (imite em "melhorResposta")\n${args.estilo}` : ""}`;
+${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}`;
 
   try {
     const raw = await llmTexto(
       system,
       `=== HISTÓRICO COMPLETO DA CONVERSA ===\n${args.historico}\n\n=== ÚLTIMAS MENSAGENS (foco aqui) ===\n${args.ultimasMensagens}`,
-      { maxTokens: 1200, json: true }
+      { maxTokens: 900, json: true }
     );
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
@@ -140,7 +183,6 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor (imite em "melhorRespo
       probabilidadeExplicacao: typeof parsed.probabilidadeExplicacao === "string" ? parsed.probabilidadeExplicacao : "",
       temperatura,
       proximaAcao: typeof parsed.proximaAcao === "string" ? parsed.proximaAcao : "",
-      melhorResposta: typeof parsed.melhorResposta === "string" ? parsed.melhorResposta.trim() : "",
       oportunidadesPerdidas,
       alertas,
     };
@@ -179,6 +221,41 @@ export async function processarOrientador(args: {
 }): Promise<{ respondido: boolean }> {
   if (!args.conv.clienteId) return { respondido: false };
 
+  // 1) Resposta rápida primeiro — é o que o cliente está esperando. Não
+  // bloqueia na análise completa (que roda depois, só pro painel).
+  const reply = await gerarRespostaRapida({
+    historico: args.historicoCompleto.slice(-2500),
+    ultimasMensagens: args.ultimasMensagens,
+    contextoCliente: args.contextoCliente,
+    estilo: args.estilo,
+  });
+
+  let respondido = false;
+  if (reply) {
+    if (args.aiActive && !args.auditMode) {
+      try {
+        const id = await sendText(args.conv.externalPhone, reply);
+        await inserirMensagem(args.conv.id, {
+          direction: "OUT", body: reply, origin: "CRM",
+          operatorDisplayName: "Orientador de Vendas", zapiMessageId: id, sendStatus: "SENT",
+        });
+        respondido = true;
+      } catch (e) {
+        console.error("[orientador] envio falhou:", e);
+      }
+    } else {
+      // Sem envio automático (Cérebro desligado, ou modo auditoria ligado):
+      // salva como rascunho — o vendedor vê a sugestão no painel e decide se envia.
+      await inserirMensagem(args.conv.id, {
+        direction: "OUT", body: reply, origin: "CRM", operatorDisplayName: "Orientador de Vendas (rascunho)",
+        isDraft: true, draftStatus: "PENDING",
+      });
+      respondido = true;
+    }
+  }
+
+  // 2) Análise completa (painel) — mais lenta, roda depois de já ter
+  // respondido/rascunhado, sem atrasar o cliente.
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -190,42 +267,19 @@ export async function processarOrientador(args: {
     });
   } catch (e) {
     await zeusReport(e, "gerarAnaliseOrientador (Orientador de Vendas)");
-    return { respondido: false };
+    return { respondido };
   }
 
   const { alertas, ...campos } = analise;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
-    create: { clienteId: args.conv.clienteId, ...campos },
-    update: { ...campos },
+    create: { clienteId: args.conv.clienteId, ...campos, melhorResposta: reply || null },
+    update: { ...campos, melhorResposta: reply || undefined },
   });
 
   for (const mensagem of alertas) {
     await criarAlertaOrientadorSeNovo(args.conv.clienteId, mensagem).catch(() => {});
   }
 
-  const reply = campos.melhorResposta;
-  if (!reply) return { respondido: false };
-
-  if (args.aiActive && !args.auditMode) {
-    try {
-      const id = await sendText(args.conv.externalPhone, reply);
-      await inserirMensagem(args.conv.id, {
-        direction: "OUT", body: reply, origin: "CRM",
-        operatorDisplayName: "Orientador de Vendas", zapiMessageId: id, sendStatus: "SENT",
-      });
-      return { respondido: true };
-    } catch (e) {
-      console.error("[orientador] envio falhou:", e);
-      return { respondido: false };
-    }
-  }
-
-  // Sem envio automático (Cérebro desligado, ou modo auditoria ligado): salva
-  // como rascunho — o vendedor vê a sugestão no painel e decide se envia.
-  await inserirMensagem(args.conv.id, {
-    direction: "OUT", body: reply, origin: "CRM", operatorDisplayName: "Orientador de Vendas (rascunho)",
-    isDraft: true, draftStatus: "PENDING",
-  });
-  return { respondido: true };
+  return { respondido };
 }
