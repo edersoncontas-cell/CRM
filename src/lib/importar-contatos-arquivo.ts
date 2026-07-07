@@ -77,9 +77,27 @@ function extrairDeLinhas(linhas: string[][]): ResultadoParse {
   return { contatos };
 }
 
+// Detecta o delimitador do CSV pela primeira linha não vazia. Excel em
+// português (pt-BR) usa PONTO E VÍRGULA como separador de campo (a vírgula é
+// o separador decimal no Brasil) — um CSV "de verdade" com vírgulas é, na
+// prática, uma minoria dos arquivos que chegam de usuários brasileiros.
+// Sem essa detecção, um CSV com ";" vira uma única coluna gigante e a
+// detecção de cabeçalho (nome/telefone) falha por completo.
+function detectarDelimitador(texto: string): "," | ";" | "\t" {
+  const primeiraLinha = texto.split(/\r?\n/).find((l) => l.trim()) ?? "";
+  const candidatos: [",", ";", "\t"] = [",", ";", "\t"];
+  let melhor: "," | ";" | "\t" = ",";
+  let maiorContagem = 0;
+  for (const c of candidatos) {
+    const contagem = primeiraLinha.split(c).length - 1;
+    if (contagem > maiorContagem) { maiorContagem = contagem; melhor = c; }
+  }
+  return melhor;
+}
+
 // Parser CSV mínimo compatível com RFC4180 (campos entre aspas podem conter
-// vírgula/quebra de linha) — evita depender de stream pra ler um Buffer.
-function parseCsv(texto: string): string[][] {
+// o delimitador/quebra de linha) — evita depender de stream pra ler um Buffer.
+function parseCsv(texto: string, delimitador: string): string[][] {
   const linhas: string[][] = [];
   let campo = "";
   let linha: string[] = [];
@@ -94,7 +112,7 @@ function parseCsv(texto: string): string[][] {
       }
     } else if (c === '"') {
       dentroAspas = true;
-    } else if (c === ",") {
+    } else if (c === delimitador) {
       linha.push(campo); campo = "";
     } else if (c === "\n" || c === "\r") {
       if (c === "\r" && texto[i + 1] === "\n") i++;
@@ -111,8 +129,17 @@ function parseCsv(texto: string): string[][] {
 
 export function parseArquivoCsv(buf: Buffer): ResultadoParse {
   let texto = buf.toString("utf-8");
+  // Excel em português com frequência salva o CSV como Windows-1252/Latin1,
+  // não UTF-8 — decodificar bytes de acentuação (ã, ç, é...) como UTF-8
+  // produz o caractere de substituição (U+FFFD). Se aparecer, tenta nomear
+  // de novo como latin1 antes de desistir.
+  if (texto.includes("�")) {
+    const alternativa = buf.toString("latin1");
+    if (!alternativa.includes("�")) texto = alternativa;
+  }
   if (texto.charCodeAt(0) === 0xfeff) texto = texto.slice(1); // remove BOM
-  return extrairDeLinhas(parseCsv(texto));
+  const delimitador = detectarDelimitador(texto);
+  return extrairDeLinhas(parseCsv(texto, delimitador));
 }
 
 export async function parseArquivoExcel(buf: Buffer): Promise<ResultadoParse> {
