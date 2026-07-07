@@ -2,12 +2,26 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
-  Activity, Power, ShieldAlert, Wrench, Bot, MessageCircle, Database, Zap, Copy, Check, RefreshCw, CheckCircle2,
+  Activity, Power, ShieldAlert, Wrench, Bot, MessageCircle, Database, Zap, Copy, Check, RefreshCw, CheckCircle2, Users,
 } from "lucide-react";
 import {
   alternarZeusAtivoAction, alternarAuditModeAction, forcarZeusTickAction, resolverZeusEventoAction,
 } from "@/lib/zeus/actions";
 import type { ResumoTick } from "@/lib/zeus/tick";
+import { MesclarClientesModal } from "@/components/MesclarClientesModal";
+
+// Extrai a lista {id,nome} de um alerta "Possíveis clientes duplicados"
+// (detalhe é JSON livre gravado por higieneDados() em zeus/tick.ts).
+function idsClientesDuplicados(detalhe: string | null): string[] | null {
+  if (!detalhe) return null;
+  try {
+    const d = JSON.parse(detalhe);
+    if (Array.isArray(d?.clientes) && d.clientes.length >= 2) {
+      return d.clientes.map((c: { id: string }) => c.id);
+    }
+  } catch {}
+  return null;
+}
 
 export type ZeusEventoRow = {
   id: string; tipo: string; severidade: string; titulo: string; detalhe: string | null; resolvido: boolean; criadoEm: string;
@@ -64,6 +78,7 @@ export function ZeusPainel({
   const [tickResultado, setTickResultado] = useState<ResumoTick | null>(null);
   const [eventosLocais, setEventosLocais] = useState(eventos);
   const [copiado, setCopiado] = useState(false);
+  const [mesclando, setMesclando] = useState<{ eventoId: string; clienteIds: string[] } | null>(null);
 
   const heartbeatsStale = useMemo(
     () => heartbeats.filter((h) => !h.ultimo || (Date.now() - new Date(h.ultimo).getTime()) / 60000 > h.minutosEsperados * 4),
@@ -210,6 +225,7 @@ export function ZeusPainel({
             {eventosLocais.length === 0 && <p className="text-xs text-zinc-600">Nenhum evento ainda.</p>}
             {eventosLocais.map((e) => {
               const Icon = ICONE_TIPO[e.tipo] ?? Activity;
+              const idsDuplicados = e.titulo.startsWith("Possíveis clientes duplicados") ? idsClientesDuplicados(e.detalhe) : null;
               return (
                 <div key={e.id} className="rounded-xl px-3 py-2 text-xs" style={{ background: "#09090b", border: "1px solid #27272a" }}>
                   <div className="mb-0.5 flex items-center justify-between gap-2">
@@ -219,11 +235,18 @@ export function ZeusPainel({
                     <span className="text-zinc-600">{tempoRelativo(e.criadoEm)}</span>
                   </div>
                   <p className="text-zinc-300">{e.titulo}</p>
-                  {!e.resolvido && e.tipo !== "health" && (
-                    <button onClick={() => resolver(e.id)} className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:underline">
-                      <CheckCircle2 size={11} /> Marcar resolvido
-                    </button>
-                  )}
+                  <div className="mt-1.5 flex items-center gap-3">
+                    {!e.resolvido && e.tipo !== "health" && (
+                      <button onClick={() => resolver(e.id)} className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:underline">
+                        <CheckCircle2 size={11} /> Marcar resolvido
+                      </button>
+                    )}
+                    {!e.resolvido && idsDuplicados && (
+                      <button onClick={() => setMesclando({ eventoId: e.id, clienteIds: idsDuplicados })} className="flex items-center gap-1 text-[11px] font-semibold text-sky-400 hover:underline">
+                        <Users size={11} /> Mesclar
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -246,6 +269,14 @@ export function ZeusPainel({
           </div>
         </div>
       </div>
+
+      {mesclando && (
+        <MesclarClientesModal
+          clienteIds={mesclando.clienteIds}
+          onClose={() => setMesclando(null)}
+          onMesclado={() => resolver(mesclando.eventoId)}
+        />
+      )}
     </div>
   );
 }

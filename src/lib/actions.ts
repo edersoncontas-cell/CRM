@@ -164,6 +164,93 @@ export async function excluirCliente(id: string): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
+// Mescla um ou mais clientes duplicados dentro de um "principal": move todo o
+// histórico ligado (negociações, visitas, conversas, tarefas, alertas, frota,
+// auditoria, indicações) para o principal, preenche campos vazios do
+// principal com dados dos duplicados, e então exclui os duplicados. Nunca é
+// automático — o ZEUS só detecta e alerta (ver zeus/tick.ts), a fusão em si
+// exige escolha manual de qual cliente é o principal.
+export async function mesclarClientes(
+  principalId: string,
+  duplicataIds: string[]
+): Promise<{ ok: boolean; erro?: string }> {
+  const idsUnicos = Array.from(new Set(duplicataIds)).filter((id) => id !== principalId);
+  if (!idsUnicos.length) return { ok: false, erro: "Selecione ao menos um cliente duplicado diferente do principal." };
+
+  const [principal, duplicatas] = await Promise.all([
+    db.cliente.findUnique({ where: { id: principalId } }),
+    db.cliente.findMany({ where: { id: { in: idsUnicos } } }),
+  ]);
+  if (!principal) return { ok: false, erro: "Cliente principal não encontrado." };
+  if (duplicatas.length !== idsUnicos.length) return { ok: false, erro: "Algum cliente duplicado não foi encontrado." };
+
+  await db.$transaction([
+    db.clienteMaquina.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.visita.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.negociacao.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.conversa.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.tarefaKanban.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.sugestaoVinculo.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.alerta.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.auditLog.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.whatsAppConversation.updateMany({ where: { clienteId: { in: idsUnicos } }, data: { clienteId: principalId } }),
+    db.cliente.updateMany({ where: { indicadoPorId: { in: idsUnicos } }, data: { indicadoPorId: principalId } }),
+  ]);
+
+  // Preenche campos vazios do principal com o que os duplicados tiverem —
+  // nunca sobrescreve um valor que o principal já possui.
+  const patch: Record<string, unknown> = {};
+  for (const dup of duplicatas) {
+    if (!principal.telefone && dup.telefone && !patch.telefone) patch.telefone = dup.telefone;
+    if (!principal.email && dup.email && !patch.email) patch.email = dup.email;
+    if (!principal.endereco && dup.endereco && !patch.endereco) patch.endereco = dup.endereco;
+    if (!principal.municipioId && dup.municipioId && !patch.municipioId) patch.municipioId = dup.municipioId;
+    if (!principal.observacoes && dup.observacoes && !patch.observacoes) patch.observacoes = dup.observacoes;
+    if (!principal.fotoUrl && dup.fotoUrl && !patch.fotoUrl) patch.fotoUrl = dup.fotoUrl;
+    if (!principal.perfilIA && dup.perfilIA && !patch.perfilIA) patch.perfilIA = dup.perfilIA;
+    if (!principal.perfilDISC && dup.perfilDISC && !patch.perfilDISC) patch.perfilDISC = dup.perfilDISC;
+    if (!principal.resumoTexto && dup.resumoTexto && !patch.resumoTexto) patch.resumoTexto = dup.resumoTexto;
+    const ultimoContatoAtual = (patch.ultimoContato as Date | undefined) ?? principal.ultimoContato;
+    if (dup.ultimoContato && (!ultimoContatoAtual || dup.ultimoContato > ultimoContatoAtual)) {
+      patch.ultimoContato = dup.ultimoContato;
+    }
+  }
+  if (Object.keys(patch).length) {
+    await db.cliente.update({ where: { id: principalId }, data: patch });
+  }
+
+  await db.cliente.deleteMany({ where: { id: { in: idsUnicos } } });
+
+  await registrarAudit({
+    acao: "cliente_atualizado",
+    origem: "usuario",
+    descricao: `Mesclou ${duplicatas.length} cliente(s) duplicado(s) (${duplicatas.map((d) => d.nome).join(", ")}) em "${principal.nome}".`,
+    entidade: "Cliente",
+    entidadeId: principalId,
+    clienteId: principalId,
+  });
+
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${principalId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/zeus");
+  return { ok: true };
+}
+
+// Busca dados de exibição de clientes por id (usado no modal de mesclagem, a
+// partir da lista {id,nome} guardada no detalhe do alerta do ZEUS).
+export async function buscarClientesPorIds(
+  ids: string[]
+): Promise<{ id: string; nome: string; telefone: string | null; municipio: string | null; criadoEm: string }[]> {
+  const clientes = await db.cliente.findMany({
+    where: { id: { in: ids } },
+    include: { municipio: { select: { nome: true } } },
+  });
+  return clientes.map((c) => ({
+    id: c.id, nome: c.nome, telefone: c.telefone, municipio: c.municipio?.nome ?? null, criadoEm: c.criadoEm.toISOString(),
+  }));
+}
+
 // ---------- Visitas ----------
 // Registra uma visita ao cliente (data + observação) e marca como visitado.
 export async function adicionarVisita(clienteId: string, formData: FormData) {
