@@ -9,6 +9,7 @@ import {
 import { FinanceiroGraficos } from "@/components/FinanceiroGraficos";
 import { ComissoesPagasSection } from "@/components/ComissoesPagasSection";
 import { PopupComissoesPendentes } from "@/components/PopupComissoesPendentes";
+import { SeletorAno } from "@/components/SeletorAno";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +44,15 @@ function previsaoComissaoCrdPme(neg: {
   return dt;
 }
 
-export default async function FinanceiroPage() {
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams: { ano?: string };
+}) {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth(); // 0-indexed
+  const anoSelecionado: number | "todos" = searchParams.ano === "todos" ? "todos" : Number(searchParams.ano) || anoAtual;
 
   // Busca todas as negociações faturadas (na coluna FATURADO ou status ganha)
   const negFaturadas = await db.negociacao.findMany({
@@ -74,15 +80,42 @@ export default async function FinanceiroPage() {
     orderBy: { faturadoEm: "desc" },
   } as any);
 
+  // Ano selecionado — restringe os KPIs de "relatório" (Negociações Faturadas,
+  // Valor Máquinas Vendidas, Comissões a Receber) à data de faturamento do ano
+  // corrente por padrão; "Todos" ou outro ano ficam disponíveis no seletor.
+  const anosDisponiveis = Array.from(
+    new Set([anoAtual, ...todasGanhas.map((n: any) => (n.faturadoEm ?? n.atualizadoEm).getFullYear())])
+  ).sort((a, b) => b - a);
+  const todasGanhasAno = anoSelecionado === "todos"
+    ? todasGanhas
+    : todasGanhas.filter((n: any) => (n.faturadoEm ?? n.atualizadoEm).getFullYear() === anoSelecionado);
+
   // KPIs
-  const totalFaturado = todasGanhas.reduce((s: number, n: any) => s + (n.valor ?? 0), 0);
-  // "Comissões a Receber" = apenas as que ainda NÃO foram marcadas como pagas.
-  const pendentesComissao = todasGanhas.filter((n: any) => !n.comissaoPaga);
+  const totalFaturado = todasGanhasAno.reduce((s: number, n: any) => s + (n.valor ?? 0), 0);
+  // "Comissões a Receber" = ainda não marcadas como pagas E já deveriam ter
+  // sido pagas. CRD PME só entra aqui quando a data prevista (75% do valor
+  // pago) já chegou — antes disso a negociação só aparece em "Comissões
+  // Futuras", nunca no pop-up de cobrança do 5º dia útil.
+  const pendentesComissao = todasGanhasAno.filter((n: any) => {
+    if (n.comissaoPaga) return false;
+    if (n.tipoPagamento !== "crd_pme") return true;
+    const previsao = previsaoComissaoCrdPme(n);
+    return !previsao || previsao <= hoje;
+  });
   const comissaoTotal = pendentesComissao.reduce((s: number, n: any) => s + calcComissao(n.valor), 0);
 
-  // Pop-up do 5º dia útil do mês: lista as comissões pendentes para confirmação de pagamento.
+  // Pop-up do 5º dia útil do mês: lista as comissões pendentes para confirmação
+  // de pagamento — sempre olha TODOS os anos (uma comissão vencida de um ano
+  // anterior não pode sumir do lembrete só porque o relatório está filtrado
+  // no ano corrente).
+  const pendentesComissaoTodos = todasGanhas.filter((n: any) => {
+    if (n.comissaoPaga) return false;
+    if (n.tipoPagamento !== "crd_pme") return true;
+    const previsao = previsaoComissaoCrdPme(n);
+    return !previsao || previsao <= hoje;
+  });
   const mesReferenciaPagamento = mesAnoAtualBrasilia();
-  const pendentesPopup = pendentesComissao.map((n: any) => ({
+  const pendentesPopup = pendentesComissaoTodos.map((n: any) => ({
     id: n.id,
     clienteNome: n.cliente.nome,
     maquina: n.maquinaModelo ?? null,
@@ -198,7 +231,11 @@ export default async function FinanceiroPage() {
       <PageHeader
         titulo="Financeiro & Comissões"
         subtitulo={`Taxa de comissão: ${(TAXA_COMISSAO * 100).toFixed(1)}% sobre valor negociado`}
+        acao={<SeletorAno basePath="/financeiro" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
       />
+      <p className="-mt-4 mb-6 text-xs text-slate-400">
+        Negociações Faturadas, Valor Máquinas Vendidas e Comissões a Receber consideram a data de faturamento de {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Comissões Futuras (CRD PME) nunca filtra por ano — é sempre o que ainda falta receber.
+      </p>
 
       {/* KPIs hero — todos clicáveis */}
       <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -206,7 +243,7 @@ export default async function FinanceiroPage() {
           <div className="rounded-2xl border border-green-200 bg-green-50 p-4 hover:shadow-md hover:border-green-400 transition-all cursor-pointer group">
             <div className="mb-2 text-green-600"><Award size={20} /></div>
             <div className="text-xs text-slate-500 mb-1">Negociações Faturadas</div>
-            <div className="text-xl font-bold text-green-700">{todasGanhas.length}</div>
+            <div className="text-xl font-bold text-green-700">{todasGanhasAno.length}</div>
             <div className="text-xs text-slate-400 mt-0.5">{formatCurrency(totalFaturado)}</div>
             <div className="text-xs text-green-600 group-hover:underline mt-1 flex items-center gap-1">Ver relação <ChevronRight size={12} /></div>
           </div>
@@ -216,7 +253,7 @@ export default async function FinanceiroPage() {
             <div className="mb-2 text-blue-600"><Handshake size={20} /></div>
             <div className="text-xs text-slate-500 mb-1">Valor Máquinas Vendidas</div>
             <div className="text-xl font-bold text-blue-700">{formatCurrency(totalFaturado)}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{todasGanhas.length} máquina(s)</div>
+            <div className="text-xs text-slate-400 mt-0.5">{todasGanhasAno.length} máquina(s)</div>
             <div className="text-xs text-blue-600 group-hover:underline mt-1 flex items-center gap-1">Ver relação <ChevronRight size={12} /></div>
           </div>
         </Link>

@@ -51,12 +51,28 @@ export function normalizarEstagio(estagio: string): string {
 // Classifica uma coluna do funil pelo TÍTULO (Negociacao.estagio grava o
 // título da coluna, não um id fixo — colunas podem ser renomeadas pelo
 // usuário). Usado para os totais "EM NEGOCIAÇÃO"/"EM BANCO" do dashboard.
-export type CategoriaColuna = "banco" | "confirmada" | "perdida" | "em_negociacao";
+export type CategoriaColuna = "banco" | "confirmada" | "perdida" | "em_negociacao" | "outro";
 
-export function categorizarColunaPorTitulo(titulo: string): CategoriaColuna {
+function ehColunaTerminal(titulo: string): boolean {
   const t = titulo.toLowerCase();
-  if (t.includes("perdid")) return "perdida";
-  if (t.includes("faturad") || t.includes("confirm") || t.includes("aprovad") || t.includes("vendid") || t.includes("ganho")) return "confirmada";
-  if (t.includes("banco") || t.includes("bcnh")) return "banco";
-  return "em_negociacao";
+  return t.includes("perdid") || t.includes("faturad") || t.includes("confirm") || t.includes("aprovad") || t.includes("vendid") || t.includes("ganho");
+}
+
+// Constrói o categorizador a partir das colunas REAIS do funil (ColunaFunil),
+// não só por palavra-chave — sem isso, negociações "órfãs" (estagio que não
+// bate com nenhuma coluna atual, sobra de renomeações/exclusões de coluna
+// antigas) caíam todas no balde "em_negociacao" e inflavam a contagem.
+export function criarCategorizadorColunas(colunas: { titulo: string }[]) {
+  const abertas = colunas.filter((c) => !ehColunaTerminal(c.titulo));
+  const colunaBanco = abertas.find((c) => /banco|bcnh/i.test(c.titulo));
+  const titulosAbertos = new Set(abertas.map((c) => c.titulo));
+
+  return function categorizarColunaPorTitulo(titulo: string): CategoriaColuna {
+    const t = titulo.toLowerCase();
+    if (t.includes("perdid")) return "perdida";
+    if (t.includes("faturad") || t.includes("confirm") || t.includes("aprovad") || t.includes("vendid") || t.includes("ganho")) return "confirmada";
+    if (!titulosAbertos.has(titulo)) return "outro";
+    if (colunaBanco && titulo === colunaBanco.titulo) return "banco";
+    return "em_negociacao";
+  };
 }

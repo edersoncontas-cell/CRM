@@ -2,23 +2,55 @@ import { db } from "@/lib/db";
 import { normalizarEstagio } from "@/lib/pipeline";
 import { FunilNegociacoes } from "@/components/FunilNegociacoes";
 import { PageHeader } from "@/components/ui";
+import { SeletorAno } from "@/components/SeletorAno";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
-export default async function NegociacoesPage() {
+export default async function NegociacoesPage({
+  searchParams,
+}: {
+  searchParams: { ano?: string };
+}) {
   await garantirManutencaoSeNecessario();
 
-  const [negociacoes, clientes, colunasFunil, maquinasProprias] = await Promise.all([
+  const anoAtual = new Date().getFullYear();
+  const anoSelecionado: number | "todos" = searchParams.ano === "todos" ? "todos" : Number(searchParams.ano) || anoAtual;
+
+  // Ganhas/perdidas (histórico) respeitam o ano selecionado — sempre pela
+  // data de faturamento (faturadoEm), com atualizadoEm como base só para
+  // registros antigos sem faturadoEm preenchido. Em aberto nunca filtra por
+  // ano: é o pipeline vivo, não histórico.
+  const filtroAno = (campo: "faturadoEm" | "atualizadoEm") =>
+    anoSelecionado === "todos"
+      ? {}
+      : { [campo]: { gte: new Date(anoSelecionado, 0, 1), lt: new Date(anoSelecionado + 1, 0, 1) } };
+
+  const [negociacoes, anosComDados, clientes, colunasFunil, maquinasProprias] = await Promise.all([
     db.negociacao.findMany({
-      where: { status: { in: ["aberta", "perdida", "ganha"] } },
+      where: {
+        OR: [
+          { status: "aberta" },
+          { status: "ganha", faturadoEm: { not: null }, ...filtroAno("faturadoEm") },
+          { status: "ganha", faturadoEm: null, ...filtroAno("atualizadoEm") },
+          { status: "perdida", ...filtroAno("atualizadoEm") },
+        ],
+      },
       include: { cliente: { include: { municipio: true } } },
       orderBy: { atualizadoEm: "desc" },
+    }),
+    db.negociacao.findMany({
+      where: { status: { in: ["ganha", "perdida"] } },
+      select: { faturadoEm: true, atualizadoEm: true },
     }),
     db.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     db.colunaFunil.findMany({ orderBy: { ordem: "asc" } }),
     db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
   ]);
+
+  const anosDisponiveis = Array.from(
+    new Set([anoAtual, ...anosComDados.map((n) => (n.faturadoEm ?? n.atualizadoEm).getFullYear())])
+  ).sort((a, b) => b - a);
 
   const cards = negociacoes.map((n) => ({
     id: n.id,
@@ -49,7 +81,11 @@ export default async function NegociacoesPage() {
       <PageHeader
         titulo="Negociações"
         subtitulo="Funil de vendas — arraste os cards entre os estágios e gerencie suas oportunidades"
+        acao={<SeletorAno basePath="/negociacoes" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
       />
+      <p className="-mt-4 mb-4 text-xs text-slate-400">
+        Faturados/Perdidos mostrando {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Em negociação/Em banco sempre mostram tudo em aberto, sem filtro de ano.
+      </p>
       <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} />
     </div>
   );

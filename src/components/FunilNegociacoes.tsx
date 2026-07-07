@@ -12,6 +12,7 @@ import {
   criarColunaFunil, excluirColunaFunil, renomearColunaFunil,
   criarNegociacaoCompleta, definirFaturadoEm,
 } from "@/lib/actions";
+import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { Termometro } from "@/components/ui";
 import { WheelMonthPicker } from "@/components/WheelDatePicker";
@@ -92,7 +93,16 @@ export function FunilNegociacoes({
   useEffect(() => setColunas(colunasIniciais), [colunasIniciais]);
 
   // KPIs
-  const abertos = cards.filter((c) => c.status === "aberta");
+  // "Em aberto" só conta cards cujo estágio bate com uma coluna ABERTA atual
+  // (EM NEGOCIAÇÃO/EM BANCO) — exclui negociações "órfãs" (estagio de coluna
+  // renomeada/excluída no passado) que nunca aparecem no board mas antes
+  // inflavam essa contagem.
+  const categorizarColuna = criarCategorizadorColunas(colunas);
+  const abertos = cards.filter((c) => {
+    if (c.status !== "aberta") return false;
+    const cat = categorizarColuna(c.estagio);
+    return cat === "em_negociacao" || cat === "banco";
+  });
   const faturados = cards.filter((c) => c.status === "ganha");
   const totalAberto = abertos.reduce((s, c) => s + (c.valor ?? 0), 0);
   const totalFaturado = faturados.reduce((s, c) => s + (c.valor ?? 0), 0);
@@ -106,7 +116,7 @@ export function FunilNegociacoes({
       (c.municipio ?? "").toLowerCase().includes(filtro.toLowerCase());
     const matchAba =
       abaFiltro === "todos" ||
-      (abaFiltro === "abertos" && c.status === "aberta") ||
+      (abaFiltro === "abertos" && abertos.some((a) => a.id === c.id)) ||
       (abaFiltro === "faturados" && c.status === "ganha") ||
       (abaFiltro === "perdidos" && c.status === "perdida");
     return matchFiltro && matchAba;
@@ -436,7 +446,7 @@ function ColunaFunilView({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/80 backdrop-blur-sm p-3 transition-all duration-200",
+        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/80 backdrop-blur-sm p-3 transition-all duration-200 max-h-[75vh]",
         coluna.cor,
         isOver && "ring-2 ring-agro-400 bg-slate-800/90 scale-[1.01] shadow-xl"
       )}
@@ -536,8 +546,8 @@ function ColunaFunilView({
         )}
       </div>
 
-      {/* Cards com animação de entrada */}
-      <div className="flex flex-col gap-2 flex-1">
+      {/* Cards com animação de entrada — rolagem própria da coluna, não da página */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
         {cards.map((c) => (
           <NegCardView key={c.id} card={c} onEditar={() => onEditar(c)} />
         ))}

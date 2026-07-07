@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia, semCodigoPais } from "@/lib/utils";
 import { ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
-import { categorizarColunaPorTitulo } from "@/lib/pipeline";
+import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { DicaVendas, FraseMotivacional } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { CadastrarContatoWhatsApp } from "@/components/CadastrarContatoWhatsApp";
@@ -61,6 +61,7 @@ visitasSemanaAgendadas, negociosCriadosSemana,
 // WHATSAPP: clientes sem contato há 30+ dias, conversas sem cadastro
 clientes30DiasSemContato, conversasSemCadastro,
 municipios,
+colunasFunil,
 ] = await Promise.all([
 db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
 db.alerta.findMany({
@@ -120,7 +121,11 @@ db.whatsAppConversation.findMany({
 }),
 // Municípios (para o popup de "Cadastrar" nas conversas sem cadastro)
 db.municipio.findMany({ select: { id: true, nome: true, foraDeArea: true }, orderBy: { nome: "asc" } }),
+// Colunas reais do funil (para não contar negociações "órfãs" de colunas renomeadas/excluídas)
+db.colunaFunil.findMany({ select: { titulo: true } }),
 ]);
+
+const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
 
 const novosNegociosSemana = negociosCriadosSemana.filter((n) => {
   const cat = categorizarColunaPorTitulo(n.estagio);
