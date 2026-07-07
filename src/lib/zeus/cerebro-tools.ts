@@ -398,6 +398,45 @@ const atualizarResumoCliente: CerebroTool = {
   },
 };
 
+const importarContatos: CerebroTool = {
+  def: {
+    name: "importar_contatos",
+    description: "Cadastra em lote uma lista de contatos (nome, telefone, município) que você extraiu de um arquivo anexado no chat — ex: exportação do Google Contacts em CSV ou vCard (.vcf). Ignora automaticamente contatos duplicados (por telefone ou nome) e nomes inválidos. Envie no máximo 300 contatos por chamada; se a lista extraída do arquivo for maior, divida em várias chamadas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contatos: {
+          type: "array",
+          description: "Lista de contatos extraídos do arquivo.",
+          items: {
+            type: "object",
+            properties: {
+              nome: { type: "string" },
+              telefone: { type: "string" },
+              municipio: { type: "string" },
+            },
+            required: ["nome"],
+          },
+        },
+      },
+      required: ["contatos"],
+    },
+  },
+  async executar(input) {
+    const lista = Array.isArray(input.contatos) ? (input.contatos as Record<string, unknown>[]) : [];
+    if (!lista.length) return { erro: "Nenhum contato informado." };
+    if (lista.length > 300) return { erro: "Máximo de 300 contatos por chamada. Divida a lista e chame a ferramenta novamente para o restante." };
+    const contatos = lista.map((c) => ({ nome: s(c.nome), telefone: s(c.telefone), municipio: s(c.municipio) }));
+    const r = await actions.importarContatosEstruturados(contatos);
+    await registrarAudit({
+      acao: "cliente_criado", origem: "cerebro",
+      descricao: `Cérebro importou contatos de um arquivo anexado: ${r.importados} cadastrados, ${r.ignorados} já existiam, ${r.erros} com erro.`,
+      entidade: "Cliente",
+    });
+    return r;
+  },
+};
+
 const criarNegociacao: CerebroTool = {
   def: {
     name: "criar_negociacao",
@@ -649,7 +688,7 @@ const excluirNegociacao: CerebroTool = {
 
 export const CEREBRO_TOOLS: CerebroTool[] = [
   buscarCliente, detalhesCliente, listarNegociacoes, agenda, buscarMaquina, estoqueUsadas, metricasFunil, conversasAguardando,
-  criarCliente, atualizarCliente, atualizarResumoCliente, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
+  criarCliente, atualizarCliente, atualizarResumoCliente, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
   criarTarefa, adicionarVisita, enviarResposta, excluirCliente, excluirNegociacao,
 ];
 
@@ -670,6 +709,7 @@ export function rotuloFerramenta(nome: string, input: Record<string, unknown>): 
     criar_cliente: `Cadastrando cliente "${s(input.nome)}"…`,
     atualizar_cliente: "Atualizando cadastro do cliente…",
     atualizar_resumo_cliente: "Atualizando resumo do cliente…",
+    importar_contatos: "Importando contatos em lote…",
     criar_negociacao: "Abrindo negociação…",
     mover_negociacao: `Movendo negociação para "${s(input.estagio)}"…`,
     marcar_ganha: "Marcando negociação como ganha…",

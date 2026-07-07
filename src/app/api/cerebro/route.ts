@@ -15,6 +15,15 @@ type ImageMediaType = (typeof MEDIA_TYPES)[number];
 
 const MAX_RODADAS_AGENTE = 8; // limite de idas-e-voltas de tool use por pergunta (evita loop infinito)
 
+// Extensões de texto que sabemos decodificar diretamente (sem lib de parsing
+// binário) — cobre CSV/TXT/vCard exportados do Google Contacts, WhatsApp etc.
+const EXTENSOES_TEXTO = [".txt", ".csv", ".md", ".markdown", ".html", ".htm", ".json", ".vcf"];
+const MAX_TEXTO_ANEXO = 400_000; // ~100k tokens — limite de segurança para não estourar o contexto
+
+function ehArquivoDeTexto(arquivo: File): boolean {
+  return arquivo.type.startsWith("text/") || EXTENSOES_TEXTO.some((ext) => arquivo.name.toLowerCase().endsWith(ext));
+}
+
 function anthropicClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
@@ -32,10 +41,19 @@ Data/hora atual (Brasília): ${agoraBrasiliaExtenso()}.
 
 ## Suas ferramentas (use-as para responder com dados REAIS do CRM — nunca chute ou invente)
 Leitura: buscar_cliente, detalhes_cliente, listar_negociacoes, agenda, buscar_maquina, estoque_usadas, metricas_funil, conversas_aguardando.
-Escrita: criar_cliente, atualizar_cliente, atualizar_resumo_cliente, criar_negociacao, mover_negociacao, marcar_ganha, marcar_perdida, criar_tarefa, adicionar_visita.
+Escrita: criar_cliente, atualizar_cliente, atualizar_resumo_cliente, importar_contatos, criar_negociacao, mover_negociacao, marcar_ganha, marcar_perdida, criar_tarefa, adicionar_visita.
 enviar_resposta NÃO manda a mensagem — cria um RASCUNHO em /atendimento para o vendedor revisar e enviar.
 excluir_cliente e excluir_negociacao são IRREVERSÍVEIS: se a ferramenta responder requires_confirmation, PARE e pergunte
 explicitamente ao vendedor se confirma — só chame de novo com confirmar:true depois que ele disser sim claramente.
+
+## Arquivos anexados
+Quando o vendedor anexa um arquivo de texto (CSV, TXT, HTML, JSON ou vCard/.vcf — inclui exportações do Google
+Contacts e do WhatsApp), o conteúdo completo aparece na própria mensagem, logo após "[Arquivo anexado: nome]".
+Leia esse conteúdo diretamente — ele já está ali, não precisa de nenhuma ferramenta para "abrir" o arquivo.
+Se o vendedor pedir para importar/cadastrar contatos de um arquivo assim: extraia nome, telefone e (se houver)
+município de cada registro do texto anexado e chame importar_contatos com a lista — não invente contatos que não
+estejam no arquivo. Arquivos binários (PDF, imagem, .docx, .xlsx) chegam só com metadados quando não há como
+extrair o texto; se for o caso, avise o vendedor e peça para reexportar como CSV, TXT ou vCard.
 
 ## Regras
 - Qualquer pergunta sobre dados do CRM (cliente, negociação, agenda, estoque, métricas) deve ser respondida DEPOIS
@@ -87,8 +105,15 @@ export async function POST(req: NextRequest) {
       if ((MEDIA_TYPES as readonly string[]).includes(mt)) {
         contentParaApi.push({ type: "image", source: { type: "base64", media_type: mt, data: buf.toString("base64") } });
         contentParaSalvar.push({ type: "text", text: `[Anexo enviado: ${arquivo.name}]` });
+      } else if (ehArquivoDeTexto(arquivo)) {
+        let texto = buf.toString("utf-8");
+        const truncado = texto.length > MAX_TEXTO_ANEXO;
+        if (truncado) texto = texto.slice(0, MAX_TEXTO_ANEXO);
+        const nota = `[Arquivo anexado: ${arquivo.name}]\n${texto}${truncado ? "\n\n[... conteúdo truncado por ser maior que o limite de leitura ...]" : ""}`;
+        contentParaApi.push({ type: "text", text: nota });
+        contentParaSalvar.push({ type: "text", text: `[Anexo enviado: ${arquivo.name}]` });
       } else {
-        const nota = `[Arquivo recebido: ${arquivo.name} (${arquivo.type}, ${(arquivo.size / 1024).toFixed(1)} KB). Analise com base no conteúdo se possível.]`;
+        const nota = `[Arquivo recebido: ${arquivo.name} (${arquivo.type || "tipo desconhecido"}, ${(arquivo.size / 1024).toFixed(1)} KB) — formato binário, não foi possível extrair o texto automaticamente. Avise o vendedor e peça para reexportar como CSV, TXT ou vCard (.vcf).]`;
         contentParaApi.push({ type: "text", text: nota });
         contentParaSalvar.push({ type: "text", text: `[Anexo enviado: ${arquivo.name}]` });
       }

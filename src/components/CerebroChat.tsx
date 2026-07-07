@@ -323,7 +323,7 @@ export function CerebroChat() {
       )}
       <div className="border-t border-zinc-800 p-3 flex items-end gap-2">
         <input ref={fileRef} type="file" multiple className="hidden"
-          accept="application/pdf,image/*,text/*,.txt,.html,.md,.csv,.doc,.docx,.xls,.xlsx"
+          accept="application/pdf,image/*,text/*,.txt,.html,.md,.csv,.vcf,.json,.doc,.docx,.xls,.xlsx"
           onChange={(e) => addArquivos(e.target.files)}
         />
         <button onClick={() => fileRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition" title="Anexar arquivo">

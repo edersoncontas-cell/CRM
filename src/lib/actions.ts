@@ -375,6 +375,56 @@ export async function importarClientesCsv(
   return { importados, ignorados, erros };
 }
 
+// Importa clientes a partir de uma lista já estruturada (usado pelo Cérebro ao
+// ler um arquivo anexado — CSV/vCard exportado do Google Contacts, WhatsApp
+// etc.). Mesma regra de dedup do importarClientesCsv.
+export async function importarContatosEstruturados(
+  contatos: { nome: string; telefone?: string; municipio?: string }[]
+): Promise<{ importados: number; ignorados: number; erros: number }> {
+  const municipios = await db.municipio.findMany();
+  const normStr = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+  let importados = 0;
+  let ignorados = 0;
+  let erros = 0;
+
+  for (const c of contatos) {
+    const nomeRaw = c.nome?.trim() ?? "";
+    if (!nomeRaw || deveDescartarContato(nomeRaw)) { ignorados++; continue; }
+
+    const telefone = c.telefone ? normalizarTelefone(c.telefone) : null;
+
+    try {
+      const condicoes: object[] = [];
+      if (telefone) {
+        condicoes.push({ telefone });
+        if (!telefone.startsWith("55") && telefone.length >= 10) {
+          condicoes.push({ telefone: `55${telefone}` });
+        }
+      } else {
+        condicoes.push({ nome: nomeRaw });
+      }
+      const existe = await db.cliente.findFirst({ where: { OR: condicoes } });
+      if (existe) { ignorados++; continue; }
+
+      const muniRaw = c.municipio?.trim() ?? "";
+      const muni = muniRaw ? municipios.find((m) => normStr(m.nome) === normStr(muniRaw)) : undefined;
+
+      await db.cliente.create({
+        data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem: "cerebro_importacao" },
+      });
+      importados++;
+    } catch {
+      erros++;
+    }
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+  return { importados, ignorados, erros };
+}
+
 // ---------- Negociações ----------
 export async function criarNegociacao(formData: FormData) {
   const clienteId = String(formData.get("clienteId") ?? "");
