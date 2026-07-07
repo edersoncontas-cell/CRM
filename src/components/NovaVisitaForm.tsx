@@ -2,35 +2,70 @@
 
 import { useState, useTransition } from "react";
 import { adicionarVisita } from "@/lib/actions";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Calendar, Clock } from "lucide-react";
+import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
 
-export function NovaVisitaForm({ clientes }: { clientes: { id: string; nome: string }[] }) {
+function formatarDataLabel(iso: string): string {
+  if (!iso) return "Selecionar data";
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+// Adiciona uma visita. Se `dataFixa` vier definida (coluna do dia clicada no
+// quadro de Visitas), a data já é essa e só falta escolher o horário; senão
+// (botão genérico "Nova visita"), também deixa escolher o dia.
+export function NovaVisitaForm({
+  clientes,
+  dataFixa,
+  rotuloDataFixa,
+  compacto,
+}: {
+  clientes: { id: string; nome: string }[];
+  dataFixa?: string;
+  rotuloDataFixa?: string;
+  compacto?: boolean;
+}) {
   const [aberto, setAberto] = useState(false);
   const [salvando, startSalvar] = useTransition();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const [data, setData] = useState(dataFixa ?? new Date().toISOString().slice(0, 10));
+  const [horario, setHorario] = useState("09:00");
+  const [clienteId, setClienteId] = useState("");
+  const [observacao, setObservacao] = useState("");
+  const [pickerAberto, setPickerAberto] = useState<"data" | "horario" | null>(null);
+
+  function abrir() {
+    setData(dataFixa ?? new Date().toISOString().slice(0, 10));
+    setAberto(true);
+  }
+
+  function submeter() {
+    if (!clienteId) return;
+    const fd = new FormData();
+    fd.set("data", data);
+    fd.set("horario", horario);
+    fd.set("observacao", observacao);
+    startSalvar(async () => {
+      await adicionarVisita(clienteId, fd);
+      setAberto(false);
+      setClienteId("");
+      setObservacao("");
+    });
+  }
 
   return (
     <>
       <button
-        onClick={() => setAberto(true)}
-        className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+        onClick={abrir}
+        className={compacto
+          ? "flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 py-1.5 text-xs font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600"
+          : "flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"}
       >
-        <Plus size={16} /> Nova visita
+        <Plus size={compacto ? 13 : 16} /> {compacto ? "Adicionar" : "Nova visita"}
       </button>
 
       {aberto && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4">
-          <form
-            action={(fd) => {
-              const clienteId = String(fd.get("clienteId") ?? "");
-              if (!clienteId) return;
-              startSalvar(async () => {
-                await adicionarVisita(clienteId, fd);
-                setAberto(false);
-              });
-            }}
-            className="my-auto w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800">Nova visita</h2>
               <button type="button" onClick={() => setAberto(false)}>
@@ -40,25 +75,58 @@ export function NovaVisitaForm({ clientes }: { clientes: { id: string; nome: str
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Cliente *</label>
-                <select name="clienteId" required className="campo">
+                <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className="campo">
                   <option value="">— Selecionar —</option>
                   {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Data *</label>
-                <input type="date" name="data" required defaultValue={hoje} className="campo" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Data *</label>
+                  {dataFixa ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      <Calendar size={14} className="text-slate-400" /> {rotuloDataFixa ?? formatarDataLabel(data)}
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setPickerAberto("data")} className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:border-brand-300 hover:bg-brand-50">
+                      <Calendar size={14} className="text-slate-400" /> {formatarDataLabel(data)}
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Horário *</label>
+                  <button type="button" onClick={() => setPickerAberto("horario")} className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:border-brand-300 hover:bg-brand-50">
+                    <Clock size={14} className="text-slate-400" /> {horario}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Observação</label>
-                <textarea name="observacao" rows={3} placeholder="O que foi tratado na visita..." className="campo" />
+                <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={3} placeholder="O que será tratado na visita..." className="campo" />
               </div>
             </div>
-            <button disabled={salvando} className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
+            <button onClick={submeter} disabled={salvando || !clienteId} className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
               {salvando ? "Salvando…" : "Salvar"}
             </button>
-          </form>
+          </div>
         </div>
+      )}
+
+      {pickerAberto === "data" && (
+        <WheelDatePicker
+          title="Data da visita"
+          valueISO={data}
+          onClose={() => setPickerAberto(null)}
+          onConfirm={(v) => { setData(v); setPickerAberto(null); }}
+        />
+      )}
+      {pickerAberto === "horario" && (
+        <WheelTimePicker
+          title="Horário da visita"
+          valueHM={horario}
+          onClose={() => setPickerAberto(null)}
+          onConfirm={(v) => { setHorario(v); setPickerAberto(null); }}
+        />
       )}
     </>
   );

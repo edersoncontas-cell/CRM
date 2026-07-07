@@ -256,9 +256,12 @@ export async function buscarClientesPorIds(
 export async function adicionarVisita(clienteId: string, formData: FormData) {
   const dataRaw = String(formData.get("data") ?? "");
   if (!dataRaw) return;
-  // Campo type="date" → formato YYYY-MM-DD. Fixa meio-dia em Brasília para evitar
-  // virar o dia anterior por diferença de fuso ao salvar no banco.
-  const data = new Date(`${dataRaw}T12:00:00-03:00`);
+  // Campo "data" no formato YYYY-MM-DD + "horario" opcional HH:mm (seletor
+  // estilo iOS). Sem horário, mantém meio-dia em Brasília (evita virar o dia
+  // anterior por diferença de fuso ao salvar no banco).
+  const horarioRaw = String(formData.get("horario") ?? "").trim();
+  const horario = /^\d{2}:\d{2}$/.test(horarioRaw) ? horarioRaw : "12:00";
+  const data = new Date(`${dataRaw}T${horario}:00-03:00`);
   await db.visita.create({
     data: {
       clienteId,

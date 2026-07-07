@@ -181,6 +181,37 @@ export function WheelDateTimePicker({ valueLocal, onConfirm, onClose, title }: {
   );
 }
 
+// ── Seletor de horário (hora/minuto) — ex: horário de uma visita ──
+export function WheelTimePicker({ valueHM, onConfirm, onClose, title }: {
+  // valueHM no formato "HH:mm"
+  valueHM: string; onConfirm: (hm: string) => void; onClose: () => void; title?: string;
+}) {
+  const [h, m] = valueHM ? valueHM.split(":").map(Number) : [new Date().getHours(), 0];
+  const [hora, setHora] = useState(h);
+  const [minuto, setMinuto] = useState(Math.round((m ?? 0) / 5) * 5 % 60);
+
+  const horaOpts: Opcao[] = Array.from({ length: 24 }, (_, i) => ({ value: i, label: String(i).padStart(2, "0") }));
+  const minutoOpts: Opcao[] = Array.from({ length: 12 }, (_, i) => ({ value: i * 5, label: String(i * 5).padStart(2, "0") }));
+
+  function confirmar() {
+    onConfirm(`${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`);
+  }
+
+  return (
+    <Folha title={title ?? "Horário"} onClose={onClose}>
+      <div className="relative flex justify-center">
+        <CentroDestaque />
+        <WheelColumn options={horaOpts} value={hora} onChange={setHora} width={64} />
+        <WheelColumn options={minutoOpts} value={minuto} onChange={setMinuto} width={64} />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button onClick={onClose} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200">Cancelar</button>
+        <button onClick={confirmar} className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600">Confirmar</button>
+      </div>
+    </Folha>
+  );
+}
+
 // ── Seletor de mês/ano — "Mês pago" ──
 export function WheelMonthPicker({ valueMes, onConfirm, onClose, title }: {
   valueMes: string; onConfirm: (mesAno: string) => void; onClose: () => void; title?: string;
