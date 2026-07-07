@@ -10,7 +10,7 @@ import { NextBestAction } from "@/components/NextBestAction";
 import { RegistroVisitaVoz } from "@/components/RegistroVisitaVoz";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +37,13 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };
   type ConvRow = { id: string };
-  const [frotaRows, waConv, orientador] = await Promise.all([
+  const [frotaRows, waConv, orientador, ultimoContatoPosVenda] = await Promise.all([
     db.$queryRawUnsafe<FrotaRow[]>(`SELECT id, marca, modelo FROM "ClienteMaquina" WHERE "clienteId" = $1 ORDER BY "criadoEm" ASC`, cliente.id).catch(() => [] as FrotaRow[]),
     db.whatsAppConversation.findFirst({ where: { clienteId: cliente.id }, select: { id: true } }).catch(() => null as ConvRow | null),
     db.orientadorAnalise.findUnique({ where: { clienteId: cliente.id } }),
+    cliente.jaComprou
+      ? db.posVendaContato.findFirst({ where: { clienteId: cliente.id }, orderBy: { data: "desc" } })
+      : Promise.resolve(null),
   ]);
 
   const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
@@ -170,6 +173,20 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
               <span>{orientador.proximaAcao}</span>
             </div>
           )}
+        </Card>
+      )}
+
+      {/* Pós-venda */}
+      {cliente.jaComprou && (
+        <Card className="mb-6 border-slate-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <HeartHandshake size={17} className="text-brand-600" />
+            <span className="font-semibold text-slate-700">Pós-venda</span>
+            <Badge tom={ultimoContatoPosVenda ? "slate" : "yellow"}>
+              {ultimoContatoPosVenda ? `Último contato ${formatDate(ultimoContatoPosVenda.data)}` : "Sem contato pós-venda registrado"}
+            </Badge>
+            <Link href="/pos-venda" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">ver setor de pós-venda</Link>
+          </div>
         </Card>
       )}
 

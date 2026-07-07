@@ -68,7 +68,22 @@ model Cliente {
   visitas        Visita[]
   frota          ClienteMaquina[]
   orientador     OrientadorAnalise?
+  posVendaContatos PosVendaContato[]
   @@index([leadScore])
+}
+
+// Setor de Pós-venda: histórico de contatos/ações com um cliente que já
+// comprou (ligação, visita, manutenção, peça vendida, indicação pedida etc.)
+// — usado pra saber há quanto tempo o cliente não recebe atenção pós-venda.
+model PosVendaContato {
+  id        String   @id @default(cuid())
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId String
+  tipo      String   // ligacao | visita | whatsapp | manutencao | peca_vendida | indicacao_pedida | ideia_ia | outro
+  nota      String
+  data      DateTime @default(now())
+  criadoEm  DateTime @default(now())
+  @@index([clienteId, data])
 }
 
 // Painel "Orientador de Vendas" — snapshot mais recente da análise de

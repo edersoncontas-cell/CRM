@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
 import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
@@ -2630,4 +2630,92 @@ export async function buscarOrientadorAnalise(clienteId: string) {
     resumoNegociacao: a.resumoNegociacao,
     atualizadoEm: a.atualizadoEm.toISOString(),
   };
+}
+
+// ---------- Setor de Pós-venda ----------
+
+// Lista clientes que já compraram, ordenados por quem está há mais tempo SEM
+// contato pós-venda primeiro (mesma lógica de urgência do Radar de Silêncio,
+// aplicada ao relacionamento pós-venda) — alimenta a página /pos-venda.
+export async function listarClientesPosVenda() {
+  const clientes = await db.cliente.findMany({
+    where: { jaComprou: true },
+    select: {
+      id: true, nome: true, maquinaComprada: true, dataCompra: true,
+      municipio: { select: { nome: true } },
+      posVendaContatos: { orderBy: { data: "desc" }, take: 1, select: { data: true, tipo: true } },
+    },
+  });
+
+  const agora = Date.now();
+  const linhas = clientes.map((c) => {
+    const ultimoContato = c.posVendaContatos[0]?.data ?? null;
+    const diasSemContato = ultimoContato
+      ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000)
+      : c.dataCompra
+      ? Math.floor((agora - c.dataCompra.getTime()) / 86_400_000)
+      : null;
+    return {
+      clienteId: c.id,
+      nome: c.nome,
+      municipio: c.municipio?.nome ?? null,
+      maquina: c.maquinaComprada,
+      dataCompra: c.dataCompra ? c.dataCompra.toISOString() : null,
+      ultimoContato: ultimoContato ? ultimoContato.toISOString() : null,
+      diasSemContato,
+    };
+  });
+
+  // Sem contato nenhum (diasSemContato null) vai pro topo — precisa de atenção primeiro.
+  linhas.sort((a, b) => (b.diasSemContato ?? Infinity) - (a.diasSemContato ?? Infinity));
+  return linhas;
+}
+
+// Histórico completo de contatos pós-venda de um cliente.
+export async function listarContatosPosVenda(clienteId: string) {
+  const contatos = await db.posVendaContato.findMany({
+    where: { clienteId },
+    orderBy: { data: "desc" },
+  });
+  return contatos.map((c) => ({
+    id: c.id, tipo: c.tipo, nota: c.nota, data: c.data.toISOString(),
+  }));
+}
+
+// Registra um novo contato/ação de pós-venda (ligação, visita, manutenção, etc.).
+export async function registrarContatoPosVenda(clienteId: string, tipo: string, nota: string) {
+  if (!nota.trim()) return;
+  await db.posVendaContato.create({ data: { clienteId, tipo, nota: nota.trim() } });
+  revalidatePath("/pos-venda");
+}
+
+// Gera sugestões de ações de pós-venda via IA para um cliente específico —
+// não salva sozinho; o vendedor decide se quer registrar como contato.
+export async function gerarIdeiasPosVendaAction(clienteId: string): Promise<{ ok: boolean; ideias?: string; erro?: string }> {
+  const cliente = await db.cliente.findUnique({
+    where: { id: clienteId },
+    select: { nome: true, maquinaComprada: true, dataCompra: true, observacoes: true },
+  });
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+
+  const contatos = await db.posVendaContato.findMany({
+    where: { clienteId }, orderBy: { data: "desc" }, take: 8,
+  });
+  const ultimoContato = contatos[0]?.data ?? null;
+  const agora = Date.now();
+
+  const ideias = await gerarIdeiasPosVendaIA({
+    nomeCliente: cliente.nome,
+    maquina: cliente.maquinaComprada,
+    dataCompra: cliente.dataCompra ? cliente.dataCompra.toLocaleDateString("pt-BR") : null,
+    diasDesdeCompra: cliente.dataCompra ? Math.floor((agora - cliente.dataCompra.getTime()) / 86_400_000) : null,
+    diasDesdeUltimoContato: ultimoContato ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000) : null,
+    historicoContatos: contatos.map((c) => `[${c.data.toLocaleDateString("pt-BR")}] (${c.tipo}) ${c.nota}`),
+    observacoes: cliente.observacoes,
+  });
+
+  if (!ideias) {
+    return { ok: false, erro: "IA não habilitada. Configure GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY." };
+  }
+  return { ok: true, ideias };
 }

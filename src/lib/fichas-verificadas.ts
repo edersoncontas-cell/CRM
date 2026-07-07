@@ -630,6 +630,44 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
 ];
 
+// Diferencial de nicho das motoniveladoras New Holland: cabine no chassi
+// TRASEIRO (a articulação do chassi dianteiro, que carrega a lâmina, fica à
+// frente da cabine) — favorece a visualização da lâmina, segundo material
+// oficial da fábrica ("newholland.com.br/70anos/.../Motoniveladoras"). A
+// Caterpillar (concorrente direto cadastrado aqui) usa o layout oposto:
+// cabine no chassi DIANTEIRO, com a articulação atrás da cabine. Não
+// confirmamos essa mesma comparação para Komatsu/Volvo — evite citar essas
+// duas marcas nesse ponto específico sem checar o manual delas antes.
+const DIFERENCIAL_CABINE_MOTONIVELADORA =
+  "Cabine montada no CHASSI TRASEIRO: a articulação do chassi dianteiro (que carrega a lâmina) fica à frente da cabine, favorecendo a visualização da lâmina durante a operação — diferente da Caterpillar, cuja cabine é montada no chassi dianteiro (articulação atrás da cabine).";
+
+const MODELOS_MOTONIVELADORA_NH = ["RG140", "RG170", "RG200"];
+
+let diferencialCabineGarantido = false;
+
+// Adiciona o diferencial de posição da cabine às motoniveladoras New Holland
+// já cadastradas — não sobrescreve o que o vendedor já escreveu em
+// `diferenciais`, só complementa (e não duplica se rodar de novo).
+async function garantirDiferencialCabineMotoniveladora(): Promise<void> {
+  if (diferencialCabineGarantido) return;
+  try {
+    const motoniveladoras = await db.maquina.findMany({
+      where: { marca: "New Holland", modelo: { in: MODELOS_MOTONIVELADORA_NH } },
+      select: { id: true, diferenciais: true },
+    });
+    for (const m of motoniveladoras) {
+      if (m.diferenciais?.includes("CHASSI TRASEIRO")) continue;
+      const novoTexto = m.diferenciais?.trim()
+        ? `${m.diferenciais.trim()}\n${DIFERENCIAL_CABINE_MOTONIVELADORA}`
+        : DIFERENCIAL_CABINE_MOTONIVELADORA;
+      await db.maquina.update({ where: { id: m.id }, data: { diferenciais: novoTexto } });
+    }
+  } catch (e) {
+    console.error("Falha ao garantir diferencial de cabine das motoniveladoras:", e);
+  }
+  diferencialCabineGarantido = true;
+}
+
 let fichasGarantidas = false;
 
 // Versão das fichas. Bump aqui quando FICHAS_VERIFICADAS mudar para reaplicar.
@@ -649,6 +687,9 @@ export async function garantirFichasVerificadas(): Promise<void> {
   try {
     // Máquinas novas (pós-seed) — barato, tem guarda própria em memória.
     await garantirMaquinasNovas();
+    // Diferencial de cabine das motoniveladoras — roda independente da versão
+    // das fichas abaixo (guarda própria por conteúdo, não pela flag de versão).
+    await garantirDiferencialCabineMotoniveladora();
 
     // Já preenchido nesta versão? Pula os 57 updates.
     const cfg = await db.configuracao.findUnique({ where: { chave: CHAVE_VERSAO } });

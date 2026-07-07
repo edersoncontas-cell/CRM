@@ -128,6 +128,22 @@ export async function aplicarMigracoes(): Promise<void> {
     // Setor de Aplicações & Nichos: nichos/segmentos de mercado e operações
     // que cada máquina própria realiza (gerado por IA, editável).
     await db.$executeRawUnsafe(`ALTER TABLE "Maquina" ADD COLUMN IF NOT EXISTS "aplicacoes" TEXT`);
+
+    // Setor de Pós-venda: histórico de contatos com clientes que já compraram.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "PosVendaContato" (
+        "id"        TEXT NOT NULL,
+        "clienteId" TEXT NOT NULL,
+        "tipo"      TEXT NOT NULL,
+        "nota"      TEXT NOT NULL,
+        "data"      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "criadoEm"  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "PosVendaContato_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "PosVendaContato_clienteId_fkey"
+          FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PosVendaContato_clienteId_data_idx" ON "PosVendaContato" ("clienteId", "data")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

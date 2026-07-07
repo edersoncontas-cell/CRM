@@ -562,6 +562,47 @@ ${maquina.diferenciais ? `Diferenciais: ${maquina.diferenciais}` : ""}`,
   }
 }
 
+// Setor de Pós-venda: sugere ações concretas para manter presença junto a um
+// cliente que já comprou — nunca inventa dado (máquina, datas) que não esteja
+// no contexto fornecido.
+export async function gerarIdeiasPosVendaIA(contexto: {
+  nomeCliente: string;
+  maquina: string | null;
+  dataCompra: string | null;
+  diasDesdeCompra: number | null;
+  diasDesdeUltimoContato: number | null;
+  historicoContatos: string[];
+  observacoes: string | null;
+}): Promise<string> {
+  if (!iaHabilitada()) return "";
+  try {
+    return await llmTexto(
+      `Você é especialista em pós-venda e retenção de clientes de máquinas pesadas (New Holland Construction / Dynapac) no Brasil.
+Seu objetivo é manter o vendedor SEMPRE PRESENTE na vida do cliente depois da venda — não deixar o relacionamento esfriar.
+Sugira de 3 a 5 ações CONCRETAS e específicas para este cliente agora, considerando a máquina comprada, há quanto tempo,
+e o histórico de contatos já feitos (não repita algo que já foi feito recentemente).
+Tipos de ação possíveis: ligação de satisfação, oferta de revisão/manutenção preventiva, venda de peças/consumíveis,
+convite para trazer a máquina numa ação da concessionária, pedido de indicação de outro cliente da região, verificação
+de necessidade de implemento ou máquina adicional, aniversário da compra.
+NUNCA invente dados (prazos de garantia, preços, datas) que não estejam no contexto.
+Responda em português, formato de lista curta, direto ao ponto, sem títulos nem introdução:
+- Ação 1 — motivo/gancho
+- Ação 2 — motivo/gancho
+(até 5 itens)`,
+      `Cliente: ${contexto.nomeCliente}
+Máquina comprada: ${contexto.maquina ?? "não informado"}
+Data da compra: ${contexto.dataCompra ?? "não informada"}${contexto.diasDesdeCompra != null ? ` (${contexto.diasDesdeCompra} dias atrás)` : ""}
+Último contato pós-venda: ${contexto.diasDesdeUltimoContato != null ? `${contexto.diasDesdeUltimoContato} dias atrás` : "nenhum registrado ainda"}
+${contexto.historicoContatos.length ? `Histórico de contatos pós-venda:\n${contexto.historicoContatos.join("\n")}` : "Sem histórico de contato pós-venda registrado."}
+${contexto.observacoes ? `Observações do cliente: ${contexto.observacoes}` : ""}`,
+      { maxTokens: 600 }
+    );
+  } catch (err) {
+    console.error("Falha ao gerar ideias de pós-venda:", err);
+    return "";
+  }
+}
+
 // Extrai a ficha técnica de um ARQUIVO anexado (PDF ou imagem do catálogo).
 // PDF/imagem exigem um provedor com visão (Gemini, OpenAI ou Anthropic — ver
 // llmVisao). O arquivo NÃO é guardado — só o conteúdo extraído.
