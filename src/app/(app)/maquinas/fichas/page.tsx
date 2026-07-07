@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { iaHabilitada } from "@/lib/ai";
 import { FichasTecnicasClient } from "@/components/FichasTecnicasClient";
 import { FileText } from "lucide-react";
 
@@ -25,7 +26,7 @@ export default async function FichasTecnicasPage() {
     orderBy: [{ proprio: "desc" }, { marca: "asc" }, { categoria: "asc" }, { modelo: "asc" }],
   });
 
-  const temChaveIA = !!process.env.ANTHROPIC_API_KEY;
+  const temChaveIA = iaHabilitada();
 
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">

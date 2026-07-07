@@ -173,6 +173,7 @@ model Maquina {
   diferenciais      String?
   curiosidades      String?
   imagemUrl         String?
+  aplicacoes        String? // setor de aplicações: nichos/segmentos de mercado e operações que a máquina realiza
   midiaPosts        MidiaPost[]
   notas             NotaMaquina[]
   @@unique([marca, modelo])

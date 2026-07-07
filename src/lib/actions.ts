@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
 import { MODEL_TAREFA } from "./ai/config";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
@@ -867,6 +867,39 @@ export async function preencherFichaTecnicaIA(id: string): Promise<{
     return { ok: false, erro: "IA não habilitada ou sem dados. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
   }
   return { ok: true, ...ficha };
+}
+
+// ---------- Setor de Aplicações & Nichos ----------
+
+// Lista as máquinas próprias (New Holland/Dynapac) com o texto de aplicações
+// já gerado — alimenta a página /aplicacoes.
+export async function listarAplicacoesMaquinas() {
+  const maquinas = await db.maquina.findMany({
+    where: { proprio: true },
+    select: { id: true, marca: true, modelo: true, categoria: true, aplicacoes: true },
+    orderBy: [{ marca: "asc" }, { categoria: "asc" }, { modelo: "asc" }],
+  });
+  return maquinas;
+}
+
+// Gera o texto de aplicações/nichos de uma máquina via IA (revisável antes de salvar).
+export async function preencherAplicacoesMaquinaIA(id: string): Promise<{ ok: boolean; aplicacoes?: string; erro?: string }> {
+  const maq = await db.maquina.findUnique({
+    where: { id },
+    select: { marca: true, modelo: true, categoria: true, descricao: true, especificacoes: true, pontosFortes: true, diferenciais: true },
+  });
+  if (!maq) return { ok: false, erro: "Máquina não encontrada" };
+
+  const aplicacoes = await gerarAplicacoesMaquinaIA(maq);
+  if (!aplicacoes) {
+    return { ok: false, erro: "IA não habilitada. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY ou GROQ_API_KEY." };
+  }
+  return { ok: true, aplicacoes };
+}
+
+export async function salvarAplicacoesMaquina(id: string, aplicacoes: string) {
+  await db.maquina.update({ where: { id }, data: { aplicacoes: aplicacoes || null } });
+  revalidatePath("/aplicacoes");
 }
 
 // Extrai a ficha técnica de um arquivo anexado (PDF/imagem do catálogo) via IA.

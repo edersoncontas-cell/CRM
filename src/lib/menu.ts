@@ -6,7 +6,7 @@ import {
   TrendingDown, Sparkles, Megaphone, Settings, Calculator,
   Swords, Send, CalendarRange, BrainCircuit, MessageCircle,
   Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText,
-  Truck, Brain, Handshake, ListTodo, ShieldCheck, Radar, MapPin, Compass,
+  Truck, Brain, Handshake, ListTodo, ShieldCheck, Radar, MapPin, Compass, Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +32,7 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
+      { href: "/aplicacoes", label: "Aplicações & Nichos", icon: Layers },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/resumos", label: "Resumos IA", icon: ClipboardList },
       { href: "/agenda", label: "Agenda", icon: Calendar },

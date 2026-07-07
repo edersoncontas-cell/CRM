@@ -124,6 +124,10 @@ export async function aplicarMigracoes(): Promise<void> {
           FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE
       )
     `);
+
+    // Setor de Aplicações & Nichos: nichos/segmentos de mercado e operações
+    // que cada máquina própria realiza (gerado por IA, editável).
+    await db.$executeRawUnsafe(`ALTER TABLE "Maquina" ADD COLUMN IF NOT EXISTS "aplicacoes" TEXT`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -368,6 +368,65 @@ ${campos}`,
   }
 }
 
+const SEGMENTOS_APLICACAO = [
+  "Construção civil e infraestrutura", "Terraplenagem e movimentação de terra", "Agricultura e agronegócio",
+  "Mineração e brita", "Saneamento, drenagem e obras hídricas", "Pavimentação e conservação de estradas",
+  "Prefeituras e obras públicas", "Locação (aluguel) para terceiros", "Paisagismo e obras de grande porte",
+  "Logística, portos e pátios industriais", "Florestal e limpeza de área", "Gestão de resíduos e aterros",
+];
+
+// Setor de Aplicações & Nichos (item pedido pelo usuário): para uma máquina
+// PRÓPRIA (New Holland/Dynapac), lista TODOS os segmentos de mercado e
+// operações reais onde ela se aplica — objetivo é ajudar o vendedor a
+// enxergar nichos de cliente que ele ainda não está prospectando. Diferente
+// da ficha técnica: aqui pode usar conhecimento geral de mercado do setor
+// (não exige que o dado já esteja cadastrado), mas sem inventar números.
+export async function gerarAplicacoesMaquinaIA(maquina: {
+  marca: string;
+  modelo: string;
+  categoria: string;
+  descricao?: string | null;
+  especificacoes?: string | null;
+  pontosFortes?: string | null;
+  diferenciais?: string | null;
+}): Promise<string> {
+  if (!iaHabilitada()) return "";
+  try {
+    return await llmTexto(
+      `Você é um especialista sênior em aplicações de máquinas pesadas do ramo construction (linha amarela) no
+Brasil, com profundo conhecimento de TODOS os setores que usam esse tipo de equipamento — não só os óbvios.
+Segmentos possíveis a considerar (use somente os que realmente fazem sentido para a categoria da máquina,
+não force um segmento onde ela não se aplica): ${SEGMENTOS_APLICACAO.join("; ")}.
+
+Para a máquina informada, mapeie TODOS os segmentos de mercado onde ela é realmente útil e, para cada um,
+liste as operações/tarefas concretas que ela realiza nesse segmento (seja específico: não diga "trabalha na
+construção", diga o que ela faz na construção). Baseie-se em como esse tipo de máquina é usado de fato no
+mercado brasileiro — pode usar seu conhecimento geral do setor, mas NUNCA invente números técnicos ou dados
+que não foram informados.
+
+Termine com uma seção "Nichos pouco explorados" com 2-4 sugestões de tipo de cliente/segmento que o vendedor
+provavelmente não está prospectando hoje, mas que essa máquina atenderia bem.
+
+Formato (markdown, sem preâmbulo):
+## [Nome do segmento]
+- Operação/tarefa concreta — por que essa máquina se encaixa (1 frase, cite um diferencial real se houver)
+(repita para cada segmento aplicável)
+
+## Nichos pouco explorados
+- ...`,
+      `Máquina: ${maquina.marca} ${maquina.modelo} (categoria: ${maquina.categoria}).
+${maquina.descricao ? `Descrição: ${maquina.descricao}` : ""}
+${maquina.especificacoes ? `Especificações:\n${maquina.especificacoes}` : ""}
+${maquina.pontosFortes ? `Pontos fortes: ${maquina.pontosFortes}` : ""}
+${maquina.diferenciais ? `Diferenciais: ${maquina.diferenciais}` : ""}`,
+      { maxTokens: 1400 }
+    );
+  } catch (err) {
+    console.error("Falha ao gerar aplicações da máquina:", err);
+    return "";
+  }
+}
+
 // Extrai a ficha técnica de um ARQUIVO anexado (PDF ou imagem do catálogo).
 // Usa o Claude (Anthropic), que lê PDF e imagem nativamente. O arquivo NÃO é
 // guardado — só o conteúdo extraído. Exige ANTHROPIC_API_KEY (o Groq não lê PDF).
