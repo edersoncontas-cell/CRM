@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia";
 import { MODEL_CHAT } from "@/lib/ai/config";
+import { zeusReport } from "@/lib/zeus/eventos";
 
 function anthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -243,7 +244,10 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
     });
     const bloco = msg.content[0];
     return bloco.type === "text" ? bloco.text.trim() : "";
-  } catch {
+  } catch (e) {
+    // Nunca pode falhar em silêncio: sem isso, o cliente fica sem resposta E
+    // sem ninguém saber o motivo (ex: crédito da Anthropic zerado).
+    await zeusReport(e, "gerarRespostaCerebro (auto-resposta do WhatsApp)");
     return "";
   }
 }
@@ -282,7 +286,8 @@ ${args.estilo ? `\n## Estilo de comunicação do Ederson\n${args.estilo}` : ""}
     });
     const bloco = msg.content[0];
     return bloco.type === "text" ? bloco.text.trim() : "";
-  } catch {
+  } catch (e) {
+    await zeusReport(e, "gerarMensagemFollowUp (retomada de contato)");
     return "";
   }
 }

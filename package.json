@@ -21,6 +21,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^5.22.0",
+    "@vercel/functions": "^3.7.5",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",

@@ -7,6 +7,7 @@ import {
 import { registrarDiag } from "@/lib/zapi-diag";
 import { processarMensagem } from "@/lib/zeus/pipeline";
 import { zeusReport } from "@/lib/zeus/eventos";
+import { waitUntil } from "@vercel/functions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -187,27 +188,35 @@ export async function POST(req: NextRequest) {
         await processarMensagem(msgRecebida.id);
       } catch (e) {
         console.error("[zeus-pipeline] erro no webhook:", e);
+        await zeusReport(e, "processarMensagem (pipeline do webhook)");
       }
 
       // Chama o Cérebro IMEDIATAMENTE se a conversa estiver com IA ativa.
-      // Usa dispatchWithDebounce: aguarda 3s para agregar mensagens rápidas antes de responder.
+      // Debounce de 1s (agrega mensagens rápidas antes de responder).
       if (conv.aiActive) {
-        // Registra o agendamento para o debounce (3s)
+        // Registra o agendamento para o debounce (1s)
         const agendadoEm = new Date();
         await import("@/lib/db").then(({ db }) =>
           db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: agendadoEm } })
         );
-        // Dispara o Cérebro de forma assíncrona após 3s de debounce
-        // Usa setTimeout para não bloquear o webhook (responde ao Z-API imediatamente)
+        // Dispara o Cérebro de forma assíncrona — o webhook responde ao Z-API
+        // imediatamente, mas o fetch continua rodando via waitUntil() (sem
+        // isso, a Vercel pode congelar a função assim que a resposta é
+        // enviada, matando o fetch no meio e o cliente nunca recebe resposta
+        // nem rascunho — silenciosamente).
         const baseUrl = process.env.NEXTAUTH_URL
           ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
         const cronSecret = process.env.CRON_SECRET ?? "";
-        // Dispara sem await — o webhook responde OK imediatamente, Cérebro processa em background
-        fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
-          body: JSON.stringify({ conversationId: conv.id, agendadoEm: agendadoEm.toISOString() }),
-        }).catch((e) => console.error("[cerebro-dispatch] erro:", e));
+        waitUntil(
+          fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
+            body: JSON.stringify({ conversationId: conv.id, agendadoEm: agendadoEm.toISOString() }),
+          }).catch((e) => {
+            console.error("[cerebro-dispatch] erro:", e);
+            return zeusReport(e, "dispatch do Cérebro (webhook → despacho-rapido)");
+          })
+        );
       }
       diag.status = "recebida";
     }
