@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { statusConexao } from "@/lib/zapi";
 import { ultimoHeartbeat, zeusAtivo } from "@/lib/zeus/estado";
 import { getWaSettings } from "@/lib/whatsapp-settings";
+import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
 
@@ -53,7 +54,8 @@ export default async function ZeusPage() {
         auditMode={settings.auditMode}
         statusZapi={status ? { configurado: status.configurado, conectado: status.conectado, erro: status.erro ?? null } : null}
         heartbeats={heartbeats.map((h) => ({ nome: h.nome, minutosEsperados: h.minutosEsperados, ultimo: h.ultimo ? h.ultimo.toISOString() : null }))}
-        anthropicConfigurado={!!process.env.ANTHROPIC_API_KEY}
+        iaConfigurada={iaHabilitada()}
+        provedorIA={provedorIANome()}
         contadores={{ mensagensHoje, acoesHoje, correcoes, alertasAbertos }}
         eventos={eventosRows}
         audits={auditRows}

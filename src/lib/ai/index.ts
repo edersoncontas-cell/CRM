@@ -2,21 +2,28 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
-import { MODEL_TAREFA, OPENAI_MODEL } from "./config";
+import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-// Provedor de IA disponível, em ordem de preferência: OpenAI > Anthropic > Groq.
-// OpenAI primeiro porque o Orientador de Vendas foi pedido especificamente
-// com ela; manter Anthropic/Groq como fallback automático evita que a IA
-// inteira fique muda se um único provedor ficar sem crédito (já aconteceu).
-function provedorIA(): "openai" | "anthropic" | "groq" | null {
+
+// Provedor de IA disponível, em ordem de preferência: Gemini > Groq > DeepSeek
+// > OpenAI > Anthropic. Ordem pensada pra custo mínimo — Gemini e Groq têm
+// camada gratuita de verdade (o suficiente pro volume de um único vendedor),
+// DeepSeek é o mais barato entre os pagos, OpenAI vem em seguida e a
+// Anthropic (a mais cara) fica só como último recurso. Manter vários
+// provedores configurados ao mesmo tempo é opcional — o sistema funciona
+// perfeitamente com um único configurado; os demais só entram em ação se
+// esse ficar sem crédito ou não estiver configurado.
+function provedorIA(): "gemini" | "groq" | "deepseek" | "openai" | "anthropic" | null {
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  if (process.env.GROQ_API_KEY) return "groq";
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  if (process.env.GROQ_API_KEY) return "groq";
   return null;
 }
 
@@ -27,9 +34,11 @@ export function iaHabilitada() {
 // Nome amigável do provedor de IA ativo (para exibir na interface).
 export function provedorIANome(): string | null {
   const p = provedorIA();
+  if (p === "gemini") return "Google Gemini";
+  if (p === "groq") return "Groq (grátis)";
+  if (p === "deepseek") return "DeepSeek";
   if (p === "openai") return "OpenAI";
   if (p === "anthropic") return "Anthropic";
-  if (p === "groq") return "Groq (grátis)";
   return null;
 }
 
@@ -41,10 +50,44 @@ function openaiClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-// Chamada unificada de LLM: usa OpenAI se houver chave, senão Anthropic, senão
-// Groq (grátis). Retorna o texto bruto da resposta. Lança erro se nenhum
-// provedor existir. Exportada para uso fora deste arquivo (ex: Orientador de
-// Vendas em lib/zeus/orientador.ts) — mesmo fallback de provedor pra todo mundo.
+// DeepSeek expõe uma API compatível com o formato da OpenAI — reaproveita o
+// mesmo SDK, só trocando a URL base e a chave.
+function deepseekClient() {
+  return new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
+}
+
+// Gemini usa um formato de API próprio (REST, sem SDK) — chamada direta via fetch.
+async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean }): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: {
+          maxOutputTokens: opts?.maxTokens ?? 1024,
+          ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+        },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const detalhe = await res.text().catch(() => "");
+    throw new Error(`Falha no Gemini (${res.status}): ${detalhe.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+}
+
+// Chamada unificada de LLM — usa o provedor configurado em provedorIA() (ver
+// ordem de preferência acima). Retorna o texto bruto da resposta. Lança erro
+// se nenhum provedor existir. Exportada para uso fora deste arquivo (ex:
+// Orientador de Vendas em lib/zeus/orientador.ts) — mesmo fallback de
+// provedor pra todo mundo.
 export async function llmTexto(
   system: string,
   user: string,
@@ -53,9 +96,26 @@ export async function llmTexto(
   const prov = provedorIA();
   const maxTokens = opts?.maxTokens ?? 1024;
 
+  if (prov === "gemini") {
+    return gemini(system, user, opts);
+  }
+
   if (prov === "openai") {
     const resp = await openaiClient().chat.completions.create({
       model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      ...(opts?.json ? { response_format: { type: "json_object" as const } } : {}),
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    return resp.choices[0]?.message?.content ?? "";
+  }
+
+  if (prov === "deepseek") {
+    const resp = await deepseekClient().chat.completions.create({
+      model: DEEPSEEK_MODEL,
       max_tokens: maxTokens,
       ...(opts?.json ? { response_format: { type: "json_object" as const } } : {}),
       messages: [
@@ -107,6 +167,81 @@ export async function llmTexto(
   }
 
   throw new Error("Nenhum provedor de IA configurado.");
+}
+
+// Chamada unificada com VISÃO (lê PDF/imagem) — usada por extrairFichaDeArquivoIA
+// e pelo post de marketing a partir de foto. Ordem de preferência: Gemini >
+// OpenAI (gpt-4o-mini também lê imagem/PDF nativamente) > Anthropic. Groq e
+// DeepSeek não entram aqui (sem suporte a visão nesse tipo de chamada).
+async function llmVisao(
+  system: string,
+  textoUser: string,
+  arquivo: { base64: string; mediaType: string },
+  opts?: { maxTokens?: number; json?: boolean }
+): Promise<string> {
+  if (process.env.GEMINI_API_KEY) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: arquivo.mediaType, data: arquivo.base64 } },
+              { text: textoUser },
+            ],
+          }],
+          generationConfig: {
+            maxOutputTokens: opts?.maxTokens ?? 1500,
+            ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+          },
+        }),
+      }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      throw new Error(`Falha no Gemini (${res.status}): ${detalhe.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    const resp = await openaiClient().chat.completions.create({
+      model: OPENAI_MODEL,
+      max_tokens: opts?.maxTokens ?? 1500,
+      ...(opts?.json ? { response_format: { type: "json_object" as const } } : {}),
+      messages: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${arquivo.mediaType};base64,${arquivo.base64}` } },
+            { type: "text", text: textoUser },
+          ],
+        },
+      ],
+    });
+    return resp.choices[0]?.message?.content ?? "";
+  }
+
+  if (process.env.ANTHROPIC_API_KEY) {
+    const bloco = arquivo.mediaType === "application/pdf"
+      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64 } }
+      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64 } };
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: opts?.maxTokens ?? 1500,
+      system,
+      messages: [{ role: "user", content: [bloco, { type: "text" as const, text: textoUser }] as Anthropic.MessageParam["content"] }],
+    });
+    return resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+  }
+
+  throw new Error("Nenhum provedor com leitura de PDF/imagem configurado (GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).");
 }
 
 const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION
@@ -243,7 +378,7 @@ export async function interpretarComandoIA(
   opts?: { base?: Date }
 ): Promise<{ resposta: string; acoes: Record<string, unknown>[] }> {
   if (!iaHabilitada()) {
-    return { resposta: "A IA não está configurada (defina ANTHROPIC_API_KEY ou GROQ_API_KEY).", acoes: [] };
+    return { resposta: "A IA não está configurada (defina GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).", acoes: [] };
   }
   const agora = opts?.base ?? new Date();
   const system = `Você é o Assistente IA de um CRM de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES) — tão capaz quanto o Cérebro do CRM. Você entende qualquer pedido relacionado a clientes, negociações, visitas e tarefas, e converte em ações estruturadas. Nunca diga que "não pode" ou que é limitado — se o pedido corresponder a um dos tipos de ação abaixo, execute-o com confiança; se não corresponder a nenhum, explique em "resposta" o que você consegue fazer hoje.
@@ -428,8 +563,8 @@ ${maquina.diferenciais ? `Diferenciais: ${maquina.diferenciais}` : ""}`,
 }
 
 // Extrai a ficha técnica de um ARQUIVO anexado (PDF ou imagem do catálogo).
-// Usa o Claude (Anthropic), que lê PDF e imagem nativamente. O arquivo NÃO é
-// guardado — só o conteúdo extraído. Exige ANTHROPIC_API_KEY (o Groq não lê PDF).
+// PDF/imagem exigem um provedor com visão (Gemini, OpenAI ou Anthropic — ver
+// llmVisao). O arquivo NÃO é guardado — só o conteúdo extraído.
 export async function extrairFichaDeArquivoIA(
   maquina: { marca: string; modelo: string; categoria: string; proprio: boolean },
   arquivo: { base64?: string; mediaType?: string; texto?: string }
@@ -447,9 +582,9 @@ export async function extrairFichaDeArquivoIA(
   const ehPdf = arquivo.mediaType === "application/pdf";
   const ehImagem = !!arquivo.mediaType?.startsWith("image/");
 
-  // PDF/imagem exigem a Anthropic (lê nativamente). Texto pode usar Groq também.
-  if (!ehTexto && !process.env.ANTHROPIC_API_KEY) {
-    return { ok: false, erro: "A leitura de PDF/imagem exige a chave da Anthropic (ANTHROPIC_API_KEY)." };
+  // PDF/imagem exigem um provedor com visão.
+  if (!ehTexto && !process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, erro: "A leitura de PDF/imagem exige GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY." };
   }
   if (!ehTexto && !ehPdf && !ehImagem) {
     return { ok: false, erro: "Formato não suportado. Envie PDF, imagem (JPG/PNG) ou texto/HTML." };
@@ -503,31 +638,18 @@ ${campos}`;
     // configurado, llmTexto lança erro (não retorna vazio), e cairia no catch
     // genérico abaixo — escondendo a mensagem clara de "configure uma chave".
     if (ehTexto) {
-      if (!iaHabilitada()) return { ok: false, erro: "IA não habilitada. Configure GROQ_API_KEY ou ANTHROPIC_API_KEY." };
+      if (!iaHabilitada()) return { ok: false, erro: "IA não habilitada. Configure GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY." };
       const raw = await llmTexto(system, `Conteúdo do arquivo:\n\n${arquivo.texto}`, { maxTokens: 1500, json: true });
       return finalizar(JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)));
     }
 
-    // Caminho de PDF/IMAGEM — Claude lê nativamente.
-    const bloco = ehPdf
-      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64! } }
-      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64! } };
-
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: 1500,
+    // Caminho de PDF/IMAGEM — via llmVisao (Gemini > OpenAI > Anthropic).
+    const raw = await llmVisao(
       system,
-      messages: [
-        {
-          role: "user",
-          content: [bloco, { type: "text" as const, text: `Extraia a ficha técnica da ${maquina.marca} ${maquina.modelo} (${maquina.categoria}).` }] as Anthropic.MessageParam["content"],
-        },
-      ],
-    });
-    const raw = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+      `Extraia a ficha técnica da ${maquina.marca} ${maquina.modelo} (${maquina.categoria}).`,
+      { base64: arquivo.base64!, mediaType: arquivo.mediaType! },
+      { maxTokens: 1500, json: true }
+    );
     return finalizar(JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)));
   } catch (err) {
     console.error("Falha ao extrair ficha de arquivo:", err);
@@ -702,8 +824,8 @@ ATENÇÃO: Se o vendedor pediu um modelo específico, use ESSE modelo e nenhum o
       : "";
 
   try {
-    // Se houver imagem e Anthropic disponível, usa vision para criar post baseado na foto
-    if (imagem && process.env.ANTHROPIC_API_KEY) {
+    // Se houver imagem e algum provedor com visão disponível, usa a foto pra criar o post
+    if (imagem && (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY)) {
       const systemVision = `Você é o social media de Ederson, vendedor de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo (Brasil).
 Analise a imagem da máquina enviada e crie um post CRIATIVO, com emojis estratégicos, linguagem profissional mas próxima.
 Tema do post: ${tema}.
@@ -713,19 +835,12 @@ Devolva SOMENTE um JSON válido (sem texto fora do JSON):
 {"titulo": string, "corpo": string, "hashtags": string}
 "corpo": texto completo do post com emojis, máx 450 caracteres para WhatsApp.
 "hashtags": string com hashtags separadas por espaço.`;
-      const resp = await client().messages.create({
-        model: MODEL,
-        max_tokens: 800,
-        system: systemVision,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: imagem.mediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: imagem.base64 } },
-            { type: "text", text: `${infoMaquina}${feedbackPart}` },
-          ],
-        }],
-      });
-      const visionRaw = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+      const visionRaw = await llmVisao(
+        systemVision,
+        `${infoMaquina}${feedbackPart}`,
+        { base64: imagem.base64, mediaType: imagem.mediaType },
+        { maxTokens: 800, json: true }
+      );
       const visionParsed = JSON.parse(visionRaw.slice(visionRaw.indexOf("{"), visionRaw.lastIndexOf("}") + 1));
       return {
         titulo: visionParsed.titulo ?? "Post de marketing",
@@ -827,7 +942,7 @@ export async function gerarEstrategiaVendaIA(opts: {
     return {
       titulo: opts.tema,
       conteudo:
-        "Configure uma chave de IA (GROQ_API_KEY grátis ou ANTHROPIC_API_KEY) para gerar estratégias personalizadas. Enquanto isso, consulte as metodologias e perfis curados na Academia.",
+        "Configure uma chave de IA (GEMINI_API_KEY ou GROQ_API_KEY, ambas grátis) para gerar estratégias personalizadas. Enquanto isso, consulte as metodologias e perfis curados na Academia.",
     };
   }
 

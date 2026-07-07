@@ -61,13 +61,14 @@ function StatusCard({ ok, label, valor, icon: Icon }: { ok: boolean | null; labe
 }
 
 export function ZeusPainel({
-  ativo: ativoInicial, auditMode: auditModeInicial, statusZapi, heartbeats, anthropicConfigurado, contadores, eventos, audits,
+  ativo: ativoInicial, auditMode: auditModeInicial, statusZapi, heartbeats, iaConfigurada, provedorIA, contadores, eventos, audits,
 }: {
   ativo: boolean;
   auditMode: boolean;
   statusZapi: { configurado: boolean; conectado: boolean; erro: string | null } | null;
   heartbeats: Heartbeat[];
-  anthropicConfigurado: boolean;
+  iaConfigurada: boolean;
+  provedorIA: string | null;
   contadores: { mensagensHoje: number; acoesHoje: number; correcoes: number; alertasAbertos: number };
   eventos: ZeusEventoRow[];
   audits: AuditRow[];
@@ -139,7 +140,7 @@ export function ZeusPainel({
       {/* Status */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatusCard icon={MessageCircle} label="WhatsApp (Z-API)" ok={statusZapi ? statusZapi.conectado : null} valor={statusZapi?.conectado ? "conectado" : statusZapi?.configurado ? "desconectado" : "não configurado"} />
-        <StatusCard icon={Bot} label="IA (Anthropic)" ok={anthropicConfigurado} valor={anthropicConfigurado ? "configurada" : "modo heurístico/Groq"} />
+        <StatusCard icon={Bot} label="IA" ok={iaConfigurada} valor={iaConfigurada ? (provedorIA ?? "configurada") : "modo heurístico"} />
         <StatusCard icon={Activity} label="Crons" ok={heartbeatsStale.length === 0} valor={heartbeatsStale.length === 0 ? "todos ativos" : `${heartbeatsStale.length} parado(s)`} />
         <StatusCard icon={Database} label="ZEUS" ok={ativo} valor={ativo ? "ativo" : "pausado"} />
       </div>

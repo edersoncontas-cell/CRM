@@ -16,6 +16,7 @@ import { enviarPushNotificacao } from "@/lib/push";
 import { MODEL_TAREFA } from "@/lib/ai/config";
 import { recalcularLeadScores } from "@/lib/zeus/leadscore";
 import { montarContextoCliente, gerarMensagemFollowUp } from "@/lib/zeus/cerebro-resposta";
+import { iaHabilitada } from "@/lib/ai";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 
 const HORA = 60 * 60 * 1000;
@@ -87,8 +88,8 @@ async function healthChecks(): Promise<number> {
     }
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    if (await eventoSeNovo("health", "ANTHROPIC_API_KEY ausente — CRM operando em modo heurístico/Groq", 1440, "baixa")) novos++;
+  if (!iaHabilitada()) {
+    if (await eventoSeNovo("health", "Nenhuma chave de IA configurada — CRM operando em modo heurístico", 1440, "baixa")) novos++;
   }
 
   return novos;
@@ -318,7 +319,7 @@ async function leadScoring(): Promise<number> {
 // enviar_resposta do Cérebro). Cada negociação só gera um rascunho por
 // semana (dedup via ZeusEvent) e respeita o orçamento diário de IA.
 async function followUpInteligente(): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!iaHabilitada()) return 0;
   let preparados = 0;
 
   const candidatas = await db.negociacao.findMany({

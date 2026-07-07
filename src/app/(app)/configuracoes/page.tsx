@@ -26,7 +26,7 @@ export default async function ConfiguracoesPage() {
       icon: Bot,
       ativo: iaHabilitada(),
       desc: "Analisa toda a negociação (histórico completo, cadastro, visitas, financiamento) e sugere estágio, objeções, temperatura, probabilidade de fechamento e a melhor resposta.",
-      comoAtivar: "Defina OPENAI_API_KEY (recomendado), ANTHROPIC_API_KEY ou GROQ_API_KEY (grátis) no ambiente.",
+      comoAtivar: "Defina GEMINI_API_KEY (recomendado, tem camada grátis) ou GROQ_API_KEY (grátis) no ambiente. DeepSeek/OpenAI/Anthropic também funcionam.",
     },
     {
       nome: "WhatsApp via Z-API (número fica no celular)",

@@ -22,3 +22,14 @@ export const MODEL_TAREFA = process.env.MODEL_TAREFA || process.env.ANTHROPIC_MO
 // estruturada e geração de resposta em português — troque via env
 // OPENAI_MODEL="gpt-4o" se algum dia sentir falta de qualidade.
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+// Gemini (Google) — hoje a opção mais barata com camada gratuita generosa e
+// leitura nativa de PDF/imagem (ver llmVisao em index.ts). gemini-2.5-flash
+// é o modelo estável recomendado pelo Google para uso geral; troque para
+// "gemini-2.5-flash-lite" (ainda mais barato) via GEMINI_MODEL se precisar.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+// DeepSeek — o mais barato entre os provedores de texto pagos, API compatível
+// com o formato da OpenAI. "deepseek-chat"/"deepseek-reasoner" foram
+// descontinuados em favor de deepseek-v4-flash/deepseek-v4-pro.
+export const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";

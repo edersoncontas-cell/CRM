@@ -209,7 +209,7 @@ function EditModal({
         </p>
         {!temChaveIA && (
           <p className="mb-3 -mt-0.5 text-[11px] rounded-lg px-3 py-2" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
-            ⚠️ <b>PDF e imagens</b> exigem a chave da Anthropic (<code>ANTHROPIC_API_KEY</code>) — configure em <b>Configurações → Integrações</b>. Arquivos de texto e HTML funcionam normalmente.
+            ⚠️ <b>PDF e imagens</b> exigem <code>GEMINI_API_KEY</code>, <code>OPENAI_API_KEY</code> ou <code>ANTHROPIC_API_KEY</code> — configure em <b>Configurações → Integrações</b>. Arquivos de texto e HTML funcionam normalmente.
           </p>
         )}
         {aviso && (
