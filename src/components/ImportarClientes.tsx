@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { importarClientesCsv, importarClientesExcel } from "@/lib/actions";
+import { importarClientesCsv, importarClientesArquivo } from "@/lib/actions";
 import { Upload, X, CheckCircle, AlertCircle, FileSpreadsheet, ClipboardPaste } from "lucide-react";
 
 type Resultado = { importados: number; ignorados: number; erros: number; erro?: string };
 
 export function ImportarClientes() {
   const [aberto, setAberto] = useState(false);
-  const [modo, setModo] = useState<"texto" | "excel">("texto");
+  const [modo, setModo] = useState<"texto" | "arquivo">("texto");
   const [carregando, setCarregando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
@@ -21,7 +21,7 @@ export function ImportarClientes() {
     setCarregando(true);
     setResultado(null);
     try {
-      const r = modo === "texto" ? await importarClientesCsv(fd) : await importarClientesExcel(fd);
+      const r = modo === "texto" ? await importarClientesCsv(fd) : await importarClientesArquivo(fd);
       setResultado(r);
       if (r.importados > 0) {
         setTimeout(() => setAberto(false), 2000);
@@ -60,10 +60,10 @@ export function ImportarClientes() {
               </button>
               <button
                 type="button"
-                onClick={() => { setModo("excel"); setResultado(null); }}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition ${modo === "excel" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                onClick={() => { setModo("arquivo"); setResultado(null); }}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition ${modo === "arquivo" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}
               >
-                <FileSpreadsheet size={13} /> Arquivo Excel (Google Contacts)
+                <FileSpreadsheet size={13} /> Arquivo (Excel, CSV ou PDF)
               </button>
             </div>
 
@@ -86,14 +86,14 @@ export function ImportarClientes() {
             ) : (
               <>
                 <p className="mb-2 text-sm text-slate-500">
-                  No Google Contacts, exporte em <b>Exportar → Google CSV</b>, abra o arquivo no Excel/Google
-                  Sheets e salve como <b>.xlsx</b>. Contatos que já existem no CRM (mesmo telefone ou nome) são
-                  ignorados automaticamente — só os novos são cadastrados.
+                  Aceita <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (Google Contacts, Outlook ou lista genérica, em
+                  português ou inglês) e <b>.pdf</b> (uma linha por contato, com nome e telefone). Contatos que já
+                  existem no CRM (mesmo telefone ou nome) são ignorados automaticamente — só os novos são cadastrados.
                 </p>
                 <input
                   type="file"
                   name="arquivo"
-                  accept=".xlsx"
+                  accept=".xlsx,.xls,.csv,.pdf"
                   required
                   className="w-full rounded-lg border border-slate-300 p-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
                 />
