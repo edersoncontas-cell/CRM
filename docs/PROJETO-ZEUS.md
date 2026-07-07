@@ -293,6 +293,33 @@
      hoje existem **9 pares de conversas duplicadas** por telefone (confirmado por query direta). Diferente das
      colunas acima, um `CREATE UNIQUE INDEX` falha na presença de duplicados; requer decidir como mesclar essas
      9 conversas antes de aplicar. Fica para uma sessão dedicada de limpeza de dados.
+- ✅ **Correções de dados pós-merge (2026-07-07)** — usuário reportou vários números incorretos no Dashboard após
+  o merge. Causa raiz: `Negociacao.estagio` guarda o TÍTULO literal da coluna do funil (não um id normalizado),
+  e o dashboard comparava contra ids legados que nunca batiam. Corrigido com `categorizarColunaPorTitulo()`
+  (`src/lib/pipeline.ts`), usado para: contagem real de EM NEGOCIAÇÃO/EM BANCO (antes mostrava 73 fixo, contando
+  todo o histórico), "Novos Negócios" da seção Metas (segunda a sábado, zera domingo) e "Negócios que precisam
+  de visita" (substituiu a Fila de Follow-up + Pipeline por Estágio removidos do dashboard). Meta Anual corrigida
+  para filtrar por `faturadoEm` dentro do ano corrente (antes usava `atualizadoEm`). "Top 5 para atacar hoje"
+  corrigido para excluir clientes com `status: "nao_cliente"`. Regiões de município (Caparaó/Litorânea/Granito/
+  Serrana/Das Santas) nunca tinham sido aplicadas em produção porque o gate de manutenção one-time já estava
+  marcado como concluído antes do código existir — corrigido bumping `CHAVE_MANUTENCAO` para `"manutencao.v2"`
+  em `src/lib/manutencao.ts`, forçando reexecução.
+- ✅ **Nova seção Visitas + reorganização de menu + drag-and-drop manual (2026-07-07)** — página `/visitas`
+  (lista da semana corrente, zera toda segunda, histórico abaixo), menu reorganizado (Negociações/Demandas
+  logo abaixo do Dashboard, Visitas após o WhatsApp, Radar de safra/silêncio movidos para o fim de Análise) e
+  reordenação manual do menu por arrastar-e-soltar (`@dnd-kit/sortable`), persistida por aparelho via
+  localStorage (`menu_ordem_v1`), com toggle "Reorganizar menu" no topo do Sidebar.
+- ✅ **Cérebro não lia arquivos anexados (2026-07-07)** — usuário tentou importar contatos exportados do Google
+  Contacts (CSV/vCard) pelo chat do Cérebro e nada acontecia. Causa raiz: `api/cerebro/route.ts` só enviava
+  nome/tamanho do arquivo à IA para qualquer anexo que não fosse imagem — o conteúdo real nunca chegava ao
+  modelo, então não havia como ele "ler" nada. Corrigido: arquivos de texto (CSV, TXT, HTML, JSON, `.vcf`) agora
+  têm o conteúdo decodificado (UTF-8, truncado a ~400 mil caracteres por segurança) e embutido na mensagem
+  enviada à IA. Adicionada a tool `importar_contatos` (`src/lib/zeus/cerebro-tools.ts` +
+  `importarContatosEstruturados` em `src/lib/actions.ts`) para cadastro em lote com a mesma deduplicação por
+  telefone/nome da importação manual. Arquivos binários (PDF, `.docx`, `.xlsx`) continuam sem extração de texto
+  automática — o Cérebro agora avisa isso ao vendedor em vez de fingir que leu.
+  **Ainda não implementado**: integração OAuth direta com a conta Google Contacts do usuário (pedido alternativo
+  do usuário) — não iniciada nesta sessão; o caminho via upload de arquivo no Cérebro cobre o caso relatado.
 
 ---
 
