@@ -5,15 +5,20 @@ import * as zapi from "@/lib/zapi";
 import * as googleCalendar from "@/lib/integrations/googleCalendar";
 import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
-import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench } from "lucide-react";
+import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
+import { AtualizarCotacaoCafeForm } from "@/components/AtualizarCotacaoCafeForm";
+import { obterCotacoes } from "@/lib/mercado";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage() {
-  const estilo = await db.estiloDeFala.findFirst();
+  const [estilo, cotacoes] = await Promise.all([
+    db.estiloDeFala.findFirst(),
+    obterCotacoes(),
+  ]);
 
   const integracoes = [
     {
@@ -116,6 +121,17 @@ export default async function ConfiguracoesPage() {
         <p className="text-sm text-slate-600">
           {estilo?.guia ?? "Ainda não aprendido. Quando você conectar suas conversas, a IA aprende o seu jeito de falar."}
         </p>
+      </Card>
+
+      <Card className="mt-6">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
+          <Coffee size={18} className="text-brand-600" /> Cotação do café (letreiro do Dashboard)
+        </div>
+        <p className="mb-3 text-sm text-slate-600">
+          Não existe API gratuita confiável para café arábica/conilon — atualize aqui manualmente (o dólar do letreiro é
+          buscado ao vivo, automaticamente).
+        </p>
+        <AtualizarCotacaoCafeForm arabica={cotacoes.cafeArabica} conilon={cotacoes.cafeConilon} />
       </Card>
 
       <Card className="mt-6">

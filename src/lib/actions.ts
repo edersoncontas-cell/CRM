@@ -16,6 +16,7 @@ import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { registrarAudit } from "./audit";
 import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
+import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
 import ExcelJS from "exceljs";
 
@@ -315,6 +316,23 @@ export async function definirModoFimDeSemana(
       : "Modo fim de semana DESATIVADO — IA volta a só sugerir.",
   });
   revalidatePath("/atendimento");
+  return { ok: true };
+}
+
+// ---------- Cotação do café (letreiro do Dashboard) ----------
+// Sem API gratuita confiável para arábica/conilon — valor informado manualmente
+// aqui, uma vez por dia. O dólar é buscado ao vivo (ver lib/mercado.ts).
+export async function atualizarCotacaoCafeAction(formData: FormData): Promise<{ ok: boolean }> {
+  const arabicaRaw = String(formData.get("arabica") ?? "").replace(",", ".");
+  const conilonRaw = String(formData.get("conilon") ?? "").replace(",", ".");
+  const arabica = arabicaRaw ? parseFloat(arabicaRaw) : null;
+  const conilon = conilonRaw ? parseFloat(conilonRaw) : null;
+  await atualizarCotacaoCafe(
+    arabica != null && Number.isFinite(arabica) ? arabica : null,
+    conilon != null && Number.isFinite(conilon) ? conilon : null,
+  );
+  revalidatePath("/dashboard");
+  revalidatePath("/configuracoes");
   return { ok: true };
 }
 

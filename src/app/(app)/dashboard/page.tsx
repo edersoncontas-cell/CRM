@@ -3,6 +3,7 @@ import { diasDesde, saudacaoBrasilia, semCodigoPais } from "@/lib/utils";
 import { ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { DicaVendas, FraseMotivacional } from "@/components/MotivacaoWidget";
+import { TickerMercado } from "@/components/TickerMercado";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { CadastrarContatoWhatsApp } from "@/components/CadastrarContatoWhatsApp";
 import Link from "next/link";
@@ -203,6 +204,8 @@ return (
 </div>
 <BotaoAtualizar />
 </div>
+
+<TickerMercado />
 
 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 <DicaVendas />

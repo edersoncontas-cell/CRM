@@ -185,6 +185,12 @@ img, video, iframe {
     animation: fadeIn 0.15s ease-out;
 }
 
+/* Letreiro de cotações do Dashboard (café/dólar) — rolagem contínua */
+@keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
 /* Impressão de propostas */
 @media print {
     body {
