@@ -47,3 +47,16 @@ const LEGADO: Record<string, string> = {
 export function normalizarEstagio(estagio: string): string {
   return LEGADO[estagio] ?? estagio;
 }
+
+// Classifica uma coluna do funil pelo TÍTULO (Negociacao.estagio grava o
+// título da coluna, não um id fixo — colunas podem ser renomeadas pelo
+// usuário). Usado para os totais "EM NEGOCIAÇÃO"/"EM BANCO" do dashboard.
+export type CategoriaColuna = "banco" | "confirmada" | "perdida" | "em_negociacao";
+
+export function categorizarColunaPorTitulo(titulo: string): CategoriaColuna {
+  const t = titulo.toLowerCase();
+  if (t.includes("perdid")) return "perdida";
+  if (t.includes("faturad") || t.includes("confirm") || t.includes("aprovad") || t.includes("vendid") || t.includes("ganho")) return "confirmada";
+  if (t.includes("banco") || t.includes("bcnh")) return "banco";
+  return "em_negociacao";
+}

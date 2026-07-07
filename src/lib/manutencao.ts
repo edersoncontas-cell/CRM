@@ -15,7 +15,10 @@ import { garantirColunasDemanda } from "@/lib/demandas";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 
-const CHAVE_MANUTENCAO = "manutencao.v1";
+// v2: adiciona o agrupamento de municípios em regiões (Caparaó/Litorânea/
+// Granito/Serrana/Das Santas) -- precisa rodar de novo mesmo em bancos que já
+// tinham manutencao.v1 feita antes desse agrupamento existir.
+const CHAVE_MANUTENCAO = "manutencao.v2";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

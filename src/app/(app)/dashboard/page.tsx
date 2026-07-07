@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
-import { diasDesde, saudacaoBrasilia } from "@/lib/utils";
-import { PipelineChart } from "@/components/charts";
+import { diasDesde, saudacaoBrasilia, semCodigoPais } from "@/lib/utils";
 import { ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
-import { ESTAGIOS, normalizarEstagio } from "@/lib/pipeline";
-import { DicaVendas } from "@/components/MotivacaoWidget";
+import { categorizarColunaPorTitulo } from "@/lib/pipeline";
+import { DicaVendas, FraseMotivacional } from "@/components/MotivacaoWidget";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { CadastrarContatoWhatsApp } from "@/components/CadastrarContatoWhatsApp";
 import Link from "next/link";
 import {
 Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
@@ -37,22 +37,30 @@ const deltaSegunda = diaSemanaAtual === 0 ? 6 : diaSemanaAtual - 1;
 const inicioSemanaSegunda = new Date(hoje); inicioSemanaSegunda.setDate(hoje.getDate() - deltaSegunda); inicioSemanaSegunda.setHours(0, 0, 0, 0);
 const fimSemanaDomingo = new Date(inicioSemanaSegunda); fimSemanaDomingo.setDate(inicioSemanaSegunda.getDate() + 7);
 
+// Janela de segunda a sábado (para o quadro "Novos Negócios", que zera todo domingo)
+const ehDomingoHoje = diaSemanaAtual === 0;
+const fimSemanaSabado = new Date(inicioSemanaSegunda); fimSemanaSabado.setDate(inicioSemanaSegunda.getDate() + 6); fimSemanaSabado.setHours(23, 59, 59, 999);
+
+// Ano corrente completo (para a Meta Anual — só conta faturamento dentro do ano)
+const fimAno = new Date(anoAtual + 1, 0, 1);
+
 const DIAS_SEM_CONTATO = 30;
 const corteSemContato = new Date(hoje);
 corteSemContato.setDate(corteSemContato.getDate() - DIAS_SEM_CONTATO);
 
 const [
 metas, alertas, negociacoes, clientesCount,
-aguardando, clientesAguardandoRaw, futuros,
+clientesAguardandoRaw, futuros,
 vendasGanhasAno,
 // Demandas de hoje
 demandasHoje,
 // Próximas visitas agendadas
 proximasVisitas,
-// Metas semanais (segunda a domingo)
-visitasSemanaAgendadas, novosNegociosSemana,
+// Metas semanais
+visitasSemanaAgendadas, negociosCriadosSemana,
 // WHATSAPP: clientes sem contato há 30+ dias, conversas sem cadastro
 clientes30DiasSemContato, conversasSemCadastro,
+municipios,
 ] = await Promise.all([
 db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
 db.alerta.findMany({
@@ -62,11 +70,6 @@ orderBy: { diasDesde: "desc" },
 }),
 db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
 db.cliente.count(),
-db.negociacao.findMany({
-where: { status: "aberta" },
-include: { cliente: true },
-orderBy: { ultimoContato: "asc" },
-}),
 db.cliente.findMany({
 where: { aguardandoResposta: true },
 include: {
@@ -80,8 +83,8 @@ orderBy: { interesseFuturoData: "asc" },
 take: 12,
 select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
 }),
-// Vendas ganhas no ano (usado na Meta Anual / Ritmo Mensal)
-db.negociacao.count({ where: { status: "ganha", atualizadoEm: { gte: inicioAno } } }),
+// Vendas faturadas DENTRO do ano corrente (por data de faturamento, não de atualização)
+db.negociacao.count({ where: { status: "ganha", faturadoEm: { gte: inicioAno, lt: fimAno } } }),
 // Demandas de hoje (com dueDate definida para hoje)
 db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
 // Próximas visitas (30 dias)
@@ -95,8 +98,12 @@ take: 5,
 }),
 // Visitas agendadas nesta semana (segunda a domingo) — zera toda segunda
 db.visita.count({ where: { data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
-// Negociações novas nesta semana (entram por padrão em "Primeiro contato" = EM NEGOCIAÇÃO)
-db.negociacao.count({ where: { criadoEm: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
+// Negociações criadas de segunda a sábado (zera todo domingo) — filtradas
+// por coluna (EM NEGOCIAÇÃO/EM BANCO) mais abaixo, depois de saber os títulos reais
+ehDomingoHoje ? Promise.resolve([]) : db.negociacao.findMany({
+  where: { criadoEm: { gte: inicioSemanaSegunda, lte: fimSemanaSabado } },
+  select: { estagio: true },
+}),
 // Clientes com 30+ dias sem contato (cadastro do cliente, não depende de negociação)
 db.cliente.findMany({
   where: { ultimoContato: { lt: corteSemContato } },
@@ -111,11 +118,20 @@ db.whatsAppConversation.findMany({
   take: 8,
   select: { id: true, contactName: true, externalPhone: true, lastMessageAt: true },
 }),
+// Municípios (para o popup de "Cadastrar" nas conversas sem cadastro)
+db.municipio.findMany({ select: { id: true, nome: true, foraDeArea: true }, orderBy: { nome: "asc" } }),
 ]);
 
-// Top 5 para atacar hoje (Fase 5.1 — lead scoring recalculado pelo ZEUS)
+const novosNegociosSemana = negociosCriadosSemana.filter((n) => {
+  const cat = categorizarColunaPorTitulo(n.estagio);
+  return cat === "em_negociacao" || cat === "banco";
+}).length;
+
+// Top 5 para atacar hoje: clientes com atendimento no WhatsApp ainda ABERTO
+// (não marcado "Atendimento encerrado" = aguardandoResposta ainda true),
+// excluindo quem está classificado como "não cliente".
 const topAtacar = await db.cliente.findMany({
-where: { OR: [{ negociacoes: { some: { status: "aberta" } } }, { aguardandoResposta: true }] },
+where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
 orderBy: { leadScore: "desc" },
 take: 5,
 select: {
@@ -138,19 +154,24 @@ const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
 const META_ANUAL = 40;
 const faltamVendas = Math.max(0, META_ANUAL - vendasGanhasAno);
 
-// EM NEGOCIAÇÃO = ainda com o vendedor (contato/visita); EM BANCO = proposta no BCNH
-const emNegociacaoCount = negociacoes.filter((n) => normalizarEstagio(n.estagio) !== "proposta_bcnh" && normalizarEstagio(n.estagio) !== "proposta_aprovada").length;
-const emBancoCount = negociacoes.filter((n) => normalizarEstagio(n.estagio) === "proposta_bcnh").length;
+// EM NEGOCIAÇÃO = ainda com o vendedor (contato/visita); EM BANCO = proposta no
+// banco/BCNH. Classificado pelo TÍTULO real das colunas (Negociacao.estagio
+// grava o título, que pode ter sido renomeado pelo usuário).
+const emNegociacaoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "em_negociacao").length;
+const emBancoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "banco").length;
 
 // Meta Anual: quantas máquinas em média preciso vender por mês até dezembro
 const mesesRestantesAno = Math.max(1, 12 - hoje.getMonth());
 const mediaNecessariaPorMes = (faltamVendas / mesesRestantesAno).toFixed(1);
-const porEstagio = ESTAGIOS.map((e) => ({
-estagio: e.id,
-total: negociacoes.filter((n) => normalizarEstagio(n.estagio) === e.id).length,
-}));
-const aguardandoFiltrado = aguardando.filter((n) => diasDesde(n.ultimoContato) >= 3);
-const filaAguardando = aguardandoFiltrado.slice(0, 6);
+
+// Negócios em aberto (EM NEGOCIAÇÃO/EM BANCO) que ainda não têm visita marcada
+const precisamDeVisita = negociacoes
+.filter((n) => {
+const cat = categorizarColunaPorTitulo(n.estagio);
+return (cat === "em_negociacao" || cat === "banco") && !n.dataVisita;
+})
+.sort((a, b) => (a.ultimoContato?.getTime() ?? 0) - (b.ultimoContato?.getTime() ?? 0))
+.slice(0, 6);
 
 const clientesAguardando = clientesAguardandoRaw
 .filter((c) => {
@@ -176,6 +197,11 @@ return (
 </p>
 </div>
 <BotaoAtualizar />
+</div>
+
+<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+<DicaVendas />
+<FraseMotivacional />
 </div>
 
 {/* ── Top 5 para Atacar Hoje (Fase 5 — lead scoring) ── */}
@@ -323,32 +349,34 @@ style={{ width: Math.min(100, (vendasGanhasAno / META_ANUAL) * 100) + "%", backg
 <SectionLabel icone={<UserX size={16} />} cor="#f87171">Conversas sem cadastro</SectionLabel>
 <div className="space-y-2">
 {conversasSemCadastro.map((c) => (
-<Link key={c.id} href={"/atendimento?conversa=" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+<div key={c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+<Link href={"/atendimento?conversa=" + c.id} className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70">
 <UserX size={16} style={{ color: "#f87171", flexShrink: 0 }} />
 <div className="flex-1 min-w-0">
 <p className="text-sm font-semibold text-white truncate">{c.contactName || c.externalPhone}</p>
 <p className="text-xs text-zinc-500">{c.externalPhone} · sem cliente vinculado</p>
 </div>
-<ArrowRight size={14} className="text-zinc-600" />
 </Link>
+<CadastrarContatoWhatsApp telefone={semCodigoPais(c.externalPhone.replace(/\D/g, ""))} municipios={municipios} />
+</div>
 ))}
 </div>
 </section>
 )}
 
-{/* ── Aguardando na Fila ── */}
-{filaAguardando.length > 0 && (
+{/* ── Negócios em aberto que precisam de visita ── */}
+{precisamDeVisita.length > 0 && (
 <section>
-<SectionLabel icone={<Clock size={16} />} cor="#60a5fa">Fila de Follow-up</SectionLabel>
+<SectionLabel icone={<Clock size={16} />} cor="#60a5fa">Negócios que precisam de visita</SectionLabel>
 <div className="space-y-2">
-{filaAguardando.map((n) => (
+{precisamDeVisita.map((n) => (
 <Link key={n.id} href={"/pipeline"} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
 <Clock size={16} style={{ color: "#60a5fa", flexShrink: 0 }} />
 <div className="flex-1 min-w-0">
 <p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
-<p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · {n.proximaAcao ?? "Definir próxima ação"}</p>
+<p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · {n.proximaAcao ?? "Agendar visita"}</p>
 </div>
-<span className="text-xs text-zinc-500">{diasDesde(n.ultimoContato)}d</span>
+<span className="text-xs text-zinc-500">{n.ultimoContato ? `${diasDesde(n.ultimoContato)}d` : ""}</span>
 </Link>
 ))}
 </div>
@@ -378,12 +406,6 @@ style={{ width: Math.min(100, (vendasGanhasAno / META_ANUAL) * 100) + "%", backg
 </section>
 )}
 
-{/* ── Pipeline por estágio ── */}
-<section>
-<SectionLabel icone={<BarChart3 size={16} />} cor="#BFDE4D">Pipeline por Estágio</SectionLabel>
-<PipelineChart data={porEstagio} dark />
-</section>
-
 {/* ── Alertas do CRM ── */}
 {alertas.length > 0 && (
 <section>
@@ -404,8 +426,6 @@ Ver
 </div>
 </section>
 )}
-
-<DicaVendas />
 </div>
 );
 }
