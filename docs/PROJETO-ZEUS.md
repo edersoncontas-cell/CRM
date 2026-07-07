@@ -334,6 +334,43 @@
   (fail-open, com `isAllowedInstance()` conferindo o instanceId como camada extra de proteção). Confirmado pelo
   usuário que voltou a funcionar. **Fica de nota para o futuro**: se quiser reativar a validação por token, o
   valor certo precisa ser copiado exatamente da aba de segurança do painel da Z-API, não inventado.
+- ✅ **Lote grande de correções e funcionalidades — sessão noturna (2026-07-07)**:
+  - **Bugs do ZEUS verificados**: crédito da Anthropic baixo (ação do usuário, não código), cron `zeus-tick`
+    era só timing pós-redeploy, 9 conversas de WhatsApp duplicadas (SQL de correção entregue ao usuário),
+    alertas de clientes duplicados (por design, ZEUS só detecta — fusão é manual).
+  - **Mesclar clientes duplicados**: botão "Mesclar" nos alertas do ZEUS (`mesclarClientes`/`buscarClientesPorIds`
+    em `actions.ts` + `MesclarClientesModal.tsx`) — move negociações/visitas/conversas/tarefas/alertas/frota/
+    auditoria/indicações pro cliente escolhido como principal antes de excluir os duplicados.
+  - **"Em negociação"/"Em aberto" ainda errado**: causa raiz era negociações "órfãs" (estagio de coluna
+    renomeada/excluída no passado, sem card visível em nenhuma coluna atual) sendo contadas. Corrigido com
+    `criarCategorizadorColunas()` (`src/lib/pipeline.ts`), que categoriza pelas colunas REAIS do funil
+    (`ColunaFunil`), não só por palavra-chave — aplicado no Dashboard e em `FunilNegociacoes.tsx`.
+  - **Pop-up de comissão CRD PME aparecendo antes da hora**: `pendentesComissao` (Financeiro) agora só considera
+    devida quando `previsaoComissaoCrdPme()` já chegou, não só pelo booleano `comissaoPaga`.
+  - **Filtro por ano** em Negociações e Financeiro (`SeletorAno.tsx`): relatórios de faturados/comissões mostram
+    só o ano corrente por padrão (por `faturadoEm`), com opção de ver outro ano ou tudo. Pipeline aberto e
+    Comissões Futuras nunca filtram por ano.
+  - **Kanban de Negociações**: cada coluna rola por conta própria agora (`max-h-[75vh]` + `overflow-y-auto`),
+    não força mais a página inteira a rolar com muitos cards.
+  - **Card de Nova Negociação padronizado**: `FormNovaNegociacao.tsx` — um único componente usado em
+    Negociações (nova e venda antiga, antes eram formulários diferentes), no cadastro do cliente e ao gerar
+    negociação por uma conversa de WhatsApp. Quando a coluna é FATURADO, "Data da Visita" vira "Data de
+    Faturamento" automaticamente. Novo `WheelDateTimePicker` (data+hora) mantém todo input nesse fluxo no
+    padrão iOS já usado no resto do CRM.
+  - **Visitas virou agendamento de verdade**: quadro com uma coluna por dia útil (segunda a sexta), cada uma
+    com "Adicionar" próprio (cliente + horário via `WheelTimePicker`, novo). O agendamento automático via IA
+    (detecção de data nas conversas de WhatsApp, `registrarVisitaAgenda` em `zeus/pipeline.ts`) já existia e
+    aparece direto no quadro sem mudança adicional.
+  - **Importar clientes de Excel do Google Contacts**: nova aba em "Importar" (Clientes) lê o `.xlsx` real
+    (colunas `Name`/`Given Name`+`Family Name`, `Phone N - Value`) via `exceljs`, reaproveitando a mesma
+    deduplicação por telefone/nome.
+  - **Cérebro — modo de treinamento de estilo**: toggle "Treinar estilo" no chat; quando ativo, o vendedor
+    ensina como fala com clientes e a IA chama a nova tool `atualizar_estilo_fala`, salvando no mesmo
+    `EstiloDeFala.guia` já usado pelo auto-responder.
+  - **Letreiro de café/dólar no Dashboard**: dólar buscado ao vivo (AwesomeAPI, grátis); café arábica/conilon
+    não tem API gratuita confiável, fica manual em Configurações (`TickerMercado.tsx`/`lib/mercado.ts`).
+  - Tudo testado localmente (Postgres + navegador real via Playwright) antes de cada push, `tsc`/`lint`/`build`
+    limpos em cada commit.
 
 ---
 
