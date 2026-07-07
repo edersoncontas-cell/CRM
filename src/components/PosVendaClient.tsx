@@ -5,16 +5,22 @@ import Link from "next/link";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { listarContatosPosVenda, registrarContatoPosVenda, gerarIdeiasPosVendaAction } from "@/lib/actions";
-import { HeartHandshake, X, Sparkles, Phone, MapPin, Wrench, Package, Users, MessageCircle, Plus } from "lucide-react";
+import { HeartHandshake, X, Sparkles, Phone, MapPin, Wrench, Package, Users, MessageCircle, Plus, ClipboardCheck, CalendarClock } from "lucide-react";
+
+type MarcoPendente = { tipo: string; label: string } | null;
 
 type ItemLista = {
   clienteId: string;
   nome: string;
   municipio: string | null;
   maquina: string | null;
+  maquinas: string[];
   dataCompra: string | null;
   ultimoContato: string | null;
   diasSemContato: number | null;
+  diasDesdeFaturamento: number;
+  marcoPendente: MarcoPendente;
+  entregaTecnica: boolean;
 };
 
 type Contato = { id: string; tipo: string; nota: string; data: string };
@@ -27,6 +33,11 @@ const TIPO_LABEL: Record<string, { label: string; icon: typeof Phone }> = {
   peca_vendida: { label: "Peça vendida", icon: Package },
   indicacao_pedida: { label: "Indicação pedida", icon: Users },
   ideia_ia: { label: "Ideia da IA", icon: Sparkles },
+  entrega_tecnica: { label: "Entrega técnica", icon: ClipboardCheck },
+  marco_30d: { label: "Marco de 30 dias", icon: CalendarClock },
+  marco_60d: { label: "Marco de 60 dias", icon: CalendarClock },
+  marco_180d: { label: "Marco de 6 meses", icon: CalendarClock },
+  marco_365d: { label: "Marco de 1 ano", icon: CalendarClock },
   outro: { label: "Outro", icon: HeartHandshake },
 };
 
@@ -46,6 +57,8 @@ function ModalCliente({ item, onClose }: { item: ItemLista; onClose: () => void 
   const [ideias, setIdeias] = useState<string | null>(null);
   const [gerando, startGerar] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
+  const [entregaFeita, setEntregaFeita] = useState(item.entregaTecnica);
+  const [marcoFeito, setMarcoFeito] = useState(false);
 
   useEffect(() => {
     listarContatosPosVenda(item.clienteId).then((c) => { setContatos(c); setCarregando(false); });
@@ -58,6 +71,25 @@ function ModalCliente({ item, onClose }: { item: ItemLista; onClose: () => void 
       const atualizado = await listarContatosPosVenda(item.clienteId);
       setContatos(atualizado);
       setNota("");
+    });
+  }
+
+  function marcarEntregaTecnica() {
+    startSalvar(async () => {
+      await registrarContatoPosVenda(item.clienteId, "entrega_tecnica", "Entrega técnica realizada.");
+      const atualizado = await listarContatosPosVenda(item.clienteId);
+      setContatos(atualizado);
+      setEntregaFeita(true);
+    });
+  }
+
+  function marcarMarcoComoFeito() {
+    if (!item.marcoPendente) return;
+    startSalvar(async () => {
+      await registrarContatoPosVenda(item.clienteId, item.marcoPendente!.tipo, `Marco de ${item.marcoPendente!.label} cumprido.`);
+      const atualizado = await listarContatosPosVenda(item.clienteId);
+      setContatos(atualizado);
+      setMarcoFeito(true);
     });
   }
 
@@ -95,10 +127,40 @@ function ModalCliente({ item, onClose }: { item: ItemLista; onClose: () => void 
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          {item.maquina && <Badge tom="blue">{item.maquina}</Badge>}
-          {item.dataCompra && <Badge tom="slate">Comprou em {formatDate(item.dataCompra)}</Badge>}
+          {item.maquinas.length > 0 ? (
+            item.maquinas.map((m) => <Badge key={m} tom="blue">{m}</Badge>)
+          ) : (
+            item.maquina && <Badge tom="blue">{item.maquina}</Badge>
+          )}
+          {item.dataCompra && <Badge tom="slate">Faturado em {formatDate(item.dataCompra)}</Badge>}
           <Badge tom={urgencia(item.diasSemContato).tom}>{urgencia(item.diasSemContato).label}</Badge>
+          {entregaFeita ? (
+            <Badge tom="green">Entrega técnica feita</Badge>
+          ) : (
+            <button
+              onClick={marcarEntregaTecnica}
+              disabled={salvando}
+              className="rounded-full border border-slate-300 px-2.5 py-0.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Marcar entrega técnica
+            </button>
+          )}
         </div>
+
+        {item.marcoPendente && !marcoFeito && (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+              <CalendarClock size={15} /> Marco de {item.marcoPendente.label} pendente
+            </div>
+            <button
+              onClick={marcarMarcoComoFeito}
+              disabled={salvando}
+              className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+            >
+              Marcar como feito
+            </button>
+          </div>
+        )}
 
         <div className="mb-4">
           <button
@@ -106,7 +168,12 @@ function ModalCliente({ item, onClose }: { item: ItemLista; onClose: () => void 
             disabled={gerando}
             className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
           >
-            <Sparkles size={13} /> {gerando ? "Gerando…" : "Gerar ideias de pós-venda com IA"}
+            <Sparkles size={13} />
+            {gerando
+              ? "Gerando…"
+              : item.marcoPendente && !marcoFeito
+              ? `Gerar mensagem do marco de ${item.marcoPendente.label}`
+              : "Gerar ideias de pós-venda com IA"}
           </button>
           {erro && <p className="mt-2 text-xs font-semibold text-red-600">{erro}</p>}
           {ideias && (
@@ -184,7 +251,7 @@ export function PosVendaClient({ clientes }: { clientes: ItemLista[] }) {
       <EmptyState
         icone={<HeartHandshake size={28} />}
         texto="Nenhum cliente pós-venda ainda"
-        subtexto="Assim que um cliente comprar uma máquina (marcado como 'já comprou' no cadastro), ele aparece aqui para acompanhamento."
+        subtexto="Assim que uma negociação for faturada (coluna FATURADO, com data de faturamento), o cliente aparece aqui para acompanhamento."
       />
     );
   }
@@ -205,7 +272,12 @@ export function PosVendaClient({ clientes }: { clientes: ItemLista[] }) {
                   <Badge tom={u.tom}>{u.label}</Badge>
                 </div>
                 {c.maquina && <div className="mb-1 text-sm text-slate-600">{c.maquina}</div>}
-                {c.dataCompra && <div className="text-xs text-slate-400">Comprou em {formatDate(c.dataCompra)}</div>}
+                {c.dataCompra && <div className="text-xs text-slate-400">Faturado em {formatDate(c.dataCompra)}</div>}
+                {c.marcoPendente && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                    <CalendarClock size={13} /> Marco de {c.marcoPendente.label} pendente
+                  </div>
+                )}
               </Card>
             </button>
           );

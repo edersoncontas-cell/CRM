@@ -570,7 +570,9 @@ ${maquina.diferenciais ? `Diferenciais: ${maquina.diferenciais}` : ""}`,
 
 // Setor de Pós-venda: sugere ações concretas para manter presença junto a um
 // cliente que já comprou — nunca inventa dado (máquina, datas) que não esteja
-// no contexto fornecido.
+// no contexto fornecido. Quando o cliente está num marco de acompanhamento
+// (30/60/180/365 dias desde o faturamento) ainda não registrado, prioriza
+// gerar a MENSAGEM PRONTA daquele marco em vez de ideias genéricas.
 export async function gerarIdeiasPosVendaIA(contexto: {
   nomeCliente: string;
   maquina: string | null;
@@ -579,29 +581,39 @@ export async function gerarIdeiasPosVendaIA(contexto: {
   diasDesdeUltimoContato: number | null;
   historicoContatos: string[];
   observacoes: string | null;
+  marcoPendente: string | null;
 }): Promise<string> {
   if (!iaHabilitada()) return "";
   try {
+    const instrucaoMarco = contexto.marcoPendente
+      ? `Este cliente atingiu o marco de acompanhamento de ${contexto.marcoPendente} desde o faturamento da máquina — isso é
+PRIORIDADE. Comece a resposta com a linha "Mensagem pronta para enviar agora (marco de ${contexto.marcoPendente}):" seguida,
+na linha de baixo, do rascunho de uma mensagem de WhatsApp (entre aspas) natural e pessoal — cite o nome do cliente e a
+máquina, sem parecer automática ou robótica — adequada a este momento específico do ciclo pós-venda:
+- 30 dias: checar adaptação à máquina, horas de uso, dúvidas de operação, lembrete da primeira manutenção
+- 60 dias: satisfação geral com a máquina, oferecer peças de desgaste/consumíveis
+- 6 meses: lembrete de revisão preventiva
+- 1 ano: comemorar o aniversário da compra e sondar necessidade de nova máquina/implemento
+Depois dessa mensagem, pule uma linha e escreva "Outras ações:" seguido de 2-3 ações adicionais em lista.`
+      : `Sugira de 3 a 5 ações CONCRETAS e específicas para este cliente agora, considerando a máquina comprada, há quanto
+tempo, e o histórico de contatos já feitos (não repita algo que já foi feito recentemente).`;
+
     return await llmTexto(
       `Você é especialista em pós-venda e retenção de clientes de máquinas pesadas (New Holland Construction / Dynapac) no Brasil.
 Seu objetivo é manter o vendedor SEMPRE PRESENTE na vida do cliente depois da venda — não deixar o relacionamento esfriar.
-Sugira de 3 a 5 ações CONCRETAS e específicas para este cliente agora, considerando a máquina comprada, há quanto tempo,
-e o histórico de contatos já feitos (não repita algo que já foi feito recentemente).
+${instrucaoMarco}
 Tipos de ação possíveis: ligação de satisfação, oferta de revisão/manutenção preventiva, venda de peças/consumíveis,
 convite para trazer a máquina numa ação da concessionária, pedido de indicação de outro cliente da região, verificação
 de necessidade de implemento ou máquina adicional, aniversário da compra.
 NUNCA invente dados (prazos de garantia, preços, datas) que não estejam no contexto.
-Responda em português, formato de lista curta, direto ao ponto, sem títulos nem introdução:
-- Ação 1 — motivo/gancho
-- Ação 2 — motivo/gancho
-(até 5 itens)`,
+Responda em português, direto ao ponto, sem markdown (##, **) e sem introdução além do pedido acima.`,
       `Cliente: ${contexto.nomeCliente}
 Máquina comprada: ${contexto.maquina ?? "não informado"}
-Data da compra: ${contexto.dataCompra ?? "não informada"}${contexto.diasDesdeCompra != null ? ` (${contexto.diasDesdeCompra} dias atrás)` : ""}
-Último contato pós-venda: ${contexto.diasDesdeUltimoContato != null ? `${contexto.diasDesdeUltimoContato} dias atrás` : "nenhum registrado ainda"}
+Data do faturamento: ${contexto.dataCompra ?? "não informada"}${contexto.diasDesdeCompra != null ? ` (${contexto.diasDesdeCompra} dias atrás)` : ""}
+Último contato (WhatsApp ou registro manual): ${contexto.diasDesdeUltimoContato != null ? `${contexto.diasDesdeUltimoContato} dias atrás` : "nenhum registrado ainda"}
 ${contexto.historicoContatos.length ? `Histórico de contatos pós-venda:\n${contexto.historicoContatos.join("\n")}` : "Sem histórico de contato pós-venda registrado."}
 ${contexto.observacoes ? `Observações do cliente: ${contexto.observacoes}` : ""}`,
-      { maxTokens: 600 }
+      { maxTokens: 700 }
     );
   } catch (err) {
     console.error("Falha ao gerar ideias de pós-venda:", err);

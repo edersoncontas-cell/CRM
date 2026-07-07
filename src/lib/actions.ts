@@ -2634,40 +2634,128 @@ export async function buscarOrientadorAnalise(clienteId: string) {
 
 // ---------- Setor de Pós-venda ----------
 
-// Lista clientes que já compraram, ordenados por quem está há mais tempo SEM
-// contato pós-venda primeiro (mesma lógica de urgência do Radar de Silêncio,
-// aplicada ao relacionamento pós-venda) — alimenta a página /pos-venda.
+// Marcos de acompanhamento desde a data de faturamento (do mais avançado pro
+// mais recente — o primeiro que já venceu e ainda não foi registrado como
+// feito é o "marco pendente" do cliente). Registrar um marco como feito é só
+// criar um PosVendaContato com tipo = o próprio marco (ex: "marco_30d").
+const MARCOS_POS_VENDA = [
+  { tipo: "marco_365d", dias: 365, label: "1 ano" },
+  { tipo: "marco_180d", dias: 180, label: "6 meses" },
+  { tipo: "marco_60d", dias: 60, label: "60 dias" },
+  { tipo: "marco_30d", dias: 30, label: "30 dias" },
+] as const;
+
+function calcularMarcoPendente(diasDesdeFaturamento: number, tiposFeitos: Set<string>) {
+  const marco = MARCOS_POS_VENDA.find((m) => diasDesdeFaturamento >= m.dias && !tiposFeitos.has(m.tipo));
+  return marco ? { tipo: marco.tipo, label: marco.label } : null;
+}
+
+// Data efetiva de faturamento de uma negociação ganha: usa `faturadoEm`
+// quando existe; para vendas antigas registradas só com "mês/ano de
+// referência" (sem data exata), aproxima pelo dia 1 do mês informado — sem
+// isso, vendas históricas reais somem da lista por falta de data exata.
+function dataEfetivaFaturamento(n: { faturadoEm: Date | null; mesAnoReferencia: string | null }): Date | null {
+  if (n.faturadoEm) return n.faturadoEm;
+  if (n.mesAnoReferencia && /^\d{4}-\d{2}$/.test(n.mesAnoReferencia)) {
+    return new Date(`${n.mesAnoReferencia}-01T12:00:00-03:00`);
+  }
+  return null;
+}
+
+// Lista clientes com negociação GANHA e FATURADA (fonte de verdade real de
+// "já comprou" — Cliente.dataCompra/jaComprou não é confiável, nunca é
+// preenchido pelo fluxo normal de fechamento). Cruza com a última mensagem
+// de WhatsApp (não só contatos registrados manualmente) e calcula o marco de
+// acompanhamento (30/60/180/365 dias) pendente — alimenta a página /pos-venda.
 export async function listarClientesPosVenda() {
-  const clientes = await db.cliente.findMany({
-    where: { jaComprou: true },
+  const negociacoes = await db.negociacao.findMany({
+    where: { status: "ganha", OR: [{ faturadoEm: { not: null } }, { mesAnoReferencia: { not: null } }] },
     select: {
-      id: true, nome: true, maquinaComprada: true, dataCompra: true,
-      municipio: { select: { nome: true } },
-      posVendaContatos: { orderBy: { data: "desc" }, take: 1, select: { data: true, tipo: true } },
+      clienteId: true, marca: true, maquinaModelo: true, faturadoEm: true, mesAnoReferencia: true,
+      cliente: { select: { nome: true, municipio: { select: { nome: true } } } },
     },
   });
 
+  type Ref = { clienteId: string; nome: string; municipio: string | null; faturadoEm: Date; maquinas: string[] };
+  const porCliente = new Map<string, Ref>();
+  for (const n of negociacoes) {
+    const dataEfetiva = dataEfetivaFaturamento(n);
+    if (!dataEfetiva) continue;
+    const maquina = [n.marca, n.maquinaModelo].filter(Boolean).join(" ") || null;
+    const atual = porCliente.get(n.clienteId);
+    if (!atual || dataEfetiva > atual.faturadoEm) {
+      const maquinas = new Set(atual?.maquinas ?? []);
+      if (maquina) maquinas.add(maquina);
+      porCliente.set(n.clienteId, {
+        clienteId: n.clienteId, nome: n.cliente.nome, municipio: n.cliente.municipio?.nome ?? null,
+        faturadoEm: dataEfetiva, maquinas: Array.from(maquinas),
+      });
+    } else if (maquina && !atual.maquinas.includes(maquina)) {
+      atual.maquinas.push(maquina);
+    }
+  }
+
+  const clienteIds = Array.from(porCliente.keys());
+  if (!clienteIds.length) return [];
+
+  const [conversas, contatos] = await Promise.all([
+    db.whatsAppConversation.findMany({
+      where: { clienteId: { in: clienteIds } },
+      select: { clienteId: true, lastMessageAt: true },
+    }),
+    db.posVendaContato.findMany({
+      where: { clienteId: { in: clienteIds } },
+      orderBy: { data: "desc" },
+      select: { clienteId: true, tipo: true, data: true },
+    }),
+  ]);
+
+  const ultimaMsgPorCliente = new Map<string, Date>();
+  for (const c of conversas) {
+    if (!c.clienteId) continue;
+    const atual = ultimaMsgPorCliente.get(c.clienteId);
+    if (!atual || c.lastMessageAt > atual) ultimaMsgPorCliente.set(c.clienteId, c.lastMessageAt);
+  }
+  const contatosPorCliente = new Map<string, typeof contatos>();
+  for (const ct of contatos) {
+    const lista = contatosPorCliente.get(ct.clienteId) ?? [];
+    lista.push(ct);
+    contatosPorCliente.set(ct.clienteId, lista);
+  }
+
   const agora = Date.now();
-  const linhas = clientes.map((c) => {
-    const ultimoContato = c.posVendaContatos[0]?.data ?? null;
-    const diasSemContato = ultimoContato
-      ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000)
-      : c.dataCompra
-      ? Math.floor((agora - c.dataCompra.getTime()) / 86_400_000)
-      : null;
+  const linhas = Array.from(porCliente.values()).map((c) => {
+    const contatosCliente = contatosPorCliente.get(c.clienteId) ?? [];
+    const ultimoContatoManual = contatosCliente[0]?.data ?? null;
+    const ultimaMsgWhats = ultimaMsgPorCliente.get(c.clienteId) ?? null;
+    const candidatos = [ultimoContatoManual, ultimaMsgWhats].filter((d): d is Date => d != null);
+    const ultimoContato = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
+
+    const diasDesdeFaturamento = Math.floor((agora - c.faturadoEm.getTime()) / 86_400_000);
+    const diasSemContato = ultimoContato ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000) : diasDesdeFaturamento;
+    const tiposFeitos = new Set(contatosCliente.map((ct) => ct.tipo));
+
     return {
-      clienteId: c.id,
+      clienteId: c.clienteId,
       nome: c.nome,
-      municipio: c.municipio?.nome ?? null,
-      maquina: c.maquinaComprada,
-      dataCompra: c.dataCompra ? c.dataCompra.toISOString() : null,
+      municipio: c.municipio,
+      maquina: c.maquinas[c.maquinas.length - 1] ?? null,
+      maquinas: c.maquinas,
+      dataCompra: c.faturadoEm.toISOString(),
       ultimoContato: ultimoContato ? ultimoContato.toISOString() : null,
       diasSemContato,
+      diasDesdeFaturamento,
+      marcoPendente: calcularMarcoPendente(diasDesdeFaturamento, tiposFeitos),
+      entregaTecnica: tiposFeitos.has("entrega_tecnica"),
     };
   });
 
-  // Sem contato nenhum (diasSemContato null) vai pro topo — precisa de atenção primeiro.
-  linhas.sort((a, b) => (b.diasSemContato ?? Infinity) - (a.diasSemContato ?? Infinity));
+  // Marco pendente primeiro (precisa de ação de acompanhamento programado);
+  // dentro de cada grupo, quem está há mais tempo sem contato primeiro.
+  linhas.sort((a, b) => {
+    if (!!a.marcoPendente !== !!b.marcoPendente) return a.marcoPendente ? -1 : 1;
+    return (b.diasSemContato ?? 0) - (a.diasSemContato ?? 0);
+  });
   return linhas;
 }
 
@@ -2682,7 +2770,8 @@ export async function listarContatosPosVenda(clienteId: string) {
   }));
 }
 
-// Registra um novo contato/ação de pós-venda (ligação, visita, manutenção, etc.).
+// Registra um novo contato/ação de pós-venda (ligação, visita, manutenção,
+// entrega técnica, marco de acompanhamento cumprido, etc.).
 export async function registrarContatoPosVenda(clienteId: string, tipo: string, nota: string) {
   if (!nota.trim()) return;
   await db.posVendaContato.create({ data: { clienteId, tipo, nota: nota.trim() } });
@@ -2690,28 +2779,47 @@ export async function registrarContatoPosVenda(clienteId: string, tipo: string, 
 }
 
 // Gera sugestões de ações de pós-venda via IA para um cliente específico —
-// não salva sozinho; o vendedor decide se quer registrar como contato.
+// não salva sozinho; o vendedor decide se quer registrar como contato. Se o
+// cliente estiver com um marco de acompanhamento pendente (30/60/180/365
+// dias), prioriza gerar a mensagem pronta daquele marco.
 export async function gerarIdeiasPosVendaAction(clienteId: string): Promise<{ ok: boolean; ideias?: string; erro?: string }> {
   const cliente = await db.cliente.findUnique({
     where: { id: clienteId },
-    select: { nome: true, maquinaComprada: true, dataCompra: true, observacoes: true },
+    select: { nome: true, observacoes: true },
   });
   if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
-  const contatos = await db.posVendaContato.findMany({
-    where: { clienteId }, orderBy: { data: "desc" }, take: 8,
-  });
-  const ultimoContato = contatos[0]?.data ?? null;
+  const [negociacao, contatos, conversa] = await Promise.all([
+    db.negociacao.findFirst({
+      where: { clienteId, status: "ganha", OR: [{ faturadoEm: { not: null } }, { mesAnoReferencia: { not: null } }] },
+      orderBy: { faturadoEm: "desc" },
+      select: { marca: true, maquinaModelo: true, faturadoEm: true, mesAnoReferencia: true },
+    }),
+    db.posVendaContato.findMany({ where: { clienteId }, orderBy: { data: "desc" }, take: 8 }),
+    db.whatsAppConversation.findFirst({ where: { clienteId }, select: { lastMessageAt: true } }),
+  ]);
+
+  const faturadoEm = negociacao ? dataEfetivaFaturamento(negociacao) : null;
+  const maquina = negociacao ? [negociacao.marca, negociacao.maquinaModelo].filter(Boolean).join(" ") || null : null;
   const agora = Date.now();
+
+  const ultimoContatoManual = contatos[0]?.data ?? null;
+  const candidatos = [ultimoContatoManual, conversa?.lastMessageAt ?? null].filter((d): d is Date => d != null);
+  const ultimoContato = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
+
+  const marcoPendente = faturadoEm
+    ? calcularMarcoPendente(Math.floor((agora - faturadoEm.getTime()) / 86_400_000), new Set(contatos.map((c) => c.tipo)))
+    : null;
 
   const ideias = await gerarIdeiasPosVendaIA({
     nomeCliente: cliente.nome,
-    maquina: cliente.maquinaComprada,
-    dataCompra: cliente.dataCompra ? cliente.dataCompra.toLocaleDateString("pt-BR") : null,
-    diasDesdeCompra: cliente.dataCompra ? Math.floor((agora - cliente.dataCompra.getTime()) / 86_400_000) : null,
+    maquina,
+    dataCompra: faturadoEm ? faturadoEm.toLocaleDateString("pt-BR") : null,
+    diasDesdeCompra: faturadoEm ? Math.floor((agora - faturadoEm.getTime()) / 86_400_000) : null,
     diasDesdeUltimoContato: ultimoContato ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000) : null,
     historicoContatos: contatos.map((c) => `[${c.data.toLocaleDateString("pt-BR")}] (${c.tipo}) ${c.nota}`),
     observacoes: cliente.observacoes,
+    marcoPendente: marcoPendente?.label ?? null,
   });
 
   if (!ideias) {
