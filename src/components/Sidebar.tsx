@@ -3,11 +3,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { Menu, X, GripVertical, ArrowUpDown, Check } from "lucide-react";
 import { ExcavatorIcon } from "@/components/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { GRUPOS, TODOS_HREFS, lerMenuOcultos, EVENTO_MENU } from "@/lib/menu";
+import { GRUPOS, TODOS_HREFS, lerMenuOcultos, lerOrdemMenu, salvarOrdemMenu, EVENTO_MENU, type ItemMenu } from "@/lib/menu";
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // O link ativo é o de match mais específico (ex.: /maquinas/fichas vence /maquinas).
 function hrefAtivo(pathname: string, href: string): boolean {
@@ -19,14 +26,55 @@ function hrefAtivo(pathname: string, href: string): boolean {
   return href === maisEspecifico;
 }
 
+// Aplica a ordem customizada (se existir) a uma lista de itens: os que estão
+// na ordem salva vêm primeiro (nessa ordem), o resto mantém a ordem original.
+function aplicarOrdem(itens: ItemMenu[], ordem: string[]): ItemMenu[] {
+  if (!ordem.length) return itens;
+  const porHref = new Map(itens.map((i) => [i.href, i]));
+  const ordenados: ItemMenu[] = [];
+  for (const href of ordem) {
+    const item = porHref.get(href);
+    if (item) { ordenados.push(item); porHref.delete(href); }
+  }
+  return [...ordenados, ...porHref.values()];
+}
+
+function ItemArrastavel({ item, ativo, fechar }: { item: ItemMenu; ativo: boolean; fechar: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.href });
+  const Icon = item.icon;
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className={cn(
+        "group flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-medium",
+        ativo ? "bg-white/15 text-white" : "text-brand-300"
+      )}
+    >
+      <span {...attributes} {...listeners} className="cursor-grab touch-none rounded p-1 text-brand-500 active:cursor-grabbing">
+        <GripVertical size={15} />
+      </span>
+      <Icon size={17} className="shrink-0 text-brand-400" />
+      <span className="truncate">{item.label}</span>
+    </div>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
   const [ocultos, setOcultos] = useState<string[]>([]);
+  const [ordem, setOrdem] = useState<string[]>([]);
+  const [reorganizando, setReorganizando] = useState(false);
 
-  // Lê a preferência de visibilidade e reage a mudanças (feitas em Configurações).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
+
+  // Lê a preferência de visibilidade/ordem e reage a mudanças (feitas em Configurações).
   useEffect(() => {
-    const atualizar = () => setOcultos(lerMenuOcultos());
+    const atualizar = () => { setOcultos(lerMenuOcultos()); setOrdem(lerOrdemMenu()); };
     atualizar();
     window.addEventListener(EVENTO_MENU, atualizar);
     window.addEventListener("storage", atualizar);
@@ -55,6 +103,23 @@ export function Sidebar() {
   const grupos = GRUPOS
     .map((g) => ({ ...g, links: g.links.filter((l) => l.fixo || !ocultos.includes(l.href)) }))
     .filter((g) => g.links.length > 0);
+
+  // Lista plana (todos os itens visíveis, na ordem personalizada se houver) —
+  // usada tanto no modo de reorganizar quanto, depois de salva, na navegação normal.
+  const itensPlanosOriginais = useMemo(() => grupos.flatMap((g) => g.links), [grupos]);
+  const itensOrdenados = useMemo(() => aplicarOrdem(itensPlanosOriginais, ordem), [itensPlanosOriginais, ordem]);
+
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const hrefsAtuais = itensOrdenados.map((i) => i.href);
+    const oldIndex = hrefsAtuais.indexOf(String(active.id));
+    const newIndex = hrefsAtuais.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    const novaOrdem = arrayMove(hrefsAtuais, oldIndex, newIndex);
+    setOrdem(novaOrdem);
+    salvarOrdemMenu(novaOrdem);
+  }
 
   const fechar = () => setAberto(false);
 
@@ -137,17 +202,41 @@ export function Sidebar() {
         {/* Divisor desktop */}
         <div className="mx-4 hidden border-t border-brand-800 md:block" />
 
+        {/* Botão de reorganizar menu */}
+        <div className="px-4 pt-2">
+          <button
+            onClick={() => setReorganizando((v) => !v)}
+            className={cn(
+              "flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors",
+              reorganizando ? "bg-agro-400 text-black" : "text-brand-400 hover:bg-white/5 hover:text-white"
+            )}
+          >
+            {reorganizando ? <Check size={13} /> : <ArrowUpDown size={13} />}
+            {reorganizando ? "Concluir reorganização" : "Reorganizar menu"}
+          </button>
+        </div>
+
         {/* Nav com grupos — scroll isolado aqui */}
         <nav
           className="flex-1 overflow-y-auto py-3 scrollbar-none"
           style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
         >
-          {grupos.map((grupo) => (
-            <div key={grupo.label} className="mb-1 px-3">
-              <div className="mb-1 mt-3 px-2 text-[10px] font-bold uppercase tracking-widest text-brand-500">
-                {grupo.label}
-              </div>
-              {grupo.links.map(({ href, label, icon: Icon }) => {
+          {reorganizando ? (
+            <div className="px-3">
+              <p className="mb-2 px-2 text-[11px] text-brand-400">Arraste pelo ícone para reordenar.</p>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                <SortableContext items={itensOrdenados.map((i) => i.href)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1">
+                    {itensOrdenados.map((item) => (
+                      <ItemArrastavel key={item.href} item={item} ativo={hrefAtivo(pathname, item.href)} fechar={fechar} />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </div>
+          ) : ordem.length ? (
+            <div className="px-3">
+              {itensOrdenados.map(({ href, label, icon: Icon }) => {
                 const ativo = hrefAtivo(pathname, href);
                 return (
                   <Link
@@ -169,14 +258,48 @@ export function Sidebar() {
                       )}
                     />
                     <span className="truncate">{label}</span>
-                    {ativo && (
-                      <div className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-agro-400" />
-                    )}
+                    {ativo && <div className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-agro-400" />}
                   </Link>
                 );
               })}
             </div>
-          ))}
+          ) : (
+            grupos.map((grupo) => (
+              <div key={grupo.label} className="mb-1 px-3">
+                <div className="mb-1 mt-3 px-2 text-[10px] font-bold uppercase tracking-widest text-brand-500">
+                  {grupo.label}
+                </div>
+                {grupo.links.map(({ href, label, icon: Icon }) => {
+                  const ativo = hrefAtivo(pathname, href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={fechar}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                        ativo
+                          ? "bg-white/15 text-white"
+                          : "text-brand-300 hover:bg-white/10 hover:text-white active:bg-white/20"
+                      )}
+                    >
+                      <Icon
+                        size={17}
+                        className={cn(
+                          "shrink-0 transition-colors",
+                          ativo ? "text-agro-400" : "text-brand-400 group-hover:text-brand-200"
+                        )}
+                      />
+                      <span className="truncate">{label}</span>
+                      {ativo && (
+                        <div className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-agro-400" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))
+          )}
           {/* Espaço extra no final para safe-area inferior (iPhone) */}
           <div className="h-[env(safe-area-inset-bottom,1rem)]" />
         </nav>

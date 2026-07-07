@@ -182,11 +182,15 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
   await db.cliente.update({ where: { id: clienteId }, data: { visitado: true } });
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
+  revalidatePath("/visitas");
+  revalidatePath("/dashboard");
 }
 
 export async function removerVisita(id: string, clienteId: string) {
   await db.visita.delete({ where: { id } });
   revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/visitas");
+  revalidatePath("/dashboard");
 }
 
 // Marca que respondi ao cliente sem enviar nada pelo WhatsApp (apenas baixa o alerta).

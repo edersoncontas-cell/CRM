@@ -6,7 +6,7 @@ import {
   TrendingDown, Sparkles, Megaphone, Settings, Calculator,
   Swords, Send, CalendarRange, BrainCircuit, MessageCircle,
   Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText,
-  Truck, Brain, Handshake, ListTodo, ShieldCheck, Radar,
+  Truck, Brain, Handshake, ListTodo, ShieldCheck, Radar, MapPin,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,17 +18,16 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Principal",
     links: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/negociacoes", label: "Negociações", icon: Handshake },
+      { href: "/pipeline", label: "Demandas", icon: ListTodo },
       { href: "/atendimento", label: "WhatsApp", icon: MessageCircle },
+      { href: "/visitas", label: "Visitas", icon: MapPin },
       { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/radar", label: "Radar de safra", icon: CalendarRange },
-      { href: "/radar-silencio", label: "Radar de Silêncio", icon: Radar },
     ],
   },
   {
     label: "Vendas",
     links: [
-      { href: "/negociacoes", label: "Negociações", icon: Handshake },
-      { href: "/pipeline", label: "Demandas", icon: ListTodo },
       { href: "/maquinas", label: "Modelos em Foco", icon: Star },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
@@ -59,6 +58,8 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/historico", label: "Histórico de Negócios", icon: ClipboardList },
       { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
       { href: "/sugestoes", label: "Sugestões IA", icon: Sparkles },
+      { href: "/radar", label: "Radar de safra", icon: CalendarRange },
+      { href: "/radar-silencio", label: "Radar de Silêncio", icon: Radar },
     ],
   },
   {
@@ -92,6 +93,26 @@ export function lerMenuOcultos(): string[] {
 export function salvarMenuOcultos(ocultos: string[]) {
   try {
     localStorage.setItem(CHAVE_OCULTOS, JSON.stringify(ocultos));
+    window.dispatchEvent(new CustomEvent(EVENTO_MENU));
+  } catch {}
+}
+
+// ── Ordem personalizada (arrastar e soltar, por aparelho) ───────────────────
+const CHAVE_ORDEM = "menu_ordem_v1";
+
+export function lerOrdemMenu(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const arr = JSON.parse(localStorage.getItem(CHAVE_ORDEM) ?? "[]");
+    return Array.isArray(arr) ? arr.filter((h) => typeof h === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function salvarOrdemMenu(ordem: string[]) {
+  try {
+    localStorage.setItem(CHAVE_ORDEM, JSON.stringify(ordem));
     window.dispatchEvent(new CustomEvent(EVENTO_MENU));
   } catch {}
 }
