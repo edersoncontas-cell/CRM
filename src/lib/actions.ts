@@ -17,6 +17,7 @@ import { registrarAudit } from "./audit";
 import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
 import { CHAVES, setConfig } from "./config";
 import { z } from "zod";
+import ExcelJS from "exceljs";
 
 // Validação de maior risco (grava direto no banco a partir de FormData bruto).
 const clienteInputSchema = z.object({
@@ -469,7 +470,8 @@ export async function importarClientesCsv(
 // ler um arquivo anexado — CSV/vCard exportado do Google Contacts, WhatsApp
 // etc.). Mesma regra de dedup do importarClientesCsv.
 export async function importarContatosEstruturados(
-  contatos: { nome: string; telefone?: string; municipio?: string }[]
+  contatos: { nome: string; telefone?: string; municipio?: string }[],
+  origem: string = "cerebro_importacao"
 ): Promise<{ importados: number; ignorados: number; erros: number }> {
   const municipios = await db.municipio.findMany();
   const normStr = (s: string) =>
@@ -502,7 +504,7 @@ export async function importarContatosEstruturados(
       const muni = muniRaw ? municipios.find((m) => normStr(m.nome) === normStr(muniRaw)) : undefined;
 
       await db.cliente.create({
-        data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem: "cerebro_importacao" },
+        data: { nome: nomeRaw, telefone, municipioId: muni?.id ?? null, origem },
       });
       importados++;
     } catch {
@@ -513,6 +515,70 @@ export async function importarContatosEstruturados(
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { importados, ignorados, erros };
+}
+
+// Importa clientes a partir de um arquivo Excel (.xlsx) exportado do Google
+// Contacts. O export real do Google usa colunas "Name"/"Given Name"+"Family
+// Name" e "Phone 1 - Value", "Phone 2 - Value" etc (várias linhas por
+// contato quando há múltiplos telefones/e-mails, mas cada linha tem o nome
+// completo repetido). Pula quem já existe (mesma regra de dedup por
+// telefone/nome do importarContatosEstruturados).
+export async function importarClientesExcel(
+  formData: FormData
+): Promise<{ importados: number; ignorados: number; erros: number; erro?: string }> {
+  const arquivo = formData.get("arquivo");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { importados: 0, ignorados: 0, erros: 0, erro: "Nenhum arquivo enviado." };
+  }
+
+  const wb = new ExcelJS.Workbook();
+  try {
+    const buf = Buffer.from(await arquivo.arrayBuffer());
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  } catch {
+    return { importados: 0, ignorados: 0, erros: 0, erro: "Não foi possível ler o arquivo. Confira se é um .xlsx válido (exportado do Google Contacts)." };
+  }
+
+  const sheet = wb.worksheets[0];
+  if (!sheet) return { importados: 0, ignorados: 0, erros: 0, erro: "A planilha está vazia." };
+
+  const colunas: Record<string, number> = {};
+  sheet.getRow(1).eachCell((cell, colNumber) => {
+    const texto = String(cell.value ?? "").trim();
+    if (texto) colunas[texto] = colNumber;
+  });
+
+  const colNome = colunas["Name"];
+  const colGivenName = colunas["Given Name"];
+  const colFamilyName = colunas["Family Name"];
+  const colunasTelefone = Object.keys(colunas).filter((h) => /^Phone\s*\d+\s*-\s*Value$/i.test(h)).map((h) => colunas[h]);
+
+  if (!colNome && !colGivenName) {
+    return {
+      importados: 0, ignorados: 0, erros: 0,
+      erro: 'Não reconheci o formato do arquivo — esperado um export do Google Contacts (com colunas "Name" ou "Given Name"). Exporte em Contatos do Google → Exportar → Google CSV, e abra/salve como .xlsx.',
+    };
+  }
+
+  const pegar = (row: ExcelJS.Row, col?: number) => (col ? String(row.getCell(col).value ?? "").trim() : "");
+  const contatos: { nome: string; telefone?: string }[] = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const nome = pegar(row, colNome) || [pegar(row, colGivenName), pegar(row, colFamilyName)].filter(Boolean).join(" ").trim();
+    if (!nome) return;
+    let telefone = "";
+    for (const col of colunasTelefone) {
+      const v = pegar(row, col);
+      if (v) { telefone = v; break; }
+    }
+    contatos.push({ nome, telefone: telefone || undefined });
+  });
+
+  if (!contatos.length) {
+    return { importados: 0, ignorados: 0, erros: 0, erro: "Nenhum contato válido encontrado no arquivo." };
+  }
+
+  return importarContatosEstruturados(contatos, "importacao_excel");
 }
 
 // ---------- Negociações ----------
