@@ -191,16 +191,28 @@ export async function POST(req: NextRequest) {
         await zeusReport(e, "processarMensagem (pipeline do webhook)");
       }
 
+      // O pipeline acima pode ter acabado de VINCULAR/CRIAR o cliente desta
+      // conversa (primeira mensagem de um contato novo) — reler o clienteId
+      // aqui, senão a primeira mensagem de todo cliente novo nunca dispararia
+      // o Orientador (conv foi carregada ANTES do pipeline rodar).
+      const { db } = await import("@/lib/db");
+      let clienteIdAtual = conv.clienteId;
+      if (!clienteIdAtual) {
+        const convAtual = await db.whatsAppConversation.findUnique({
+          where: { id: conv.id },
+          select: { clienteId: true },
+        });
+        clienteIdAtual = convAtual?.clienteId ?? null;
+      }
+
       // Chama o Orientador de Vendas IMEDIATAMENTE para toda conversa com
       // cliente vinculado (não só com o Cérebro/auto-resposta ligado — o
       // painel de coaching deve existir mesmo quando o vendedor responde
       // manualmente). Debounce de 1s (agrega mensagens rápidas antes de analisar).
-      if (conv.clienteId) {
+      if (clienteIdAtual) {
         // Registra o agendamento para o debounce (1s)
         const agendadoEm = new Date();
-        await import("@/lib/db").then(({ db }) =>
-          db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: agendadoEm } })
-        );
+        await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: agendadoEm } });
         // Dispara o Cérebro de forma assíncrona — o webhook responde ao Z-API
         // imediatamente, mas o fetch continua rodando via waitUntil() (sem
         // isso, a Vercel pode congelar a função assim que a resposta é

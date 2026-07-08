@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
+import { iaHabilitada } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -77,6 +78,17 @@ export async function POST(req: NextRequest) {
     conv, historicoCompleto, ultimasMensagens, contextoCliente, contextoAcademia, estilo,
     aiActive: conv.aiActive, auditMode: settings.auditMode,
   });
+
+  // Falhou em gerar/enviar a resposta (instabilidade do provedor de IA, erro
+  // da Z-API)? Devolve o agendamento que zeramos acima — sem isso o cron de
+  // fallback (agnes-dispatch) nunca tentaria de novo e o cliente ficaria sem
+  // resposta em silêncio. Só re-agenda se há IA configurada (senão viraria
+  // retry infinito sem chance de sucesso).
+  if (!respondido && iaHabilitada()) {
+    await db.whatsAppConversation
+      .update({ where: { id: conversationId }, data: { agnesScheduledAt: conv.agnesScheduledAt } })
+      .catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, respondido });
 }

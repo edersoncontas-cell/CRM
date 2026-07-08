@@ -2,7 +2,8 @@
 // gerarRespostaCerebro com a análise de coaching pedida pelo usuário: estágio,
 // perfil do comprador, objeções, temperatura, probabilidade de fechamento,
 // próxima ação, oportunidades perdidas e alertas). Roteada por llmTexto()
-// (OpenAI > Anthropic > Groq, com fallback automático de provedor).
+// (Gemini > Groq > DeepSeek > OpenAI > Anthropic, com fallback automático
+// de provedor: se um falhar, o próximo assume).
 //
 // IMPORTANTE (velocidade): a resposta que vai pro cliente é gerada por uma
 // chamada RÁPIDA e SEPARADA (gerarRespostaRapida — só texto, ~200 tokens de

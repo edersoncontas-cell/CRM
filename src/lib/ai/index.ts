@@ -10,21 +10,28 @@ const MODEL = MODEL_TAREFA;
 // Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
-// Provedor de IA disponível, em ordem de preferência: Gemini > Groq > DeepSeek
-// > OpenAI > Anthropic. Ordem pensada pra custo mínimo — Gemini e Groq têm
-// camada gratuita de verdade (o suficiente pro volume de um único vendedor),
-// DeepSeek é o mais barato entre os pagos, OpenAI vem em seguida e a
-// Anthropic (a mais cara) fica só como último recurso. Manter vários
-// provedores configurados ao mesmo tempo é opcional — o sistema funciona
-// perfeitamente com um único configurado; os demais só entram em ação se
-// esse ficar sem crédito ou não estiver configurado.
-function provedorIA(): "gemini" | "groq" | "deepseek" | "openai" | "anthropic" | null {
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.GROQ_API_KEY) return "groq";
-  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
-  if (process.env.OPENAI_API_KEY) return "openai";
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  return null;
+// Provedores de IA disponíveis, em ordem de preferência: Gemini > Groq >
+// DeepSeek > OpenAI > Anthropic. Ordem pensada pra custo mínimo — Gemini e
+// Groq têm camada gratuita de verdade (o suficiente pro volume de um único
+// vendedor), DeepSeek é o mais barato entre os pagos, OpenAI vem em seguida
+// e a Anthropic (a mais cara) fica só como último recurso. Manter vários
+// provedores configurados ao mesmo tempo é opcional, mas recomendado: se o
+// primeiro falhar (limite do plano grátis, sem crédito, instabilidade),
+// llmTexto tenta AUTOMATICAMENTE o próximo da lista.
+type ProvedorTexto = "gemini" | "groq" | "deepseek" | "openai" | "anthropic";
+
+function provedoresDisponiveis(): ProvedorTexto[] {
+  const lista: ProvedorTexto[] = [];
+  if (process.env.GEMINI_API_KEY) lista.push("gemini");
+  if (process.env.GROQ_API_KEY) lista.push("groq");
+  if (process.env.DEEPSEEK_API_KEY) lista.push("deepseek");
+  if (process.env.OPENAI_API_KEY) lista.push("openai");
+  if (process.env.ANTHROPIC_API_KEY) lista.push("anthropic");
+  return lista;
+}
+
+function provedorIA(): ProvedorTexto | null {
+  return provedoresDisponiveis()[0] ?? null;
 }
 
 export function iaHabilitada() {
@@ -83,17 +90,14 @@ async function gemini(system: string, user: string, opts?: { maxTokens?: number;
   return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 }
 
-// Chamada unificada de LLM — usa o provedor configurado em provedorIA() (ver
-// ordem de preferência acima). Retorna o texto bruto da resposta. Lança erro
-// se nenhum provedor existir. Exportada para uso fora deste arquivo (ex:
-// Orientador de Vendas em lib/zeus/orientador.ts) — mesmo fallback de
-// provedor pra todo mundo.
-export async function llmTexto(
+// Executa a chamada de texto num provedor específico — corpo de cada branch
+// extraído de llmTexto para permitir a cascata de fallback abaixo.
+async function chamarProvedorTexto(
+  prov: ProvedorTexto,
   system: string,
   user: string,
   opts?: { maxTokens?: number; json?: boolean }
 ): Promise<string> {
-  const prov = provedorIA();
   const maxTokens = opts?.maxTokens ?? 1024;
 
   if (prov === "gemini") {
@@ -139,47 +143,68 @@ export async function llmTexto(
       .join("");
   }
 
-  if (prov === "groq") {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        max_tokens: maxTokens,
-        ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      const detalhe = await res.text().catch(() => "");
-      throw new Error(`Falha no Groq (${res.status}): ${detalhe.slice(0, 200)}`);
-    }
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    return data.choices?.[0]?.message?.content ?? "";
+  // groq
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      max_tokens: maxTokens,
+      ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const detalhe = await res.text().catch(() => "");
+    throw new Error(`Falha no Groq (${res.status}): ${detalhe.slice(0, 200)}`);
   }
-
-  throw new Error("Nenhum provedor de IA configurado.");
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
-// Chamada unificada com VISÃO (lê PDF/imagem) — usada por extrairFichaDeArquivoIA
-// e pelo post de marketing a partir de foto. Ordem de preferência: Gemini >
-// OpenAI (gpt-4o-mini também lê imagem/PDF nativamente) > Anthropic. Groq e
-// DeepSeek não entram aqui (sem suporte a visão nesse tipo de chamada).
-async function llmVisao(
+// Chamada unificada de LLM com FALLBACK REAL de provedor: tenta cada provedor
+// configurado na ordem de preferência e, se um falhar (429 do plano grátis,
+// sem crédito, instabilidade), passa pro próximo automaticamente — só lança
+// erro se TODOS falharem. Exportada para uso fora deste arquivo (ex:
+// Orientador de Vendas em lib/zeus/orientador.ts).
+export async function llmTexto(
+  system: string,
+  user: string,
+  opts?: { maxTokens?: number; json?: boolean }
+): Promise<string> {
+  const provs = provedoresDisponiveis();
+  if (!provs.length) throw new Error("Nenhum provedor de IA configurado.");
+
+  let ultimoErro: unknown = null;
+  for (const prov of provs) {
+    try {
+      return await chamarProvedorTexto(prov, system, user, opts);
+    } catch (e) {
+      ultimoErro = e;
+      console.error(`[llmTexto] provedor ${prov} falhou, tentando o próximo:`, e instanceof Error ? e.message : e);
+    }
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
+}
+
+// Executa a chamada com visão num provedor específico — corpo extraído de
+// llmVisao para permitir a cascata de fallback abaixo.
+async function chamarProvedorVisao(
+  prov: "gemini" | "openai" | "anthropic",
   system: string,
   textoUser: string,
   arquivo: { base64: string; mediaType: string },
   opts?: { maxTokens?: number; json?: boolean }
 ): Promise<string> {
-  if (process.env.GEMINI_API_KEY) {
+  if (prov === "gemini") {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -209,7 +234,7 @@ async function llmVisao(
     return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   }
 
-  if (process.env.OPENAI_API_KEY) {
+  if (prov === "openai") {
     const resp = await openaiClient().chat.completions.create({
       model: OPENAI_MODEL,
       max_tokens: opts?.maxTokens ?? 1500,
@@ -228,20 +253,48 @@ async function llmVisao(
     return resp.choices[0]?.message?.content ?? "";
   }
 
-  if (process.env.ANTHROPIC_API_KEY) {
-    const bloco = arquivo.mediaType === "application/pdf"
-      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64 } }
-      : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64 } };
-    const resp = await client().messages.create({
-      model: MODEL,
-      max_tokens: opts?.maxTokens ?? 1500,
-      system,
-      messages: [{ role: "user", content: [bloco, { type: "text" as const, text: textoUser }] as Anthropic.MessageParam["content"] }],
-    });
-    return resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+  // anthropic
+  const bloco = arquivo.mediaType === "application/pdf"
+    ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: arquivo.base64 } }
+    : { type: "image" as const, source: { type: "base64" as const, media_type: arquivo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: arquivo.base64 } };
+  const resp = await client().messages.create({
+    model: MODEL,
+    max_tokens: opts?.maxTokens ?? 1500,
+    system,
+    messages: [{ role: "user", content: [bloco, { type: "text" as const, text: textoUser }] as Anthropic.MessageParam["content"] }],
+  });
+  return resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+}
+
+// Chamada unificada com VISÃO (lê PDF/imagem) — usada por extrairFichaDeArquivoIA
+// e pelo post de marketing a partir de foto. Ordem de preferência: Gemini >
+// OpenAI (gpt-4o-mini também lê imagem/PDF nativamente) > Anthropic. Groq e
+// DeepSeek não entram aqui (sem suporte a visão nesse tipo de chamada).
+// Mesmo fallback automático de llmTexto: se um provedor falhar, tenta o próximo.
+async function llmVisao(
+  system: string,
+  textoUser: string,
+  arquivo: { base64: string; mediaType: string },
+  opts?: { maxTokens?: number; json?: boolean }
+): Promise<string> {
+  const provs: ("gemini" | "openai" | "anthropic")[] = [];
+  if (process.env.GEMINI_API_KEY) provs.push("gemini");
+  if (process.env.OPENAI_API_KEY) provs.push("openai");
+  if (process.env.ANTHROPIC_API_KEY) provs.push("anthropic");
+  if (!provs.length) {
+    throw new Error("Nenhum provedor com leitura de PDF/imagem configurado (GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).");
   }
 
-  throw new Error("Nenhum provedor com leitura de PDF/imagem configurado (GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).");
+  let ultimoErro: unknown = null;
+  for (const prov of provs) {
+    try {
+      return await chamarProvedorVisao(prov, system, textoUser, arquivo, opts);
+    } catch (e) {
+      ultimoErro = e;
+      console.error(`[llmVisao] provedor ${prov} falhou, tentando o próximo:`, e instanceof Error ? e.message : e);
+    }
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
 }
 
 const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION

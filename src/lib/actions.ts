@@ -338,9 +338,22 @@ export async function atualizarCotacaoCafeAction(formData: FormData): Promise<{ 
 
 // Aprende o estilo de fala do Ederson a partir das mensagens que ele já enviou
 // e salva no banco para a IA imitar nas respostas.
+// CRÍTICO: excluir TODAS as mensagens geradas por IA (Cérebro, Orientador de
+// Vendas, rascunhos aprovados como "Agnes") — sem isso a IA aprende o estilo
+// com as próprias respostas dela, um ciclo vicioso que amplifica os vícios de
+// fraseado (ex: toda resposta começando com a mesma saudação).
+const OPERADORES_IA = ["Cérebro", "Orientador de Vendas", "Agnes"];
+
 export async function aprenderMeuEstilo(): Promise<{ ok: boolean }> {
   const minhas = await db.whatsAppMessage.findMany({
-    where: { direction: "OUT", isDraft: false, operatorDisplayName: { not: "Cérebro" } },
+    where: {
+      direction: "OUT",
+      isDraft: false,
+      OR: [
+        { operatorDisplayName: null },
+        { operatorDisplayName: { notIn: OPERADORES_IA } },
+      ],
+    },
     orderBy: { sentAt: "desc" },
     take: 40,
     select: { body: true },
@@ -2676,22 +2689,27 @@ export async function listarClientesPosVenda() {
     },
   });
 
-  type Ref = { clienteId: string; nome: string; municipio: string | null; faturadoEm: Date; maquinas: string[] };
+  // Agrupa por cliente: a compra MAIS RECENTE define a data de referência dos
+  // marcos e a máquina em destaque; as demais entram só na lista de máquinas.
+  type Ref = { clienteId: string; nome: string; municipio: string | null; faturadoEm: Date; maquinaPrincipal: string | null; maquinas: Set<string> };
   const porCliente = new Map<string, Ref>();
   for (const n of negociacoes) {
     const dataEfetiva = dataEfetivaFaturamento(n);
     if (!dataEfetiva) continue;
     const maquina = [n.marca, n.maquinaModelo].filter(Boolean).join(" ") || null;
     const atual = porCliente.get(n.clienteId);
-    if (!atual || dataEfetiva > atual.faturadoEm) {
-      const maquinas = new Set(atual?.maquinas ?? []);
-      if (maquina) maquinas.add(maquina);
+    if (!atual) {
       porCliente.set(n.clienteId, {
         clienteId: n.clienteId, nome: n.cliente.nome, municipio: n.cliente.municipio?.nome ?? null,
-        faturadoEm: dataEfetiva, maquinas: Array.from(maquinas),
+        faturadoEm: dataEfetiva, maquinaPrincipal: maquina,
+        maquinas: new Set(maquina ? [maquina] : []),
       });
-    } else if (maquina && !atual.maquinas.includes(maquina)) {
-      atual.maquinas.push(maquina);
+    } else {
+      if (maquina) atual.maquinas.add(maquina);
+      if (dataEfetiva > atual.faturadoEm) {
+        atual.faturadoEm = dataEfetiva;
+        if (maquina) atual.maquinaPrincipal = maquina;
+      }
     }
   }
 
@@ -2733,14 +2751,20 @@ export async function listarClientesPosVenda() {
 
     const diasDesdeFaturamento = Math.floor((agora - c.faturadoEm.getTime()) / 86_400_000);
     const diasSemContato = ultimoContato ? Math.floor((agora - ultimoContato.getTime()) / 86_400_000) : diasDesdeFaturamento;
-    const tiposFeitos = new Set(contatosCliente.map((ct) => ct.tipo));
+    // Marcos registrados ANTES da compra mais recente pertencem ao ciclo da
+    // máquina anterior — não podem suprimir os marcos da compra nova.
+    const tiposFeitos = new Set(
+      contatosCliente
+        .filter((ct) => !ct.tipo.startsWith("marco_") || ct.data >= c.faturadoEm)
+        .map((ct) => ct.tipo)
+    );
 
     return {
       clienteId: c.clienteId,
       nome: c.nome,
       municipio: c.municipio,
-      maquina: c.maquinas[c.maquinas.length - 1] ?? null,
-      maquinas: c.maquinas,
+      maquina: c.maquinaPrincipal,
+      maquinas: Array.from(c.maquinas),
       dataCompra: c.faturadoEm.toISOString(),
       ultimoContato: ultimoContato ? ultimoContato.toISOString() : null,
       diasSemContato,
@@ -2808,7 +2832,11 @@ export async function gerarIdeiasPosVendaAction(clienteId: string): Promise<{ ok
   const ultimoContato = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
 
   const marcoPendente = faturadoEm
-    ? calcularMarcoPendente(Math.floor((agora - faturadoEm.getTime()) / 86_400_000), new Set(contatos.map((c) => c.tipo)))
+    ? calcularMarcoPendente(
+        Math.floor((agora - faturadoEm.getTime()) / 86_400_000),
+        // Mesmo critério da listagem: marcos de compras anteriores não contam.
+        new Set(contatos.filter((c) => !c.tipo.startsWith("marco_") || c.data >= faturadoEm).map((c) => c.tipo))
+      )
     : null;
 
   const ideias = await gerarIdeiasPosVendaIA({
