@@ -11,6 +11,7 @@ type Status = {
   conectado: boolean;
   precisaQrCode: boolean;
   clientTokenConfigurado: boolean;
+  provedor?: "evolution" | "zapi" | null;
   telefone?: string | null;
   erro?: string | null;
 };
@@ -102,28 +103,37 @@ export function ConexaoWhatsApp() {
     );
   }
 
-  // Z-API não configurada: instruções de setup.
+  // Nenhum provedor configurado: instruções de setup (opção grátis primeiro).
   if (!status.configurado) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
         <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800">
-          <AlertTriangle size={18} /> Z-API ainda não configurada
+          <AlertTriangle size={18} /> WhatsApp ainda não configurado
         </div>
         <p className="text-sm text-amber-700">
-          Para conectar o WhatsApp pelo CRM, crie uma instância em{" "}
-          <a href="https://z-api.io" target="_blank" rel="noreferrer" className="font-semibold underline">z-api.io</a>{" "}
-          e adicione estas variáveis de ambiente no Vercel:
+          <b>Opção grátis (recomendada): Evolution API</b> — software aberto que você mesmo hospeda
+          (siga o passo a passo em <code className="rounded bg-amber-100 px-1.5 py-0.5">docs/GRATUITO.md</code>).
+          Adicione no Vercel:
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-amber-800">
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_ID</code></li>
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_TOKEN</code></li>
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_CLIENT_TOKEN</code> <span className="text-amber-600">(token de segurança da conta)</span></li>
+        <ul className="mt-2 space-y-1 text-sm text-amber-800">
+          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_URL</code> <span className="text-amber-600">(ex: https://seu-servidor:8080)</span></li>
+          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_KEY</code> <span className="text-amber-600">(a AUTHENTICATION_API_KEY da Evolution)</span></li>
+          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_INSTANCE</code> <span className="text-amber-600">(nome da instância criada no Manager)</span></li>
         </ul>
-        <p className="mt-3 text-xs text-amber-600">
-          Depois, no painel da Z-API, configure o webhook &quot;Ao receber&quot; apontando para
-          <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">…/api/zapi/webhook</code>
-          e faça um redeploy.
+        <p className="mt-2 text-xs text-amber-600">
+          Na Evolution, aponte o webhook da instância para
+          <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">…/api/webhooks/evolution</code>
+          com os eventos MESSAGES_UPSERT e MESSAGES_UPDATE e a opção Base64 ligada.
         </p>
+        <p className="mt-4 text-sm text-amber-700">
+          <b>Opção paga: Z-API</b> — crie uma instância em{" "}
+          <a href="https://z-api.io" target="_blank" rel="noreferrer" className="font-semibold underline">z-api.io</a>{" "}
+          e adicione <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_ID</code>,{" "}
+          <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_TOKEN</code> e{" "}
+          <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_CLIENT_TOKEN</code>, com o webhook &quot;Ao receber&quot; em
+          <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">…/api/webhooks/zapi</code>.
+        </p>
+        <p className="mt-3 text-xs text-amber-600">Depois de salvar as variáveis, faça um redeploy.</p>
       </div>
     );
   }
@@ -136,6 +146,7 @@ export function ConexaoWhatsApp() {
       <div className="rounded-xl border border-green-200 bg-green-50 p-5">
         <div className="mb-1 flex items-center gap-2 text-lg font-bold text-green-700">
           <CheckCircle2 size={22} /> WhatsApp conectado
+          {status.provedor === "evolution" && <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Evolution API · grátis</span>}
         </div>
         <p className="flex items-center gap-2 text-sm text-green-700">
           <Smartphone size={15} />
@@ -187,7 +198,7 @@ export function ConexaoWhatsApp() {
       </div>
 
       {status.erro && (
-        <p className="mt-3 text-xs text-amber-600">Z-API: {status.erro}</p>
+        <p className="mt-3 text-xs text-amber-600">{status.provedor === "evolution" ? "Evolution API" : "Z-API"}: {status.erro}</p>
       )}
 
       <div className="mt-4 flex gap-2">

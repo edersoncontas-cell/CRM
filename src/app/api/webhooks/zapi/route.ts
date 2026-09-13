@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateWebhook, expectedZApiInstanceId } from "@/lib/zapi";
 import { isAllowedInstance, extractLid, extractContent, isGroupChatId } from "@/lib/whatsapp-routing";
-import {
-  acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, atualizarStatusEntrega, curarZapiId,
-} from "@/lib/whatsapp-store";
+import { atualizarStatusEntrega } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
-import { processarMensagem } from "@/lib/zeus/pipeline";
-import { zeusReport } from "@/lib/zeus/eventos";
-import { waitUntil } from "@vercel/functions";
+import { processarEventoMensagem } from "@/lib/whatsapp-inbound";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+// Webhook da Z-API. Só valida/normaliza o payload — toda a lógica comum
+// (eco, vínculo de cliente, pipeline, Orientador) vive em lib/whatsapp-inbound.ts,
+// compartilhada com o webhook da Evolution API.
 
 // GET de teste no navegador.
 export async function GET() {
@@ -18,59 +18,6 @@ export async function GET() {
 }
 
 const STATUS_MAP: Record<string, string> = { SENT: "SENT", RECEIVED: "DELIVERED", READ: "READ", PLAYED: "READ" };
-
-/**
- * Transcreve áudio via Groq Whisper (ou OpenAI Whisper como fallback).
- * Retorna null se não houver chave de API ou se ocorrer erro.
- */
-async function transcribeAudio(audioUrl: string): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!groqKey && !openaiKey) return null;
-  if (!audioUrl) return null;
-
-  try {
-    // Baixa o áudio da URL — timeout para não travar o webhook (a Z-API
-    // espera resposta rápida; se demorar demais ela reenvia o evento).
-    const audioResp = await fetch(audioUrl, { signal: AbortSignal.timeout(15_000) });
-    if (!audioResp.ok) return null;
-    const audioBuffer = await audioResp.arrayBuffer();
-    const audioBytes = new Uint8Array(audioBuffer);
-
-    // Prepara FormData para Whisper
-    const formData = new FormData();
-    const blob = new Blob([audioBytes], { type: "audio/ogg" });
-    formData.append("file", blob, "audio.ogg");
-    formData.append("model", groqKey ? "whisper-large-v3" : "whisper-1");
-    formData.append("language", "pt");
-    formData.append("response_format", "text");
-
-    const apiUrl = groqKey
-      ? "https://api.groq.com/openai/v1/audio/transcriptions"
-      : "https://api.openai.com/v1/audio/transcriptions";
-    const apiKey = groqKey ?? openaiKey!;
-
-    const resp = await fetch(apiUrl, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: formData,
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      console.error("[transcribeAudio] erro API:", err.slice(0, 200));
-      return null;
-    }
-
-    // Groq com response_format=text retorna texto direto
-    const text = await resp.text();
-    return text.trim() || null;
-  } catch (e) {
-    console.error("[transcribeAudio] erro:", e);
-    return null;
-  }
-}
 
 export async function POST(req: NextRequest) {
   // 1. validação (nunca usa o token de ENVIO)
@@ -107,141 +54,29 @@ export async function POST(req: NextRequest) {
   const fromMe = body?.fromMe === true;
   const isGroup = body?.isGroup === true || (phoneRaw ? isGroupChatId(phoneRaw) : false);
 
-  // CORREÇÃO: quando fromMe=true, o senderName é o nome do OPERADOR (você),
-  // não do contato. Nunca usar senderName de mensagens fromMe como nome do contato.
+  // Quando fromMe=true, o senderName é o nome do OPERADOR (você), não do
+  // contato. Nunca usar senderName de mensagens fromMe como nome do contato.
   const nomeRecebido = !fromMe ? ((body?.senderName as string) ?? (body?.chatName as string) ?? null) : null;
   const nomeGrupo = isGroup ? ((body?.senderName as string) ?? (body?.chatName as string) ?? null) : null;
 
   // A Z-API manda a foto do contato/grupo direto no payload — aproveitamos sem custo.
   const foto = (body?.photo as string) ?? (body?.senderPhoto as string) ?? (body?.chatImage as string) ?? null;
 
-  let diag = { dir: fromMe ? "out" as const : "in" as const, phone: phoneRaw, nome: nomeRecebido, texto: "", status: "?" };
-
   console.log("[webhook wa]", JSON.stringify({ type: body?.type, fromMe, phone: phoneRaw, isGroup }));
 
-  if (!phoneRaw) { diag.status = "sem-telefone"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
-
-  // 7/8. conteúdo (texto + mídia)
-  const c = extractContent(body);
-
-  // Transcrição de áudio: se for áudio sem transcrição da Z-API, usa Whisper
-  if (c.mediaType === "audio" && c.mediaUrl && !c.transcript) {
-    const whisperText = await transcribeAudio(c.mediaUrl);
-    if (whisperText) {
-      c.transcript = whisperText;
-      c.text = `🎤 ${whisperText}`;
-    }
+  if (!phoneRaw) {
+    await registrarDiag({ dir: fromMe ? "out" : "in", phone: null, nome: nomeRecebido, texto: "", status: "sem-telefone" });
+    return NextResponse.json({ ok: true });
   }
 
-  diag.texto = c.text;
-  if (!c.text) { diag.status = "sem-texto"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
-
-  // 9. telefone + tampa
+  const conteudo = extractContent(body);
   const tampa = extractLid(body);
   const telefone = isGroup ? phoneRaw : (phoneRaw.includes("@") ? phoneRaw.split("@")[0] : phoneRaw).replace(/\D/g, "") || phoneRaw;
   const zapiMessageId = body?.messageId ? String(body.messageId) : null;
 
-  try {
-    if (fromMe) {
-      // ── Ramo fromMe (anti-eco em 2 camadas) ──
-      if (await existeZapiId(zapiMessageId)) { diag.status = "eco"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
-      const { conv } = await acharOuCriarConversa({
-        phone: telefone, lid: tampa, isGroup,
-        // fromMe: não passar nome de contato (seria o nome do operador, não do cliente)
-        contactName: null,
-        groupName: isGroup ? nomeGrupo : null,
-        photoUrl: foto,
-      });
-      const eco = await acharEcoRecente(conv.id, c.text);
-      if (eco) {
-        if (zapiMessageId && !eco.zapiMessageId) await curarZapiId(eco.id, zapiMessageId);
-        diag.status = "eco"; await registrarDiag(diag); return NextResponse.json({ ok: true });
-      }
-      await inserirMensagem(conv.id, {
-        direction: "OUT", body: c.text, origin: "EXTERNAL", operatorDisplayName: "Enviada fora do CRM",
-        mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
-        zapiMessageId, sendStatus: "SENT",
-      });
-      diag.status = "enviada";
-    } else {
-      // ── Ramo recebido ──
-      // A Z-API pode reentregar o mesmo evento (retry de webhook lento) — sem
-      // esta checagem, a mensagem duplicava e o pipeline do ZEUS reprocessava
-      // a mesma conversa duas vezes (negociação, push, auditoria repetidos).
-      if (await existeZapiId(zapiMessageId)) { diag.status = "duplicado"; await registrarDiag(diag); return NextResponse.json({ ok: true }); }
-      const { conv } = await acharOuCriarConversa({
-        phone: telefone, lid: tampa, isGroup,
-        contactName: nomeRecebido,
-        groupName: isGroup ? nomeRecebido : null,
-        photoUrl: foto,
-      });
-      const msgRecebida = await inserirMensagem(conv.id, {
-        direction: "IN", body: c.text, senderName: isGroup ? nomeRecebido : null,
-        mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
-        zapiMessageId,
-      });
-
-      // Pipeline autônomo do ZEUS (Fase 2): vincula/cria cliente, analisa com
-      // IA, alimenta negociação/agenda/município, classifica e notifica.
-      // Erros aqui nunca derrubam o webhook — a mensagem já está salva.
-      try {
-        await processarMensagem(msgRecebida.id);
-      } catch (e) {
-        console.error("[zeus-pipeline] erro no webhook:", e);
-        await zeusReport(e, "processarMensagem (pipeline do webhook)");
-      }
-
-      // O pipeline acima pode ter acabado de VINCULAR/CRIAR o cliente desta
-      // conversa (primeira mensagem de um contato novo) — reler o clienteId
-      // aqui, senão a primeira mensagem de todo cliente novo nunca dispararia
-      // o Orientador (conv foi carregada ANTES do pipeline rodar).
-      const { db } = await import("@/lib/db");
-      let clienteIdAtual = conv.clienteId;
-      if (!clienteIdAtual) {
-        const convAtual = await db.whatsAppConversation.findUnique({
-          where: { id: conv.id },
-          select: { clienteId: true },
-        });
-        clienteIdAtual = convAtual?.clienteId ?? null;
-      }
-
-      // Chama o Orientador de Vendas IMEDIATAMENTE para toda conversa com
-      // cliente vinculado (não só com o Cérebro/auto-resposta ligado — o
-      // painel de coaching deve existir mesmo quando o vendedor responde
-      // manualmente). Debounce de 1s (agrega mensagens rápidas antes de analisar).
-      if (clienteIdAtual) {
-        // Registra o agendamento para o debounce (1s)
-        const agendadoEm = new Date();
-        await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: agendadoEm } });
-        // Dispara o Cérebro de forma assíncrona — o webhook responde ao Z-API
-        // imediatamente, mas o fetch continua rodando via waitUntil() (sem
-        // isso, a Vercel pode congelar a função assim que a resposta é
-        // enviada, matando o fetch no meio e o cliente nunca recebe resposta
-        // nem rascunho — silenciosamente).
-        const baseUrl = process.env.NEXTAUTH_URL
-          ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-        const cronSecret = process.env.CRON_SECRET ?? "";
-        waitUntil(
-          fetch(`${baseUrl}/api/cerebro/despacho-rapido`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-cron-secret": cronSecret },
-            body: JSON.stringify({ conversationId: conv.id, agendadoEm: agendadoEm.toISOString() }),
-          }).catch((e) => {
-            console.error("[orientador-dispatch] erro:", e);
-            return zeusReport(e, "dispatch do Orientador (webhook → despacho-rapido)");
-          })
-        );
-      }
-      diag.status = "recebida";
-    }
-  } catch (e) {
-    console.error("Erro [wa webhook]:", e);
-    diag.status = "erro:" + String(e).slice(0, 50);
-    await registrarDiag(diag);
-    await zeusReport(e, "webhook zapi (api/webhooks/zapi/route.ts)");
-    return NextResponse.json({ ok: false }, { status: 500 });
-  }
-
-  await registrarDiag(diag);
-  return NextResponse.json({ ok: true });
-  }
+  const r = await processarEventoMensagem({
+    fromMe, phone: telefone, lid: tampa, isGroup,
+    nomeContato: nomeRecebido, nomeGrupo, foto, conteudo, messageId: zapiMessageId,
+  });
+  return NextResponse.json({ ok: r.ok }, { status: r.ok ? 200 : 500 });
+}

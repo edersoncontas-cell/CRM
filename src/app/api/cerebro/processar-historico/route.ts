@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
+import { llmTexto } from "@/lib/ai";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
-import { MODEL_TAREFA } from "@/lib/ai/config";
-
-function anthropicClient() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
 
 // POST /api/cerebro/processar-historico
 // Recebe o histórico de conversa exportado do WhatsApp (já parseado no cliente)
@@ -101,13 +96,12 @@ Responda em JSON com o seguinte formato exato:
   "resumo": "resumo em 1-2 frases do que foi conversado para mostrar ao usuário"
 }`;
 
-    const resposta = await anthropicClient().messages.create({
-      model: MODEL_TAREFA,
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const textoResposta = resposta.content[0].type === "text" ? resposta.content[0].text : "";
+    // Qualquer provedor via llmTexto (Gemini/Groq grátis, com fallback).
+    const textoResposta = await llmTexto(
+      "Você é o Cérebro do CRM. Responda SOMENTE com o JSON pedido, sem texto antes ou depois.",
+      prompt,
+      { maxTokens: 2048, json: true }
+    );
 
     // 5. Parseia o JSON da resposta do Cérebro
     let atualizacoes: { perfilIA?: string; observacoes?: string; maquinaInteresse?: string; resumo?: string } = {};

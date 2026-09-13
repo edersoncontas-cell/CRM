@@ -2,20 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cronAutorizado } from "@/lib/whatsapp-settings";
 import { temaDestaSeamana } from "@/lib/academia";
-import Anthropic from "@anthropic-ai/sdk";
-import { MODEL_CHAT } from "@/lib/ai/config";
+import { llmTexto, iaHabilitada } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function anthropic() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
-
-// Cron semanal: gera automaticamente uma nova estratégia de vendas baseada no tema da semana.
+// Cron semanal: gera automaticamente uma nova estratégia de vendas baseada no
+// tema da semana. Roteado por llmTexto (Gemini/Groq grátis, com fallback).
 export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ ok: false, erro: "sem chave" });
+  if (!iaHabilitada()) return NextResponse.json({ ok: false, erro: "sem chave de IA" });
 
   const tema = temaDestaSeamana();
 
@@ -27,17 +23,10 @@ Formato: título de 1 linha, seguido de conteúdo em 4-8 parágrafos ou tópicos
 Retorne APENAS o conteúdo, sem introdução ou metadados.`;
 
   try {
-    const msg = await anthropic().messages.create({
-      model: MODEL_CHAT,
-      max_tokens: 1200,
-      system,
-      messages: [{ role: "user", content: `Gere uma estratégia completa sobre: ${tema}` }],
-    });
+    const texto = (await llmTexto(system, `Gere uma estratégia completa sobre: ${tema}`, { maxTokens: 1200 })).trim();
+    if (!texto) return NextResponse.json({ ok: false, erro: "sem conteúdo" });
 
-    const bloco = msg.content[0];
-    if (bloco.type !== "text") return NextResponse.json({ ok: false, erro: "sem conteúdo" });
-
-    const linhas = bloco.text.trim().split("\n");
+    const linhas = texto.split("\n");
     const titulo = linhas[0].replace(/^#+\s*/, "").trim();
     const conteudo = linhas.slice(1).join("\n").trim();
 

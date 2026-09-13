@@ -139,7 +139,7 @@ export function ZeusPainel({
     <div className="space-y-6">
       {/* Status */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatusCard icon={MessageCircle} label="WhatsApp (Z-API)" ok={statusZapi ? statusZapi.conectado : null} valor={statusZapi?.conectado ? "conectado" : statusZapi?.configurado ? "desconectado" : "não configurado"} />
+        <StatusCard icon={MessageCircle} label="WhatsApp" ok={statusZapi ? statusZapi.conectado : null} valor={statusZapi?.conectado ? "conectado" : statusZapi?.configurado ? "desconectado" : "não configurado"} />
         <StatusCard icon={Bot} label="IA" ok={iaConfigurada} valor={iaConfigurada ? (provedorIA ?? "configurada") : "modo heurístico"} />
         <StatusCard icon={Activity} label="Crons" ok={heartbeatsStale.length === 0} valor={heartbeatsStale.length === 0 ? "todos ativos" : `${heartbeatsStale.length} parado(s)`} />
         <StatusCard icon={Database} label="ZEUS" ok={ativo} valor={ativo ? "ativo" : "pausado"} />

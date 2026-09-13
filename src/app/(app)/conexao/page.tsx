@@ -3,6 +3,7 @@ import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
+import { provedorWhatsApp } from "@/lib/zapi";
 import { diasDesde } from "@/lib/utils";
 import { MessageCircle, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -31,6 +32,10 @@ const CORES_STATUS: Record<string, string> = {
 export default async function ConexaoPage() {
   const diag = await lerDiag();
   const recebeuAlgo = diag.ultimos.some((e) => e.status === "recebida" || e.status === "enviada");
+  const provedor = provedorWhatsApp();
+  const nomeProvedor = provedor === "evolution" ? "Evolution API" : "Z-API";
+  const base = (process.env.NEXTAUTH_URL ?? "https://crm-lyart-ten.vercel.app").replace(/\/+$/, "");
+  const urlWebhook = provedor === "evolution" ? `${base}/api/webhooks/evolution` : `${base}/api/webhooks/zapi`;
 
   return (
     <div>
@@ -55,7 +60,7 @@ export default async function ConexaoPage() {
         <ImportarAtendimento />
       </Card>
 
-      {/* Diagnóstico do webhook — mostra se a Z-API está chamando o CRM */}
+      {/* Diagnóstico do webhook — mostra se o provedor está chamando o CRM */}
       <Card className="mb-6 max-w-2xl">
         <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
           <Activity size={18} className="text-brand-600" /> Diagnóstico do recebimento
@@ -65,12 +70,14 @@ export default async function ConexaoPage() {
           <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <div>
-              <b>A Z-API ainda não chamou o CRM nenhuma vez.</b> Isso significa que o webhook não está
-              configurado/apontando certo. No painel da Z-API, em <b>Webhooks → Ao receber</b>, a URL precisa ser:
+              <b>A {nomeProvedor} ainda não chamou o CRM nenhuma vez.</b> Isso significa que o webhook não está
+              configurado/apontando certo. A URL do webhook precisa ser:
               <code className="mt-1 block break-all rounded bg-red-100 px-2 py-1 text-xs">
-                https://crm-lyart-ten.vercel.app/api/webhooks/zapi
+                {urlWebhook}
               </code>
-              e ligue <b>&quot;Notificar as enviadas por mim também&quot;</b>.
+              {provedor === "evolution"
+                ? <>com os eventos <b>MESSAGES_UPSERT</b> e <b>MESSAGES_UPDATE</b> e a opção <b>Base64</b> ligada.</>
+                : <>e ligue <b>&quot;Notificar as enviadas por mim também&quot;</b>.</>}
             </div>
           </div>
         ) : (
@@ -78,7 +85,7 @@ export default async function ConexaoPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-slate-50 p-3 text-center">
                 <div className="text-xl font-bold text-slate-800">{diag.totalChamadas}</div>
-                <div className="text-xs text-slate-500">chamadas recebidas da Z-API</div>
+                <div className="text-xs text-slate-500">chamadas recebidas da {nomeProvedor}</div>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 text-center">
                 <div className="text-sm font-bold text-slate-800">{quando(diag.ultimaChamada)}</div>
@@ -88,12 +95,12 @@ export default async function ConexaoPage() {
 
             {recebeuAlgo ? (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-                <CheckCircle2 size={15} /> A Z-API está entregando mensagens ao CRM. ✅
+                <CheckCircle2 size={15} /> A {nomeProvedor} está entregando mensagens ao CRM. ✅
               </div>
             ) : (
               <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
                 <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                A Z-API está chamando, mas só com grupos/status — nenhuma mensagem de cliente ainda.
+                A {nomeProvedor} está chamando, mas só com grupos/status — nenhuma mensagem de cliente ainda.
                 Mande uma mensagem de teste para o seu número e clique em Atualizar.
               </div>
             )}

@@ -4,7 +4,6 @@
 // "Forçar tick" do painel /zeus — por isso vive numa função só, sem depender
 // do contexto HTTP do cron.
 
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { statusConexao } from "@/lib/zapi";
 import { lerDiag } from "@/lib/zapi-diag";
@@ -13,10 +12,9 @@ import { registrarZeusEvent, type TipoZeusEvent, type SeveridadeZeusEvent } from
 import { zeusAtivo, tocarHeartbeat, ultimoHeartbeat, orcamentoIADisponivel, consumirOrcamentoIA } from "@/lib/zeus/estado";
 import { registrarAudit } from "@/lib/audit";
 import { enviarPushNotificacao } from "@/lib/push";
-import { MODEL_TAREFA } from "@/lib/ai/config";
 import { recalcularLeadScores } from "@/lib/zeus/leadscore";
 import { montarContextoCliente, gerarMensagemFollowUp } from "@/lib/zeus/cerebro-resposta";
-import { iaHabilitada } from "@/lib/ai";
+import { iaHabilitada, llmTexto } from "@/lib/ai";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 
 const HORA = 60 * 60 * 1000;
@@ -74,11 +72,14 @@ async function healthChecks(): Promise<number> {
     }
   }
 
-  // Heartbeats dos crons que deveriam rodar com frequência.
+  // Heartbeats dos crons que deveriam rodar com frequência. No modo gratuito
+  // todos são disparados pelo agendador externo via /api/cron/tudo a cada
+  // ~15 min (ver comentário lá) — a tolerância aqui precisa acompanhar isso,
+  // senão o ZEUS alarma "cron parado" o dia inteiro sem motivo.
   const cronsEsperados: { nome: string; minutosEsperados: number }[] = [
-    { nome: "zeus-pipeline", minutosEsperados: 1 },
-    { nome: "agnes-dispatch", minutosEsperados: 1 },
-    { nome: "whatsapp-retry", minutosEsperados: 5 },
+    { nome: "zeus-pipeline", minutosEsperados: 15 },
+    { nome: "agnes-dispatch", minutosEsperados: 15 },
+    { nome: "whatsapp-retry", minutosEsperados: 15 },
   ];
   for (const c of cronsEsperados) {
     const ultimo = await ultimoHeartbeat(c.nome);
@@ -401,7 +402,7 @@ function assinaturaErro(titulo: string): string {
 }
 
 async function diagnosticarErros(): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!iaHabilitada()) return 0;
   if (!(await orcamentoIADisponivel())) return 0;
 
   const erros = await db.zeusEvent.findMany({
@@ -427,16 +428,13 @@ async function diagnosticarErros(): Promise<number> {
     if (!(await orcamentoIADisponivel())) break;
 
     try {
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const exemplos = ocorrencias.slice(0, 3).map((e) => e.detalhe ?? e.titulo).join("\n---\n");
-      const resp = await anthropic.messages.create({
-        model: MODEL_TAREFA,
-        max_tokens: 400,
-        system: "Você analisa erros de runtime de um CRM Next.js 14 (App Router) + Prisma + Postgres. Aponte, de forma BEM curta (3-5 linhas), o arquivo/módulo provável e a causa provável, para o desenvolvedor colar numa sessão do Claude Code e investigar. Não invente arquivos que não aparecem no contexto.",
-        messages: [{ role: "user", content: `Erro ocorreu ${ocorrencias.length}x nas últimas 72h:\n${exemplos}` }],
-      });
+      const texto = await llmTexto(
+        "Você analisa erros de runtime de um CRM Next.js 14 (App Router) + Prisma + Postgres. Aponte, de forma BEM curta (3-5 linhas), o arquivo/módulo provável e a causa provável, para o desenvolvedor colar numa sessão do Claude Code e investigar. Não invente arquivos que não aparecem no contexto.",
+        `Erro ocorreu ${ocorrencias.length}x nas últimas 72h:\n${exemplos}`,
+        { maxTokens: 400 }
+      );
       await consumirOrcamentoIA();
-      const texto = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
       await registrarZeusEvent({
         tipo: "fix",
         severidade: "media",

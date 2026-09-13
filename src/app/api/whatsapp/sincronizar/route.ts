@@ -12,7 +12,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const cfg = await resolveZApiConfig();
   if (!cfg) {
-    return NextResponse.json({ erro: "Z-API nao configurada" }, { status: 503 });
+    return NextResponse.json({
+      ok: false,
+      erro: "A sincronização de chats apagados usa um recurso exclusivo da Z-API. Com a Evolution API, apague a conversa direto no CRM (menu da conversa em /atendimento).",
+    }, { status: 503 });
   }
 
   // 1. Busca ate 2000 chats do Z-API (20 paginas x 100)

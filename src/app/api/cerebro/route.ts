@@ -6,9 +6,12 @@ import { MODEL_CHAT } from "@/lib/ai/config";
 import { agoraBrasiliaExtenso } from "@/lib/utils";
 import { TOOL_DEFS, executarFerramenta, rotuloFerramenta } from "@/lib/zeus/cerebro-tools";
 import { zeusReport } from "@/lib/zeus/eventos";
+import { provedoresCompat, rodadaAgenteCompat } from "@/lib/ai/agente-compat";
 
 export const runtime = "nodejs";
-export const maxDuration = 180;
+// 60s é o teto do plano Hobby (grátis) da Vercel sem Fluid Compute — acima
+// disso o deploy é recusado. Cada rodada do agente leva poucos segundos.
+export const maxDuration = 60;
 
 const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof MEDIA_TYPES)[number];
@@ -92,6 +95,39 @@ function ehErroDeTool(result: unknown): boolean {
   return typeof result === "object" && result !== null && "erro" in (result as Record<string, unknown>);
 }
 
+type ToolUse = { id: string; name: string; input: Record<string, unknown> };
+type Emit = (payload: Record<string, unknown>) => void;
+// Bloco de conteúdo de um turno (texto, tool_use, tool_result, imagem) —
+// derivado do próprio tipo do SDK para não depender do nome exportado, que
+// muda entre versões (ContentBlock vs ContentBlockParam).
+type BlocoParam = Exclude<Anthropic.MessageParam["content"], string>[number];
+
+// Uma rodada do agente pela Anthropic (streaming). Devolve os blocos exatos
+// da resposta (para persistir) e as chamadas de ferramenta pedidas.
+async function rodadaAnthropic(system: string, messages: Anthropic.MessageParam[], emit: Emit) {
+  const stream = anthropicClient().messages.stream({ model: MODEL_CHAT, max_tokens: 2048, system, tools: TOOL_DEFS, messages });
+  for await (const evento of stream) {
+    if (evento.type === "content_block_delta" && evento.delta.type === "text_delta") emit({ text: evento.delta.text });
+  }
+  const finalMessage = await stream.finalMessage();
+  const toolUses: ToolUse[] = finalMessage.content
+    .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+    .map((b) => ({ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> }));
+  return { blocos: finalMessage.content as BlocoParam[], toolUses: finalMessage.stop_reason === "tool_use" ? toolUses : [] };
+}
+
+// Uma rodada pelos provedores no formato OpenAI (Gemini/Groq/DeepSeek/OpenAI),
+// sem streaming — o texto é emitido de uma vez. Reconstrói os blocos no
+// formato da Anthropic para o histórico ficar homogêneo no banco.
+async function rodadaCompat(system: string, messages: Anthropic.MessageParam[], precisaVisao: boolean, emit: Emit) {
+  const r = await rodadaAgenteCompat(system, messages, TOOL_DEFS, precisaVisao);
+  if (r.texto) emit({ text: r.texto });
+  const blocos: BlocoParam[] = [];
+  if (r.texto) blocos.push({ type: "text", text: r.texto });
+  for (const tc of r.toolCalls) blocos.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.input });
+  return { blocos, toolUses: r.toolCalls };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const fd = await req.formData();
@@ -104,7 +140,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Monta os content blocks do turno do usuário — dois formatos: um para
-    // enviar à Anthropic AGORA (com a imagem real) e outro para persistir no
+    // enviar à IA AGORA (com a imagem real) e outro para persistir no
     // banco (troca a imagem por um texto-placeholder, para não guardar
     // base64 de anexos para sempre no Postgres).
     const contentParaApi: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = [];
@@ -137,6 +173,7 @@ export async function POST(req: NextRequest) {
       contentParaApi.push({ type: "text", text: "(mensagem vazia)" });
       contentParaSalvar.push({ type: "text", text: "(mensagem vazia)" });
     }
+    const precisaVisao = contentParaApi.some((b) => b.type === "image");
 
     // Persiste o turno do usuário ANTES de chamar a IA — histórico durável
     // mesmo se o stream falhar no meio.
@@ -149,53 +186,55 @@ export async function POST(req: NextRequest) {
 
     const system = await montarSystemPrompt(modoTreinamento);
 
+    // Provedores no formato OpenAI (Gemini/Groq grátis, DeepSeek, OpenAI) têm
+    // preferência — a Anthropic (mais cara) só entra se for a única chave, ou
+    // como último recurso se todos os outros falharem nesta rodada.
+    const temCompat = provedoresCompat().length > 0;
+    const temAnthropic = !!process.env.ANTHROPIC_API_KEY;
+    if (!temCompat && !temAnthropic) {
+      return new Response(JSON.stringify({ erro: "Nenhuma chave de IA configurada (GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY)." }), { status: 503 });
+    }
+
     const readable = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        const emit = (payload: Record<string, unknown>) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        const emit: Emit = (payload) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
         try {
           for (let rodada = 0; rodada < MAX_RODADAS_AGENTE; rodada++) {
-            const stream = anthropicClient().messages.stream({
-              model: MODEL_CHAT,
-              max_tokens: 2048,
-              system,
-              tools: TOOL_DEFS,
-              messages,
-            });
-
-            for await (const evento of stream) {
-              if (evento.type === "content_block_delta" && evento.delta.type === "text_delta") {
-                emit({ text: evento.delta.text });
+            let resultado: { blocos: BlocoParam[]; toolUses: ToolUse[] };
+            if (temCompat) {
+              try {
+                resultado = await rodadaCompat(system, messages, precisaVisao, emit);
+              } catch (e) {
+                if (!temAnthropic) throw e;
+                console.error("[cerebro] provedores compatíveis falharam, usando Anthropic:", e instanceof Error ? e.message : e);
+                resultado = await rodadaAnthropic(system, messages, emit);
               }
+            } else {
+              resultado = await rodadaAnthropic(system, messages, emit);
             }
 
-            const finalMessage = await stream.finalMessage();
-            messages.push({ role: "assistant", content: finalMessage.content });
-            await salvarMensagem(sessionId, "assistant", finalMessage.content);
+            if (!resultado.blocos.length) break;
+            messages.push({ role: "assistant", content: resultado.blocos });
+            await salvarMensagem(sessionId, "assistant", resultado.blocos);
 
-            if (finalMessage.stop_reason !== "tool_use") break;
-
-            const toolUseBlocks = finalMessage.content.filter(
-              (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-            );
-            if (!toolUseBlocks.length) break;
+            if (!resultado.toolUses.length) break;
 
             const toolResults: Anthropic.ToolResultBlockParam[] = [];
-            for (const bloco of toolUseBlocks) {
-              const input = (bloco.input ?? {}) as Record<string, unknown>;
-              const label = rotuloFerramenta(bloco.name, input);
+            for (const bloco of resultado.toolUses) {
+              const label = rotuloFerramenta(bloco.name, bloco.input);
               emit({ tool: { name: bloco.name, status: "start", label } });
-              const resultado = await executarFerramenta(bloco.name, input);
+              const resultadoTool = await executarFerramenta(bloco.name, bloco.input);
               emit({ tool: { name: bloco.name, status: "done", label } });
-              if (resultado && typeof resultado === "object" && (resultado as Record<string, unknown>).requires_confirmation) {
-                emit({ confirm: { mensagem: (resultado as Record<string, unknown>).mensagem ?? "Confirma esta ação?" } });
+              if (resultadoTool && typeof resultadoTool === "object" && (resultadoTool as Record<string, unknown>).requires_confirmation) {
+                emit({ confirm: { mensagem: (resultadoTool as Record<string, unknown>).mensagem ?? "Confirma esta ação?" } });
               }
               toolResults.push({
                 type: "tool_result",
                 tool_use_id: bloco.id,
-                content: JSON.stringify(resultado),
-                is_error: ehErroDeTool(resultado),
+                content: JSON.stringify(resultadoTool),
+                is_error: ehErroDeTool(resultadoTool),
               });
             }
 

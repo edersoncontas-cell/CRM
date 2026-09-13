@@ -16,6 +16,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks/zapi") ||
+    pathname.startsWith("/api/webhooks/evolution") ||
     pathname.startsWith("/api/zapi/webhook") ||
     pathname.startsWith("/api/cerebro/despacho-rapido") ||
     pathname.startsWith("/api/cron/");

@@ -1,10 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/agnes-dispatch", "schedule": "* * * * *" },
-    { "path": "/api/cron/zeus-pipeline", "schedule": "* * * * *" },
-    { "path": "/api/cron/whatsapp-retry", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/academia-atualizar", "schedule": "0 8 * * 1" },
-    { "path": "/api/cron/zeus-tick", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/zeus-diario", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/tudo", "schedule": "0 12 * * *" }
   ]
 }

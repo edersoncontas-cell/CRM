@@ -48,6 +48,9 @@ export async function transcreverBuffer(
     method: "POST",
     headers: { Authorization: `Bearer ${p.key}` },
     body: form,
+    // Chamado de dentro do webhook — sem timeout, um provedor lento travaria
+    // a resposta ao WhatsApp e o evento seria reenviado (mensagem duplicada).
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!res.ok) {

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { cronAutorizado } from "@/lib/whatsapp-settings";
-import { sendText, isEnabled as zapiHabilitado } from "@/lib/zapi";
+import { sendText, isEnabled as whatsappHabilitado } from "@/lib/zapi";
 import { registrarZeusEvent } from "@/lib/zeus/eventos";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
-import { MODEL_CHAT } from "@/lib/ai/config";
+import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { agoraBrasiliaExtenso } from "@/lib/utils";
 import { sugerirProximaAcaoHeuristica } from "@/lib/zeus/nextbestaction";
 
@@ -72,16 +71,15 @@ async function gerarTexto(dados: Awaited<ReturnType<typeof montarDados>>): Promi
   ];
   const bruto = linhas.join("\n");
 
-  if (!process.env.ANTHROPIC_API_KEY) return bruto;
+  // Reescrita opcional pela IA (qualquer provedor via llmTexto, com fallback).
+  // Sem IA ou com falha, o briefing bruto já é útil por si só.
+  if (!iaHabilitada()) return bruto;
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const resp = await anthropic.messages.create({
-      model: MODEL_CHAT,
-      max_tokens: 500,
-      system: "Você é o ZEUS, assistente autônomo do CRM de um vendedor de máquinas pesadas. Reescreva o briefing abaixo em português, tom direto e profissional, formato de mensagem de WhatsApp (sem markdown, pode usar quebras de linha), sem emojis, mantendo TODOS os dados factuais exatamente como estão — não invente nada além do que foi passado.",
-      messages: [{ role: "user", content: bruto }],
-    });
-    const texto = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
+    const texto = (await llmTexto(
+      "Você é o ZEUS, assistente autônomo do CRM de um vendedor de máquinas pesadas. Reescreva o briefing abaixo em português, tom direto e profissional, formato de mensagem de WhatsApp (sem markdown, pode usar quebras de linha), sem emojis, mantendo TODOS os dados factuais exatamente como estão — não invente nada além do que foi passado.",
+      bruto,
+      { maxTokens: 500 }
+    )).trim();
     return texto || bruto;
   } catch {
     return bruto;
@@ -94,12 +92,12 @@ export async function GET(req: NextRequest) {
   await tocarHeartbeat("zeus-diario");
 
   const destino = process.env.ZEUS_WHATSAPP_DESTINO;
-  if (!destino || !zapiHabilitado()) {
+  if (!destino || !whatsappHabilitado()) {
     await registrarZeusEvent({
       tipo: "health", severidade: "baixa",
-      titulo: "Briefing diário não enviado — ZEUS_WHATSAPP_DESTINO ou Z-API não configurados",
+      titulo: "Briefing diário não enviado — ZEUS_WHATSAPP_DESTINO ou WhatsApp não configurados",
     });
-    return NextResponse.json({ ok: false, erro: "ZEUS_WHATSAPP_DESTINO ou Z-API não configurados." });
+    return NextResponse.json({ ok: false, erro: "ZEUS_WHATSAPP_DESTINO ou WhatsApp não configurados." });
   }
 
   try {

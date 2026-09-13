@@ -1,10 +1,8 @@
 "use server";
-import Anthropic from "@anthropic-ai/sdk";
 
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
-import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA } from "./ai";
-import { MODEL_TAREFA } from "./ai/config";
+import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import type { AcaoPlano } from "./assistente";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
@@ -1587,13 +1585,12 @@ Gere um resumo executivo em português brasileiro com:
 Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos pontos chave.`;
 
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const res = await client.messages.create({
-      model: MODEL_TAREFA,
-      max_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const resumo = (res.content[0] as any).text ?? "";
+    // Qualquer provedor via llmTexto (Gemini/Groq grátis, com fallback).
+    const resumo = (await llmTexto(
+      "Você é o assistente comercial do CRM do Ederson. Responda em português brasileiro, direto e prático.",
+      prompt,
+      { maxTokens: 1024 }
+    )).trim();
     if (!resumo) return { ok: false, erro: "IA não retornou resumo." };
 
     // Salva automaticamente no cadastro do cliente

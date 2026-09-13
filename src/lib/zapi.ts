@@ -1,9 +1,18 @@
-// Camada Z-API (spec seção 4). Reescrita para o novo sistema de atendimento.
-// Resolve config das env vars (aceita as que o usuário JÁ tem) ou de WhatsAppSettings.
+// Camada de WhatsApp — abstrai o PROVEDOR de envio/conexão:
+//   • Evolution API (open source, GRÁTIS, self-hosted) — env EVOLUTION_API_URL,
+//     EVOLUTION_API_KEY e EVOLUTION_INSTANCE. Tem prioridade quando configurada.
+//   • Z-API (paga) — env ZAPI_INSTANCE_ID + ZAPI_TOKEN/ZAPI_INSTANCE_TOKEN
+//     (+ ZAPI_CLIENT_TOKEN), ou WhatsAppSettings no banco.
+// O nome do arquivo (zapi.ts) foi mantido de propósito: ~20 módulos importam
+// daqui e a assinatura de todas as funções continua idêntica — só o transporte
+// muda por baixo.
 
 import { db } from "@/lib/db";
+import { mensagemEvolutionParaZapi } from "@/lib/evolution";
 
 export type ZApiConfig = { instanceId: string; token: string; clientToken: string; apiUrl: string };
+export type EvolutionConfig = { url: string; apiKey: string; instance: string };
+export type ProvedorWhatsApp = "evolution" | "zapi";
 
 // Aceita os nomes novos da spec E os antigos que já estão na Vercel.
 function envConfig(): ZApiConfig | null {
@@ -18,6 +27,29 @@ function envConfig(): ZApiConfig | null {
   };
 }
 
+export function evolutionConfig(): EvolutionConfig | null {
+  const url = (process.env.EVOLUTION_API_URL || "").trim().replace(/\/+$/, "");
+  const apiKey = (process.env.EVOLUTION_API_KEY || "").trim();
+  const instance = (process.env.EVOLUTION_INSTANCE || "").trim();
+  if (!url || !apiKey || !instance) return null;
+  return { url, apiKey, instance };
+}
+
+export function provedorWhatsApp(): ProvedorWhatsApp | null {
+  if (evolutionConfig()) return "evolution";
+  if (envConfig()) return "zapi";
+  return null;
+}
+
+export function provedorWhatsAppNome(): string | null {
+  const p = provedorWhatsApp();
+  if (p === "evolution") return "Evolution API (grátis)";
+  if (p === "zapi") return "Z-API";
+  return null;
+}
+
+// Config da Z-API (env ou banco). Usada só pelas rotas que dependem de
+// recursos exclusivos da Z-API (sincronizar chats apagados, diagnóstico).
 export async function resolveZApiConfig(): Promise<ZApiConfig | null> {
   const env = envConfig();
   if (env) return env;
@@ -31,7 +63,7 @@ export async function resolveZApiConfig(): Promise<ZApiConfig | null> {
 }
 
 export function isEnabled(): boolean {
-  return envConfig() !== null;
+  return provedorWhatsApp() !== null;
 }
 
 function headers(clientToken: string): Record<string, string> {
@@ -40,7 +72,7 @@ function headers(clientToken: string): Record<string, string> {
   return h;
 }
 
-// POST genérico. Trata HTTP 200 com `error` no corpo (instância desconectada).
+// POST genérico da Z-API. Trata HTTP 200 com `error` no corpo (instância desconectada).
 export async function zapiPost(endpoint: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const cfg = await resolveZApiConfig();
   if (!cfg) throw new Error("Z-API não configurada.");
@@ -62,6 +94,48 @@ async function zapiGet(endpoint: string): Promise<unknown> {
   return res.json().catch(() => null);
 }
 
+// ---------- Evolution API (transporte) ----------
+
+async function evoFetch(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const cfg = evolutionConfig();
+  if (!cfg) throw new Error("Evolution API não configurada.");
+  const res = await fetch(`${cfg.url}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const detalhe = (data?.response as Record<string, unknown> | undefined)?.message ?? data?.message ?? data?.error ?? JSON.stringify(data);
+    throw new Error(`Evolution API ${path} falhou (${res.status}): ${String(detalhe).slice(0, 200)}`);
+  }
+  return data;
+}
+
+function evoInstancia(): string {
+  return encodeURIComponent(evolutionConfig()?.instance ?? "");
+}
+
+// Converte o "phone" do CRM (dígitos, id de grupo da Z-API ou JID) no
+// destinatário que a Evolution espera.
+function evoDestino(phone: string): string {
+  if (phone.includes("@")) return phone; // já é um JID (grupo, lid)
+  if (/-group$/i.test(phone)) return `${phone.replace(/-group$/i, "")}@g.us`;
+  if (/^\d{8,}-\d{9,}$/.test(phone)) return `${phone}@g.us`;
+  return normalizePhone(phone);
+}
+
+function evoJidChat(phone: string): string {
+  const d = evoDestino(phone);
+  return d.includes("@") ? d : `${d}@s.whatsapp.net`;
+}
+
 // ---------- Telefone / grupos ----------
 
 export function isGroupChatId(phone: string): boolean {
@@ -79,12 +153,13 @@ export function normalizePhone(phone: string): string {
 // ---------- Envio ----------
 
 function extractMessageId(data: Record<string, unknown>): string | null {
-  return (data.messageId as string) || (data.zaapId as string) || (data.id as string) || null;
+  const key = data.key as Record<string, unknown> | undefined;
+  return (key?.id as string) || (data.messageId as string) || (data.zaapId as string) || (data.id as string) || null;
 }
 
-// A Z-API respondeu HTTP 200 sem `error`, mas sem messageId reconhecível — a
+// O provedor respondeu HTTP 200 sem `error`, mas sem messageId reconhecível — a
 // mensagem provavelmente FOI entregue (não houve erro de rede/API), só não dá
-// para confirmar o ID. Distinto de uma falha real (rede/HTTP/erro da Z-API),
+// para confirmar o ID. Distinto de uma falha real (rede/HTTP/erro do provedor),
 // para não reenviar (duplicar) uma mensagem que talvez já tenha chegado.
 export class EnvioNaoConfirmadoError extends Error {
   constructor() {
@@ -97,6 +172,14 @@ export class EnvioNaoConfirmadoError extends Error {
 // rótulos internos (ex.: "*Cérebro:*"). Esses rótulos ficam só em
 // WhatsAppMessage.operatorDisplayName, visível apenas dentro do CRM.
 export async function sendText(phone: string, message: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendText/${evoInstancia()}`, {
+      number: evoDestino(phone), text: message, delay: 1200,
+    });
+    const id = extractMessageId(data);
+    if (!id) throw new EnvioNaoConfirmadoError();
+    return id;
+  }
   const data = await zapiPost("send-text", { phone: normalizePhone(phone), message, delayMessage: 2 });
   const id = extractMessageId(data);
   if (!id) throw new EnvioNaoConfirmadoError();
@@ -104,22 +187,40 @@ export async function sendText(phone: string, message: string): Promise<string> 
 }
 
 export async function sendImage(phone: string, imageUrl: string, caption?: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
+      number: evoDestino(phone), mediatype: "image", media: imageUrl, caption: caption ?? "",
+    });
+    return extractMessageId(data) ?? "";
+  }
   const data = await zapiPost("send-image", { phone: normalizePhone(phone), image: imageUrl, caption: caption ?? "" });
   return extractMessageId(data) ?? "";
 }
 
 export async function sendAudio(phone: string, audioUrl: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendWhatsAppAudio/${evoInstancia()}`, {
+      number: evoDestino(phone), audio: audioUrl,
+    });
+    return extractMessageId(data) ?? "";
+  }
   const data = await zapiPost("send-audio", { phone: normalizePhone(phone), audio: audioUrl });
   return extractMessageId(data) ?? "";
 }
 
 export async function sendDocument(phone: string, docUrl: string, fileName: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
+      number: evoDestino(phone), mediatype: "document", media: docUrl, fileName,
+    });
+    return extractMessageId(data) ?? "";
+  }
   const ext = (fileName.split(".").pop() || "pdf").toLowerCase();
   const data = await zapiPost(`send-document/${ext}`, { phone: normalizePhone(phone), document: docUrl, fileName });
   return extractMessageId(data) ?? "";
 }
 
-// ---------- Webhook ----------
+// ---------- Webhook (Z-API) ----------
 
 // Nem todo plano/conta da Z-API oferece um "Client-Token" de segurança para
 // carimbar nos webhooks — quando não está disponível, não dá para exigir essa
@@ -139,7 +240,38 @@ export function expectedZApiInstanceId(): string | null {
 
 // ---------- Histórico / contato ----------
 
-export async function listarChats(page = 1, pageSize = 5): Promise<Array<{ phone: string; name?: string; isGroup?: boolean; photo?: string | null }>> {
+type ChatResumo = { phone: string; name?: string; isGroup?: boolean; photo?: string | null };
+
+async function listarChatsEvolution(page: number, pageSize: number): Promise<ChatResumo[]> {
+  const data = await evoFetch("POST", `/chat/findChats/${evoInstancia()}`, {}).catch(() => null);
+  const lista: unknown[] = Array.isArray(data)
+    ? data
+    : Array.isArray((data as Record<string, unknown> | null)?.chats)
+    ? ((data as Record<string, unknown>).chats as unknown[])
+    : [];
+  const chats: (ChatResumo & { ts: number })[] = [];
+  for (const item of lista) {
+    const c = item as Record<string, unknown>;
+    const jid = String(c.remoteJid ?? c.id ?? "");
+    if (!jid || jid.endsWith("@broadcast")) continue;
+    const isGroup = jid.endsWith("@g.us");
+    const ts = c.updatedAt
+      ? new Date(String(c.updatedAt)).getTime()
+      : Number(c.lastMessageTimestamp ?? c.messageTimestamp ?? 0) || 0;
+    chats.push({
+      phone: isGroup ? jid : jid.split("@")[0],
+      name: (c.name as string) ?? (c.pushName as string) ?? undefined,
+      isGroup,
+      photo: (c.profilePicUrl as string) ?? null,
+      ts: Number.isFinite(ts) ? ts : 0,
+    });
+  }
+  chats.sort((a, b) => b.ts - a.ts);
+  return chats.slice((page - 1) * pageSize, page * pageSize).map(({ phone, name, isGroup, photo }) => ({ phone, name, isGroup, photo }));
+}
+
+export async function listarChats(page = 1, pageSize = 5): Promise<ChatResumo[]> {
+  if (provedorWhatsApp() === "evolution") return listarChatsEvolution(page, pageSize);
   const data = await zapiGet(`chats?page=${page}&pageSize=${pageSize}`).catch(() => []);
   if (!Array.isArray(data)) return [];
   return data.map((c: Record<string, unknown>) => ({
@@ -150,13 +282,35 @@ export async function listarChats(page = 1, pageSize = 5): Promise<Array<{ phone
   })).filter((c) => c.phone);
 }
 
+// Devolve mensagens no formato "estilo Z-API" (messageId/fromMe/momment/text…)
+// — a importação de histórico (api/whatsapp/import-history) só conhece esse
+// formato, então a Evolution é convertida antes de devolver.
 export async function mensagensDoChat(phone: string, amount = 200): Promise<Record<string, unknown>[]> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, {
+      where: { key: { remoteJid: evoJidChat(phone) } },
+      limit: amount,
+    }).catch(() => null);
+    const mensagens = data?.messages as Record<string, unknown> | unknown[] | undefined;
+    const registros: unknown[] = Array.isArray(data)
+      ? data
+      : Array.isArray(mensagens)
+      ? mensagens
+      : Array.isArray((mensagens as Record<string, unknown> | undefined)?.records)
+      ? ((mensagens as Record<string, unknown>).records as unknown[])
+      : [];
+    return registros.map((r) => mensagemEvolutionParaZapi(r as Record<string, unknown>));
+  }
   const data = await zapiGet(`chat-messages/${phone}?amount=${amount}`).catch(() => []);
   return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
 }
 
 export async function fotoPerfil(phone: string): Promise<string | null> {
   try {
+    if (provedorWhatsApp() === "evolution") {
+      const data = await evoFetch("POST", `/chat/fetchProfilePictureUrl/${evoInstancia()}`, { number: evoDestino(phone) });
+      return (data?.profilePictureUrl as string) ?? null;
+    }
     const data = (await zapiGet(`profile-picture?phone=${normalizePhone(phone)}`)) as Record<string, unknown>;
     return (data?.link as string) ?? (data?.url as string) ?? null;
   } catch {
@@ -166,20 +320,63 @@ export async function fotoPerfil(phone: string): Promise<string | null> {
 
 // ---------- Conexão (QR / status) ----------
 
-export async function statusConexao(): Promise<{ configurado: boolean; conectado: boolean; precisaQrCode: boolean; clientTokenConfigurado: boolean; erro?: string | null }> {
+export type StatusConexao = {
+  configurado: boolean;
+  conectado: boolean;
+  precisaQrCode: boolean;
+  clientTokenConfigurado: boolean;
+  provedor?: ProvedorWhatsApp | null;
+  erro?: string | null;
+};
+
+export async function statusConexao(): Promise<StatusConexao> {
+  const provedor = provedorWhatsApp();
+  if (!provedor) {
+    return { configurado: false, conectado: false, precisaQrCode: false, clientTokenConfigurado: !!process.env.ZAPI_CLIENT_TOKEN, provedor: null };
+  }
+
+  if (provedor === "evolution") {
+    try {
+      const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`);
+      const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
+      const conectado = state === "open";
+      return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado: true, provedor, erro: null };
+    } catch (e) {
+      const msg = String(e);
+      const erro = /\(404\)/.test(msg)
+        ? `Instância "${evolutionConfig()?.instance}" não existe na Evolution API — crie-a no Manager com esse nome exato.`
+        : msg;
+      return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true, provedor, erro };
+    }
+  }
+
   const clientTokenConfigurado = !!process.env.ZAPI_CLIENT_TOKEN;
-  if (!isEnabled()) return { configurado: false, conectado: false, precisaQrCode: false, clientTokenConfigurado };
   try {
     const data = (await zapiGet("status")) as { connected?: boolean; smartphoneConnected?: boolean; error?: string | null };
     const conectado = !!(data?.connected && data?.smartphoneConnected !== false);
-    return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado, erro: data?.error ?? null };
+    return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado, provedor, erro: data?.error ?? null };
   } catch (e) {
-    return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado, erro: String(e) };
+    return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado, provedor, erro: String(e) };
   }
 }
 
 export async function obterQrCode(): Promise<{ imagem: string | null; erro?: string }> {
-  if (!isEnabled()) return { imagem: null, erro: "Z-API não configurada." };
+  const provedor = provedorWhatsApp();
+  if (!provedor) return { imagem: null, erro: "WhatsApp não configurado (Evolution API ou Z-API)." };
+
+  if (provedor === "evolution") {
+    try {
+      const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+      const base64 = data?.base64 as string | undefined;
+      if (base64) return { imagem: base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}` };
+      const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? "");
+      if (state === "open") return { imagem: null, erro: "Já conectado." };
+      return { imagem: null, erro: "QR indisponível — tente de novo em alguns segundos." };
+    } catch (e) {
+      return { imagem: null, erro: String(e) };
+    }
+  }
+
   try {
     const data = (await zapiGet("qr-code/image")) as { value?: string };
     if (!data?.value) return { imagem: null, erro: "QR indisponível (talvez já conectado)." };
@@ -191,16 +388,24 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
 }
 
 export async function reiniciar(): Promise<boolean> {
+  if (provedorWhatsApp() === "evolution") {
+    // Versões da Evolution divergem no verbo (PUT nas 2.x, POST em outras).
+    try { await evoFetch("PUT", `/instance/restart/${evoInstancia()}`); return true; } catch {}
+    try { await evoFetch("POST", `/instance/restart/${evoInstancia()}`); return true; } catch { return false; }
+  }
   try { await zapiGet("restart"); return true; } catch { return false; }
 }
 
 export async function desconectar(): Promise<boolean> {
+  if (provedorWhatsApp() === "evolution") {
+    try { await evoFetch("DELETE", `/instance/logout/${evoInstancia()}`); return true; } catch { return false; }
+  }
   try { await zapiGet("disconnect"); return true; } catch { return false; }
 }
 
 export async function baixarAudio(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string } | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return null;
     return { buffer: await res.arrayBuffer(), mimeType: res.headers.get("content-type") ?? "audio/ogg" };
   } catch {

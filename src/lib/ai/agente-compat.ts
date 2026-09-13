@@ -1,0 +1,162 @@
+// Loop agêntico do Cérebro para provedores no FORMATO OpenAI — Gemini (pelo
+// endpoint de compatibilidade do Google), Groq, DeepSeek e a própria OpenAI.
+// Existe para o chat do Cérebro (com ferramentas) funcionar sem a Anthropic,
+// que é o provedor mais caro. O HISTÓRICO continua salvo no formato de blocos
+// da Anthropic (como sempre foi no banco) — a conversão acontece só na hora
+// de chamar, então dá pra alternar de provedor no meio de uma sessão sem
+// perder nada.
+
+import OpenAI from "openai";
+import type Anthropic from "@anthropic-ai/sdk";
+import { OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
+
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: boolean };
+
+// Mesma ordem de preferência de llmTexto (do mais barato pro mais caro).
+export function provedoresCompat(): ProvedorCompat[] {
+  const lista: ProvedorCompat[] = [];
+  if (process.env.GEMINI_API_KEY) {
+    lista.push({
+      nome: "gemini",
+      client: new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" }),
+      model: GEMINI_MODEL,
+      visao: true,
+    });
+  }
+  if (process.env.GROQ_API_KEY) {
+    lista.push({
+      nome: "groq",
+      client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" }),
+      model: GROQ_MODEL,
+      visao: false,
+    });
+  }
+  if (process.env.DEEPSEEK_API_KEY) {
+    lista.push({
+      nome: "deepseek",
+      client: new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" }),
+      model: DEEPSEEK_MODEL,
+      visao: false,
+    });
+  }
+  if (process.env.OPENAI_API_KEY) {
+    lista.push({ nome: "openai", client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }), model: OPENAI_MODEL, visao: true });
+  }
+  return lista;
+}
+
+type Bloco = Record<string, unknown>;
+const blocosDe = (content: Anthropic.MessageParam["content"]): Bloco[] =>
+  typeof content === "string" ? [{ type: "text", text: content }] : (content as unknown as Bloco[]);
+const texto = (b: Bloco): string => (typeof b.text === "string" ? b.text : "");
+
+// Definição de tool da Anthropic -> tool "function" da OpenAI (mesmo JSON Schema).
+export function toolsParaOpenAI(defs: Anthropic.Tool[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
+  return defs.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.input_schema as unknown as Record<string, unknown> },
+  }));
+}
+
+// Histórico em blocos da Anthropic -> mensagens no formato OpenAI.
+export function historicoParaOpenAI(
+  system: string,
+  messages: Anthropic.MessageParam[]
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: "system", content: system }];
+
+  for (const m of messages) {
+    const blocos = blocosDe(m.content);
+
+    if (m.role === "assistant") {
+      const conteudo = blocos.filter((b) => b.type === "text").map(texto).join("\n");
+      const toolCalls = blocos
+        .filter((b) => b.type === "tool_use")
+        .map((b) => ({
+          id: String(b.id),
+          type: "function" as const,
+          function: { name: String(b.name), arguments: JSON.stringify(b.input ?? {}) },
+        }));
+      out.push({ role: "assistant", content: conteudo, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) });
+      continue;
+    }
+
+    // user: resultados de ferramenta viram mensagens "tool"; texto/imagem viram "user".
+    for (const b of blocos) {
+      if (b.type !== "tool_result") continue;
+      out.push({
+        role: "tool",
+        tool_call_id: String(b.tool_use_id),
+        content: typeof b.content === "string" ? b.content : JSON.stringify(b.content ?? ""),
+      });
+    }
+    const partes: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+    for (const b of blocos) {
+      if (b.type === "text") partes.push({ type: "text", text: texto(b) });
+      else if (b.type === "image") {
+        const source = b.source as { type?: string; media_type?: string; data?: string } | undefined;
+        if (source?.type === "base64" && source.data) {
+          partes.push({ type: "image_url", image_url: { url: `data:${source.media_type ?? "image/jpeg"};base64,${source.data}` } });
+        }
+      }
+    }
+    if (partes.length) {
+      const soTexto = partes.every((p) => p.type === "text");
+      out.push({ role: "user", content: soTexto ? partes.map((p) => (p.type === "text" ? p.text : "")).join("\n") : partes });
+    }
+  }
+  return out;
+}
+
+export type RodadaCompat = {
+  provedor: string;
+  texto: string;
+  toolCalls: { id: string; name: string; input: Record<string, unknown> }[];
+};
+
+// Uma rodada do agente (sem streaming). Tenta cada provedor na ordem; se um
+// falhar (limite do plano grátis, sem crédito), passa pro próximo.
+export async function rodadaAgenteCompat(
+  system: string,
+  messages: Anthropic.MessageParam[],
+  tools: Anthropic.Tool[],
+  precisaVisao: boolean
+): Promise<RodadaCompat> {
+  const provs = provedoresCompat().filter((p) => !precisaVisao || p.visao);
+  if (!provs.length) {
+    throw new Error(precisaVisao
+      ? "Nenhum provedor com leitura de imagem configurado (GEMINI_API_KEY ou OPENAI_API_KEY)."
+      : "Nenhum provedor de IA configurado (GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY ou OPENAI_API_KEY).");
+  }
+
+  const msgs = historicoParaOpenAI(system, messages);
+  const ferramentas = toolsParaOpenAI(tools);
+
+  let ultimoErro: unknown = null;
+  for (const p of provs) {
+    try {
+      const resp = await p.client.chat.completions.create({
+        model: p.model,
+        messages: msgs,
+        tools: ferramentas,
+        tool_choice: "auto",
+        max_tokens: 2048,
+      });
+      const escolha = resp.choices[0]?.message;
+      const toolCalls: RodadaCompat["toolCalls"] = [];
+      for (const tc of escolha?.tool_calls ?? []) {
+        if (tc.type !== "function") continue;
+        let input: Record<string, unknown> = {};
+        try { input = JSON.parse(tc.function.arguments || "{}"); } catch { input = {}; }
+        toolCalls.push({ id: tc.id, name: tc.function.name, input });
+      }
+      return { provedor: p.nome, texto: (escolha?.content ?? "").trim(), toolCalls };
+    } catch (e) {
+      ultimoErro = e;
+      console.error(`[cerebro-compat] provedor ${p.nome} falhou, tentando o próximo:`, e instanceof Error ? e.message : e);
+    }
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
+}

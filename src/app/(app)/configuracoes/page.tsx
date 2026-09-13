@@ -29,11 +29,11 @@ export default async function ConfiguracoesPage() {
       comoAtivar: "Defina GEMINI_API_KEY (recomendado, tem camada grátis) ou GROQ_API_KEY (grátis) no ambiente. DeepSeek/OpenAI/Anthropic também funcionam.",
     },
     {
-      nome: "WhatsApp via Z-API (número fica no celular)",
+      nome: zapi.isEnabled() ? `WhatsApp via ${zapi.provedorWhatsAppNome()}` : "WhatsApp (número fica no celular)",
       icon: MessageCircle,
       ativo: zapi.isEnabled(),
       desc: "Conecta por QR Code (estilo WhatsApp Web). O número continua no celular, sem migrar.",
-      comoAtivar: "Defina ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN e ZAPI_CLIENT_TOKEN.",
+      comoAtivar: "Grátis: Evolution API (EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE — ver docs/GRATUITO.md). Paga: Z-API (ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN).",
     },
     {
       nome: "Google Agenda",
@@ -81,7 +81,7 @@ export default async function ConfiguracoesPage() {
           <div className="font-semibold text-emerald-800">Conectar WhatsApp por QR Code</div>
           <p className="text-sm text-emerald-700">
             {zapi.isEnabled()
-              ? "Z-API configurada. Abra para escanear o QR e parear seu número."
+              ? `${zapi.provedorWhatsAppNome()} configurada. Abra para escanear o QR e parear seu número.`
               : "Veja como ativar e escanear o QR para receber/responder no CRM."}
           </p>
         </div>

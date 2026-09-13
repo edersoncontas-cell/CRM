@@ -1,0 +1,87 @@
+# Evolution API — WhatsApp GRÁTIS para o CRM (software aberto, você hospeda)
+#
+# Substitui a Z-API (paga). Sobe 3 containers: a Evolution, um Postgres e um
+# Redis, tudo local no seu servidor/PC. Passo a passo completo em
+# ../docs/GRATUITO.md. Antes de subir, troque os DOIS valores marcados com
+# "TROQUE" abaixo.
+#
+#   docker compose up -d          # sobe
+#   docker compose logs -f        # acompanha
+#   docker compose down           # para (os dados ficam nos volumes)
+
+services:
+  evolution-api:
+    # Versão 2.x — a mesma família que o CRM integra (sendText/webhook/base64).
+    # Se quiser a mais nova: evoapicloud/evolution-api:latest
+    image: atendai/evolution-api:v2.2.3
+    container_name: evolution_api
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      # URL pública pela qual o CRM (na Vercel) vai chamar esta Evolution.
+      # Ex.: http://IP-DO-SERVIDOR:8080  ou  https://seu-tunel.ts.net
+      - SERVER_URL=http://TROQUE-PELO-SEU-IP-OU-DOMINIO:8080
+      # Senha mestre da API — a MESMA vai em EVOLUTION_API_KEY na Vercel.
+      # Gere algo longo e aleatório (ex.: openssl rand -hex 32).
+      - AUTHENTICATION_API_KEY=TROQUE-POR-UMA-CHAVE-LONGA-E-SECRETA
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - LANGUAGE=pt-BR
+
+      # Banco local (container abaixo) — não usa o Neon do CRM.
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      # Guardar mensagens aqui permite o botão "Importar conversas" do CRM
+      # puxar o histórico antigo. Pode desligar (false) se o disco apertar.
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=false
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - DATABASE_SAVE_DATA_LABELS=false
+      - DATABASE_SAVE_DATA_HISTORIC=true
+
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+
+      # O webhook é configurado POR INSTÂNCIA (no Manager ou via API) — ver o
+      # guia. Global fica desligado.
+      - WEBHOOK_GLOBAL_ENABLED=false
+      # Nome que aparece em "Aparelhos conectados" no celular.
+      - CONFIG_SESSION_PHONE_CLIENT=CRM
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - QRCODE_LIMIT=30
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=evolution
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: evolution_redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_instances:
+  evolution_postgres:
+  evolution_redis:
