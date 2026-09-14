@@ -28,7 +28,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // bancos com a versão antiga marcada NUNCA rodariam a migração sozinhos e
 // toda página que usa as colunas novas quebra (já aconteceu em produção).
 // v6: coluna Visita.googleEventId (integração real com a Google Agenda).
-export const CHAVE_MANUTENCAO = "manutencao.v6";
+// v7: remove as 7 tabelas de telas excluídas (ver migrations.ts).
+export const CHAVE_MANUTENCAO = "manutencao.v7";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

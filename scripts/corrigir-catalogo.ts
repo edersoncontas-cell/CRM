@@ -99,7 +99,6 @@ async function main() {
       console.log(`  MESCLAR: "${nomeAntigo}" (${antiga.id}) → "${nomeNovo}" (${jaExisteNova.id}) já existe; migra vínculos e apaga a antiga.`);
       if (aplicar) {
         await prisma.$transaction([
-          prisma.midiaPost.updateMany({ where: { maquinaId: antiga.id }, data: { maquinaId: jaExisteNova.id } }),
           prisma.notaMaquina.updateMany({ where: { maquinaId: antiga.id }, data: { maquinaId: jaExisteNova.id } }),
           prisma.maquina.delete({ where: { id: antiga.id } }),
         ]);
@@ -117,13 +116,13 @@ async function main() {
   const oficiais = new Set(Object.keys(PORTFOLIO_NH));
   const nhProprias = await prisma.maquina.findMany({
     where: { marca: "New Holland", proprio: true },
-    include: { _count: { select: { midiaPosts: true, notas: true } } },
+    include: { _count: { select: { notas: true } } },
   });
   for (const m of nhProprias) {
     if (oficiais.has(m.modelo)) continue;
-    const temVinculos = m._count.midiaPosts > 0 || m._count.notas > 0;
+    const temVinculos = m._count.notas > 0;
     if (temVinculos) {
-      console.log(`  DESMARCAR proprio: "${m.modelo}" (tem ${m._count.midiaPosts} mídia + ${m._count.notas} nota(s) vinculadas)`);
+      console.log(`  DESMARCAR proprio: "${m.modelo}" (tem ${m._count.notas} nota(s) vinculada(s))`);
       if (aplicar) await prisma.maquina.update({ where: { id: m.id }, data: { proprio: false } });
     } else {
       console.log(`  APAGAR: "${m.modelo}" (fora do portfólio, sem vínculos)`);

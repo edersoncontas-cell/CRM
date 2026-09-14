@@ -287,38 +287,10 @@ const NOMES = [
   "Construtora Litoral",
 ];
 
-const MOTIVACOES: { texto: string; autor?: string; categoria: string }[] = [
-  { texto: "O sucesso é a soma de pequenos esforços repetidos dia após dia.", autor: "Robert Collier", categoria: "persistencia" },
-  { texto: "Não espere por oportunidades extraordinárias. Agarre ocasiões comuns e as torne grandes.", autor: "Orison Marden", categoria: "vendas" },
-  { texto: "A persistência é o caminho do êxito.", autor: "Charles Chaplin", categoria: "persistencia" },
-  { texto: "Pessoas compram de pessoas em quem confiam. Construa relação antes da venda.", categoria: "vendas" },
-  { texto: "Cada 'não' te aproxima do próximo 'sim'. Continue ligando.", categoria: "vendas" },
-  { texto: "Foco não é dizer sim. Foco é dizer não para mil coisas boas.", autor: "Steve Jobs", categoria: "foco" },
-  { texto: "Comece onde você está. Use o que você tem. Faça o que você pode.", autor: "Arthur Ashe", categoria: "mindset" },
-  { texto: "A melhor maneira de prever o futuro é criá-lo.", autor: "Peter Drucker", categoria: "mindset" },
-  { texto: "Quem não é visto, não é lembrado. Esteja presente na obra do cliente.", categoria: "vendas" },
-  { texto: "Disciplina é fazer o que precisa ser feito, mesmo quando você não tem vontade.", categoria: "foco" },
-  { texto: "Não conte os dias, faça os dias contarem.", autor: "Muhammad Ali", categoria: "mindset" },
-  { texto: "Uma meta sem um plano é apenas um desejo.", autor: "Antoine de Saint-Exupéry", categoria: "foco" },
-  { texto: "O cliente não compra a máquina. Compra a solução para o problema dele.", categoria: "vendas" },
-  { texto: "Grandes resultados exigem grandes ambições.", autor: "Heráclito", categoria: "mindset" },
-  { texto: "Pequenos passos todos os dias vencem grandes saltos de vez em quando.", categoria: "tdah" },
-  { texto: "Faça uma coisa de cada vez. Termine. Depois a próxima.", categoria: "tdah" },
-  { texto: "Anote agora. Sua memória vai te trair, sua lista não.", categoria: "tdah" },
-  { texto: "Energia gera energia. Comece pela tarefa mais fácil e ganhe impulso.", categoria: "tdah" },
-  { texto: "Vender é transferir confiança e entusiasmo.", autor: "Zig Ziglar", categoria: "vendas" },
-  { texto: "Seu maior concorrente é a versão de você que desistiu ontem.", categoria: "persistencia" },
-  { texto: "Trabalhe enquanto eles dormem. Aprenda enquanto eles se divertem.", categoria: "persistencia" },
-  { texto: "A diferença entre o impossível e o possível está na determinação.", autor: "Tommy Lasorda", categoria: "persistencia" },
-];
-
 export interface ResultadoSeed {
   municipios: number;
   maquinas: number;
   clientes: number;
-  metas: number;
-  motivacoes: number;
-  campanhas: number;
 }
 
 export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
@@ -367,23 +339,6 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
     });
   }
 
-  // Motivações
-  if ((await db.motivacao.count()) === 0) {
-    await db.motivacao.createMany({ data: MOTIVACOES });
-  }
-
-  // Metas
-  if ((await db.meta.count()) === 0) {
-    await db.meta.createMany({
-      data: [
-        { tipo: "diaria", rotulo: "Contatos com clientes (hoje)", alvo: 10, progresso: 6, periodo: "diaria" },
-        { tipo: "prospeccao", rotulo: "Novos prospects (semana)", alvo: 15, progresso: 9, periodo: "semanal" },
-        { tipo: "negocios_banco", rotulo: "Propostas em banco (mês)", alvo: 8, progresso: 3, periodo: "mensal" },
-        { tipo: "mensal", rotulo: "Máquinas vendidas (mês)", alvo: 5, progresso: 2, periodo: "mensal" },
-        { tipo: "semanal", rotulo: "Visitas técnicas (semana)", alvo: 6, progresso: 4, periodo: "semanal" },
-      ],
-    });
-  }
 
   // Clientes + negociações
   if ((await db.cliente.count()) === 0) {
@@ -458,77 +413,9 @@ export async function semear(db: PrismaClient): Promise<ResultadoSeed> {
     }
   }
 
-  // Sugestões de vínculo
-  if ((await db.sugestaoVinculo.count()) === 0) {
-    const cliente = await db.cliente.findFirst();
-    await db.sugestaoVinculo.createMany({
-      data: [
-        { telefone: "28998887766", nomeDetectado: "Zé da Terraplenagem", textoContexto: "Bom dia, queria saber da escavadeira E215", confianca: 72, clienteId: cliente?.id },
-        { telefone: "28997776655", nomeDetectado: null, textoContexto: "Oi, vi seu anúncio do rolo Dynapac", confianca: 45 },
-      ],
-    });
-  }
-
-  // Mídia
-  if ((await db.midiaPost.count()) === 0) {
-    const maq = await db.maquina.findFirst({ where: { marca: "New Holland", modelo: "E215C" } });
-    await db.midiaPost.create({
-      data: {
-        maquinaId: maq?.id,
-        titulo: "Você conhece a New Holland E215C?",
-        conteudo: "🚜 21,5 toneladas de produtividade com o motor FPT econômico! Caçamba de até 1,7 m³, cabine ROPS e câmera de ré. Quer um comparativo com a concorrência? Me chama! 👇",
-        status: "agendado",
-        agendadoPara: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3),
-      },
-    });
-  }
-
-  // Campanhas de marketing de demonstração
-  if ((await db.campanhaMarketing.count()) === 0) {
-    await db.campanhaMarketing.createMany({
-      data: [
-        {
-          tipo: "diario",
-          titulo: "💡 Sabia disso sobre a New Holland E245C?",
-          conteudo: "🔧 Dica do dia!\n\nA New Holland E245C tem capacidade de escavação de até 7,2 metros de profundidade — ideal para fundações profundas e obras de saneamento!\n\nIsso significa MAIS OBRA com MENOS reposicionamento. 💪\n\nQuer um comparativo técnico? Me chama! 👇",
-          hashtags: "#NewHolland #E245C #Escavadeira #Construção #SulES",
-          canalAlvo: "ambos",
-          status: "rascunho",
-          marca: "New Holland",
-          categoria: "escavadeira",
-        },
-        {
-          tipo: "segunda",
-          titulo: "🚀 Segunda-feira de oportunidades!",
-          conteudo: "Bom dia! 🌅 Semana nova, oportunidade nova!\n\nA Dynapac CA3500 está disponível com condições especiais Finame/BNDES. Rolo liso de 8 toneladas com tração 4x4 — perfeito para asfalto e solo.\n\n✅ Taxa reduzida\n✅ Demonstração gratuita\n✅ Proposta em 24h\n\nMe chama! 👇",
-          hashtags: "#Dynapac #CA3500 #RoloCompactador #Finame #Construção",
-          canalAlvo: "whatsapp",
-          status: "aprovado",
-          marca: "Dynapac",
-          categoria: "rolo_solo",
-        },
-        {
-          tipo: "mensal_fim",
-          titulo: "⏰ Últimos dias — condições especiais vencem!",
-          conteudo: "⚠️ ATENÇÃO!\n\nEstamos nos ÚLTIMOS DIAS do mês!\n\nA New Holland B110C (retroescavadeira) com condições que só existem AGORA:\n🔥 Finame com entrada reduzida\n🔥 Demonstração na sua obra\n🔥 Garantia estendida incluída\n\nMe chama AGORA e garanta sua proposta! ⬇️",
-          hashtags: "#NewHolland #B110C #Retroescavadeira #ÚltimosDias #Oportunidade",
-          canalAlvo: "ambos",
-          status: "enviado",
-          marca: "New Holland",
-          categoria: "retroescavadeira",
-          totalEnviado: 12,
-          enviadoEm: new Date(Date.now() - 1000 * 60 * 60 * 48),
-        },
-      ],
-    });
-  }
-
   return {
     municipios: await db.municipio.count(),
     maquinas: await db.maquina.count(),
     clientes: await db.cliente.count(),
-    metas: await db.meta.count(),
-    motivacoes: await db.motivacao.count(),
-    campanhas: await db.campanhaMarketing.count(),
   };
 }

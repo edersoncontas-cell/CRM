@@ -157,6 +157,13 @@ export async function aplicarMigracoes(): Promise<void> {
 
     // Google Agenda (OAuth real): id do evento criado para cada visita.
     await db.$executeRawUnsafe(`ALTER TABLE "Visita" ADD COLUMN IF NOT EXISTS "googleEventId" TEXT`);
+
+    // Limpeza (v7): tabelas de telas excluídas (marketing, mídia, resumos
+    // colados, sugestões de vínculo, metas/frases antigas). Nenhuma tela lia
+    // nelas; o Prisma já não as conhece. Ordem respeita as chaves estrangeiras.
+    for (const t of ["AnaliseIA", "Conversa", "SugestaoVinculo", "MidiaPost", "CampanhaMarketing", "Motivacao", "Meta"]) {
+      await db.$executeRawUnsafe(`DROP TABLE IF EXISTS "${t}" CASCADE`);
+    }
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

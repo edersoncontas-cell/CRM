@@ -64,9 +64,7 @@ model Cliente {
   criadoEm       DateTime  @default(now())
   atualizadoEm   DateTime  @updatedAt
   negociacoes    Negociacao[]
-  conversas      Conversa[]
   alertas        Alerta[]
-  sugestoes      SugestaoVinculo[]
   tarefas        TarefaKanban[]
   visitas        Visita[]
   frota          ClienteMaquina[]
@@ -172,7 +170,6 @@ model Negociacao {
   comissaoPagaEm        DateTime? // timestamp de quando foi confirmada
   criadoEm             DateTime  @default(now())
   atualizadoEm         DateTime  @updatedAt
-  analises              AnaliseIA[]
 }
 
 model Maquina {
@@ -195,7 +192,6 @@ model Maquina {
   curiosidades      String?
   imagemUrl         String?
   aplicacoes        String? // setor de aplicações: nichos/segmentos de mercado e operações que a máquina realiza
-  midiaPosts        MidiaPost[]
   notas             NotaMaquina[]
   @@unique([marca, modelo])
 }
@@ -211,42 +207,6 @@ model NotaMaquina {
   texto         String
   criadoEm      DateTime @default(now())
   @@index([maquinaId])
-}
-
-model Conversa {
-  id            String    @id @default(cuid())
-  cliente       Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId     String?
-  canal         String    @default("manual")
-  tipo          String    @default("texto")
-  conteudo      String
-  transcricao   String?
-  remetente     String    @default("cliente")
-  zapiId        String?
-  analisadaEm  DateTime?
-  criadoEm     DateTime  @default(now())
-  analise       AnaliseIA?
-  @@index([zapiId])
-}
-
-model AnaliseIA {
-  id                 String     @id @default(cuid())
-  conversa           Conversa?  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
-  conversaId         String?    @unique
-  negociacao         Negociacao? @relation(fields: [negociacaoId], references: [id], onDelete: SetNull)
-  negociacaoId       String?
-  resumo             String?
-  perfil             String?
-  maquina            String?
-  valor              Float?
-  condicaoPagamento  String?
-  concorrente        String?
-  dataVisita         DateTime?
-  sentimento         String?
-  ehProspectReal     Boolean    @default(false)
-  rascunhoResposta   String?
-  fonte              String     @default("ia")
-  criadoEm          DateTime   @default(now())
 }
 
 model TarefaKanban {
@@ -298,28 +258,6 @@ model MaquinaUsada {
   atualizadoEm DateTime @updatedAt
 }
 
-model Meta {
-  id         String   @id @default(cuid())
-  tipo       String
-  rotulo     String
-  alvo       Float
-  progresso  Float    @default(0)
-  periodo    String   @default("mensal")
-  criadoEm  DateTime @default(now())
-}
-
-model SugestaoVinculo {
-  id               String   @id @default(cuid())
-  telefone         String
-  nomeDetectado    String?
-  textoContexto    String?
-  clienteSugerido  Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId        String?
-  confianca        Int      @default(50)
-  status           String   @default("pendente")
-  criadoEm        DateTime @default(now())
-}
-
 model Alerta {
   id         String   @id @default(cuid())
   cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -332,49 +270,11 @@ model Alerta {
   criadoEm  DateTime @default(now())
 }
 
-model MidiaPost {
-  id            String    @id @default(cuid())
-  maquina       Maquina?  @relation(fields: [maquinaId], references: [id], onDelete: SetNull)
-  maquinaId     String?
-  titulo        String
-  conteudo      String
-  status        String    @default("rascunho")
-  agendadoPara  DateTime?
-  criadoEm     DateTime  @default(now())
-}
-
 model EstiloDeFala {
   id           String   @id @default(cuid())
   guia         String
   exemplos     String?
   atualizadoEm DateTime @updatedAt @default(now())
-}
-
-model CampanhaMarketing {
-  id              String    @id @default(cuid())
-  tipo            String
-  titulo          String
-  conteudo        String
-  hashtags        String?
-  canalAlvo       String    @default("ambos")
-  status          String    @default("rascunho")
-  marca           String?
-  categoria       String?
-  municipioFiltro String?
-  feedbackEderson String?
-  totalEnviado    Int       @default(0)
-  enviadoEm       DateTime?
-  criadoEm       DateTime  @default(now())
-  atualizadoEm   DateTime  @updatedAt
-}
-
-model Motivacao {
-  id        String   @id @default(cuid())
-  texto     String
-  autor     String?
-  categoria String   @default("vendas")
-  ativo     Boolean  @default(true)
-  criadoEm DateTime @default(now())
 }
 
 model Configuracao {
