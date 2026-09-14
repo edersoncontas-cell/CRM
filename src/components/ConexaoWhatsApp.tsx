@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction } from "@/lib/actions";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction } from "@/lib/actions";
 import {
-  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2,
+  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal,
 } from "lucide-react";
 
 type Status = {
@@ -14,7 +14,12 @@ type Status = {
   provedor?: "evolution" | "zapi" | null;
   telefone?: string | null;
   erro?: string | null;
+  instanciaNaoExiste?: boolean;
+  webhookOk?: boolean | null;
+  instancia?: string | null;
 };
+
+const COMANDO_INSTALAR = "curl -fsSL https://raw.githubusercontent.com/edersoncontas-cell/CRM/claude/relaxed-cori-5c3g4l/evolution/instalar.sh | sudo bash -s -- https://SEU-CRM.vercel.app";
 
 // Aviso quando o ZAPI_CLIENT_TOKEN está faltando — o número até recebe mensagens,
 // mas NÃO consegue enviar (a Z-API recusa com "client-token is not configured").
@@ -45,6 +50,16 @@ export function ConexaoWhatsApp() {
   const [carregandoQr, setCarregandoQr] = useState(false);
   const [pending, startTransition] = useTransition();
   const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
+  const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
+  const webhookCorrigido = useRef(false);
+
+  // Webhook fora do lugar (ou desligado): o CRM aponta para si mesmo sozinho,
+  // uma vez por visita à página. Sem isso as mensagens não chegam.
+  useEffect(() => {
+    if (status?.provedor !== "evolution" || status.webhookOk !== false || webhookCorrigido.current) return;
+    webhookCorrigido.current = true;
+    configurarWebhookEvolutionAction().then((r) => setWebhookMsg(r.ok ? `Webhook apontado automaticamente para ${r.url}` : `Não consegui apontar o webhook: ${r.erro}`)).catch(() => {});
+  }, [status]);
 
   const buscarStatus = useCallback(async () => {
     try {
@@ -104,7 +119,7 @@ export function ConexaoWhatsApp() {
     );
   }
 
-  // Nenhum provedor configurado: instruções de setup (opção grátis primeiro).
+  // Nenhum provedor configurado: passo a passo da Evolution API (grátis).
   if (!status.configurado) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
@@ -112,29 +127,32 @@ export function ConexaoWhatsApp() {
           <AlertTriangle size={18} /> WhatsApp ainda não configurado
         </div>
         <p className="text-sm text-amber-700">
-          <b>Opção grátis (recomendada): Evolution API</b> — software aberto que você mesmo hospeda
-          (siga o passo a passo em <code className="rounded bg-amber-100 px-1.5 py-0.5">docs/GRATUITO.md</code>).
-          Adicione no Vercel:
+          O CRM usa a <b>Evolution API</b> (software aberto, sem mensalidade). Ela precisa rodar num
+          servidor ligado 24h. São três passos:
         </p>
-        <ul className="mt-2 space-y-1 text-sm text-amber-800">
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_URL</code> <span className="text-amber-600">(ex: https://seu-servidor:8080)</span></li>
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_KEY</code> <span className="text-amber-600">(a AUTHENTICATION_API_KEY da Evolution)</span></li>
-          <li><code className="rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_INSTANCE</code> <span className="text-amber-600">(nome da instância criada no Manager)</span></li>
-        </ul>
-        <p className="mt-2 text-xs text-amber-600">
-          Na Evolution, aponte o webhook da instância para
-          <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">…/api/webhooks/evolution</code>
-          com os eventos MESSAGES_UPSERT e MESSAGES_UPDATE e a opção Base64 ligada.
-        </p>
-        <p className="mt-4 text-sm text-amber-700">
-          <b>Opção paga: Z-API</b> — crie uma instância em{" "}
-          <a href="https://z-api.io" target="_blank" rel="noreferrer" className="font-semibold underline">z-api.io</a>{" "}
-          e adicione <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_ID</code>,{" "}
-          <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_INSTANCE_TOKEN</code> e{" "}
-          <code className="rounded bg-amber-100 px-1.5 py-0.5">ZAPI_CLIENT_TOKEN</code>, com o webhook &quot;Ao receber&quot; em
-          <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">…/api/webhooks/zapi</code>.
-        </p>
-        <p className="mt-3 text-xs text-amber-600">Depois de salvar as variáveis, faça um redeploy.</p>
+        <ol className="mt-3 space-y-3 text-sm text-amber-800">
+          <li className="flex gap-2">
+            <Server size={16} className="mt-0.5 shrink-0" />
+            <div><b>1. Um servidor Ubuntu</b> (VPS de R$ 20–30/mês na Hostinger, Contabo ou DigitalOcean, ou a VM grátis da Oracle Cloud). Guia em <code className="rounded bg-amber-100 px-1.5 py-0.5">docs/GRATUITO.md</code>.</div>
+          </li>
+          <li className="flex gap-2">
+            <Terminal size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <b>2. Um comando no servidor</b> (por SSH). Ele instala tudo, cria a instância e mostra as variáveis:
+              <code className="mt-1 block break-all rounded bg-amber-100 px-2 py-1.5 text-[11px] leading-relaxed">{COMANDO_INSTALAR}</code>
+            </div>
+          </li>
+          <li className="flex gap-2">
+            <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <b>3. Colar na Vercel</b> (Settings → Environment Variables) as três variáveis que o comando imprime:
+              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_URL</code>
+              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_KEY</code>
+              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_INSTANCE</code>
+              e fazer <b>Redeploy</b>. Volte aqui e escaneie o QR.
+            </div>
+          </li>
+        </ol>
       </div>
     );
   }
@@ -158,7 +176,13 @@ export function ConexaoWhatsApp() {
         </p>
         {status.provedor === "evolution" && (
           <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm text-slate-600">
-            <b className="text-slate-700">Webhook da Evolution.</b> Aponte a instância para este CRM com um clique (eventos de mensagem e status, áudio em base64).
+            {status.webhookOk === true ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-green-700"><CheckCircle2 size={15} /> Webhook apontando para este CRM — as mensagens chegam sozinhas.</span>
+            ) : status.webhookOk === false ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700"><AlertTriangle size={15} /> Webhook fora do lugar — corrigindo automaticamente…</span>
+            ) : (
+              <><b className="text-slate-700">Webhook da Evolution.</b> Aponte a instância para este CRM com um clique (eventos de mensagem e status, áudio em base64).</>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 onClick={() => startTransition(async () => { const r = await configurarWebhookEvolutionAction(); setWebhookMsg(r.ok ? `Webhook configurado: ${r.url}` : `Falhou: ${r.erro}`); })}
@@ -179,6 +203,36 @@ export function ConexaoWhatsApp() {
           {pending ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Desconectar
         </button>
       </div>
+      </div>
+    );
+  }
+
+  // Evolution configurada, mas a instância ainda não foi criada: cria daqui.
+  if (status.provedor === "evolution" && status.instanciaNaoExiste) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800">
+          <Server size={18} /> Falta criar a instância &quot;{status.instancia}&quot; na Evolution
+        </div>
+        <p className="text-sm text-amber-700">
+          A Evolution respondeu, mas ainda não tem uma instância com esse nome. O CRM cria agora,
+          já com o webhook apontando para cá, e em seguida mostra o QR Code.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => startTransition(async () => {
+              setCriandoMsg(null);
+              const r = await criarInstanciaEvolutionAction();
+              if (r.ok) { setCriandoMsg("Instância criada."); if (r.qr) setQr(r.qr); await buscarStatus(); if (!r.qr) await buscarQr(); }
+              else setCriandoMsg(`Falhou: ${r.erro}`);
+            })}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60"
+          >
+            {pending ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />} Criar instância e gerar QR
+          </button>
+          {criandoMsg && <span className="text-xs text-slate-600">{criandoMsg}</span>}
+        </div>
       </div>
     );
   }

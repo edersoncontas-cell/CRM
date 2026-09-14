@@ -395,6 +395,48 @@ export async function configurarWebhookEvolution(urlWebhook: string): Promise<{ 
   }
 }
 
+// URL pública deste CRM que a Evolution deve chamar (NEXTAUTH_URL na Vercel,
+// ou a URL do deploy como reserva). null quando não dá para descobrir.
+export function urlWebhookCrm(): string | null {
+  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).trim().replace(/\/+$/, "");
+  return base ? `${base}/api/webhooks/evolution` : null;
+}
+
+// Cria a instância com o nome de EVOLUTION_INSTANCE (canal Baileys, QR Code)
+// já apontando o webhook para o CRM. Tenta o formato das versões 2.x e, se a
+// Evolution recusar, o formato "plano" das 1.x. Devolve o QR quando ele já vem
+// na resposta.
+export async function criarInstanciaEvolution(urlWebhook: string | null): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
+  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
+  const nome = evolutionConfig()?.instance ?? "";
+  const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE"];
+  const corpoV2: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true };
+  const corpoV1: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true };
+  if (urlWebhook) {
+    corpoV2.webhook = { enabled: true, url: urlWebhook, byEvents: false, base64: true, events: eventos };
+    Object.assign(corpoV1, { webhook: urlWebhook, webhook_by_events: false, webhook_base64: true, events: eventos });
+  }
+  const extrairQr = (data: Record<string, unknown>): string | null => {
+    const q = data.qrcode as Record<string, unknown> | undefined;
+    const b64 = typeof q?.base64 === "string" ? q.base64 : null;
+    return b64 ? (b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`) : null;
+  };
+  try {
+    const data = await evoFetch("POST", "/instance/create", corpoV2);
+    return { ok: true, qr: extrairQr(data) };
+  } catch (e1) {
+    const msg1 = e1 instanceof Error ? e1.message : String(e1);
+    // Já existe: não é erro para quem só quer conectar.
+    if (/already|já existe|in use|em uso/i.test(msg1)) return { ok: true, qr: null };
+    try {
+      const data = await evoFetch("POST", "/instance/create", corpoV1);
+      return { ok: true, qr: extrairQr(data) };
+    } catch (e2) {
+      return { ok: false, erro: e2 instanceof Error ? e2.message : msg1 };
+    }
+  }
+}
+
 // Lê o webhook atual da instância (para o painel de conexão conferir).
 export async function lerWebhookEvolution(): Promise<{ url: string | null; enabled: boolean } | null> {
   if (provedorWhatsApp() !== "evolution") return null;
@@ -416,26 +458,40 @@ export type StatusConexao = {
   clientTokenConfigurado: boolean;
   provedor?: ProvedorWhatsApp | null;
   erro?: string | null;
+  // Evolution: a instância com o nome de EVOLUTION_INSTANCE ainda não foi criada
+  // (a tela /conexao oferece o botão "Criar instância").
+  instanciaNaoExiste?: boolean;
+  // Evolution: o webhook da instância aponta para urlWebhookEsperada? null = não
+  // conferido (a Evolution não respondeu ou não está conectada).
+  webhookOk?: boolean | null;
+  instancia?: string | null;
 };
 
-export async function statusConexao(): Promise<StatusConexao> {
+export async function statusConexao(urlWebhookEsperada?: string | null): Promise<StatusConexao> {
   const provedor = provedorWhatsApp();
   if (!provedor) {
     return { configurado: false, conectado: false, precisaQrCode: false, clientTokenConfigurado: !!process.env.ZAPI_CLIENT_TOKEN, provedor: null };
   }
 
   if (provedor === "evolution") {
+    const instancia = evolutionConfig()?.instance ?? null;
     try {
       const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`);
       const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
       const conectado = state === "open";
-      return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado: true, provedor, erro: null };
+      let webhookOk: boolean | null = null;
+      if (urlWebhookEsperada) {
+        const w = await lerWebhookEvolution();
+        webhookOk = w ? w.enabled && (w.url ?? "").replace(/\/+$/, "") === urlWebhookEsperada.replace(/\/+$/, "") : null;
+      }
+      return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado: true, provedor, erro: null, webhookOk, instancia };
     } catch (e) {
       const msg = String(e);
-      const erro = /\(404\)/.test(msg)
-        ? `Instância "${evolutionConfig()?.instance}" não existe na Evolution API — crie-a no Manager com esse nome exato.`
+      const naoExiste = /\(404\)/.test(msg) || /does not exist|não existe/i.test(msg);
+      const erro = naoExiste
+        ? `A instância "${instancia}" ainda não existe na Evolution API. Clique em "Criar instância" abaixo.`
         : msg;
-      return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true, provedor, erro };
+      return { configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true, provedor, erro, instanciaNaoExiste: naoExiste, instancia };
     }
   }
 

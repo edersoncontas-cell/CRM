@@ -1149,13 +1149,26 @@ export async function reiniciarZapi(): Promise<{ ok: boolean }> {
 }
 
 export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean; erro?: string; url?: string }> {
-  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).replace(/\/+$/, "");
-  if (!base) return { ok: false, erro: "Defina NEXTAUTH_URL na Vercel (URL pública do CRM) para apontar o webhook." };
-  const url = `${base}/api/webhooks/evolution`;
+  const url = zapi.urlWebhookCrm();
+  if (!url) return { ok: false, erro: "Defina NEXTAUTH_URL na Vercel (URL pública do CRM) para apontar o webhook." };
   const r = await zapi.configurarWebhookEvolution(url);
   if (r.ok) await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Webhook da Evolution API apontado para ${url}.` }).catch(() => {});
   revalidatePath("/conexao");
   return { ...r, url };
+}
+
+// Cria a instância na Evolution (nome de EVOLUTION_INSTANCE) já com o webhook
+// apontando para este CRM. Usado pelo botão "Criar instância" em /conexao.
+export async function criarInstanciaEvolutionAction(): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
+  const url = zapi.urlWebhookCrm();
+  const r = await zapi.criarInstanciaEvolution(url);
+  if (r.ok) {
+    // Garante o webhook mesmo quando a instância já existia ou a versão ignorou o campo no create.
+    if (url) await zapi.configurarWebhookEvolution(url).catch(() => ({ ok: false }));
+    await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: "Instância da Evolution API criada pelo CRM." }).catch(() => {});
+  }
+  revalidatePath("/conexao");
+  return r;
 }
 
 export async function desconectarZapi(): Promise<{ ok: boolean }> {

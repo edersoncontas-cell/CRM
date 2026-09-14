@@ -11,9 +11,9 @@
 
 services:
   evolution-api:
-    # Versão 2.x — a mesma família que o CRM integra (sendText/webhook/base64).
-    # Se quiser a mais nova: evoapicloud/evolution-api:latest
-    image: atendai/evolution-api:v2.2.3
+    # Imagem mantida pelo projeto (a antiga atendai/evolution-api parou em 2025).
+    # Se o QR não conectar, tente a mais nova: evoapicloud/evolution-api:latest
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: evolution_api
     restart: always
     ports:

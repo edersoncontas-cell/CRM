@@ -20,7 +20,7 @@ import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
-  AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check,
+  CheckCircle2, Clock, BarChart3, MoreVertical, Check,
   FileText, Percent, Repeat,
 } from "lucide-react";
 
@@ -70,10 +70,12 @@ function temaCalor(t: number): string {
   return "from-sky-500/25 to-blue-600/10 border-sky-400/40";
 }
 
+// Só marca os extremos: chama = negociação quente, floco = fria. O meio
+// (a maioria dos cards) fica limpo, sem ícone.
 function iconeCalor(t: number) {
-  if (t >= 70) return <Flame size={13} className="text-orange-400" />;
-  if (t >= 40) return <AlertTriangle size={13} className="text-amber-400" />;
-  return <Snowflake size={13} className="text-sky-400" />;
+  if (t >= 70) return <span title="Negociação quente"><Flame size={13} className="text-orange-400" /></span>;
+  if (t < 40) return <span title="Negociação fria"><Snowflake size={13} className="text-sky-400" /></span>;
+  return null;
 }
 
 // ── Componente principal ──────────────────────────────────────────────────

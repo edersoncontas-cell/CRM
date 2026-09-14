@@ -91,9 +91,35 @@ endpoint: `/api/cron/tudo`. Quem chama ele é o cron-job.org (grátis).
 
 A Evolution API faz o mesmo que a Z-API (conecta por QR Code, o número fica no
 seu celular), mas é software aberto: você roda num servidor seu. Precisa de um
-lugar ligado 24h. Duas opções gratuitas:
+lugar ligado 24h.
 
-### Opção A (recomendada) — Oracle Cloud "Always Free"
+### Caminho rápido (um comando) — recomendado
+
+1. **Tenha um servidor Ubuntu 22.04/24.04 com IP público.** O mais rápido é uma
+   VPS pequena (1 vCPU / 2 GB já serve): Hostinger KVM 1, Contabo, DigitalOcean
+   ou Vultr — de R$ 20 a R$ 30 por mês, contra ~R$ 100 da Z-API. A VM grátis da
+   Oracle (Opção A abaixo) também serve, só demora mais para criar a conta.
+2. **Conecte por SSH** (a VPS mostra usuário, IP e senha) e cole **um comando**,
+   trocando `https://SEU-CRM.vercel.app` pela URL do seu CRM:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/edersoncontas-cell/CRM/claude/relaxed-cori-5c3g4l/evolution/instalar.sh | sudo bash -s -- https://SEU-CRM.vercel.app
+   ```
+   Ele instala o Docker, sobe a Evolution com Postgres e Redis, libera a porta
+   8080, cria a instância `crm` já com o webhook apontando para o CRM e, no
+   fim, imprime as três variáveis (também salvas em `/opt/evolution/CREDENCIAIS.txt`).
+3. **Na Vercel → Settings → Environment Variables**, cole `EVOLUTION_API_URL`,
+   `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE`, apague as `ZAPI_*` e faça
+   **Deployments → ⋯ → Redeploy**.
+4. **No CRM, abra /conexao** e escaneie o QR Code com o celular (*WhatsApp →
+   Aparelhos conectados → Conectar um aparelho*). Se a instância não existir, a
+   própria tela oferece o botão **"Criar instância e gerar QR"**; se o webhook
+   estiver fora do lugar, ela corrige sozinha.
+5. Peça uma mensagem de teste. Em **/conexao → Diagnóstico do recebimento**
+   deve aparecer "recebida" e a conversa entra em **/atendimento**.
+
+Pronto. O resto desta seção é o caminho manual, para quem preferir.
+
+### Opção A — Oracle Cloud "Always Free" (grátis, cadastro mais chato)
 Servidor grátis para sempre (precisa de cartão só para confirmar identidade —
 não é cobrado; escolha sempre recursos marcados *Always Free*).
 
