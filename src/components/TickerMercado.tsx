@@ -28,12 +28,12 @@ export async function TickerMercado() {
   const conteudo = (
     <>
       {itens.map((it, i) => (
-        <span key={i} className="inline-flex items-center gap-1.5 px-6 text-sm font-semibold text-zinc-200 whitespace-nowrap">
-          {it.label}: <span className="font-bold" style={{ color: "#BFDE4D" }}>{it.valor}</span>
+        <span key={i} className="inline-flex items-center gap-1.5 px-6 text-sm font-semibold whitespace-nowrap" style={{ color: "#e9e2f7" }}>
+          {it.label}: <span className="font-bold" style={{ color: "#3dffa0" }}>{it.valor}</span>
         </span>
       ))}
       {dataRotulo && (
-        <span className="inline-flex items-center px-6 text-xs text-zinc-500 whitespace-nowrap">
+        <span className="inline-flex items-center px-6 text-xs whitespace-nowrap" style={{ color: "#7d6ba3" }}>
           café atualizado em {dataRotulo}
         </span>
       )}
@@ -41,7 +41,7 @@ export async function TickerMercado() {
   );
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+    <div className="mb-4 overflow-hidden rounded-xl" style={{ background: "#1d1038", border: "1px solid #34225c" }}>
       <div className="flex animate-[ticker_25s_linear_infinite] py-2">
         <div className="flex shrink-0">{conteudo}</div>
         <div className="flex shrink-0" aria-hidden="true">{conteudo}</div>

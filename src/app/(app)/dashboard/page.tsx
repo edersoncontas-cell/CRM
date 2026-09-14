@@ -1,486 +1,477 @@
 import { db } from "@/lib/db";
-import { diasDesde, saudacaoBrasilia, semCodigoPais } from "@/lib/utils";
-import { ESTAGIO_VENDAS_CONFIRMADAS } from "@/lib/insights";
+import { diasDesde, saudacaoBrasilia, semCodigoPais, formatCurrency } from "@/lib/utils";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { DicaVendas, FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { CadastrarContatoWhatsApp } from "@/components/CadastrarContatoWhatsApp";
+import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
+import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
+import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
+import { carregarVendasFaturadas, resumoVendas, META_ANUAL_VENDAS } from "@/lib/vendas-dashboard";
+import { T } from "@/lib/dash-tema";
 import Link from "next/link";
 import {
-Target, TrendingUp, AlertTriangle, Clock, DollarSign, Users,
-Bell, Snowflake, CheckCircle2, ArrowRight, MessageCircle, UserX,
-MapPin, Calendar, Trophy, BarChart3, Zap, Eye,
+  Target, AlertTriangle, Clock, Bell, Snowflake, ArrowRight, MessageCircle, UserX,
+  Calendar, Trophy, MapPin, Wallet, Receipt, Handshake, Landmark, ListTodo, TrendingUp,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// ── Dark palette ──────────────────────────────────────────────────────────────
-// Surface: #09090b (zinc-950) | Card: #18181b (zinc-900) | Border: #27272a
-// Text: #fafafa / #a1a1aa / #71717a
-// Accents: #BFDE4D agro | #22c55e green | #f59e0b amber | #f87171 red | #60a5fa blue
-
 const DESPEDIDA_RE =
-/\b(obrigad[ao]|valeu|até logo|tchau|tchauzinho|boa noite|boa tarde|bom dia(?! pessoal)|até mais|abraços?|foi um prazer|tudo certo|combinado|fechado|até amanhã|até segunda|pode ser|ok obrigad[ao])\b/i;
+  /\b(obrigad[ao]|valeu|até logo|tchau|tchauzinho|boa noite|boa tarde|bom dia(?! pessoal)|até mais|abraços?|foi um prazer|tudo certo|combinado|fechado|até amanhã|até segunda|pode ser|ok obrigad[ao])\b/i;
 
-export default async function DashboardPage() {
-const hoje = new Date();
-const anoAtual = hoje.getFullYear();
-const inicioAno = new Date(anoAtual, 0, 1);
-const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
-const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
-const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate() - hoje.getDay()); inicioSemana.setHours(0, 0, 0, 0);
-const inicioMes = new Date(anoAtual, hoje.getMonth(), 1);
+export default async function DashboardPage({ searchParams }: { searchParams: { ano?: string } }) {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const anoSel = searchParams.ano && /^\d{4}$/.test(searchParams.ano) ? Number(searchParams.ano) : anoAtual;
+  const inicioAno = new Date(anoAtual, 0, 1);
+  const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
+  const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
 
-// Semana de segunda a domingo (para os quadros que zeram toda segunda-feira)
-const diaSemanaAtual = hoje.getDay(); // 0=domingo ... 6=sábado
-const deltaSegunda = diaSemanaAtual === 0 ? 6 : diaSemanaAtual - 1;
-const inicioSemanaSegunda = new Date(hoje); inicioSemanaSegunda.setDate(hoje.getDate() - deltaSegunda); inicioSemanaSegunda.setHours(0, 0, 0, 0);
-const fimSemanaDomingo = new Date(inicioSemanaSegunda); fimSemanaDomingo.setDate(inicioSemanaSegunda.getDate() + 7);
+  // Semana de segunda a domingo (para os quadros que zeram toda segunda-feira)
+  const diaSemanaAtual = hoje.getDay(); // 0=domingo ... 6=sábado
+  const deltaSegunda = diaSemanaAtual === 0 ? 6 : diaSemanaAtual - 1;
+  const inicioSemanaSegunda = new Date(hoje); inicioSemanaSegunda.setDate(hoje.getDate() - deltaSegunda); inicioSemanaSegunda.setHours(0, 0, 0, 0);
+  const fimSemanaDomingo = new Date(inicioSemanaSegunda); fimSemanaDomingo.setDate(inicioSemanaSegunda.getDate() + 7);
 
-// Janela de segunda a sábado (para o quadro "Novos Negócios", que zera todo domingo)
-const ehDomingoHoje = diaSemanaAtual === 0;
-const fimSemanaSabado = new Date(inicioSemanaSegunda); fimSemanaSabado.setDate(inicioSemanaSegunda.getDate() + 6); fimSemanaSabado.setHours(23, 59, 59, 999);
+  // Janela de segunda a sábado (para o quadro "Novos Negócios", que zera todo domingo)
+  const ehDomingoHoje = diaSemanaAtual === 0;
+  const fimSemanaSabado = new Date(inicioSemanaSegunda); fimSemanaSabado.setDate(inicioSemanaSegunda.getDate() + 6); fimSemanaSabado.setHours(23, 59, 59, 999);
 
-// Ano corrente completo (para a Meta Anual — só conta faturamento dentro do ano)
-const fimAno = new Date(anoAtual + 1, 0, 1);
+  const DIAS_SEM_CONTATO = 30;
+  const corteSemContato = new Date(hoje);
+  corteSemContato.setDate(corteSemContato.getDate() - DIAS_SEM_CONTATO);
 
-const DIAS_SEM_CONTATO = 30;
-const corteSemContato = new Date(hoje);
-corteSemContato.setDate(corteSemContato.getDate() - DIAS_SEM_CONTATO);
+  // Calendário do mês corrente
+  const inicioMesCal = new Date(anoAtual, hoje.getMonth(), 1);
+  const fimMesCal = new Date(anoAtual, hoje.getMonth() + 1, 1);
 
-const [
-metas, alertas, negociacoes, clientesCount,
-clientesAguardandoRaw, futuros,
-vendasGanhasAno,
-// Demandas de hoje
-demandasHoje,
-// Próximas visitas agendadas
-proximasVisitas,
-// Metas semanais
-visitasSemanaAgendadas, negociosCriadosSemana,
-// WHATSAPP: clientes sem contato há 30+ dias, conversas sem cadastro
-clientes30DiasSemContato, conversasSemCadastro,
-municipios,
-colunasFunil,
-] = await Promise.all([
-db.meta.findMany({ orderBy: { criadoEm: "asc" } }),
-db.alerta.findMany({
-where: { resolvido: false },
-include: { cliente: true },
-orderBy: { diasDesde: "desc" },
-}),
-db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
-db.cliente.count(),
-db.cliente.findMany({
-where: { aguardandoResposta: true },
-include: {
-conversas: { orderBy: { criadoEm: "desc" }, take: 1 },
-},
-orderBy: { ultimoContato: "asc" },
-}),
-db.cliente.findMany({
-where: { interesseFuturo: true },
-orderBy: { interesseFuturoData: "asc" },
-take: 12,
-select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
-}),
-// Vendas faturadas DENTRO do ano corrente (por data de faturamento, não de atualização)
-db.negociacao.count({ where: { status: "ganha", faturadoEm: { gte: inicioAno, lt: fimAno } } }),
-// Demandas de hoje (com dueDate definida para hoje)
-db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
-// Próximas visitas (30 dias)
-db.cliente.findMany({
-where: {
-proximaVisita: { gte: hoje, lte: new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000) },
-},
-select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
-orderBy: { proximaVisita: "asc" },
-take: 5,
-}),
-// Visitas agendadas nesta semana (segunda a domingo) — zera toda segunda
-db.visita.count({ where: { data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
-// Negociações criadas de segunda a sábado (zera todo domingo) — filtradas
-// por coluna (EM NEGOCIAÇÃO/EM BANCO) mais abaixo, depois de saber os títulos reais
-ehDomingoHoje ? Promise.resolve([]) : db.negociacao.findMany({
-  where: { criadoEm: { gte: inicioSemanaSegunda, lte: fimSemanaSabado } },
-  select: { estagio: true },
-}),
-// Clientes com 30+ dias sem contato (cadastro do cliente, não depende de negociação)
-db.cliente.findMany({
-  where: { ultimoContato: { lt: corteSemContato } },
-  orderBy: { ultimoContato: "asc" },
-  take: 8,
-  select: { id: true, nome: true, ultimoContato: true },
-}),
-// Conversas de WhatsApp abertas sem cliente vinculado
-db.whatsAppConversation.findMany({
-  where: { clienteId: null, isGroup: false },
-  orderBy: { lastMessageAt: "desc" },
-  take: 8,
-  select: { id: true, contactName: true, externalPhone: true, lastMessageAt: true },
-}),
-// Municípios (para o popup de "Cadastrar" nas conversas sem cadastro)
-db.municipio.findMany({ select: { id: true, nome: true, foraDeArea: true }, orderBy: { nome: "asc" } }),
-// Colunas reais do funil (para não contar negociações "órfãs" de colunas renomeadas/excluídas)
-db.colunaFunil.findMany({ select: { titulo: true } }),
-]);
+  const [
+    alertas, negociacoes,
+    clientesAguardandoRaw, futuros,
+    demandasHoje,
+    proximasVisitas,
+    visitasSemanaAgendadas, negociosCriadosSemana,
+    clientes30DiasSemContato, conversasSemCadastro,
+    municipios,
+    colunasFunil,
+    vendasFaturadas,
+    visitasMes, clientesProximaVisitaMes,
+  ] = await Promise.all([
+    db.alerta.findMany({ where: { resolvido: false }, include: { cliente: true }, orderBy: { diasDesde: "desc" } }),
+    db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
+    db.cliente.findMany({
+      where: { aguardandoResposta: true },
+      include: { conversas: { orderBy: { criadoEm: "desc" }, take: 1 } },
+      orderBy: { ultimoContato: "asc" },
+    }),
+    db.cliente.findMany({
+      where: { interesseFuturo: true },
+      orderBy: { interesseFuturoData: "asc" },
+      take: 12,
+      select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
+    }),
+    db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
+    db.cliente.findMany({
+      where: { proximaVisita: { gte: hoje, lte: new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000) } },
+      select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+      orderBy: { proximaVisita: "asc" },
+      take: 5,
+    }),
+    db.visita.count({ where: { data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
+    ehDomingoHoje ? Promise.resolve([]) : db.negociacao.findMany({
+      where: { criadoEm: { gte: inicioSemanaSegunda, lte: fimSemanaSabado } },
+      select: { estagio: true },
+    }),
+    db.cliente.findMany({
+      where: { ultimoContato: { lt: corteSemContato } },
+      orderBy: { ultimoContato: "asc" },
+      take: 8,
+      select: { id: true, nome: true, ultimoContato: true },
+    }),
+    db.whatsAppConversation.findMany({
+      where: { clienteId: null, isGroup: false },
+      orderBy: { lastMessageAt: "desc" },
+      take: 8,
+      select: { id: true, contactName: true, externalPhone: true, lastMessageAt: true },
+    }),
+    db.municipio.findMany({ select: { id: true, nome: true, foraDeArea: true }, orderBy: { nome: "asc" } }),
+    db.colunaFunil.findMany({ select: { titulo: true } }),
+    carregarVendasFaturadas(),
+    db.visita.findMany({ where: { data: { gte: inicioMesCal, lt: fimMesCal } }, select: { data: true } }),
+    db.cliente.findMany({ where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } }, select: { proximaVisita: true } }),
+  ]);
 
-const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
+  const resumo = resumoVendas(vendasFaturadas, anoSel);
+  const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
 
-const novosNegociosSemana = negociosCriadosSemana.filter((n) => {
-  const cat = categorizarColunaPorTitulo(n.estagio);
-  return cat === "em_negociacao" || cat === "banco";
-}).length;
+  const novosNegociosSemana = negociosCriadosSemana.filter((n) => {
+    const cat = categorizarColunaPorTitulo(n.estagio);
+    return cat === "em_negociacao" || cat === "banco";
+  }).length;
 
-// Top 5 para atacar hoje: clientes com atendimento no WhatsApp ainda ABERTO
-// (não marcado "Atendimento encerrado" = aguardandoResposta ainda true),
-// excluindo quem está classificado como "não cliente".
-const topAtacar = await db.cliente.findMany({
-where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
-orderBy: { leadScore: "desc" },
-take: 5,
-select: {
-id: true, nome: true, leadScore: true, aguardandoResposta: true,
-municipio: { select: { nome: true } },
-negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
-},
-});
+  const topAtacar = await db.cliente.findMany({
+    where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
+    orderBy: { leadScore: "desc" },
+    take: 5,
+    select: {
+      id: true, nome: true, leadScore: true, aguardandoResposta: true,
+      municipio: { select: { nome: true } },
+      negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
+    },
+  });
 
-// "Chegou a hora": interesse futuro dentro de 30 dias
-const em30Dias = new Date(hoje);
-em30Dias.setDate(em30Dias.getDate() + 30);
-const futurosNaHora = futuros.filter(
-(f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias
-).length;
+  const em30Dias = new Date(hoje);
+  em30Dias.setDate(em30Dias.getDate() + 30);
+  const futurosNaHora = futuros.filter((f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias);
 
-const saudacao = saudacaoBrasilia(hoje);
-const metasAbertas = metas.filter((m) => m.progresso < m.alvo).length;
+  const saudacao = saudacaoBrasilia(hoje);
+  const emNegociacaoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "em_negociacao").length;
+  const emBancoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "banco").length;
 
-const META_ANUAL = 40;
-const faltamVendas = Math.max(0, META_ANUAL - vendasGanhasAno);
+  const vendasAno = resumo.kpis.vendas;
+  const faltamVendas = Math.max(0, META_ANUAL_VENDAS - vendasAno);
+  const mesesRestantesAno = Math.max(1, 12 - hoje.getMonth());
+  const mediaNecessariaPorMes = (faltamVendas / mesesRestantesAno).toFixed(1);
+  const diaDoAno = Math.ceil((hoje.getTime() - inicioAno.getTime()) / 86400000);
+  const diasRestantesAno = 365 - diaDoAno;
+  const ritmoMensal = vendasAno > 0 ? (vendasAno / (anoSel === anoAtual ? hoje.getMonth() + 1 : 12)).toFixed(1) : "0";
 
-// EM NEGOCIAÇÃO = ainda com o vendedor (contato/visita); EM BANCO = proposta no
-// banco/BCNH. Classificado pelo TÍTULO real das colunas (Negociacao.estagio
-// grava o título, que pode ter sido renomeado pelo usuário).
-const emNegociacaoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "em_negociacao").length;
-const emBancoCount = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "banco").length;
+  const precisamDeVisita = negociacoes
+    .filter((n) => {
+      const cat = categorizarColunaPorTitulo(n.estagio);
+      return (cat === "em_negociacao" || cat === "banco") && !n.dataVisita;
+    })
+    .sort((a, b) => (a.ultimoContato?.getTime() ?? 0) - (b.ultimoContato?.getTime() ?? 0))
+    .slice(0, 6);
 
-// Meta Anual: quantas máquinas em média preciso vender por mês até dezembro
-const mesesRestantesAno = Math.max(1, 12 - hoje.getMonth());
-const mediaNecessariaPorMes = (faltamVendas / mesesRestantesAno).toFixed(1);
+  const clientesAguardando = clientesAguardandoRaw
+    .filter((c) => {
+      const ultima = c.conversas[0];
+      if (!ultima) return true;
+      if (ultima.remetente === "vendedor") return false;
+      return !DESPEDIDA_RE.test(ultima.conteudo);
+    })
+    .slice(0, 8);
 
-// Negócios em aberto (EM NEGOCIAÇÃO/EM BANCO) que ainda não têm visita marcada
-const precisamDeVisita = negociacoes
-.filter((n) => {
-const cat = categorizarColunaPorTitulo(n.estagio);
-return (cat === "em_negociacao" || cat === "banco") && !n.dataVisita;
-})
-.sort((a, b) => (a.ultimoContato?.getTime() ?? 0) - (b.ultimoContato?.getTime() ?? 0))
-.slice(0, 6);
+  const diasComVisita = new Map<number, number>();
+  for (const v of visitasMes) diasComVisita.set(v.data.getDate(), (diasComVisita.get(v.data.getDate()) ?? 0) + 1);
+  for (const c of clientesProximaVisitaMes) {
+    if (!c.proximaVisita) continue;
+    const d = c.proximaVisita.getDate();
+    diasComVisita.set(d, (diasComVisita.get(d) ?? 0) + 1);
+  }
 
-const clientesAguardando = clientesAguardandoRaw
-.filter((c) => {
-const ultima = c.conversas[0];
-if (!ultima) return true;
-if (ultima.remetente === "vendedor") return false;
-return !DESPEDIDA_RE.test(ultima.conteudo);
-})
-.slice(0, 8);
+  const cidadesTop = resumo.pontosMapa.slice(0, 8).map((p) => ({ nome: p.nome, qtd: p.vendas }));
 
-const diaDoAno = Math.ceil((hoje.getTime() - inicioAno.getTime()) / 86400000);
-const diasRestantesAno = 365 - diaDoAno;
-const ritmoMensal = vendasGanhasAno > 0 ? (vendasGanhasAno / (hoje.getMonth() + 1)).toFixed(1) : "0";
+  const painelWhats = [
+    { rotulo: "Em negociação", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
+    { rotulo: "Em banco", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
+    { rotulo: "Aguardando resposta", valor: clientesAguardando.length, cor: T.rosa, icone: MessageCircle, href: "/atendimento" },
+    { rotulo: "Sem cadastro", valor: conversasSemCadastro.length, cor: T.laranja, icone: UserX, href: "/atendimento" },
+    { rotulo: "30+ dias sem contato", valor: clientes30DiasSemContato.length, cor: T.amarelo, icone: Snowflake, href: "/radar-silencio" },
+    { rotulo: "Demandas de hoje", valor: demandasHoje, cor: T.verde, icone: ListTodo, href: "/pipeline" },
+  ];
+  const maxPainel = Math.max(1, ...painelWhats.map((p) => p.valor));
 
-return (
-<div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-4 md:-m-8 md:p-6 space-y-5">
-{/* ── Saudação + Atualizar ── */}
-<div className="flex items-center justify-between">
-<div>
-<h1 className="text-2xl font-black text-white">{saudacao} 👋</h1>
-<p className="text-xs text-zinc-500 mt-0.5">
-{hoje.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {hoje.getFullYear()}
-</p>
-</div>
-<BotaoAtualizar />
-</div>
+  return (
+    <div style={{ background: T.fundo, minHeight: "100%", color: T.texto }} className="-m-4 space-y-4 p-4 md:-m-8 md:p-6">
+      {/* ── Cabeçalho ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight">Dashboard <span style={{ color: T.rosa }}>·</span> <span className="font-semibold" style={{ color: T.texto2 }}>{saudacao}</span></h1>
+          <p className="mt-0.5 text-xs" style={{ color: T.mudo }}>
+            {hoje.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {anoAtual}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: T.mudo }}>Ano</span>
+          {resumo.anosDisponiveis.slice(0, 4).map((a) => (
+            <Chip key={a} ativo={a === anoSel} href={a === anoAtual ? "/dashboard" : `/dashboard?ano=${a}`}>{a}</Chip>
+          ))}
+          <BotaoAtualizar />
+        </div>
+      </div>
 
-<TickerMercado />
+      <TickerMercado />
 
-<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-<DicaVendas />
-<FraseMotivacional />
-</div>
+      {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Painel className="flex flex-col items-center text-center">
+          <Anel id="meta" valor={vendasAno} max={META_ANUAL_VENDAS} cor1={T.rosa} cor2={T.violeta}>
+            <span className="text-2xl font-black leading-none">{vendasAno}</span>
+            <span className="text-[10px]" style={{ color: T.mudo }}>/{META_ANUAL_VENDAS}</span>
+          </Anel>
+          <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Vendas {anoSel}</p>
+          <p className="text-[11px]" style={{ color: T.mudo }}>{resumo.kpis.atingimento}% da meta · faltam {faltamVendas}</p>
+        </Painel>
 
-{/* ── Top 5 para Atacar Hoje (Fase 5 — lead scoring) ── */}
-{topAtacar.length > 0 && (
-<section>
-<SectionLabel icone={<Target size={16} />} cor="#f87171">Top 5 para Atacar Hoje</SectionLabel>
-<div className="space-y-2">
-{topAtacar.map((c) => {
-const neg = c.negociacoes[0];
-return (
-<Link key={c.id} href={"/clientes/" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>
-{c.leadScore}
-</span>
-<div className="min-w-0 flex-1">
-<p className="text-sm font-semibold text-white truncate">{c.nome}</p>
-<p className="text-xs text-zinc-500 truncate">
-{neg?.proximaAcao ?? (c.aguardandoResposta ? "Aguardando seu retorno no WhatsApp" : (neg?.maquinaModelo ?? "Definir próxima ação"))}
-{c.municipio ? ` · ${c.municipio.nome}` : ""}
-</p>
-</div>
-<ArrowRight size={14} className="text-zinc-600" />
-</Link>
-);
-})}
-</div>
-</section>
-)}
+        <Painel className="flex flex-col items-center text-center">
+          <Anel id="visitas" valor={visitasSemanaAgendadas} max={20} cor1={T.ciano} cor2={T.verde}>
+            <span className="text-2xl font-black leading-none">{visitasSemanaAgendadas}</span>
+            <span className="text-[10px]" style={{ color: T.mudo }}>/20</span>
+          </Anel>
+          <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Visitas na semana</p>
+          <p className="text-[11px]" style={{ color: T.mudo }}>zera toda segunda</p>
+        </Painel>
 
-{/* ── Negociações (primeiro lugar) ── */}
-<Section titulo="🤝 Negociações" cor="#BFDE4D">
-<div className="grid grid-cols-2 gap-3">
-<KpiCard titulo="Em negociação" valor={emNegociacaoCount} cor="#BFDE4D" sub="com o cliente" />
-<KpiCard titulo="Em banco" valor={emBancoCount} cor="#a78bfa" sub="proposta no BCNH" />
-</div>
-</Section>
+        <Painel className="flex flex-col items-center text-center">
+          <Anel id="negocios" valor={novosNegociosSemana} max={5} cor1={T.amarelo} cor2={T.rosa}>
+            <span className="text-2xl font-black leading-none">{novosNegociosSemana}</span>
+            <span className="text-[10px]" style={{ color: T.mudo }}>/5</span>
+          </Anel>
+          <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Novos negócios</p>
+          <p className="text-[11px]" style={{ color: T.mudo }}>na semana (seg–sáb)</p>
+        </Painel>
 
-{/* ── BLOCO 3b: Demandas de Hoje ── */}
-<Section titulo="📋 Demandas de Hoje" cor="#f59e0b">
-  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-    <KpiCard titulo="Hoje" valor={demandasHoje} sub="demanda(s)" cor="amber" />
-  </div>
-</Section>
+        <Painel className="col-span-2 md:col-span-3 xl:col-span-1" destaque>
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>
+            <Wallet size={14} style={{ color: T.verde }} /> Faturamento {anoSel}
+          </div>
+          <p className="mt-1 text-2xl font-black leading-tight" style={{ background: `linear-gradient(90deg, ${T.verde}, ${T.ciano})`, WebkitBackgroundClip: "text", color: "transparent" }}>
+            {formatCurrency(resumo.kpis.faturamento)}
+          </p>
+          <Delta valor={resumo.kpis.faturamentoDelta} />
+          <div className="mt-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>
+            <Receipt size={14} style={{ color: T.amarelo }} /> Ticket médio
+          </div>
+          <p className="mt-1 text-xl font-black leading-tight" style={{ background: `linear-gradient(90deg, ${T.amarelo}, ${T.rosa})`, WebkitBackgroundClip: "text", color: "transparent" }}>
+            {formatCurrency(resumo.kpis.ticket)}
+          </p>
+          <Delta valor={resumo.kpis.ticketDelta} />
+        </Painel>
 
-{/* ── METAS ── */}
-<Section titulo="📊 Metas" cor="#f59e0b">
-<div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
-<KpiCard titulo="Visitas Semanais" valor={<><span style={{ color: "#60a5fa" }}>{visitasSemanaAgendadas}</span><span style={{ color: "#71717a", fontSize: 13 }}>/20</span></>} cor="#60a5fa" sub="zera toda segunda" numerico={false} />
-<KpiCard titulo="Novos Negócios" valor={<><span style={{ color: "#BFDE4D" }}>{novosNegociosSemana}</span><span style={{ color: "#71717a", fontSize: 13 }}>/5</span></>} cor="#BFDE4D" sub="na semana" numerico={false} />
-<KpiCard titulo="Ritmo Mensal" valor={ritmoMensal} cor="#a78bfa" sub="vendas/mês (média)" />
-</div>
-<div className="grid grid-cols-2 gap-3 mb-3">
-<KpiCard titulo="Meta Anual" valor={<><span style={{ color: "#4ade80" }}>{vendasGanhasAno}</span><span style={{ color: "#71717a", fontSize: 13 }}>/{META_ANUAL}</span></>} cor="#BFDE4D" sub={faltamVendas + " para bater"} numerico={false} />
-<KpiCard titulo="Média necessária" valor={mediaNecessariaPorMes} cor="#f59e0b" sub={"máquinas/mês até dez"} />
-</div>
-{/* Barra de progresso meta anual */}
-<div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<div className="flex justify-between items-center mb-2">
-<span className="text-xs text-zinc-400 font-semibold">Meta Anual: {vendasGanhasAno}/{META_ANUAL} vendas</span>
-<span className="text-xs font-bold" style={{ color: "#BFDE4D" }}>{Math.round((vendasGanhasAno / META_ANUAL) * 100)}%</span>
-</div>
-<div className="h-2.5 rounded-full overflow-hidden" style={{ background: "#27272a" }}>
-<div
-className="h-full rounded-full transition-all"
-style={{ width: Math.min(100, (vendasGanhasAno / META_ANUAL) * 100) + "%", background: "linear-gradient(90deg, #BFDE4D, #22c55e)" }}
-/>
-</div>
-<p className="text-xs text-zinc-600 mt-1.5">{diasRestantesAno} dias restantes no ano · {faltamVendas} vendas para a meta</p>
-</div>
-</Section>
+        <Painel className="col-span-2 md:col-span-3 xl:col-span-2" titulo="Termômetro comercial" subtitulo="o que está na mesa agora">
+          <ul className="space-y-2">
+            {painelWhats.map((p) => (
+              <li key={p.rotulo}>
+                <Link href={p.href} className="flex items-center gap-2 text-xs">
+                  <p.icone size={13} style={{ color: p.cor, flexShrink: 0 }} />
+                  <span className="w-36 shrink-0 truncate" style={{ color: T.texto2 }}>{p.rotulo}</span>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+                    <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (p.valor / maxPainel) * 100)}%`, background: `linear-gradient(90deg, ${p.cor}, ${p.cor}88)`, boxShadow: `0 0 8px ${p.cor}66` }} />
+                  </span>
+                  <span className="w-7 text-right font-black" style={{ color: p.cor }}>{p.valor}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Painel>
+      </div>
 
-{/* ── WHATSAPP ── */}
-<Section titulo="📱 WhatsApp" cor="#f87171">
-<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-<KpiCard titulo="Aguard. resposta" valor={clientesAguardando.length} cor="#f87171" sub="sem resposta" />
-<KpiCard titulo="30+ dias sem contato" valor={clientes30DiasSemContato.length} cor="#f59e0b" sub="clientes" />
-<KpiCard titulo="Interesse Futuro" valor={futuros.length} cor="#a78bfa" sub={futurosNaHora + " chegando (30d)"} />
-<KpiCard titulo="Sem cadastro" valor={conversasSemCadastro.length} cor="#f87171" sub="conversas abertas" />
-</div>
-</Section>
+      {/* ── Linha 2: evolução + ticket por ano ── */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Painel className="lg:col-span-2" titulo="Evolução de vendas" subtitulo={`faturamento por mês em ${anoSel} · linha rosa = vendas · tracejado = meta mensal (${resumo.metaMensal.toFixed(1)})`}>
+          <GraficoEvolucao dados={resumo.porMes} metaMensal={resumo.metaMensal} />
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: T.mudo }}>
+            <span><TrendingUp size={11} className="mr-1 inline" style={{ color: T.verde }} />Ritmo: <b style={{ color: T.texto }}>{ritmoMensal}</b> vendas/mês</span>
+            <span>Necessário até dez: <b style={{ color: T.texto }}>{mediaNecessariaPorMes}</b>/mês</span>
+            <span>{diasRestantesAno} dias restantes no ano</span>
+          </div>
+        </Painel>
+        <Painel titulo="Ticket médio por ano" subtitulo="valor médio por máquina faturada">
+          <GraficoTicketPorAno dados={resumo.ticketPorAno} />
+        </Painel>
+      </div>
 
-{/* ── Próximas Visitas Agendadas ── */}
-{proximasVisitas.length > 0 && (
-<section>
-<SectionLabel icone={<Calendar size={16} />} cor="#60a5fa">Próximas Visitas Agendadas</SectionLabel>
-<div className="space-y-2">
-{proximasVisitas.map((v) => (
-<div key={v.id} className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<Calendar size={16} style={{ color: "#60a5fa", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{v.nome}</p>
-{v.municipio && <p className="text-xs text-zinc-500">{v.municipio.nome}</p>}
-{v.proximaVisitaNota && <p className="text-xs text-zinc-400 truncate">{v.proximaVisitaNota}</p>}
-</div>
-<span className="text-xs font-bold whitespace-nowrap" style={{ color: "#60a5fa" }}>
-{new Date(v.proximaVisita!).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-</span>
-</div>
-))}
-</div>
-</section>
-)}
+      {/* ── Linha 3: mapa do ES + linhas/cidades ── */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Painel className="lg:col-span-2" titulo="Vendas por cidade — Espírito Santo" subtitulo="cifrão = cidade com máquina faturada (município do cadastro do cliente); atualiza sozinho">
+          <MapaVendasWrapper pontosIniciais={resumo.pontosMapa} pontosTudoIniciais={resumo.pontosMapaTudo} ano={anoSel} />
+        </Painel>
+        <div className="grid grid-cols-1 gap-3">
+          <Painel titulo="Vendas por linha" subtitulo={`New Holland × Dynapac em ${anoSel}`}>
+            <GraficoDonut dados={resumo.porMarca} />
+          </Painel>
+          <Painel titulo="Cidades que mais compram" subtitulo={`máquinas faturadas em ${anoSel}`}>
+            <GraficoBarrasHorizontais dados={cidadesTop} />
+          </Painel>
+        </div>
+      </div>
 
-{/* ── Aguardando resposta WhatsApp ── */}
-{clientesAguardando.length > 0 && (
-<section>
-<SectionLabel icone={<MessageCircle size={16} />} cor="#f87171">Aguardando Resposta no WhatsApp</SectionLabel>
-<div className="space-y-2">
-{clientesAguardando.map((c) => (
-<Link key={c.id} href={"/clientes/" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<MessageCircle size={16} style={{ color: "#f87171", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{c.nome}</p>
-<p className="text-xs text-zinc-500">Aguardando resposta · {diasDesde(c.ultimoContato)}d sem contato</p>
-</div>
-<ArrowRight size={14} className="text-zinc-600" />
-</Link>
-))}
-</div>
-</section>
-)}
+      {/* ── Linha 4: ranking + modelos + calendário ── */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Painel className="lg:col-span-2" titulo="Ranking de clientes" subtitulo={`quem mais faturou em ${anoSel}`}>
+          {resumo.topClientes.length === 0 ? (
+            <p className="text-xs" style={{ color: T.mudo }}>Nenhuma venda faturada em {anoSel} ainda.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>
+                    <th className="pb-2 pr-2">#</th><th className="pb-2 pr-2">Cliente</th><th className="pb-2 pr-2 text-right">Faturamento</th><th className="pb-2 pr-2 text-right">Qtd</th><th className="pb-2 text-right">Ticket</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumo.topClientes.map((c, i) => (
+                    <tr key={c.id} style={{ borderTop: `1px solid ${T.borda}` }}>
+                      <td className="py-2 pr-2">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black"
+                          style={{ background: i < 3 ? `linear-gradient(135deg, ${[T.amarelo, T.ciano, T.laranja][i]}, ${T.rosa})` : "rgba(255,255,255,0.08)", color: i < 3 ? "#111" : T.texto2 }}>
+                          {i < 3 ? <Trophy size={12} /> : i + 1}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Link href={`/clientes/${c.id}`} className="font-semibold hover:underline">{c.nome}</Link>
+                        {c.cidade && <span className="ml-1 text-[11px]" style={{ color: T.mudo }}><MapPin size={10} className="mr-0.5 inline" />{c.cidade}</span>}
+                      </td>
+                      <td className="py-2 pr-2 text-right font-black" style={{ color: T.verde }}>{formatCurrency(c.faturamento)}</td>
+                      <td className="py-2 pr-2 text-right" style={{ color: T.texto2 }}>{c.qtd}</td>
+                      <td className="py-2 text-right" style={{ color: T.texto2 }}>{formatCurrency(c.ticket)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="mt-4">
+            <h3 className="mb-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: T.texto2 }}>Modelos mais vendidos</h3>
+            <GraficoBarrasHorizontais dados={resumo.porModelo} />
+          </div>
+        </Painel>
+        <Painel titulo="Agenda de visitas" subtitulo="dias marcados têm visita">
+          <CalendarioVisitas ano={anoAtual} mes={hoje.getMonth()} diasComVisita={diasComVisita} hoje={hoje.getDate()} />
+          {proximasVisitas.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {proximasVisitas.map((v) => (
+                <li key={v.id} className="flex items-center gap-2 text-xs">
+                  <Calendar size={13} style={{ color: T.ciano, flexShrink: 0 }} />
+                  <Link href={`/clientes/${v.id}`} className="min-w-0 flex-1 truncate font-semibold hover:underline">{v.nome}</Link>
+                  <span className="font-black" style={{ color: T.ciano }}>{new Date(v.proximaVisita!).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Painel>
+      </div>
 
-{/* ── Clientes com 30+ dias sem contato ── */}
-{clientes30DiasSemContato.length > 0 && (
-<section>
-<SectionLabel icone={<Snowflake size={16} />} cor="#f59e0b">Clientes com 30+ dias sem contato</SectionLabel>
-<div className="space-y-2">
-{clientes30DiasSemContato.map((c) => (
-<Link key={c.id} href={"/clientes/" + c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<Snowflake size={16} style={{ color: "#f59e0b", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{c.nome}</p>
-<p className="text-xs text-zinc-500">{c.ultimoContato ? `há ${diasDesde(c.ultimoContato)}d sem contato` : "sem registro de contato"}</p>
-</div>
-<ArrowRight size={14} className="text-zinc-600" />
-</Link>
-))}
-</div>
-</section>
-)}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DicaVendas />
+        <FraseMotivacional />
+      </div>
 
-{/* ── Conversas de WhatsApp sem cadastro ── */}
-{conversasSemCadastro.length > 0 && (
-<section>
-<SectionLabel icone={<UserX size={16} />} cor="#f87171">Conversas sem cadastro</SectionLabel>
-<div className="space-y-2">
-{conversasSemCadastro.map((c) => (
-<div key={c.id} className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<Link href={"/atendimento?conversa=" + c.id} className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70">
-<UserX size={16} style={{ color: "#f87171", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{c.contactName || c.externalPhone}</p>
-<p className="text-xs text-zinc-500">{c.externalPhone} · sem cliente vinculado</p>
-</div>
-</Link>
-<CadastrarContatoWhatsApp telefone={semCodigoPais(c.externalPhone.replace(/\D/g, ""))} municipios={municipios} />
-</div>
-))}
-</div>
-</section>
-)}
+      {/* ── Operacional ── */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {topAtacar.length > 0 && (
+          <Painel titulo="Top 5 para atacar hoje" subtitulo="pelo lead score · atendimento em aberto">
+            <Lista>
+              {topAtacar.map((c) => {
+                const neg = c.negociacoes[0];
+                return (
+                  <Linha key={c.id} href={"/clientes/" + c.id}
+                    esquerda={<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={{ background: `linear-gradient(135deg, ${T.rosa}, ${T.violeta})`, color: "#fff" }}>{c.leadScore}</span>}
+                    titulo={c.nome}
+                    sub={`${neg?.proximaAcao ?? (c.aguardandoResposta ? "Aguardando seu retorno no WhatsApp" : (neg?.maquinaModelo ?? "Definir próxima ação"))}${c.municipio ? ` · ${c.municipio.nome}` : ""}`} />
+                );
+              })}
+            </Lista>
+          </Painel>
+        )}
 
-{/* ── Negócios em aberto que precisam de visita ── */}
-{precisamDeVisita.length > 0 && (
-<section>
-<SectionLabel icone={<Clock size={16} />} cor="#60a5fa">Negócios que precisam de visita</SectionLabel>
-<div className="space-y-2">
-{precisamDeVisita.map((n) => (
-<Link key={n.id} href={"/pipeline"} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<Clock size={16} style={{ color: "#60a5fa", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{n.cliente?.nome}</p>
-<p className="text-xs text-zinc-500">{n.maquinaModelo ?? "?"} · {n.proximaAcao ?? "Agendar visita"}</p>
-</div>
-<span className="text-xs text-zinc-500">{n.ultimoContato ? `${diasDesde(n.ultimoContato)}d` : ""}</span>
-</Link>
-))}
-</div>
-</section>
-)}
+        {clientesAguardando.length > 0 && (
+          <Painel titulo="Aguardando resposta no WhatsApp">
+            <Lista>
+              {clientesAguardando.map((c) => (
+                <Linha key={c.id} href={"/clientes/" + c.id} esquerda={<MessageCircle size={16} style={{ color: T.rosa }} />}
+                  titulo={c.nome} sub={`${diasDesde(c.ultimoContato)}d sem contato`} />
+              ))}
+            </Lista>
+          </Painel>
+        )}
 
-{/* ── Interesse Futuro chegando ── */}
-{futurosNaHora > 0 && (
-<section>
-<SectionLabel icone={<Bell size={16} />} cor="#a78bfa">Chegou a Hora — Interesse Futuro</SectionLabel>
-<div className="space-y-2">
-{futuros
-.filter((f) => f.interesseFuturoData && f.interesseFuturoData <= em30Dias)
-.map((f) => (
-<Link key={f.id} href={"/clientes/" + f.id} className="flex items-center gap-3 rounded-2xl px-4 py-3 active:opacity-70" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<Bell size={16} style={{ color: "#a78bfa", flexShrink: 0 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white truncate">{f.nome}</p>
-<p className="text-xs text-zinc-500">{f.interesseFuturoNota ?? "Interesse futuro"}</p>
-</div>
-<span className="text-xs font-bold" style={{ color: "#a78bfa" }}>
-{f.interesseFuturoData ? new Date(f.interesseFuturoData).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "Em breve"}
-</span>
-</Link>
-))}
-</div>
-</section>
-)}
+        {clientes30DiasSemContato.length > 0 && (
+          <Painel titulo="Clientes com 30+ dias sem contato">
+            <Lista>
+              {clientes30DiasSemContato.map((c) => (
+                <Linha key={c.id} href={"/clientes/" + c.id} esquerda={<Snowflake size={16} style={{ color: T.amarelo }} />}
+                  titulo={c.nome} sub={c.ultimoContato ? `há ${diasDesde(c.ultimoContato)}d sem contato` : "sem registro de contato"} />
+              ))}
+            </Lista>
+          </Painel>
+        )}
 
-{/* ── Alertas do CRM ── */}
-{alertas.length > 0 && (
-<section>
-<SectionLabel icone={<Bell size={16} />} cor="#f59e0b">Alertas do Sistema</SectionLabel>
-<div className="space-y-2">
-{alertas.slice(0, 5).map((a) => (
-<div key={a.id} className="flex items-start gap-3 rounded-2xl px-4 py-3" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<AlertTriangle size={16} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 1 }} />
-<div className="flex-1 min-w-0">
-<p className="text-sm font-semibold text-white">{a.cliente?.nome}</p>
-<p className="text-xs text-zinc-400">{a.mensagem}</p>
-</div>
-<Link href={"/clientes/" + a.clienteId} className="text-xs px-2 py-1 rounded-lg" style={{ background: "#27272a", color: "#a1a1aa" }}>
-Ver
-</Link>
-</div>
-))}
-</div>
-</section>
-)}
-</div>
-);
+        {conversasSemCadastro.length > 0 && (
+          <Painel titulo="Conversas sem cadastro">
+            <Lista>
+              {conversasSemCadastro.map((c) => (
+                <li key={c.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <Link href={"/atendimento?conversa=" + c.id} className="flex min-w-0 flex-1 items-center gap-3">
+                    <UserX size={16} style={{ color: T.laranja, flexShrink: 0 }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{c.contactName || c.externalPhone}</p>
+                      <p className="text-xs" style={{ color: T.mudo }}>{c.externalPhone} · sem cliente vinculado</p>
+                    </div>
+                  </Link>
+                  <CadastrarContatoWhatsApp telefone={semCodigoPais(c.externalPhone.replace(/\D/g, ""))} municipios={municipios} />
+                </li>
+              ))}
+            </Lista>
+          </Painel>
+        )}
+
+        {precisamDeVisita.length > 0 && (
+          <Painel titulo="Negócios que precisam de visita">
+            <Lista>
+              {precisamDeVisita.map((n) => (
+                <Linha key={n.id} href="/pipeline" esquerda={<Clock size={16} style={{ color: T.ciano }} />}
+                  titulo={n.cliente?.nome ?? "—"} sub={`${n.maquinaModelo ?? "?"} · ${n.proximaAcao ?? "Agendar visita"}`}
+                  direita={n.ultimoContato ? `${diasDesde(n.ultimoContato)}d` : ""} />
+              ))}
+            </Lista>
+          </Painel>
+        )}
+
+        {futurosNaHora.length > 0 && (
+          <Painel titulo="Chegou a hora — interesse futuro">
+            <Lista>
+              {futurosNaHora.map((f) => (
+                <Linha key={f.id} href={"/clientes/" + f.id} esquerda={<Bell size={16} style={{ color: T.violeta }} />}
+                  titulo={f.nome} sub={f.interesseFuturoNota ?? "Interesse futuro"}
+                  direita={f.interesseFuturoData ? new Date(f.interesseFuturoData).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "Em breve"} />
+              ))}
+            </Lista>
+          </Painel>
+        )}
+
+        {alertas.length > 0 && (
+          <Painel titulo="Alertas do sistema">
+            <Lista>
+              {alertas.slice(0, 6).map((a) => (
+                <Linha key={a.id} href={"/clientes/" + a.clienteId} esquerda={<AlertTriangle size={16} style={{ color: T.amarelo }} />}
+                  titulo={a.cliente?.nome ?? "—"} sub={a.mensagem} />
+              ))}
+            </Lista>
+          </Painel>
+        )}
+
+        {topAtacar.length === 0 && clientesAguardando.length === 0 && alertas.length === 0 && (
+          <Painel titulo="Tudo em dia">
+            <p className="flex items-center gap-2 text-sm" style={{ color: T.verde }}><Target size={16} /> Nenhuma pendência urgente agora.</p>
+          </Painel>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Componentes internos ───────────────────────────────────────────────────────
 
-function Section({ titulo, cor, children }: { titulo: string; cor: string; children: React.ReactNode }) {
-return (
-<section className="space-y-2">
-<h2 className="text-sm font-bold" style={{ color: cor }}>{titulo}</h2>
-{children}
-</section>
-);
+function Lista({ children }: { children: React.ReactNode }) {
+  return <ul className="space-y-1.5">{children}</ul>;
 }
 
-function KpiCard({
-titulo, valor, cor, sub, numerico = true,
-}: {
-titulo: string;
-valor: React.ReactNode;
-cor: string;
-sub?: React.ReactNode;
-numerico?: boolean;
-}) {
-return (
-<div className="rounded-2xl p-4 flex flex-col gap-1" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-<p className="text-xs text-zinc-500 font-medium truncate">{titulo}</p>
-<p className="text-2xl font-black leading-none" style={{ color: cor }}>{valor}</p>
-{sub && <p className="text-xs text-zinc-600 leading-tight">{sub}</p>}
-</div>
-);
-}
-
-function SectionLabel({ children, icone, cor }: { children: React.ReactNode; icone?: React.ReactNode; cor?: string }) {
-return (
-<div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
-{icone && <span style={{ color: cor }}>{icone}</span>}
-{children}
-</div>
-);
-}
-
-function EmptyOk({ children }: { children: React.ReactNode }) {
-return (
-<div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-<CheckCircle2 size={17} style={{ color: "#4ade80" }} />
-<span className="text-sm" style={{ color: "#86efac" }}>{children}</span>
-</div>
-);
+function Linha({ href, esquerda, titulo, sub, direita }: { href: string; esquerda: React.ReactNode; titulo: string; sub?: string; direita?: React.ReactNode }) {
+  return (
+    <li>
+      <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2 transition active:opacity-70" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <span className="shrink-0">{esquerda}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{titulo}</p>
+          {sub && <p className="truncate text-xs" style={{ color: T.mudo }}>{sub}</p>}
+        </div>
+        {direita ? <span className="text-xs font-bold" style={{ color: T.texto2 }}>{direita}</span> : <ArrowRight size={14} style={{ color: T.mudo }} />}
+      </Link>
+    </li>
+  );
 }
