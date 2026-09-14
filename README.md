@@ -24,7 +24,7 @@ centro de comando (ZEUS) cuida da saúde do sistema e da higiene dos dados.
 - **Negociações** — funil Kanban; mover para *Faturado* registra a venda, a
   comissão e inicia o pós-venda.
 - **Demandas** — quadro de tarefas com checklist, cidade e prazo.
-- **WhatsApp** — caixa de entrada em tempo real (Z-API ou Evolution API),
+- **WhatsApp** — caixa de entrada em tempo real (Evolution API; Z-API só como legado),
   vínculo com cliente, rascunho ou resposta automática da IA, relatório em PDF.
 - **Visitas** — agenda semanal, registro por voz, sincronização com a Google Agenda.
 - **Clientes** — cadastro, região, mapeamento por município, importação, frota,
@@ -48,8 +48,9 @@ WhatsApp, Auditoria, Configurações (parâmetros do negócio, integrações).
 - Next.js 14 (App Router) + TypeScript + Tailwind, Prisma 5 + PostgreSQL (Neon).
 - IA multiprovedor com fallback real: Gemini → Groq → DeepSeek → OpenAI →
   Anthropic (`src/lib/ai`). Sem chave, tudo continua funcionando com heurísticas.
-- WhatsApp: Z-API (pago) ou Evolution API (grátis, self-hosted) —
-  `src/lib/zapi.ts` abstrai os dois; webhooks em `src/app/api/webhooks/*`.
+- WhatsApp: Evolution API (grátis, self-hosted; guia em `docs/GRATUITO.md`),
+  com a Z-API paga só como legado — `src/lib/zapi.ts` abstrai os dois;
+  webhooks em `src/app/api/webhooks/*`.
 - Rotinas: um cron da Vercel (`/api/cron/tudo`, diário) e um agendador externo
   a cada 15 min disparam pipeline, orientador, retry, ZEUS tick, briefing e
   Academia.

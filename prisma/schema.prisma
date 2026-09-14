@@ -422,6 +422,11 @@ model WhatsAppSettings {
   apiUrl       String  @default("https://api.z-api.io")
   isActive     Boolean @default(false)
   auditMode    Boolean @default(true)
+  // Resposta automática: só dentro da janela (hora de Brasília) e até o
+  // limite diário — fora disso vira rascunho. Protege a reputação do número.
+  autoHoraInicio Int   @default(7)
+  autoHoraFim    Int   @default(20)
+  autoLimiteDia  Int   @default(40)
   updatedAt    DateTime @updatedAt
 }
 

@@ -1,0 +1,125 @@
+"use server";
+
+// Server actions da tela de WhatsApp (Atendimento): contexto lateral da
+// conversa (Orientador + cliente + negociação + agenda + cadência) e ações
+// rápidas que antes ficavam espalhadas em rotas de API.
+
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { rotuloPapel, papelDaColuna } from "@/lib/pipeline";
+import { registrarAudit } from "@/lib/audit";
+
+export type ContextoConversa = {
+  cliente: {
+    id: string;
+    nome: string;
+    municipio: string | null;
+    telefone: string | null;
+    jaComprou: boolean;
+    aguardandoResposta: boolean;
+    leadScore: number;
+    resumoTexto: string | null;
+    proximaVisita: string | null;
+    proximaVisitaNota: string | null;
+  } | null;
+  orientador: {
+    estagioVenda: string;
+    perfilComprador: string | null;
+    objecoes: string[];
+    probabilidadeFechamento: number | null;
+    probabilidadeExplicacao: string | null;
+    temperatura: string;
+    proximaAcao: string | null;
+    melhorResposta: string | null;
+    oportunidadesPerdidas: string[];
+    resumoNegociacao: string | null;
+    atualizadoEm: string;
+  } | null;
+  negociacoes: { id: string; maquina: string | null; valor: number | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
+  visitas: { id: string; data: string; observacao: string | null }[];
+  cadencia: { id: string; toqueAtual: number; proximoToqueEm: string } | null;
+  alertas: { id: string; tipo: string; mensagem: string }[];
+};
+
+export async function contextoConversaAction(conversationId: string): Promise<ContextoConversa> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [] };
+  if (!conv?.clienteId) return vazio;
+  const clienteId = conv.clienteId;
+
+  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas] = await Promise.all([
+    db.cliente.findUnique({
+      where: { id: clienteId },
+      select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+    }),
+    db.orientadorAnalise.findUnique({ where: { clienteId } }),
+    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, maquinaModelo: true, valor: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
+    db.visita.findMany({ where: { clienteId, data: { gte: new Date(Date.now() - 24 * 3600 * 1000) } }, orderBy: { data: "asc" }, take: 3, select: { id: true, data: true, observacao: true } }),
+    db.cadencia.findFirst({ where: { clienteId, ativa: true }, select: { id: true, toqueAtual: true, proximoToqueEm: true } }),
+    db.alerta.findMany({ where: { clienteId, resolvido: false }, orderBy: { criadoEm: "desc" }, take: 4, select: { id: true, tipo: true, mensagem: true } }),
+    db.colunaFunil.findMany({ select: { titulo: true, papel: true } }),
+  ]);
+  if (!cliente) return vazio;
+  const papelPorTitulo = new Map(colunas.map((c) => [c.titulo, rotuloPapel(papelDaColuna(c))]));
+
+  return {
+    cliente: {
+      id: cliente.id, nome: cliente.nome, municipio: cliente.municipio?.nome ?? null, telefone: cliente.telefone,
+      jaComprou: cliente.jaComprou, aguardandoResposta: cliente.aguardandoResposta, leadScore: cliente.leadScore,
+      resumoTexto: cliente.resumoTexto, proximaVisita: cliente.proximaVisita?.toISOString() ?? null, proximaVisitaNota: cliente.proximaVisitaNota,
+    },
+    orientador: orientador
+      ? {
+          estagioVenda: orientador.estagioVenda, perfilComprador: orientador.perfilComprador, objecoes: orientador.objecoes,
+          probabilidadeFechamento: orientador.probabilidadeFechamento, probabilidadeExplicacao: orientador.probabilidadeExplicacao,
+          temperatura: orientador.temperatura, proximaAcao: orientador.proximaAcao, melhorResposta: orientador.melhorResposta,
+          oportunidadesPerdidas: orientador.oportunidadesPerdidas, resumoNegociacao: orientador.resumoNegociacao,
+          atualizadoEm: orientador.atualizadoEm.toISOString(),
+        }
+      : null,
+    negociacoes: negociacoes.map((n) => ({
+      id: n.id, maquina: n.maquinaModelo, valor: n.valor, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
+      termometro: n.termometro, proximaAcao: n.proximaAcao, concorrente: n.concorrenteMencionado,
+    })),
+    visitas: visitas.map((v) => ({ id: v.id, data: v.data.toISOString(), observacao: v.observacao })),
+    cadencia: cadencia ? { id: cadencia.id, toqueAtual: cadencia.toqueAtual, proximoToqueEm: cadencia.proximoToqueEm.toISOString() } : null,
+    alertas,
+  };
+}
+
+// "Marcar como respondido": o cliente deixa de contar como aguardando.
+export async function marcarRespondidoAction(conversationId: string): Promise<{ ok: boolean }> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  if (conv?.clienteId) {
+    await db.cliente.update({ where: { id: conv.clienteId }, data: { aguardandoResposta: false } }).catch(() => {});
+    await db.alerta.updateMany({ where: { clienteId: conv.clienteId, tipo: "aguardando_resposta", resolvido: false }, data: { resolvido: true } }).catch(() => {});
+  }
+  revalidatePath("/atendimento");
+  revalidatePath("/alertas");
+  return { ok: true };
+}
+
+// Ignorar / restaurar conversa (fornecedores, spam, grupos sem interesse).
+export async function ignorarConversaAction(conversationId: string, ignorar: boolean): Promise<{ ok: boolean }> {
+  await db.whatsAppConversation.update({ where: { id: conversationId }, data: { ignored: ignorar } });
+  revalidatePath("/atendimento");
+  return { ok: true };
+}
+
+// Resolver um alerta a partir do painel lateral.
+export async function resolverAlertaConversaAction(alertaId: string): Promise<{ ok: boolean }> {
+  await db.alerta.update({ where: { id: alertaId }, data: { resolvido: true } }).catch(() => {});
+  revalidatePath("/alertas");
+  return { ok: true };
+}
+
+// Registra na auditoria que a melhor resposta do Orientador foi usada (mede
+// quanto a IA está ajudando de verdade).
+export async function registrarUsoRespostaAction(conversationId: string): Promise<void> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true, contactName: true } });
+  await registrarAudit({
+    acao: "mensagem_enviada", origem: "usuario",
+    descricao: `Melhor resposta do Orientador usada na conversa com ${conv?.contactName ?? "cliente"}.`,
+    entidade: "WhatsAppConversation", entidadeId: conversationId, clienteId: conv?.clienteId ?? undefined,
+  }).catch(() => {});
+}

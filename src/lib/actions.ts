@@ -1142,6 +1142,16 @@ export async function reiniciarZapi(): Promise<{ ok: boolean }> {
   return { ok };
 }
 
+export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean; erro?: string; url?: string }> {
+  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).replace(/\/+$/, "");
+  if (!base) return { ok: false, erro: "Defina NEXTAUTH_URL na Vercel (URL pública do CRM) para apontar o webhook." };
+  const url = `${base}/api/webhooks/evolution`;
+  const r = await zapi.configurarWebhookEvolution(url);
+  if (r.ok) await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Webhook da Evolution API apontado para ${url}.` }).catch(() => {});
+  revalidatePath("/conexao");
+  return { ...r, url };
+}
+
 export async function desconectarZapi(): Promise<{ ok: boolean }> {
   const ok = await zapi.desconectar();
   revalidatePath("/conexao");

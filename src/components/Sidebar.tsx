@@ -157,7 +157,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
   return (
     <>
       {/* Topbar mobile */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-brand-800 bg-brand-900 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white md:hidden">
+      <div id="topbar-mobile" className="sticky top-0 z-30 flex items-center justify-between border-b border-brand-800 bg-brand-900 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white md:hidden">
         <div className="flex items-center gap-2.5 font-bold tracking-tight">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-agro-400">
             <ExcavatorIcon size={17} className="text-black" />

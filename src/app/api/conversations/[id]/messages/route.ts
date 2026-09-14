@@ -6,15 +6,34 @@ import { inserirMensagem } from "@/lib/whatsapp-store";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Lista as últimas 100 mensagens (ordem cronológica) e marca como acessada.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+// Lista as últimas 80 mensagens (ordem cronológica) e marca como acessada.
+//   ?before=<id>  → página anterior (mais antigas que a mensagem informada)
+//   ?q=<texto>    → busca dentro das mensagens desta conversa (até 60 resultados)
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const before = req.nextUrl.searchParams.get("before");
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
+
+  if (q) {
+    const achadas = await db.whatsAppMessage.findMany({
+      where: { conversationId: params.id, isDraft: false, body: { contains: q, mode: "insensitive" } },
+      orderBy: { sentAt: "desc" },
+      take: 60,
+    });
+    return NextResponse.json({ messages: achadas.reverse(), busca: q });
+  }
+
+  let cursor: Date | null = null;
+  if (before) {
+    const m = await db.whatsAppMessage.findUnique({ where: { id: before }, select: { sentAt: true } }).catch(() => null);
+    cursor = m?.sentAt ?? null;
+  }
   const msgs = await db.whatsAppMessage.findMany({
-    where: { conversationId: params.id },
+    where: { conversationId: params.id, ...(cursor ? { sentAt: { lt: cursor } } : {}) },
     orderBy: { sentAt: "desc" },
-    take: 100,
+    take: 80,
   });
-  await db.whatsAppConversation.update({ where: { id: params.id }, data: { lastAccessedAt: new Date() } }).catch(() => {});
-  return NextResponse.json({ messages: msgs.reverse() });
+  if (!before) await db.whatsAppConversation.update({ where: { id: params.id }, data: { lastAccessedAt: new Date() } }).catch(() => {});
+  return NextResponse.json({ messages: msgs.reverse(), temMais: msgs.length === 80 });
 }
 
 // Envia uma mensagem de texto pela Z-API e grava como OUT (origin CRM).

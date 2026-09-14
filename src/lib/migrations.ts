@@ -227,6 +227,14 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "usadaObs"       TEXT,
         ADD COLUMN IF NOT EXISTS "usadaEstoqueId" TEXT
     `);
+
+    // Resposta automática com janela de horário e limite diário (v11).
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "WhatsAppSettings"
+        ADD COLUMN IF NOT EXISTS "autoHoraInicio" INTEGER NOT NULL DEFAULT 7,
+        ADD COLUMN IF NOT EXISTS "autoHoraFim"    INTEGER NOT NULL DEFAULT 20,
+        ADD COLUMN IF NOT EXISTS "autoLimiteDia"  INTEGER NOT NULL DEFAULT 40
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

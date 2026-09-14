@@ -134,7 +134,11 @@ não é cobrado; escolha sempre recursos marcados *Always Free*).
 
 ### Criar a instância e o webhook (nas duas opções)
 1. No **Manager** (`…:8080/manager`): **+ Instance** → Name: `crm` → Channel: **Baileys** → Save.
-2. Ainda na instância → aba **Webhook** (ou *Events → Webhook*):
+2. **Caminho fácil:** depois de colocar as variáveis na Vercel (item 3 abaixo) e
+   fazer o redeploy, abra **/conexao** no CRM e clique em **“Configurar webhook
+   agora”** — o CRM aponta a instância para ele mesmo, com os eventos certos e
+   o Base64 ligado. Se preferir fazer à mão, siga o passo manual:
+   Ainda na instância → aba **Webhook** (ou *Events → Webhook*):
    - Enabled: **ON**
    - URL: `https://SEU-APP.vercel.app/api/webhooks/evolution`
    - **Webhook Base64: ON** (é assim que os áudios chegam para transcrição)
@@ -195,8 +199,8 @@ não é cobrado; escolha sempre recursos marcados *Always Free*).
   "📷 Imagem"/"📄 nome.pdf" com a legenda — não abrem no navegador (a
   Evolution não gera link público de mídia sem um serviço de armazenamento).
   **Áudios continuam sendo transcritos** normalmente.
-- O botão **"Sincronizar chats apagados"** usava um recurso exclusivo da Z-API
-  — na Evolution, apague a conversa direto no CRM.
+- Conversas apagadas no celular não somem sozinhas do CRM: apague pelo menu da
+  conversa (“Excluir conversa”) ou use “Ignorar conversa”.
 - Os fallbacks (mensagem que a IA não conseguiu responder na hora, retry de
   envio) rodam a cada **15 min** em vez de 1 min. O caminho normal (mensagem →
   resposta) continua em tempo real.

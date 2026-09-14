@@ -334,6 +334,32 @@ export async function fotoPerfil(phone: string): Promise<string | null> {
   }
 }
 
+// Configura o webhook da instância na Evolution a partir do CRM (sem curl):
+// eventos de mensagem + status, base64 ligado para os áudios.
+export async function configurarWebhookEvolution(urlWebhook: string): Promise<{ ok: boolean; erro?: string }> {
+  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
+  try {
+    await evoFetch("POST", `/webhook/set/${evoInstancia()}`, {
+      webhook: { enabled: true, url: urlWebhook, byEvents: false, base64: true, events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE"] },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Lê o webhook atual da instância (para o painel de conexão conferir).
+export async function lerWebhookEvolution(): Promise<{ url: string | null; enabled: boolean } | null> {
+  if (provedorWhatsApp() !== "evolution") return null;
+  try {
+    const data = await evoFetch("GET", `/webhook/find/${evoInstancia()}`);
+    const w = (data.webhook as Record<string, unknown> | undefined) ?? data;
+    return { url: typeof w.url === "string" ? w.url : null, enabled: w.enabled === true };
+  } catch {
+    return null;
+  }
+}
+
 // ---------- Conexão (QR / status) ----------
 
 export type StatusConexao = {

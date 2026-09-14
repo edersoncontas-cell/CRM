@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi } from "@/lib/actions";
+import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2,
 } from "lucide-react";
@@ -44,6 +44,7 @@ export function ConexaoWhatsApp() {
   const [qr, setQr] = useState<string | null>(null);
   const [carregandoQr, setCarregandoQr] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
 
   const buscarStatus = useCallback(async () => {
     try {
@@ -153,8 +154,23 @@ export function ConexaoWhatsApp() {
           {status.telefone ? `Número ${status.telefone}` : "Seu número está pareado e recebendo mensagens."}
         </p>
         <p className="mt-2 text-sm text-slate-600">
-          As mensagens recebidas entram no <b>/atendimento</b> e são analisadas pela IA automaticamente.
+          As mensagens recebidas entram no <b>WhatsApp do CRM</b> e são analisadas pela IA automaticamente.
         </p>
+        {status.provedor === "evolution" && (
+          <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm text-slate-600">
+            <b className="text-slate-700">Webhook da Evolution.</b> Aponte a instância para este CRM com um clique (eventos de mensagem e status, áudio em base64).
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => startTransition(async () => { const r = await configurarWebhookEvolutionAction(); setWebhookMsg(r.ok ? `Webhook configurado: ${r.url}` : `Falhou: ${r.erro}`); })}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60"
+              >
+                {pending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Configurar webhook agora
+              </button>
+              {webhookMsg && <span className="text-xs text-slate-500">{webhookMsg}</span>}
+            </div>
+          </div>
+        )}
         <button
           onClick={() => startTransition(async () => { await desconectarZapi(); await buscarStatus(); })}
           disabled={pending}

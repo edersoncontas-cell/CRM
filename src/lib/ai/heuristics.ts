@@ -17,6 +17,35 @@ export interface ExtracaoConversa {
   ehProspectReal: boolean;
   rascunhoResposta: string;
   fonte: "ia" | "heuristica";
+  // Inteligência do funil (v2): separa o preço citado do concorrente do
+  // valor da NOSSA negociação, lê a intenção e a categoria da máquina.
+  valorConcorrente: number | null;
+  intencao: "comprar" | "cotar" | "curiosidade" | "suporte" | "outro";
+  categoriaMaquina: string | null; // retroescavadeira | escavadeira | pá carregadeira | motoniveladora | rolo compactador | mini carregadeira
+}
+
+export type IntencaoConversa = ExtracaoConversa["intencao"];
+
+// Categoria da máquina citada por nome comum ("retro", "pá", "rolo"...).
+export function extrairCategoriaMaquina(texto: string): string | null {
+  const t = texto.toLowerCase();
+  if (/mini\s?carregadeira|skid/.test(t)) return "mini carregadeira";
+  if (/retro/.test(t)) return "retroescavadeira";
+  if (/escavadeira|hidr[áa]ulica/.test(t)) return "escavadeira";
+  if (/p[áa]\s?carregadeira|carregadeira/.test(t)) return "pá carregadeira";
+  if (/motoniveladora|patrol|niveladora/.test(t)) return "motoniveladora";
+  if (/rolo|compactador/.test(t)) return "rolo compactador";
+  return null;
+}
+
+// Intenção do cliente na conversa (heurística).
+export function extrairIntencao(texto: string): IntencaoConversa {
+  const t = texto.toLowerCase();
+  if (/(garantia|revis[ãa]o|pe[çc]a|quebr|defeito|assist[êe]ncia|manuten[çc][ãa]o|conserto)/.test(t)) return "suporte";
+  if (/(fechar|comprar|quero (?:a|uma|o)|vou levar|pode faturar|financiar|cons[óo]rcio|entrada|parcel)/.test(t)) return "comprar";
+  if (/(pre[çc]o|or[çc]amento|cota[çc][ãa]o|proposta|quanto (?:t[áa]|custa|fica|sai)|valor)/.test(t)) return "cotar";
+  if (/(m[áa]quina|escavadeira|retro|carregadeira|motoniveladora|rolo|compactador|interess)/.test(t)) return "curiosidade";
+  return "outro";
 }
 
 // Modelos da minha linha (New Holland Construction + Dynapac) — portfólio oficial.
@@ -243,14 +272,22 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
 
   const rascunho = montarRascunho({ maquina, dataVisita, condicao, sentimento });
 
+  const categoriaMaquina = extrairCategoriaMaquina(texto);
+  const intencao = extrairIntencao(texto);
+  // Preço citado junto do nome de um concorrente vira valorConcorrente, não o nosso.
+  const valorConcorrente = concorrente && valor && new RegExp(`${concorrente}[^.]{0,60}(mil|r\\$|\\d)`, "i").test(texto) ? valor : null;
+
   return {
+    valorConcorrente,
+    intencao,
+    categoriaMaquina,
     resumo,
     perfil: maquina ? `Potencial comprador de ${maquina}` : null,
     nomeCliente: extrairNome(texto),
     telefoneCliente: extrairTelefone(texto),
     municipio: extrairMunicipio(texto),
     maquina,
-    valor,
+    valor: valorConcorrente ? null : valor,
     condicaoPagamento: condicao,
     concorrente,
     dataVisita,

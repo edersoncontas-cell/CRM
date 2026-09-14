@@ -318,10 +318,15 @@ Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto a
   "dataVisita": string|null,              // ISO 8601 se houver agendamento de visita
   "sentimento": "positivo"|"neutro"|"negativo",
   "ehProspectReal": boolean,              // realmente negociou/pediu info de máquina?
+  "intencao": "comprar"|"cotar"|"curiosidade"|"suporte"|"outro", // comprar = quer fechar/financiar; cotar = pediu preço/proposta; curiosidade = só perguntou; suporte = peça/garantia/assistência
+  "categoriaMaquina": string|null,        // retroescavadeira | escavadeira | pá carregadeira | motoniveladora | rolo compactador | mini carregadeira — pelo nome comum ("retro", "pá", "rolo"), mesmo sem modelo
+  "valorConcorrente": number|null,        // preço que o cliente disse ter recebido de um CONCORRENTE (nunca vai em "valor")
   "rascunhoResposta": string              // resposta sugerida no tom do vendedor
 }
-REGRA CRÍTICA: o campo "maquina" só pode ser preenchido com um modelo que o cliente realmente citou na conversa.
-Se o cliente não citar nenhum modelo, "maquina" DEVE ser null. Jamais use um modelo padrão/exemplo.`;
+REGRAS CRÍTICAS:
+- "maquina" só pode ser preenchido com um modelo que o cliente realmente citou na conversa. Se não citar, DEVE ser null. Jamais use um modelo padrão/exemplo.
+- "valor" é o valor da NOSSA negociação (proposta nossa, orçamento pedido, quanto o cliente quer pagar). Preço de concorrente vai em "valorConcorrente". Se não houver valor nosso, "valor" é null.
+- A conversa vem em ordem cronológica; analise a ÚLTIMA mensagem do cliente à luz das anteriores (ex.: "quinta 14h pode ser" só faz sentido com a pergunta anterior). Não repita dados já resolvidos como se fossem novos.`;
 
 export async function analisarConversaIA(
   texto: string,
@@ -372,6 +377,9 @@ export async function analisarConversaIA(
       ehProspectReal: !!parsed.ehProspectReal,
       rascunhoResposta: parsed.rascunhoResposta ?? "",
       fonte: "ia",
+      valorConcorrente: typeof parsed.valorConcorrente === "number" ? parsed.valorConcorrente : null,
+      intencao: ["comprar", "cotar", "curiosidade", "suporte", "outro"].includes(parsed.intencao) ? parsed.intencao : "outro",
+      categoriaMaquina: typeof parsed.categoriaMaquina === "string" && parsed.categoriaMaquina.trim() ? parsed.categoriaMaquina.trim().toLowerCase() : null,
     };
   } catch (err) {
     console.error("Falha na IA, usando heurística:", err);

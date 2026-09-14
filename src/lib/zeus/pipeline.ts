@@ -58,6 +58,26 @@ function ajusteTermometro(sentimento: string | null): number {
 
 // Alimenta a negociação aberta do cliente (ou cria uma nova se for prospect
 // real), incluindo o ajuste do termômetro conforme o sentimento detectado.
+// Regra de abertura automática de negociação (v2). Antes, qualquer mensagem
+// com "máquina" ou "preço" abria uma negociação — o funil enchia de cards
+// vazios e o valor do concorrente virava o "nosso" valor. Agora só abre com
+// SINAL DE COMPRA: intenção de comprar/cotar E algo concreto (modelo, categoria
+// da máquina, valor nosso ou visita marcada). Curiosidade e suporte não abrem;
+// o Orientador de Vendas mostra o card e o vendedor decide (arrastar/✓).
+export function deveAbrirNegociacao(ex: ExtracaoConversa): boolean {
+  if (ex.intencao === "suporte" || ex.intencao === "outro") return false;
+  if (ex.intencao === "curiosidade" && !ex.dataVisita) return false;
+  const concreto = !!ex.maquina || !!ex.categoriaMaquina || ex.valor != null || !!ex.dataVisita;
+  return ex.ehProspectReal && concreto;
+}
+
+// Marca pelo catálogo próprio (modelo citado) — evita card "sem marca".
+async function marcaDoModelo(modelo: string | null): Promise<string | null> {
+  if (!modelo) return null;
+  const m = await db.maquina.findFirst({ where: { proprio: true, modelo: { equals: modelo, mode: "insensitive" } }, select: { marca: true } }).catch(() => null);
+  return m?.marca ?? null;
+}
+
 export async function alimentarNegociacao(
   clienteId: string,
   ex: ExtracaoConversa
@@ -66,6 +86,8 @@ export async function alimentarNegociacao(
     where: { clienteId, status: "aberta" },
     orderBy: { atualizadoEm: "desc" },
   });
+  const marca = await marcaDoModelo(ex.maquina);
+  const maquinaOuCategoria = ex.maquina ?? (ex.categoriaMaquina ? ex.categoriaMaquina.charAt(0).toUpperCase() + ex.categoriaMaquina.slice(1) : null);
 
   // Títulos REAIS das colunas do funil (o usuário pode renomear): a primeira
   // "em negociação" recebe contato novo; a que tem "visita" + "pendente"
@@ -81,14 +103,22 @@ export async function alimentarNegociacao(
         ? colVisita
         : aberta.estagio;
     const termometro = Math.max(0, Math.min(100, aberta.termometro + ajusteTermometro(ex.sentimento)));
+    // Modelo explícito substitui categoria genérica; categoria nunca substitui
+    // um modelo já conhecido. Valor: só o NOSSO, e nunca apaga o que já existe.
+    const trocaMaquina = ex.maquina ? ex.maquina !== aberta.maquinaModelo : (!aberta.maquinaModelo && !!maquinaOuCategoria);
+    const concorrenteTexto = ex.concorrente
+      ? ex.valorConcorrente ? `${ex.concorrente} (R$ ${Math.round(ex.valorConcorrente).toLocaleString("pt-BR")})` : ex.concorrente
+      : null;
     await db.negociacao.update({
       where: { id: aberta.id },
       data: {
-        ...(ex.maquina ? { maquinaModelo: ex.maquina } : {}),
-        ...(ex.valor != null ? { valor: ex.valor } : {}),
+        ...(trocaMaquina && maquinaOuCategoria ? { maquinaModelo: maquinaOuCategoria } : {}),
+        ...(marca && !aberta.marca ? { marca } : {}),
+        ...(ex.valor != null && ex.valor > 0 ? { valor: ex.valor } : {}),
         ...(ex.condicaoPagamento ? { condicaoPagamento: ex.condicaoPagamento } : {}),
-        ...(ex.concorrente ? { concorrenteMencionado: ex.concorrente } : {}),
+        ...(concorrenteTexto ? { concorrenteMencionado: concorrenteTexto } : {}),
         ...(ex.dataVisita ? { dataVisita: ex.dataVisita } : {}),
+        ...(ex.intencao === "comprar" && !aberta.proximaAcao?.toLowerCase().includes("proposta") ? { proximaAcao: "Enviar proposta de uma página e condição" } : {}),
         ultimoContato: new Date(),
         estagio,
         termometro,
@@ -97,17 +127,23 @@ export async function alimentarNegociacao(
     return { id: aberta.id, criada: false };
   }
 
-  if (ex.ehProspectReal || ex.dataVisita) {
+  if (deveAbrirNegociacao(ex)) {
+    const concorrenteTexto = ex.concorrente
+      ? ex.valorConcorrente ? `${ex.concorrente} (R$ ${Math.round(ex.valorConcorrente).toLocaleString("pt-BR")})` : ex.concorrente
+      : null;
     const nova = await db.negociacao.create({
       data: {
         clienteId,
         estagio: ex.dataVisita ? colVisita : colInicial,
-        termometro: ex.sentimento === "positivo" ? 65 : 50,
-        proximaAcao: ex.dataVisita ? "Confirmar e realizar a visita" : "Retornar contato e qualificar interesse",
-        ...(ex.maquina ? { maquinaModelo: ex.maquina } : {}),
-        ...(ex.valor != null ? { valor: ex.valor } : {}),
+        termometro: ex.intencao === "comprar" ? 70 : ex.sentimento === "positivo" ? 60 : 45,
+        proximaAcao: ex.dataVisita
+          ? "Confirmar e realizar a visita"
+          : ex.intencao === "comprar" ? "Enviar proposta de uma página e condição" : "Qualificar: aplicação, prazo e forma de pagamento",
+        ...(maquinaOuCategoria ? { maquinaModelo: maquinaOuCategoria } : {}),
+        ...(marca ? { marca } : {}),
+        ...(ex.valor != null && ex.valor > 0 ? { valor: ex.valor } : {}),
         ...(ex.condicaoPagamento ? { condicaoPagamento: ex.condicaoPagamento } : {}),
-        ...(ex.concorrente ? { concorrenteMencionado: ex.concorrente } : {}),
+        ...(concorrenteTexto ? { concorrenteMencionado: concorrenteTexto } : {}),
         ...(ex.dataVisita ? { dataVisita: ex.dataVisita } : {}),
         ultimoContato: new Date(),
       },
@@ -243,7 +279,19 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
         db.cliente.findUnique({ where: { id: clienteId }, select: { perfilIA: true, resumoTexto: true } }),
       ]);
 
-      const extracao = await analisarConversaIA(corpoAnalise, { estiloDeFala: estilo?.guia, modelosDestaque });
+      // Contexto: as últimas mensagens da conversa (não só a nova) — "quinta
+      // 14h pode ser" só faz sentido com a pergunta anterior do vendedor.
+      const anteriores = await db.whatsAppMessage.findMany({
+        where: { conversationId: conv.id, isDraft: false, id: { not: msg.id }, sentAt: { lte: msg.sentAt } },
+        orderBy: { sentAt: "desc" },
+        take: 11,
+        select: { direction: true, body: true },
+      });
+      const contextoConversa = [
+        ...anteriores.reverse().map((m) => `${m.direction === "OUT" ? "Vendedor" : "Cliente"}: ${m.body}`),
+        `Cliente (ÚLTIMA MENSAGEM, analise esta): ${corpoAnalise}`,
+      ].join("\n");
+      const extracao = await analisarConversaIA(contextoConversa, { estiloDeFala: estilo?.guia, modelosDestaque });
 
       await vincularMunicipio(clienteId, extracao.municipio);
       const negResult = await alimentarNegociacao(clienteId, extracao);

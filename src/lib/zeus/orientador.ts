@@ -18,6 +18,8 @@ import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
 import { inserirMensagem } from "@/lib/whatsapp-store";
 import { zeusReport } from "@/lib/zeus/eventos";
+import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
+import { getWaSettings } from "@/lib/whatsapp-settings";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
 
@@ -233,7 +235,29 @@ export async function processarOrientador(args: {
 
   let respondido = false;
   if (reply) {
-    if (args.aiActive && !args.auditMode) {
+    // Guardas da resposta automática: janela de horário e limite diário.
+    // Fora disso a resposta vira rascunho (o vendedor revisa) em vez de sair.
+    let podeAutomatico = args.aiActive && !args.auditMode;
+    let motivoRascunho: string | null = null;
+    if (podeAutomatico) {
+      const cfg = await getWaSettings().catch(() => null);
+      const hora = horaBrasilia();
+      if (cfg && (hora < cfg.autoHoraInicio || hora >= cfg.autoHoraFim)) {
+        podeAutomatico = false;
+        motivoRascunho = `fora do horário automático (${cfg.autoHoraInicio}h-${cfg.autoHoraFim}h)`;
+      } else if (cfg) {
+        const enviadasHoje = await db.whatsAppMessage.count({
+          where: { operatorDisplayName: "Orientador de Vendas", isDraft: false, sentAt: { gte: inicioDoDiaBrasilia() } },
+        });
+        if (enviadasHoje >= cfg.autoLimiteDia) {
+          podeAutomatico = false;
+          motivoRascunho = `limite diário de ${cfg.autoLimiteDia} respostas automáticas atingido`;
+        }
+      }
+    }
+    if (motivoRascunho) console.log("[orientador] rascunho em vez de envio:", motivoRascunho);
+
+    if (podeAutomatico) {
       try {
         const id = await sendText(args.conv.externalPhone, reply);
         await inserirMensagem(args.conv.id, {

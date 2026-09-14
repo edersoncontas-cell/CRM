@@ -71,3 +71,30 @@ describe("detectarSentimento", () => {
     expect(detectarSentimento("gostei mas está caro")).toBe("neutro");
   });
 });
+
+import { extrairIntencao, extrairCategoriaMaquina, extrairHeuristica } from "@/lib/ai/heuristics";
+
+describe("intenção, categoria e preço do concorrente (inteligência do funil)", () => {
+  it("classifica a intenção", () => {
+    expect(extrairIntencao("quero fechar a retro, como fica o financiamento?")).toBe("comprar");
+    expect(extrairIntencao("quanto tá a B95C?")).toBe("cotar");
+    expect(extrairIntencao("vocês vendem pá carregadeira?")).toBe("curiosidade");
+    expect(extrairIntencao("a máquina quebrou, tem peça?")).toBe("suporte");
+    expect(extrairIntencao("bom dia")).toBe("outro");
+  });
+  it("lê a categoria pelo nome comum", () => {
+    expect(extrairCategoriaMaquina("preciso de uma retro")).toBe("retroescavadeira");
+    expect(extrairCategoriaMaquina("uma pá carregadeira usada")).toBe("pá carregadeira");
+    expect(extrairCategoriaMaquina("rolo pra compactar")).toBe("rolo compactador");
+    expect(extrairCategoriaMaquina("bom dia")).toBeNull();
+  });
+  it("preço citado do concorrente não vira o nosso valor", () => {
+    const ex = extrairHeuristica("A CAT me passou 480 mil na 416");
+    expect(ex.concorrente).toBe("CAT");
+    expect(ex.valorConcorrente).toBe(480_000);
+    expect(ex.valor).toBeNull();
+    const nosso = extrairHeuristica("fecho a B95C por 450 mil à vista");
+    expect(nosso.valor).toBe(450_000);
+    expect(nosso.valorConcorrente).toBeNull();
+  });
+});
