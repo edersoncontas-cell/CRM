@@ -51,9 +51,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const fimMesCal = new Date(anoAtual, hoje.getMonth() + 1, 1);
 
   const [
-    negociacoes, futuros, demandasHoje, proximasVisitas,
+    negociacoes, futuros, demandasHoje,
     visitasSemanaAgendadas, negociosCriadosSemana,
-    clientes30DiasSemContato, colunasFunil,
+    total30DiasSemContato, colunasFunil,
     vendasFaturadas, visitasMes, clientesProximaVisitaMes, conversados, cotacoes, noticias,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
@@ -64,27 +64,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
     }),
     db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
-    db.cliente.findMany({
-      where: { proximaVisita: { gte: hoje, lte: new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000) } },
-      select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
-      orderBy: { proximaVisita: "asc" },
-      take: 5,
-    }),
     db.visita.count({ where: { data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
     ehDomingoHoje ? Promise.resolve([]) : db.negociacao.findMany({
       where: { criadoEm: { gte: inicioSemanaSegunda, lte: fimSemanaSabado } },
       select: { estagio: true },
     }),
-    db.cliente.findMany({
-      where: { ultimoContato: { lt: corteSemContato } },
-      orderBy: { ultimoContato: "asc" },
-      take: 8,
-      select: { id: true, nome: true, ultimoContato: true },
-    }),
+    // A lista completa mora na Central de alertas (grupo "30+ dias sem contato").
+    db.cliente.count({ where: { ultimoContato: { lt: corteSemContato }, status: { not: "nao_cliente" } } }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
     carregarVendasFaturadas(),
-    db.visita.findMany({ where: { data: { gte: inicioMesCal, lt: fimMesCal } }, select: { data: true } }),
-    db.cliente.findMany({ where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } }, select: { proximaVisita: true } }),
+    // Agenda do mês: visitas registradas + próximas visitas anotadas no cliente.
+    db.visita.findMany({
+      where: { data: { gte: inicioMesCal, lt: fimMesCal } },
+      orderBy: { data: "asc" },
+      select: { id: true, data: true, cidade: true, observacao: true, cliente: { select: { id: true, nome: true, municipio: { select: { nome: true } } } } },
+    }),
+    db.cliente.findMany({
+      where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } },
+      orderBy: { proximaVisita: "asc" },
+      select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+    }),
     contarClientesConversados(),
     obterCotacoes(),
     obterNoticias(),
@@ -99,17 +98,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     const cat = categorizarColunaPorTitulo(n.estagio);
     return cat === "em_negociacao" || cat === "banco";
   }).length;
-
-  const topAtacar = await db.cliente.findMany({
-    where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
-    orderBy: { leadScore: "desc" },
-    take: 5,
-    select: {
-      id: true, nome: true, leadScore: true, aguardandoResposta: true,
-      municipio: { select: { nome: true } },
-      negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
-    },
-  });
 
   const em30Dias = new Date(hoje);
   em30Dias.setDate(em30Dias.getDate() + 30);
@@ -127,28 +115,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const diasRestantesAno = 365 - diaDoAno;
   const ritmoMensal = vendasAno > 0 ? (vendasAno / (anoSel === anoAtual ? hoje.getMonth() + 1 : 12)).toFixed(1) : "0";
 
-  const precisamDeVisita = negociacoes
-    .filter((n) => {
-      const cat = categorizarColunaPorTitulo(n.estagio);
-      return (cat === "em_negociacao" || cat === "banco") && !n.dataVisita;
-    })
-    .sort((a, b) => (a.ultimoContato?.getTime() ?? 0) - (b.ultimoContato?.getTime() ?? 0))
-    .slice(0, 6);
-
-  const diasComVisita = new Map<number, number>();
-  for (const v of visitasMes) diasComVisita.set(v.data.getDate(), (diasComVisita.get(v.data.getDate()) ?? 0) + 1);
-  for (const c of clientesProximaVisitaMes) {
-    if (!c.proximaVisita) continue;
-    const d = c.proximaVisita.getDate();
-    diasComVisita.set(d, (diasComVisita.get(d) ?? 0) + 1);
+  // Agenda do mês: um item por visita (registrada ou anotada no cliente),
+  // agrupado por dia, para preencher o espaço abaixo do calendário.
+  type ItemAgenda = { chave: string; data: Date; clienteId: string; nome: string; local: string | null; obs: string | null; prevista: boolean };
+  const itensAgenda: ItemAgenda[] = [
+    ...visitasMes.map((v) => ({ chave: `v:${v.id}`, data: v.data, clienteId: v.cliente.id, nome: v.cliente.nome, local: v.cidade ?? v.cliente.municipio?.nome ?? null, obs: v.observacao, prevista: false })),
+    ...clientesProximaVisitaMes.filter((c) => c.proximaVisita).map((c) => ({ chave: `p:${c.id}`, data: c.proximaVisita!, clienteId: c.id, nome: c.nome, local: c.municipio?.nome ?? null, obs: c.proximaVisitaNota, prevista: true })),
+  ].sort((a, b) => a.data.getTime() - b.data.getTime());
+  const agendaPorDia = new Map<number, ItemAgenda[]>();
+  for (const it of itensAgenda) {
+    const d = it.data.getDate();
+    agendaPorDia.set(d, [...(agendaPorDia.get(d) ?? []), it]);
   }
+  const diasComVisita = new Map<number, number>();
+  for (const [d, itens] of agendaPorDia) diasComVisita.set(d, itens.length);
+  const diaHoje = hoje.getDate();
 
   const cidadesTop = resumo.pontosMapa.slice(0, 8).map((p) => ({ nome: p.nome, qtd: p.vendas }));
 
   const termometro = [
     { rotulo: "Em negociação", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
     { rotulo: "Em banco", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
-    { rotulo: "30+ dias sem contato", valor: clientes30DiasSemContato.length, cor: T.amarelo, icone: Snowflake, href: "/clientes" },
+    { rotulo: "30+ dias sem contato", valor: total30DiasSemContato, cor: T.amarelo, icone: Snowflake, href: "/alertas?grupo=semcontato" },
     { rotulo: "Demandas de hoje", valor: demandasHoje, cor: T.verde, icone: ListTodo, href: "/pipeline" },
   ];
   const maxTermometro = Math.max(1, ...termometro.map((p) => p.valor));
@@ -354,18 +342,39 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <GraficoBarrasHorizontais dados={resumo.porModelo} />
           </div>
         </Painel>
-        <Painel titulo="Agenda de visitas" subtitulo="dias marcados têm visita">
-          <CalendarioVisitas ano={anoAtual} mes={hoje.getMonth()} diasComVisita={diasComVisita} hoje={hoje.getDate()} />
-          {proximasVisitas.length > 0 && (
-            <ul className="mt-3 space-y-1.5">
-              {proximasVisitas.map((v) => (
-                <li key={v.id} className="flex items-center gap-2 text-xs">
-                  <Calendar size={13} style={{ color: T.ciano, flexShrink: 0 }} />
-                  <Link href={`/clientes/${v.id}`} className="min-w-0 flex-1 truncate font-semibold hover:underline">{v.nome}</Link>
-                  <span className="font-black" style={{ color: T.ciano }}>{new Date(v.proximaVisita!).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
-                </li>
-              ))}
-            </ul>
+        <Painel titulo="Agenda de visitas" subtitulo={itensAgenda.length ? `${itensAgenda.length} visita(s) no mês · quem e quando` : "dias marcados têm visita"}>
+          <CalendarioVisitas ano={anoAtual} mes={hoje.getMonth()} diasComVisita={diasComVisita} hoje={diaHoje} />
+          {itensAgenda.length === 0 ? (
+            <p className="mt-3 text-xs" style={{ color: T.mudo }}>Nenhuma visita marcada neste mês. Agende em <Link href="/visitas" className="underline">Visitas</Link>.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {Array.from(agendaPorDia.entries()).map(([dia, itens]) => {
+                const passado = dia < diaHoje;
+                const ehHoje = dia === diaHoje;
+                const rotuloDia = itens[0].data.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+                return (
+                  <div key={dia} className="rounded-xl p-2" style={{ background: T.sobre, opacity: passado ? 0.55 : 1, border: ehHoje ? `1px solid ${T.ciano}` : `1px solid transparent` }}>
+                    <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-widest" style={{ color: ehHoje ? T.ciano : T.texto2 }}>
+                      <span className="capitalize">{ehHoje ? "Hoje · " : ""}{rotuloDia}</span>
+                      <span style={{ color: T.mudo }}>{itens.length} visita{itens.length > 1 ? "s" : ""}</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {itens.map((it, i) => (
+                        <li key={it.chave} className="flex items-start gap-2 text-xs">
+                          <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black" style={{ background: it.prevista ? T.sobre2 : `linear-gradient(135deg, ${T.rosa}, ${T.violeta})`, color: it.prevista ? T.texto2 : "#111" }}>{i + 1}</span>
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/clientes/${it.clienteId}`} className="block truncate font-semibold hover:underline">{it.nome}</Link>
+                            <div className="truncate text-[11px]" style={{ color: T.mudo }}>
+                              {[it.data.getHours() || it.data.getMinutes() ? it.data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null, it.local, it.obs, it.prevista ? "prevista" : null].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </Painel>
       </div>
@@ -374,47 +383,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       <NoticiasSetor />
 
-      {/* ── Operacional ── */}
+      {/* ── Operacional (Top 5, 30+ dias sem contato e negócios sem visita
+            moraram aqui; agora ficam na Central de alertas) ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {topAtacar.length > 0 && (
-          <Painel titulo="Top 5 para atacar hoje" subtitulo="pelo lead score · atendimento em aberto">
-            <Lista>
-              {topAtacar.map((c) => {
-                const neg = c.negociacoes[0];
-                return (
-                  <Linha key={c.id} href={"/clientes/" + c.id}
-                    esquerda={<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={{ background: `linear-gradient(135deg, ${T.rosa}, ${T.violeta})`, color: "#fff" }}>{c.leadScore}</span>}
-                    titulo={c.nome}
-                    sub={`${neg?.proximaAcao ?? (c.aguardandoResposta ? "Aguardando seu retorno no WhatsApp" : (neg?.maquinaModelo ?? "Definir próxima ação"))}${c.municipio ? ` · ${c.municipio.nome}` : ""}`} />
-                );
-              })}
-            </Lista>
-          </Painel>
-        )}
-
-        {clientes30DiasSemContato.length > 0 && (
-          <Painel titulo="Clientes com 30+ dias sem contato">
-            <Lista>
-              {clientes30DiasSemContato.map((c) => (
-                <Linha key={c.id} href={"/clientes/" + c.id} esquerda={<Snowflake size={16} style={{ color: T.amarelo }} />}
-                  titulo={c.nome} sub={c.ultimoContato ? `há ${diasDesde(c.ultimoContato)}d sem contato` : "sem registro de contato"} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
-        {precisamDeVisita.length > 0 && (
-          <Painel titulo="Negócios que precisam de visita">
-            <Lista>
-              {precisamDeVisita.map((n) => (
-                <Linha key={n.id} href="/pipeline" esquerda={<Clock size={16} style={{ color: T.ciano }} />}
-                  titulo={n.cliente?.nome ?? "—"} sub={`${n.maquinaModelo ?? "?"} · ${n.proximaAcao ?? "Agendar visita"}`}
-                  direita={n.ultimoContato ? `${diasDesde(n.ultimoContato)}d` : ""} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
         {futurosNaHora.length > 0 && (
           <Painel titulo="Chegou a hora — interesse futuro">
             <Lista>
@@ -427,11 +398,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </Painel>
         )}
 
-        {topAtacar.length === 0 && clientes30DiasSemContato.length === 0 && precisamDeVisita.length === 0 && futurosNaHora.length === 0 && (
-          <Painel titulo="Tudo em dia">
-            <p className="flex items-center gap-2 text-sm" style={{ color: T.verde }}><Target size={16} /> Nenhuma pendência urgente agora.</p>
-          </Painel>
-        )}
+        <Painel titulo="Pendências do dia" subtitulo="top 5 para atacar, 30+ dias sem contato e negócios sem visita">
+          <p className="text-sm" style={{ color: T.texto2 }}>
+            Essas listas agora vivem na <Link href="/alertas" className="font-bold underline" style={{ color: T.ciano }}>Central de alertas</Link>, junto com tudo o que pede a sua ação.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link href="/alertas?grupo=atacar" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>Top 5 para atacar</Link>
+            <Link href="/alertas?grupo=semcontato" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>30+ dias sem contato</Link>
+            <Link href="/alertas?grupo=visitar" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>Negócios sem visita</Link>
+          </div>
+        </Painel>
       </div>
     </div>
   );

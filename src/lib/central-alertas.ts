@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
 import { calcularRitmoMetas } from "@/lib/metas";
+import { criarCategorizadorColunas } from "@/lib/pipeline";
 
 export type SeveridadeAlerta = "alta" | "media" | "baixa";
 
@@ -61,7 +62,9 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   const depoisDeAmanha = inicioDoDiaBrasilia(new Date(), 2);
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * HORA);
 
-  const [rascunhos, aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo] = await Promise.all([
+  const trintaDiasAtras = new Date(Date.now() - 30 * 24 * HORA);
+
+  const [rascunhos, aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, atacar, semContato, negAbertas, colunasFunil] = await Promise.all([
     db.whatsAppMessage.findMany({
       where: { isDraft: true, draftStatus: "PENDING" },
       orderBy: { sentAt: "desc" },
@@ -98,7 +101,37 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       take: 20,
     }),
     calcularRitmoMetas().catch(() => null),
+    // Top 5 para atacar hoje (antes no Dashboard): quem está aguardando
+    // resposta, do maior lead score para o menor.
+    db.cliente.findMany({
+      where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
+      orderBy: { leadScore: "desc" },
+      take: 5,
+      select: {
+        id: true, nome: true, leadScore: true, ultimoContato: true,
+        municipio: { select: { nome: true } },
+        negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
+      },
+    }),
+    // Clientes com 30+ dias sem contato (antes no Dashboard).
+    db.cliente.findMany({
+      where: { ultimoContato: { lt: trintaDiasAtras }, status: { not: "nao_cliente" } },
+      orderBy: { ultimoContato: "asc" },
+      take: 60,
+      select: { id: true, nome: true, ultimoContato: true, telefone: true, municipio: { select: { nome: true } } },
+    }),
+    // Negócios em aberto sem visita marcada (antes no Dashboard).
+    db.negociacao.findMany({
+      where: { status: "aberta", dataVisita: null },
+      orderBy: { ultimoContato: "asc" },
+      take: 60,
+      select: { id: true, estagio: true, maquinaModelo: true, valor: true, proximaAcao: true, ultimoContato: true, clienteId: true, cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+    }),
+    db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
   ]);
+  const categorizar = criarCategorizadorColunas(colunasFunil);
+  const precisamDeVisita = negAbertas.filter((n) => { const cat = categorizar(n.estagio); return cat === "em_negociacao" || cat === "banco"; });
+  const diasSem = (d: Date | null) => (d ? Math.floor((Date.now() - d.getTime()) / (24 * HORA)) : null);
   const catorzeDias = new Date(Date.now() - 14 * 24 * HORA);
   const [alertasRecentes, telefones] = await Promise.all([
     db.alerta.findMany({ where: { criadoEm: { gte: catorzeDias } }, select: { criadoEm: true, resolvido: true } }),
@@ -147,6 +180,59 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           href: conv ? `/atendimento?conversa=${conv}` : `/clientes/${c.id}`,
           hrefLabel: conv ? "Responder" : "Abrir cliente",
           quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
+        };
+      }),
+    },
+    {
+      id: "atacar",
+      titulo: "Top 5 para atacar hoje",
+      descricao: "Pelo lead score, entre quem está aguardando a sua resposta. Comece o dia por aqui.",
+      itens: atacar.map((c) => {
+        const neg = c.negociacoes[0];
+        const conv = convPorCliente.get(c.id);
+        return {
+          id: `atacar:${c.id}`,
+          titulo: `${c.leadScore} · ${c.nome}`,
+          detalhe: [neg?.proximaAcao ?? "Aguardando seu retorno no WhatsApp", neg?.maquinaModelo, c.municipio?.nome].filter(Boolean).join(" · "),
+          severidade: (c.leadScore ?? 0) >= 70 ? ("alta" as const) : ("media" as const),
+          href: conv ? `/atendimento?conversa=${conv}` : `/clientes/${c.id}`,
+          hrefLabel: conv ? "Responder" : "Abrir cliente",
+          quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
+        };
+      }),
+    },
+    {
+      id: "semcontato",
+      titulo: "Clientes com 30+ dias sem contato",
+      descricao: "Ninguém falou com eles há mais de um mês. Uma mensagem curta já reaquece.",
+      itens: semContato.map((c) => {
+        const dias = diasSem(c.ultimoContato) ?? 0;
+        return {
+          id: `semcontato:${c.id}`,
+          titulo: c.nome,
+          detalhe: [`há ${dias} dias sem contato`, c.municipio?.nome].filter(Boolean).join(" · "),
+          severidade: dias >= 90 ? ("alta" as const) : dias >= 60 ? ("media" as const) : ("baixa" as const),
+          href: `/clientes/${c.id}`,
+          hrefLabel: "Abrir cliente",
+          quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
+          telefone: c.telefone,
+        };
+      }),
+    },
+    {
+      id: "visitar",
+      titulo: "Negócios que precisam de visita",
+      descricao: "Negociações em aberto sem visita marcada. Quem é visitado fecha; quem não é, esfria.",
+      itens: precisamDeVisita.map((n) => {
+        const dias = diasSem(n.ultimoContato);
+        return {
+          id: `visitar:${n.id}`,
+          titulo: n.cliente.nome,
+          detalhe: [n.maquinaModelo, n.proximaAcao ?? "Agendar visita", n.cliente.municipio?.nome, dias != null ? `${dias}d sem contato` : null].filter(Boolean).join(" · "),
+          severidade: (dias ?? 0) >= 30 ? ("alta" as const) : (dias ?? 0) >= 14 ? ("media" as const) : ("baixa" as const),
+          href: `/clientes/${n.clienteId}`,
+          hrefLabel: "Abrir cliente",
+          quando: n.ultimoContato ? formatDateTime(n.ultimoContato) : null,
         };
       }),
     },

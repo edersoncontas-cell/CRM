@@ -108,12 +108,23 @@ export default function MapaVendasES({
         )}
         {pontos.map((p) => (
           <Marker key={p.municipioId} position={[p.lat, p.lng]} icon={iconeCifrao(p.vendas, max)}>
-            <Popup>
+            <Popup maxWidth={320}>
               <div className="text-sm">
                 <b>{p.nome}</b><br />
-                {p.vendas} venda{p.vendas === 1 ? "" : "s"} · {formatCurrency(p.valor)}<br />
-                {p.ultimaVenda && <span className="text-xs text-slate-500">última em {new Date(p.ultimaVenda).toLocaleDateString("pt-BR")}</span>}<br />
-                <Link href={`/clientes?municipio=${p.municipioId}`} className="text-brand-600 underline">Ver clientes</Link>
+                {p.vendas} venda{p.vendas === 1 ? "" : "s"} · {formatCurrency(p.valor)}
+                {p.ultimaVenda && <span className="text-xs text-slate-500"> · última em {new Date(p.ultimaVenda).toLocaleDateString("pt-BR")}</span>}
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto border-t border-slate-200 pt-2">
+                  {(p.clientes ?? []).map((c) => (
+                    <li key={c.id} className="flex items-start justify-between gap-2 text-xs leading-tight">
+                      <span className="min-w-0">
+                        <Link href={`/clientes/${c.id}`} className="font-semibold text-slate-800 hover:underline">{c.nome}</Link>
+                        {c.modelos.length > 0 && <span className="block text-[11px] text-slate-500">{c.modelos.join(", ")}</span>}
+                      </span>
+                      <span className="shrink-0 text-right font-bold text-emerald-700">{formatCurrency(c.valor)}{c.qtd > 1 ? <span className="block text-[10px] font-semibold text-slate-500">{c.qtd} máquinas</span> : null}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href={`/clientes?municipio=${p.municipioId}`} className="mt-2 inline-block text-xs text-brand-600 underline">Todos os clientes de {p.nome}</Link>
               </div>
             </Popup>
           </Marker>

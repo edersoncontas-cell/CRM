@@ -28,6 +28,8 @@ export type PontoVenda = {
   vendas: number;
   valor: number;
   ultimaVenda: string | null;
+  // Quem comprou nessa cidade (para o balão do mapa listar os clientes).
+  clientes: { id: string; nome: string; qtd: number; valor: number; modelos: string[] }[];
 };
 
 export async function carregarVendasFaturadas(): Promise<VendaDash[]> {
@@ -63,15 +65,23 @@ export function pontosVendas(vendas: VendaDash[], ano: number | null): PontoVend
       ? { lat: v.municipio.lat, lng: v.municipio.lng }
       : coordenadasMunicipioES(v.municipio.nome);
     if (!coords) continue;
-    const atual = porMunicipio.get(v.municipio.id) ?? {
+    const atual: PontoVenda = porMunicipio.get(v.municipio.id) ?? {
       municipioId: v.municipio.id, nome: v.municipio.nome, lat: coords.lat, lng: coords.lng,
-      vendas: 0, valor: 0, ultimaVenda: null,
+      vendas: 0, valor: 0, ultimaVenda: null, clientes: [],
     };
     atual.vendas += 1;
     atual.valor += v.valor;
     if (!atual.ultimaVenda || v.faturadoEm.toISOString() > atual.ultimaVenda) atual.ultimaVenda = v.faturadoEm.toISOString();
+    const cli = atual.clientes.find((c) => c.id === v.clienteId);
+    if (cli) {
+      cli.qtd += 1; cli.valor += v.valor;
+      if (v.modelo && !cli.modelos.includes(v.modelo)) cli.modelos.push(v.modelo);
+    } else {
+      atual.clientes.push({ id: v.clienteId, nome: v.clienteNome, qtd: 1, valor: v.valor, modelos: v.modelo ? [v.modelo] : [] });
+    }
     porMunicipio.set(v.municipio.id, atual);
   }
+  for (const p of porMunicipio.values()) p.clientes.sort((a, b) => b.valor - a.valor);
   return Array.from(porMunicipio.values()).sort((a, b) => b.vendas - a.vendas);
 }
 
@@ -135,8 +145,7 @@ export function resumoVendas(vendas: VendaDash[], ano: number, metaAnual: number
   }
   const topClientes = Array.from(porCliente.entries())
     .map(([id, c]) => ({ id, ...c, ticket: c.qtd ? c.faturamento / c.qtd : 0 }))
-    .sort((a, b) => b.faturamento - a.faturamento || b.qtd - a.qtd)
-    .slice(0, 8);
+    .sort((a, b) => b.faturamento - a.faturamento || b.qtd - a.qtd);
 
   return {
     ano,
