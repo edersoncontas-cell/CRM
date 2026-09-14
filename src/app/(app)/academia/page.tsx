@@ -18,7 +18,7 @@ export default async function AcademiaPage() {
     <div>
       <PageHeader
         titulo="Academia de Vendas"
-        subtitulo="Trilha de formação por níveis, escrita para quem vende máquinas pesadas no sul do ES: fundamentos, psicologia, neurociência, prospecção, diagnóstico, valor, objeções, fechamentos agressivos, financiamento e pós-venda — com quiz, missão prática e treino com IA em cada módulo."
+        subtitulo="Trilha de formação em 10 níveis e 60 aulas, escrita para quem vende máquinas pesadas no sul do ES: fundamentos, psicologia, neurociência, prospecção, diagnóstico, valor, objeções, fechamentos agressivos, negociação e pós-venda — com casos reais, scripts, tabelas, checklists, quiz, missão prática, prova final e treino com IA em cada módulo."
       />
       <AcademiaAbas
         trilha={<AcademiaTrilha progressoInicial={progresso} />}

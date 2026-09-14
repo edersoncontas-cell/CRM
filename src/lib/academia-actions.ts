@@ -1,7 +1,8 @@
 "use server";
 
 // Server actions da Trilha de Formação da Academia: progresso (aulas
-// concluídas e notas dos quizzes, em Configuracao) e treino com IA.
+// concluídas, notas dos quizzes e das provas finais, em Configuracao) e
+// treino com IA.
 
 import { revalidatePath } from "next/cache";
 import { getConfig, setConfig } from "@/lib/config";
@@ -12,13 +13,23 @@ const CHAVE = "academia.progresso";
 
 export type ProgressoAcademia = {
   concluidas: string[];
-  notas: Record<string, number>; // aulaId -> acertos no quiz (0-100)
-  treinos: number;               // cenários avaliados
-  melhorNota: number;            // melhor nota de treino (0-10)
+  notas: Record<string, number>;  // aulaId -> acertos no quiz (0-100)
+  provas: Record<string, number>; // moduloId -> melhor nota na prova final (0-100)
+  treinos: number;                // cenários avaliados
+  melhorNota: number;             // melhor nota de treino (0-10)
   atualizadoEm: string | null;
 };
 
-const VAZIO: ProgressoAcademia = { concluidas: [], notas: {}, treinos: 0, melhorNota: 0, atualizadoEm: null };
+const VAZIO: ProgressoAcademia = { concluidas: [], notas: {}, provas: {}, treinos: 0, melhorNota: 0, atualizadoEm: null };
+
+function mapaNumerico(v: unknown): Record<string, number> {
+  if (!v || typeof v !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof n === "number" && Number.isFinite(n)) out[k] = n;
+  }
+  return out;
+}
 
 export async function lerProgressoAcademia(): Promise<ProgressoAcademia> {
   try {
@@ -27,7 +38,8 @@ export async function lerProgressoAcademia(): Promise<ProgressoAcademia> {
     const p = JSON.parse(raw) as Partial<ProgressoAcademia>;
     return {
       concluidas: Array.isArray(p.concluidas) ? p.concluidas.filter((x) => typeof x === "string") : [],
-      notas: p.notas && typeof p.notas === "object" ? p.notas : {},
+      notas: mapaNumerico(p.notas),
+      provas: mapaNumerico(p.provas),
       treinos: Number(p.treinos) || 0,
       melhorNota: Number(p.melhorNota) || 0,
       atualizadoEm: p.atualizadoEm ?? null,
@@ -53,6 +65,16 @@ export async function concluirAulaAcademia(aulaId: string, notaQuiz?: number): P
 export async function reabrirAulaAcademia(aulaId: string): Promise<ProgressoAcademia> {
   const p = await lerProgressoAcademia();
   p.concluidas = p.concluidas.filter((id) => id !== aulaId);
+  await gravar(p);
+  return p;
+}
+
+// Registra a nota da prova final do módulo (guarda a melhor).
+export async function registrarProvaAcademia(moduloId: string, nota: number): Promise<ProgressoAcademia> {
+  const p = await lerProgressoAcademia();
+  if (!TRILHA.some((m) => m.id === moduloId)) return p;
+  const n = Math.max(0, Math.min(100, Math.round(nota)));
+  p.provas[moduloId] = Math.max(p.provas[moduloId] ?? 0, n);
   await gravar(p);
   return p;
 }

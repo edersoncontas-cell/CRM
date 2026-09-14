@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { TRILHA, TODAS_AULAS, proximaAula, progressoModulo, nivelDoVendedor, type Modulo, type Aula, type Bloco } from "@/lib/academia-trilha";
-import { concluirAulaAcademia, reabrirAulaAcademia, gerarCenarioTreinoAction, avaliarTreinoAction, type ProgressoAcademia } from "@/lib/academia-actions";
+import {
+  TRILHA, TODAS_AULAS, TOTAL_MINUTOS, NOTA_MINIMA_PROVA, proximaAula, progressoModulo, moduloCertificado, nivelDoVendedor,
+  type Modulo, type Aula, type Bloco, type Pergunta,
+} from "@/lib/academia-trilha";
+import {
+  concluirAulaAcademia, reabrirAulaAcademia, registrarProvaAcademia, gerarCenarioTreinoAction, avaliarTreinoAction, type ProgressoAcademia,
+} from "@/lib/academia-actions";
 import type { CenarioTreino, AvaliacaoTreino } from "@/lib/ai/treino";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2, Circle, ChevronLeft, Clock, Target, Lightbulb, MessageSquareQuote, Sparkles, Loader2, Trophy, Lock, ArrowRight, RotateCcw, Award,
+  BookOpen, ClipboardList, AlertTriangle, PenLine, FileText, BadgeCheck, GraduationCap, ListChecks,
 } from "lucide-react";
 
+// ─────────────────────────────────────────────────────────────────────────
+// Blocos de conteúdo
+// ─────────────────────────────────────────────────────────────────────────
 function BlocoView({ b, cor }: { b: Bloco; cor: string }) {
   if (b.tipo === "p") {
     return (
@@ -45,6 +54,88 @@ function BlocoView({ b, cor }: { b: Bloco; cor: string }) {
       </div>
     );
   }
+  if (b.tipo === "caso") {
+    return (
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-sky-700">
+          <FileText size={13} /> {b.titulo ?? "Caso real"}
+        </div>
+        <dl className="space-y-1.5 text-sm text-slate-700">
+          <div><dt className="inline font-bold text-slate-800">Situação: </dt><dd className="inline">{b.situacao}</dd></div>
+          <div><dt className="inline font-bold text-slate-800">O que foi feito: </dt><dd className="inline">{b.acao}</dd></div>
+          <div><dt className="inline font-bold text-slate-800">Resultado: </dt><dd className="inline">{b.resultado}</dd></div>
+          <div className="rounded-lg bg-white px-3 py-2 shadow-sm"><dt className="inline font-bold text-sky-800">Lição: </dt><dd className="inline font-medium text-slate-800">{b.licao}</dd></div>
+        </dl>
+      </div>
+    );
+  }
+  if (b.tipo === "checklist") {
+    return (
+      <div className="rounded-xl border border-slate-200 p-3">
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+          <ClipboardList size={13} /> {b.titulo ?? "Checklist"}
+        </div>
+        <ul className="space-y-1.5">
+          {b.itens.map((it, i) => (
+            <li key={i} className="flex gap-2 text-sm leading-relaxed text-slate-700">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2" style={{ borderColor: cor }} />
+              <span>{it}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (b.tipo === "tabela") {
+    return (
+      <div>
+        {b.titulo && <h4 className="mb-1.5 text-sm font-bold text-slate-800">{b.titulo}</h4>}
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead>
+              <tr style={{ background: `${cor}1f` }}>
+                {b.colunas.map((c, i) => <th key={i} className="px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-700">{c}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {b.linhas.map((l, i) => (
+                <tr key={i} className={i % 2 ? "bg-slate-50" : "bg-white"}>
+                  {l.map((c, j) => <td key={j} className={cn("px-3 py-2 align-top text-slate-700", j === 0 && "font-semibold text-slate-800")}>{c}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+  if (b.tipo === "erros") {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-red-700">
+          <AlertTriangle size={13} /> {b.titulo ?? "Erros comuns"}
+        </div>
+        <ul className="space-y-1.5">
+          {b.itens.map((it, i) => (
+            <li key={i} className="flex gap-2 text-sm leading-relaxed text-red-900">
+              <span className="mt-0.5 shrink-0 font-black text-red-500">✕</span>
+              <span>{it}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (b.tipo === "exercicio") {
+    return (
+      <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-700">
+          <PenLine size={13} /> {b.titulo ?? "Exercício"}
+        </div>
+        <p className="text-sm leading-relaxed text-violet-950">{b.texto}</p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: `${cor}66`, background: `${cor}14` }}>
       <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide" style={{ color: cor }}>
@@ -55,6 +146,42 @@ function BlocoView({ b, cor }: { b: Bloco; cor: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Quiz genérico (aula e prova final)
+// ─────────────────────────────────────────────────────────────────────────
+function Quiz({ perguntas, conferido, respostas, onResponder }: {
+  perguntas: Pergunta[]; conferido: boolean; respostas: Record<number, number>; onResponder: (qi: number, oi: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {perguntas.map((q, qi) => (
+        <div key={qi} className="rounded-xl border border-slate-200 p-3">
+          <p className="mb-2 text-sm font-semibold text-slate-800">{qi + 1}. {q.pergunta}</p>
+          <div className="space-y-1.5">
+            {q.opcoes.map((op, oi) => {
+              const marcada = respostas[qi] === oi;
+              const certa = conferido && oi === q.correta;
+              const errada = conferido && marcada && oi !== q.correta;
+              return (
+                <button key={oi} disabled={conferido} onClick={() => onResponder(qi, oi)}
+                  className={cn("flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition",
+                    certa ? "border-green-400 bg-green-50 text-green-800" : errada ? "border-red-300 bg-red-50 text-red-700" : marcada ? "border-brand-500 bg-brand-50 text-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50")}>
+                  {marcada || certa ? <CheckCircle2 size={15} className="shrink-0" /> : <Circle size={15} className="shrink-0 text-slate-300" />}
+                  {op}
+                </button>
+              );
+            })}
+          </div>
+          {conferido && <p className="mt-2 text-xs text-slate-600"><b>Por quê:</b> {q.explicacao}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Aula
+// ─────────────────────────────────────────────────────────────────────────
 function AulaView({ modulo, aula, concluida, nota, onConcluir, onReabrir, onVoltar, salvando }: {
   modulo: Modulo; aula: Aula; concluida: boolean; nota: number | undefined;
   onConcluir: (notaQuiz: number) => void; onReabrir: () => void; onVoltar: () => void; salvando: boolean;
@@ -75,7 +202,7 @@ function AulaView({ modulo, aula, concluida, nota, onConcluir, onReabrir, onVolt
         {concluida && <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700"><CheckCircle2 size={12} /> concluída{nota != null ? ` · quiz ${nota}%` : ""}</span>}
       </div>
       <p className="mb-1 text-sm text-slate-500">{aula.resumo}</p>
-      <p className="mb-5 flex items-center gap-1 text-xs text-slate-400"><Clock size={12} /> {aula.minutos} min de leitura</p>
+      <p className="mb-5 flex items-center gap-1 text-xs text-slate-400"><Clock size={12} /> {aula.minutos} min de leitura · {aula.blocos.length} blocos · quiz com {aula.quiz.length} pergunta{aula.quiz.length > 1 ? "s" : ""}</p>
 
       <div className="space-y-5">
         {aula.blocos.map((b, i) => <BlocoView key={i} b={b} cor={modulo.cor} />)}
@@ -88,29 +215,7 @@ function AulaView({ modulo, aula, concluida, nota, onConcluir, onReabrir, onVolt
 
       <div className="mt-6">
         <h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-700">Quiz da aula</h3>
-        <div className="space-y-4">
-          {aula.quiz.map((q, qi) => (
-            <div key={qi} className="rounded-xl border border-slate-200 p-3">
-              <p className="mb-2 text-sm font-semibold text-slate-800">{qi + 1}. {q.pergunta}</p>
-              <div className="space-y-1.5">
-                {q.opcoes.map((op, oi) => {
-                  const marcada = respostas[qi] === oi;
-                  const certa = conferido && oi === q.correta;
-                  const errada = conferido && marcada && oi !== q.correta;
-                  return (
-                    <button key={oi} disabled={conferido} onClick={() => setRespostas((r) => ({ ...r, [qi]: oi }))}
-                      className={cn("flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition",
-                        certa ? "border-green-400 bg-green-50 text-green-800" : errada ? "border-red-300 bg-red-50 text-red-700" : marcada ? "border-brand-500 bg-brand-50 text-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50")}>
-                      {marcada || certa ? <CheckCircle2 size={15} className="shrink-0" /> : <Circle size={15} className="shrink-0 text-slate-300" />}
-                      {op}
-                    </button>
-                  );
-                })}
-              </div>
-              {conferido && <p className="mt-2 text-xs text-slate-600"><b>Por quê:</b> {q.explicacao}</p>}
-            </div>
-          ))}
-        </div>
+        <Quiz perguntas={aula.quiz} conferido={conferido} respostas={respostas} onResponder={(qi, oi) => setRespostas((r) => ({ ...r, [qi]: oi }))} />
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {!conferido ? (
             <button onClick={() => setConferido(true)} disabled={!todasRespondidas}
@@ -142,6 +247,66 @@ function AulaView({ modulo, aula, concluida, nota, onConcluir, onReabrir, onVolt
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Prova final do módulo
+// ─────────────────────────────────────────────────────────────────────────
+function ProvaFinal({ modulo, liberada, melhorNota, onRegistrar, salvando }: {
+  modulo: Modulo; liberada: boolean; melhorNota: number | undefined; onRegistrar: (nota: number) => void; salvando: boolean;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [respostas, setRespostas] = useState<Record<number, number>>({});
+  const [conferido, setConferido] = useState(false);
+  const acertos = modulo.prova.filter((q, i) => respostas[i] === q.correta).length;
+  const todas = modulo.prova.every((_, i) => respostas[i] != null);
+  const nota = modulo.prova.length ? Math.round((acertos / modulo.prova.length) * 100) : 100;
+  const aprovado = melhorNota != null && melhorNota >= NOTA_MINIMA_PROVA;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-slate-700">
+          <GraduationCap size={16} style={{ color: modulo.cor }} /> Prova final do módulo {modulo.nivel}
+        </div>
+        {aprovado ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-700"><BadgeCheck size={13} /> Certificado · {melhorNota}%</span>
+        ) : melhorNota != null ? (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">Melhor nota: {melhorNota}% (mínimo {NOTA_MINIMA_PROVA}%)</span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-slate-500">{modulo.prova.length} perguntas sobre todo o módulo. Aprovação com {NOTA_MINIMA_PROVA}% ou mais gera o certificado do nível. Pode refazer quantas vezes quiser — vale a melhor nota.</p>
+      {!liberada ? (
+        <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500"><Lock size={13} /> Conclua as {modulo.aulas.length} aulas do módulo para liberar a prova.</p>
+      ) : !aberta ? (
+        <button onClick={() => { setAberta(true); setRespostas({}); setConferido(false); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">
+          <ListChecks size={14} /> {melhorNota != null ? "Refazer a prova" : "Fazer a prova"}
+        </button>
+      ) : (
+        <div className="mt-4">
+          <Quiz perguntas={modulo.prova} conferido={conferido} respostas={respostas} onResponder={(qi, oi) => setRespostas((r) => ({ ...r, [qi]: oi }))} />
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {!conferido ? (
+              <button onClick={() => setConferido(true)} disabled={!todas} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50">Conferir prova</button>
+            ) : (
+              <>
+                <span className={cn("text-sm font-bold", nota >= NOTA_MINIMA_PROVA ? "text-green-700" : "text-red-700")}>
+                  {acertos}/{modulo.prova.length} certas ({nota}%) — {nota >= NOTA_MINIMA_PROVA ? "aprovado" : "abaixo do mínimo"}
+                </span>
+                <button onClick={() => { setRespostas({}); setConferido(false); }} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><RotateCcw size={13} /> Refazer</button>
+                <button onClick={() => { onRegistrar(nota); setAberta(false); }} disabled={salvando} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50">
+                  {salvando ? <Loader2 size={15} className="animate-spin" /> : <BadgeCheck size={15} />} Registrar resultado
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Treino com IA
+// ─────────────────────────────────────────────────────────────────────────
 function TreinoIA({ modulo }: { modulo: Modulo }) {
   const [cenario, setCenario] = useState<CenarioTreino | null>(null);
   const [resposta, setResposta] = useState("");
@@ -218,6 +383,9 @@ function TreinoIA({ modulo }: { modulo: Modulo }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Trilha
+// ─────────────────────────────────────────────────────────────────────────
 export function AcademiaTrilha({ progressoInicial }: { progressoInicial: ProgressoAcademia }) {
   const [progresso, setProgresso] = useState(progressoInicial);
   const [moduloId, setModuloId] = useState<string | null>(null);
@@ -229,6 +397,7 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
   const feitas = progresso.concluidas.filter((id) => TODAS_AULAS.some((t) => t.aula.id === id)).length;
   const nivel = nivelDoVendedor(concluidas);
   const proxima = proximaAula(concluidas);
+  const certificados = TRILHA.filter((m) => moduloCertificado(m, concluidas, progresso.provas)).length;
   const modulo = TRILHA.find((m) => m.id === moduloId) ?? null;
   const aula = modulo?.aulas.find((a) => a.id === aulaId) ?? null;
 
@@ -238,24 +407,23 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
   function reabrir(id: string) {
     startSalvar(async () => { setProgresso(await reabrirAulaAcademia(id)); });
   }
+  function registrarProva(mid: string, nota: number) {
+    startSalvar(async () => { setProgresso(await registrarProvaAcademia(mid, nota)); });
+  }
 
   // ── Aula aberta ──
   if (modulo && aula) {
+    const idx = modulo.aulas.findIndex((a) => a.id === aula.id);
+    const seguinte = modulo.aulas[idx + 1] ?? null;
+    const ultimaDoModulo = !seguinte;
     return (
       <div className="space-y-4">
-        <AulaView modulo={modulo} aula={aula} concluida={concluidas.has(aula.id)} nota={progresso.notas[aula.id]}
+        <AulaView key={aula.id} modulo={modulo} aula={aula} concluida={concluidas.has(aula.id)} nota={progresso.notas[aula.id]}
           onConcluir={(n) => concluir(aula.id, n)} onReabrir={() => reabrir(aula.id)} onVoltar={() => setAulaId(null)} salvando={salvando} />
-        {(() => {
-          const idx = modulo.aulas.findIndex((a) => a.id === aula.id);
-          const seguinte = modulo.aulas[idx + 1] ?? null;
-          const proxModulo = !seguinte ? TRILHA.find((m) => m.nivel === modulo.nivel + 1) ?? null : null;
-          return (
-            <div className="flex flex-wrap justify-end gap-2">
-              {seguinte && <button onClick={() => setAulaId(seguinte.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">Próxima aula: {seguinte.titulo} <ArrowRight size={14} /></button>}
-              {proxModulo && <button onClick={() => { setModuloId(proxModulo.id); setAulaId(null); }} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">Ir para o módulo {proxModulo.nivel} <ArrowRight size={14} /></button>}
-            </div>
-          );
-        })()}
+        <div className="flex flex-wrap justify-end gap-2">
+          {seguinte && <button onClick={() => { setAulaId(seguinte.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">Próxima aula: {seguinte.titulo} <ArrowRight size={14} /></button>}
+          {ultimaDoModulo && <button onClick={() => { setAulaId(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800"><GraduationCap size={14} /> Ir para a prova final do módulo {modulo.nivel}</button>}
+        </div>
       </div>
     );
   }
@@ -263,18 +431,34 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
   // ── Módulo aberto ──
   if (modulo) {
     const pct = progressoModulo(modulo, concluidas);
+    const certificado = moduloCertificado(modulo, concluidas, progresso.provas);
+    const proxModulo = TRILHA.find((m) => m.nivel === modulo.nivel + 1) ?? null;
+    const minutos = modulo.aulas.reduce((s, a) => s + a.minutos, 0);
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <button onClick={() => setModuloId(null)} className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800"><ChevronLeft size={14} /> Todos os módulos</button>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: modulo.cor }}>Nível {modulo.nivel} · {modulo.tema}</div>
               <h2 className="text-xl font-black text-slate-900">{modulo.titulo}</h2>
               <p className="mt-1 text-sm text-slate-500">{modulo.descricao}</p>
+              <p className="mt-1 text-xs text-slate-400">{modulo.aulas.length} aulas · {minutos} min · prova final com {modulo.prova.length} perguntas · treino com IA</p>
             </div>
-            <div className="text-right"><div className="text-2xl font-black" style={{ color: modulo.cor }}>{pct}%</div><div className="text-xs text-slate-400">concluído</div></div>
+            <div className="text-right">
+              <div className="text-2xl font-black" style={{ color: modulo.cor }}>{pct}%</div>
+              <div className="text-xs text-slate-400">concluído</div>
+              {certificado && <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700"><BadgeCheck size={12} /> certificado</div>}
+            </div>
           </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500"><Target size={13} /> Ao terminar este módulo você vai saber</div>
+            <ul className="space-y-1">
+              {modulo.objetivos.map((o, i) => <li key={i} className="flex gap-2 text-sm text-slate-700"><CheckCircle2 size={14} className="mt-0.5 shrink-0" style={{ color: modulo.cor }} /><span>{o}</span></li>)}
+            </ul>
+          </div>
+
           <div className="mt-4 space-y-2">
             {modulo.aulas.map((a, i) => {
               const ok = concluidas.has(a.id);
@@ -290,8 +474,25 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
               );
             })}
           </div>
+
+          {modulo.leituras.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500"><BookOpen size={13} /> Leituras recomendadas</div>
+              <ul className="space-y-0.5 text-sm text-slate-600">
+                {modulo.leituras.map((l, i) => <li key={i}>• {l}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
+
+        <ProvaFinal key={modulo.id} modulo={modulo} liberada={pct === 100} melhorNota={progresso.provas[modulo.id]} onRegistrar={(n) => registrarProva(modulo.id, n)} salvando={salvando} />
         <TreinoIA modulo={modulo} />
+
+        {certificado && proxModulo && (
+          <div className="flex justify-end">
+            <button onClick={() => { setModuloId(proxModulo.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">Ir para o módulo {proxModulo.nivel}: {proxModulo.titulo} <ArrowRight size={14} /></button>
+          </div>
+        )}
       </div>
     );
   }
@@ -305,11 +506,15 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-agro-400">Seu nível</div>
               <div className="text-2xl font-black">{nivel.nivel}/10 · {nivel.titulo}</div>
-              <div className="mt-1 text-sm text-slate-300">{feitas} de {total} aulas concluídas{progresso.treinos ? ` · ${progresso.treinos} treino(s) com IA · melhor nota ${progresso.melhorNota}/10` : ""}</div>
+              <div className="mt-1 text-sm text-slate-300">
+                {feitas} de {total} aulas concluídas · {certificados} de {TRILHA.length} módulos certificados
+                {progresso.treinos ? ` · ${progresso.treinos} treino(s) com IA · melhor nota ${progresso.melhorNota}/10` : ""}
+              </div>
             </div>
             <Trophy size={40} className="text-agro-400" />
           </div>
           <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-agro-400 to-emerald-400" style={{ width: `${Math.round((feitas / total) * 100)}%` }} /></div>
+          <div className="mt-2 text-[11px] text-slate-400">{TRILHA.length} módulos · {total} aulas · ~{Math.round(TOTAL_MINUTOS / 60)} h de conteúdo · {TRILHA.reduce((s, m) => s + m.prova.length, 0)} perguntas de prova · treino com IA em todos os módulos</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{proxima ? "Continuar de onde parou" : "Trilha completa"}</div>
@@ -320,7 +525,7 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
               <button onClick={() => { setModuloId(proxima.modulo.id); setAulaId(proxima.aula.id); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">Abrir aula <ArrowRight size={14} /></button>
             </>
           ) : (
-            <p className="mt-1 text-sm text-slate-600">Parabéns. Refaça as missões com clientes novos e use o treino com IA antes das visitas importantes.</p>
+            <p className="mt-1 text-sm text-slate-600">Parabéns. Faça as provas finais que faltam, refaça as missões com clientes novos e use o treino com IA antes das visitas importantes.</p>
           )}
         </div>
       </div>
@@ -330,11 +535,12 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
           const pct = progressoModulo(m, concluidas);
           const anterior = TRILHA[i - 1];
           const recomendado = !anterior || progressoModulo(anterior, concluidas) === 100;
+          const cert = moduloCertificado(m, concluidas, progresso.provas);
           return (
             <button key={m.id} onClick={() => setModuloId(m.id)} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-brand-300 hover:shadow-md">
               <div className="mb-2 flex items-center justify-between">
                 <span className="rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${m.cor}22`, color: m.cor }}>Nível {m.nivel} · {m.tema}</span>
-                {pct === 100 ? <CheckCircle2 size={18} className="text-green-600" /> : !recomendado ? <span title="Recomendado após concluir o módulo anterior"><Lock size={15} className="text-slate-300" /></span> : null}
+                {cert ? <span title="Módulo certificado"><BadgeCheck size={18} className="text-green-600" /></span> : pct === 100 ? <span title="Aulas concluídas — falta a prova final"><CheckCircle2 size={18} className="text-amber-500" /></span> : !recomendado ? <span title="Recomendado após concluir o módulo anterior"><Lock size={15} className="text-slate-300" /></span> : null}
               </div>
               <div className="font-bold text-slate-800">{m.titulo}</div>
               <p className="mt-1 line-clamp-2 text-xs text-slate-500">{m.descricao}</p>
@@ -342,7 +548,7 @@ export function AcademiaTrilha({ progressoInicial }: { progressoInicial: Progres
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.cor }} /></div>
                 <span className="text-xs font-bold text-slate-500">{pct}%</span>
               </div>
-              <div className="mt-1 text-[11px] text-slate-400">{m.aulas.length} aulas · {m.aulas.reduce((s, a) => s + a.minutos, 0)} min · quiz + missão + treino com IA</div>
+              <div className="mt-1 text-[11px] text-slate-400">{m.aulas.length} aulas · {m.aulas.reduce((s, a) => s + a.minutos, 0)} min · prova final · treino com IA</div>
             </button>
           );
         })}
