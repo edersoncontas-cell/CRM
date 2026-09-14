@@ -3,8 +3,17 @@ import { AssistenteIA } from "@/components/AssistenteIA";
 import { InstalarIOS } from "@/components/InstalarIOS";
 import { AuthPersist } from "@/components/AuthPersist";
 import { SplashBoot } from "@/components/SplashBoot";
+import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export const dynamic = "force-dynamic";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Migrações de schema pendentes rodam aqui, ANTES de qualquer tela — custa
+  // 1 SELECT (memoizado) quando já está tudo em dia. Antes só algumas páginas
+  // faziam essa checagem, e uma coluna nova no banco derrubava as demais (o
+  // WhatsApp quebrou assim) até alguém abrir uma das páginas "certas".
+  await garantirManutencaoSeNecessario().catch(() => {});
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
