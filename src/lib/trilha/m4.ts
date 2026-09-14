@@ -38,7 +38,7 @@ export const M4: Modulo = {
           ["Grupos de WhatsApp de operadores e empreiteiros", "Quem pede máquina de aluguel com frequência", "Abordar com a conta aluguel x parcela"],
           ["Cooperativa de café", "Calendário de crédito da safra", "Palestra/visita técnica em conjunto com o agrônomo"],
         ] },
-        { tipo: "destaque", titulo: "Meta de prospecção", texto: "5 novos contatos qualificados por semana enchem o funil o ano inteiro. Registre todos no CRM, mesmo os que disserem “agora não” — o Radar de reengajamento vai lembrar você." },
+        { tipo: "destaque", titulo: "Meta de prospecção", texto: "5 novos contatos qualificados por semana enchem o funil o ano inteiro. Registre todos no CRM, mesmo os que disserem “agora não” — o painel de 30+ dias sem contato do Dashboard vai lembrar você." },
         { tipo: "caso", titulo: "Caso: o loteamento que virou 3 vendas", situacao: "Vendedor viu placa de loteamento novo em Marataízes. Não conhecia ninguém envolvido.", acao: "Foi à obra, conversou com o encarregado, descobriu a empreiteira e o engenheiro. Cadastrou os três no CRM. Ofereceu uma visita técnica gratuita para dimensionar a frota da terraplenagem.", resultado: "A empreiteira comprou uma retro e um rolo; o engenheiro indicou a pá para outro loteamento em Itapemirim.", licao: "Uma placa de obra é um funil inteiro. Entre, pergunte, cadastre." },
       ],
       missao: "Monte a rota das próximas 3 semanas por região no CRM: em cada dia de campo, 2 clientes ativos, 2 prospectos novos (de fontes diferentes) e 1 pós-venda.",

@@ -98,7 +98,7 @@ export const M10: Modulo = {
           "Ler o letreiro e as notícias do Dashboard; anotar 2 sinais e 2 ações.",
           "Olhar o mapa: uma cidade-alvo para a semana.",
           "Filtrar clientes 30+ dias sem contato e negociações paradas: uma ação para cada.",
-          "Conferir o Radar de reengajamento e o Orientador de Vendas: quem a IA marcou como quente.",
+          "Conferir o Orientador de Vendas: quem a IA marcou como quente e qual é a próxima ação sugerida.",
           "Anotar o que a concorrência fez na semana (preço, entrega, promoção) no CRM.",
         ] },
         { tipo: "p", titulo: "Concorrência como fonte", texto: "Cada máquina que o concorrente entrega na região é informação: o cliente precisava, a especificação, a condição que ganhou. Pergunte (ao cliente, ao operador, ao balcão de peças). Registre no CRM. Em 3 meses você conhece o padrão do concorrente melhor que o próprio vendedor dele — e chega antes na próxima." },

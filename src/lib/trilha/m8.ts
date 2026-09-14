@@ -213,7 +213,7 @@ export const M8: Modulo = {
         { tipo: "lista", titulo: "Se for não", itens: [
           "Agradeça sem drama. “Entendo. Posso perguntar o que pesou? Quero aprender.”",
           "Isole a última vez: “se X mudasse, faria sentido?”. Às vezes o não vira sim aqui.",
-          "Combine data de retorno concreta e registre no CRM como perdida com motivo (o Radar vai lembrar).",
+          "Combine data de retorno concreta e registre no CRM como perdida com motivo e a data de retorno na próxima ação.",
           "Mantenha a porta aberta: contato de valor a cada 60 dias.",
           "Analise depois: qual módulo desta trilha teria mudado o resultado?",
         ] },
