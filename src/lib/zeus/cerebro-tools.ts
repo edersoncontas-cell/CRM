@@ -11,6 +11,7 @@ import { registrarAudit } from "@/lib/audit";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 import * as actions from "@/lib/actions";
+import { inicioDoDiaBrasilia } from "@/lib/utils";
 
 export type ToolResult = Record<string, unknown> | unknown[];
 
@@ -163,7 +164,7 @@ const agenda: CerebroTool = {
   async executar(input) {
     const periodo = s(input.periodo) || "semana";
     const agora = new Date();
-    const inicio = new Date(agora); inicio.setHours(0, 0, 0, 0);
+    const inicio = inicioDoDiaBrasilia(agora);
     let fim: Date | undefined;
     if (periodo === "hoje") { fim = new Date(inicio); fim.setDate(fim.getDate() + 1); }
     else if (periodo === "semana") { fim = new Date(inicio); fim.setDate(fim.getDate() + 7); }

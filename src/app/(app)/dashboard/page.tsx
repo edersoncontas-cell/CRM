@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { diasDesde, saudacaoBrasilia, formatCurrency } from "@/lib/utils";
+import { diasDesde, saudacaoBrasilia, formatCurrency, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
@@ -26,18 +26,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const anoAtual = hoje.getFullYear();
   const anoSel = searchParams.ano && /^\d{4}$/.test(searchParams.ano) ? Number(searchParams.ano) : anoAtual;
   const inicioAno = new Date(anoAtual, 0, 1);
-  const inicioDia = new Date(hoje); inicioDia.setHours(0, 0, 0, 0);
-  const fimDia = new Date(hoje); fimDia.setHours(23, 59, 59, 999);
+  // Limites de dia e semana no fuso de Brasília (o servidor roda em UTC).
+  const inicioDia = inicioDoDiaBrasilia(hoje);
+  const fimDia = new Date(inicioDoDiaBrasilia(hoje, 1).getTime() - 1);
 
   // Semana de segunda a domingo (para os quadros que zeram toda segunda-feira)
-  const diaSemanaAtual = hoje.getDay(); // 0=domingo ... 6=sábado
+  const diaSemanaAtual = diaSemanaBrasilia(hoje); // 0=domingo ... 6=sábado
   const deltaSegunda = diaSemanaAtual === 0 ? 6 : diaSemanaAtual - 1;
-  const inicioSemanaSegunda = new Date(hoje); inicioSemanaSegunda.setDate(hoje.getDate() - deltaSegunda); inicioSemanaSegunda.setHours(0, 0, 0, 0);
-  const fimSemanaDomingo = new Date(inicioSemanaSegunda); fimSemanaDomingo.setDate(inicioSemanaSegunda.getDate() + 7);
+  const inicioSemanaSegunda = inicioDoDiaBrasilia(hoje, -deltaSegunda);
+  const fimSemanaDomingo = inicioDoDiaBrasilia(hoje, -deltaSegunda + 7);
 
   // Janela de segunda a sábado (para o quadro "Novos Negócios", que zera todo domingo)
   const ehDomingoHoje = diaSemanaAtual === 0;
-  const fimSemanaSabado = new Date(inicioSemanaSegunda); fimSemanaSabado.setDate(inicioSemanaSegunda.getDate() + 6); fimSemanaSabado.setHours(23, 59, 59, 999);
+  const fimSemanaSabado = new Date(inicioDoDiaBrasilia(hoje, -deltaSegunda + 6).getTime() - 1);
 
   const DIAS_SEM_CONTATO = 30;
   const corteSemContato = new Date(hoje);

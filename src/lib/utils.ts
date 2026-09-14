@@ -64,6 +64,22 @@ export function diaSemanaBrasilia(date: Date): number {
   return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[nome] ?? date.getDay();
 }
 
+// Data (YYYY-MM-DD) de um instante no fuso de Brasília.
+export function dataIsoBrasilia(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_BR, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+// Meia-noite (00:00) de Brasília do dia em que `date` cai, deslocada em
+// `deslocamentoDias` dias. O servidor (Vercel) roda em UTC: `setHours(0,0,0,0)`
+// devolve 00:00 UTC = 21:00 do dia ANTERIOR em Brasília, então "hoje",
+// "amanhã" e "esta semana" ficavam errados entre 21h e meia-noite. O Brasil não
+// tem horário de verão desde 2019, por isso o deslocamento -03:00 é fixo.
+export function inicioDoDiaBrasilia(date: Date = new Date(), deslocamentoDias = 0): Date {
+  const base = new Date(`${dataIsoBrasilia(date)}T00:00:00-03:00`);
+  if (deslocamentoDias) base.setUTCDate(base.getUTCDate() + deslocamentoDias);
+  return base;
+}
+
 // Mês/ano atual (YYYY-MM) no fuso de Brasília — usado para marcar comissões pagas.
 export function mesAnoAtualBrasilia(date: Date = new Date()): string {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_BR, year: "numeric", month: "2-digit" });

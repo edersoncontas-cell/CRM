@@ -5,7 +5,7 @@ import { sendText, isEnabled as whatsappHabilitado } from "@/lib/zapi";
 import { registrarZeusEvent } from "@/lib/zeus/eventos";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
-import { agoraBrasiliaExtenso } from "@/lib/utils";
+import { agoraBrasiliaExtenso, inicioDoDiaBrasilia } from "@/lib/utils";
 import { sugerirProximaAcaoHeuristica } from "@/lib/zeus/nextbestaction";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +19,8 @@ function pontuarNegociacao(neg: { termometro: number; valor: number | null; ulti
 }
 
 async function montarDados() {
-  const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0);
-  const fimDia = new Date(inicioDia); fimDia.setDate(fimDia.getDate() + 1);
+  const inicioDia = inicioDoDiaBrasilia();
+  const fimDia = inicioDoDiaBrasilia(new Date(), 1);
 
   const [visitasHoje, aguardando, negociacoesAbertas, alertasAbertos] = await Promise.all([
     db.visita.findMany({

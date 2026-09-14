@@ -16,6 +16,7 @@ import { recalcularLeadScores } from "@/lib/zeus/leadscore";
 import { montarContextoCliente, gerarMensagemFollowUp } from "@/lib/zeus/cerebro-resposta";
 import { iaHabilitada, llmTexto } from "@/lib/ai";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
+import { inicioDoDiaBrasilia } from "@/lib/utils";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -249,8 +250,8 @@ async function alertasComerciais(): Promise<number> {
   }
 
   // Visita amanhã.
-  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(0, 0, 0, 0);
-  const depoisDeAmanha = new Date(amanha); depoisDeAmanha.setDate(depoisDeAmanha.getDate() + 1);
+  const amanha = inicioDoDiaBrasilia(new Date(), 1);
+  const depoisDeAmanha = inicioDoDiaBrasilia(new Date(), 2);
   const visitasAmanha = await db.visita.findMany({
     where: { data: { gte: amanha, lt: depoisDeAmanha } },
     include: { cliente: { select: { nome: true } } },

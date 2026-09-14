@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui";
-import { formatDate } from "@/lib/utils";
+import { formatDate, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { NovaVisitaForm } from "@/components/NovaVisitaForm";
 import { BotaoRemoverVisita } from "@/components/BotaoRemoverVisita";
 import { MapPin, Calendar, Clock } from "lucide-react";
@@ -16,9 +16,12 @@ function horaLocal(d: Date): string {
 
 export default async function VisitasPage() {
   const hoje = new Date();
-  const diaSemanaAtual = hoje.getDay();
+  // Dia e semana calculados no fuso de Brasília — o servidor roda em UTC e,
+  // sem isso, a partir das 21h a agenda pulava para o dia seguinte.
+  const diaSemanaAtual = diaSemanaBrasilia(hoje);
   const deltaSegunda = diaSemanaAtual === 0 ? 6 : diaSemanaAtual - 1;
-  const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate() - deltaSegunda); inicioSemana.setHours(0, 0, 0, 0);
+  const inicioSemana = inicioDoDiaBrasilia(hoje, -deltaSegunda);
+  const hojeInicio = inicioDoDiaBrasilia(hoje);
   // Semana completa (segunda a domingo) — mesma janela usada no card "Visitas
   // Semanais" do Dashboard, pra "X/20 esta semana" bater nas duas telas.
   const fimSemanaCompleta = new Date(inicioSemana); fimSemanaCompleta.setDate(inicioSemana.getDate() + 7);
@@ -46,8 +49,8 @@ export default async function VisitasPage() {
     return {
       nome: DIAS_SEMANA[i],
       iso: data.toISOString().slice(0, 10),
-      label: data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-      ehHoje: data.toDateString() === hoje.toDateString(),
+      label: data.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }),
+      ehHoje: data.getTime() === hojeInicio.getTime(),
       visitas: estaSemanaUtil.filter((v) => v.data >= data && v.data < fimDia).sort((a, b) => a.data.getTime() - b.data.getTime()),
     };
   });

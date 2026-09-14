@@ -823,7 +823,7 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
             ))}
           </div>
           <div className="pt-2 border-t">
-            <p className="text-xs text-slate-400">Não encontrou? <a href="/clientes/novo" className="text-blue-600 hover:underline">Cadastrar novo cliente</a></p>
+            <p className="text-xs text-slate-400">Não encontrou? <a href="/clientes" className="text-blue-600 hover:underline">Cadastrar novo cliente</a> (botão “Novo cliente” na tela de Clientes)</p>
           </div>
         </div>
       </div>

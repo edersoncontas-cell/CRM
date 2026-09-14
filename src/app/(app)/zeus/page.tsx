@@ -5,19 +5,24 @@ import { getWaSettings } from "@/lib/whatsapp-settings";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
+import { inicioDoDiaBrasilia } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+// No modo gratuito TODOS os crons são disparados pelo agendador externo via
+// /api/cron/tudo a cada ~15 min — a expectativa aqui precisa acompanhar isso
+// (mesma tolerância de lib/zeus/tick.ts), senão o painel marca "parado" o dia
+// inteiro sem motivo.
 const CRONS_MONITORADOS = [
-  { nome: "zeus-tick", minutosEsperados: 5 },
-  { nome: "zeus-pipeline", minutosEsperados: 1 },
-  { nome: "agnes-dispatch", minutosEsperados: 1 },
-  { nome: "whatsapp-retry", minutosEsperados: 5 },
+  { nome: "zeus-tick", minutosEsperados: 15 },
+  { nome: "zeus-pipeline", minutosEsperados: 15 },
+  { nome: "agnes-dispatch", minutosEsperados: 15 },
+  { nome: "whatsapp-retry", minutosEsperados: 15 },
   { nome: "zeus-diario", minutosEsperados: 24 * 60 },
 ];
 
 export default async function ZeusPage() {
-  const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0);
+  const inicioDia = inicioDoDiaBrasilia();
 
   const [status, ativo, settings, heartbeats, eventos, audits, mensagensHoje, acoesHoje, correcoes, alertasAbertos] = await Promise.all([
     statusConexao().catch(() => null),
