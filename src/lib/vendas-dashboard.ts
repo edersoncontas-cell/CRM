@@ -82,7 +82,7 @@ function variacaoPct(atual: number, anterior: number): number | null {
   return Math.round(((atual - anterior) / anterior) * 100);
 }
 
-export function resumoVendas(vendas: VendaDash[], ano: number) {
+export function resumoVendas(vendas: VendaDash[], ano: number, metaAnual: number = META_ANUAL_VENDAS) {
   const atual = doAno(vendas, ano);
   const anterior = doAno(vendas, ano - 1);
 
@@ -92,8 +92,8 @@ export function resumoVendas(vendas: VendaDash[], ano: number) {
   const comValorAnt = anterior.filter((v) => v.valor > 0);
   const ticket = comValor.length ? fat / comValor.length : 0;
   const ticketAnt = comValorAnt.length ? fatAnt / comValorAnt.length : 0;
-  const atingimento = Math.round((atual.length / META_ANUAL_VENDAS) * 100);
-  const atingimentoAnt = Math.round((anterior.length / META_ANUAL_VENDAS) * 100);
+  const atingimento = Math.round((atual.length / metaAnual) * 100);
+  const atingimentoAnt = Math.round((anterior.length / metaAnual) * 100);
 
   // Meses futuros do ano corrente ficam null (a linha do gráfico para no mês
   // atual em vez de "despencar" para zero até dezembro).
@@ -148,7 +148,7 @@ export function resumoVendas(vendas: VendaDash[], ano: number) {
       ticket, ticketDelta: variacaoPct(ticket, ticketAnt),
     },
     porMes,
-    metaMensal: META_ANUAL_VENDAS / 12,
+    metaMensal: metaAnual / 12,
     ticketPorAno,
     porMarca,
     porModelo,

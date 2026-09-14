@@ -77,7 +77,7 @@ function ContadorAlertas({ href, total, alta }: { href: string; total: number; a
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }: { nome?: string; sub?: string } = {}) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
   const [ocultos, setOcultos] = useState<string[]>([]);
@@ -162,7 +162,7 @@ export function Sidebar() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-agro-400">
             <ExcavatorIcon size={17} className="text-black" />
           </div>
-          CRM DO EDY
+          {nome}
         </div>
         <button
           onClick={() => setAberto((v) => !v)}
@@ -206,8 +206,8 @@ export function Sidebar() {
               <ExcavatorIcon size={22} className="text-black" />
             </div>
             <div>
-              <div className="text-sm font-bold leading-none text-white">CRM DO EDY</div>
-              <div className="mt-0.5 text-[10px] text-agro-400">New Holland · Dynapac</div>
+              <div className="text-sm font-bold leading-none text-white">{nome}</div>
+              <div className="mt-0.5 text-[10px] text-agro-400">{sub}</div>
             </div>
           </div>
           <button
@@ -225,8 +225,8 @@ export function Sidebar() {
             <ExcavatorIcon size={22} className="text-black" />
           </div>
           <div>
-            <div className="text-sm font-bold leading-none text-white">CRM DO EDY</div>
-            <div className="mt-0.5 text-[10px] text-agro-400">New Holland · Dynapac</div>
+            <div className="text-sm font-bold leading-none text-white">{nome}</div>
+            <div className="mt-0.5 text-[10px] text-agro-400">{sub}</div>
           </div>
         </div>
 

@@ -2,6 +2,7 @@ import { ArrowLeft, Calendar } from "lucide-react";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import MesDetailClient from "./client";
+import { lerParametros } from "@/lib/parametros";
 
 const MESES_LABEL: Record<string, string> = {
   janeiro:"Janeiro",fevereiro:"Fevereiro",marco:"Março",abril:"Abril",maio:"Maio",junho:"Junho",
@@ -60,7 +61,7 @@ export default async function MesDetailPage({ params }: { params: Promise<{ mes:
         </div>
         <p className="text-sm text-gray-500 mt-1">{negsFiltradas.length} negociação(ões) faturada(s)</p>
       </div>
-      <MesDetailClient negs={serialized} mes={mes} mesLabel={mesLabel} />
+      <MesDetailClient negs={serialized} mes={mes} mesLabel={mesLabel} taxa={(await lerParametros()).taxaComissao} />
     </div>
   );
 }

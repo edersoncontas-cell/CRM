@@ -4,12 +4,13 @@ import { formatCurrency } from "@/lib/utils";
 import { FaturadasTable } from "@/components/FaturadasTable";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 
-const TAXA = 0.005;
 
 export default async function FaturadasPage() {
+  const TAXA = (await lerParametros()).taxaComissao;
   const negs = await db.negociacao.findMany({
     where: { status: "ganha" },
     include: { cliente: { include: { municipio: true } } },

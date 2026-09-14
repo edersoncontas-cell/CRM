@@ -4,6 +4,7 @@ import { getWaSettings } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
 import { iaHabilitada } from "@/lib/ai";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,6 +15,7 @@ export const maxDuration = 60;
 // o painel de coaching mesmo quando o vendedor prefere responder manualmente).
 // Debounce de 1s para agregar mensagens rápidas antes de analisar.
 export async function POST(req: NextRequest) {
+  const p = await lerParametros();
   const secret = req.headers.get("x-cron-secret") ?? "";
   const cronSecret = process.env.CRON_SECRET ?? "";
   if (cronSecret && secret !== cronSecret) {
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
   // Monta histórico completo (não invertido — ordem cronológica para a IA ler)
   const historicoCompleto = msgs
     .map((m) => {
-      const quem = m.direction === "OUT" ? "Ederson" : "Cliente";
+      const quem = m.direction === "OUT" ? p.nomeVendedor : "Cliente";
       const hora = m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
       return `[${hora}] ${quem}: ${m.body}`;
     })
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
   // Últimas 5 mensagens para foco imediato
   const ultimasMensagens = msgs
     .slice(-5)
-    .map((m) => `${m.direction === "OUT" ? "Ederson" : "Cliente"}: ${m.body}`)
+    .map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`)
     .join("\n");
 
   const contextoCliente = await montarContextoCliente({

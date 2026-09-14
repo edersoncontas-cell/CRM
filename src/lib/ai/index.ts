@@ -4,6 +4,7 @@ import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
+import { lerParametros } from "@/lib/parametros";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -297,8 +298,8 @@ async function llmVisao(
   throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
 }
 
-const SCHEMA_INSTRUCAO = `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION
-(New Holland Construction e Dynapac) no sul do Espírito Santo. O vendedor NÃO trabalha com máquinas
+const schemaInstrucao = (marcas: string, regiao: string) => `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION
+(${marcas}) no ${regiao}. O vendedor NÃO trabalha com máquinas
 agrícolas nem tratores (não existe T7, TL, colheitadeira, etc. no portfólio dele).
 Os equipamentos são: escavadeiras (ex: E215C), retroescavadeiras (ex: B95C), pás-carregadeiras (ex: W190B),
 motoniveladoras (ex: RG170) e rolos compactadores Dynapac (ex: CA2500, CC2200).
@@ -333,6 +334,7 @@ export async function analisarConversaIA(
   if (!iaHabilitada()) {
     return extrairHeuristica(texto, opts?.base);
   }
+  const p = await lerParametros();
 
   try {
     const tom = opts?.estiloDeFala
@@ -349,7 +351,7 @@ export async function analisarConversaIA(
       ? `\n\nMODELOS MAIS COMERCIALIZADOS PELO VENDEDOR (priorize estes ao sugerir máquinas e ao construir argumentos de venda):\n` +
         opts.modelosDestaque.map((m) => `• ${m.marca} ${m.modelo} (${m.categoria})`).join("\n")
       : "";
-    const raw = await llmTexto(SCHEMA_INSTRUCAO + contextoData + modelos + tom, `Conversa:\n${texto}`, {
+    const raw = await llmTexto(schemaInstrucao(p.marcas, p.regiao) + contextoData + modelos + tom, `Conversa:\n${texto}`, {
       maxTokens: 1024,
       json: true,
     });
@@ -397,6 +399,7 @@ export async function aprenderTomIA(mensagensVendedor: string[]): Promise<string
 // Resume uma conversa de WhatsApp em poucos pontos objetivos para o vendedor
 // revisar e decidir o próximo passo (criar card, agendar visita ou nada).
 export async function resumirConversaIA(thread: string): Promise<string> {
+  const p = await lerParametros();
   const texto = thread.trim();
   if (!texto) return "Sem mensagens nesta conversa.";
   if (!iaHabilitada()) {
@@ -406,7 +409,7 @@ export async function resumirConversaIA(thread: string): Promise<string> {
   }
   try {
     return await llmTexto(
-      `Você ajuda um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES).
+      `Você ajuda um vendedor de máquinas pesadas (${p.marcas}, ${p.regiao}).
 Resuma a conversa de WhatsApp abaixo em português, de forma curta e acionável, com bullets:
 • O que o cliente quer / interesse principal
 • Máquina(s) e valores mencionados (se houver)
@@ -430,11 +433,12 @@ export async function interpretarComandoIA(
   texto: string,
   opts?: { base?: Date }
 ): Promise<{ resposta: string; acoes: Record<string, unknown>[] }> {
+  const p = await lerParametros();
   if (!iaHabilitada()) {
     return { resposta: "A IA não está configurada (defina GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).", acoes: [] };
   }
   const agora = opts?.base ?? new Date();
-  const system = `Você é o Assistente IA de um CRM de um vendedor de máquinas pesadas (New Holland Construction / Dynapac, sul do ES) — tão capaz quanto o Cérebro do CRM. Você entende qualquer pedido relacionado a clientes, negociações, visitas e tarefas, e converte em ações estruturadas. Nunca diga que "não pode" ou que é limitado — se o pedido corresponder a um dos tipos de ação abaixo, execute-o com confiança; se não corresponder a nenhum, explique em "resposta" o que você consegue fazer hoje.
+  const system = `Você é o Assistente IA de um CRM de um vendedor de máquinas pesadas (${p.marcas}, ${p.regiao}) — tão capaz quanto o Cérebro do CRM. Você entende qualquer pedido relacionado a clientes, negociações, visitas e tarefas, e converte em ações estruturadas. Nunca diga que "não pode" ou que é limitado — se o pedido corresponder a um dos tipos de ação abaixo, execute-o com confiança; se não corresponder a nenhum, explique em "resposta" o que você consegue fazer hoje.
 Responda SOMENTE com JSON válido, sem texto fora do JSON:
 {
   "resposta": string,   // fala curta e confiante confirmando o que entendeu
@@ -775,10 +779,11 @@ export async function gerarBattlecardIA(
   minha: { marca: string; modelo: string; categoria: string; especificacoes?: string | null; pontosFortes?: string | null },
   conc: { marca: string; modelo: string; especificacoes?: string | null }
 ): Promise<string> {
+  const p = await lerParametros();
   if (!iaHabilitada()) return "";
   try {
     return await llmTexto(
-      `Você é consultor de vendas de máquinas pesadas (New Holland Construction / Dynapac) no sul do ES.
+      `Você é consultor de vendas de máquinas pesadas (${p.marcas}) no ${p.regiao}.
 Compare a MINHA máquina com a do CONCORRENTE usando as fichas técnicas fornecidas.
 Escreva um argumento de venda CURTO (3-4 frases), comparando números reais quando existirem (peso, potência, capacidade, força).
 Seja honesto: se o concorrente tem vantagem em algo, reconheça e compense com pós-venda, revenda, custo, rede de peças e Finame.
@@ -815,10 +820,11 @@ export async function gerarResumoDiferenciaisIA(
   concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[],
   notas: string[]
 ): Promise<string> {
+  const p = await lerParametros();
   if (!iaHabilitada()) return "";
   try {
     return await llmTexto(
-      `Você é consultor de vendas de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo.
+      `Você é consultor de vendas de máquinas pesadas ${p.marcas} no ${p.regiao}.
 Para cada diferencial REAL da MINHA máquina frente aos concorrentes listados, explique o BENEFÍCIO PRÁTICO e a melhor aplicação —
 use SOMENTE os dados fornecidos (especificações, pontos fortes, diferenciais, argumentos e notas do vendedor).
 Formato: bullets curtos "Diferencial → benefício prático (melhor aplicação)". Ex.: "Tanque maior → mais horas de trabalho sem parar para reabastecer".
@@ -849,10 +855,11 @@ export async function gerarComparativoCompletoIA(
   concorrentes: { marca: string; modelo: string; especificacoes?: string | null }[],
   notas: string[]
 ): Promise<string> {
+  const p = await lerParametros();
   if (!iaHabilitada()) return "";
   try {
     return await llmTexto(
-      `Você é consultor sênior de vendas de máquinas pesadas New Holland Construction e Dynapac no sul do Espírito Santo.
+      `Você é consultor sênior de vendas de máquinas pesadas ${p.marcas} no ${p.regiao}.
 Escreva um COMPARATIVO PROFISSIONAL COMPLETO da minha máquina contra os concorrentes selecionados, para o vendedor apresentar/imprimir ao cliente.
 Use SOMENTE os dados fornecidos (especificações, pontos fortes, diferenciais, argumentos, notas do vendedor) — NUNCA invente números ou recursos.
 Estruture em markdown com estes títulos, nesta ordem:

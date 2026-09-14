@@ -3,10 +3,10 @@ import { PageHeader } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Clock } from "lucide-react";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 
-const TAXA = 0.005;
 
 function previsaoComissaoCrdPme(neg: {
   faturadoEm: Date | null;
@@ -32,6 +32,7 @@ function previsaoComissaoCrdPme(neg: {
 }
 
 export default async function ComissoesFuturasPage() {
+  const TAXA = (await lerParametros()).taxaComissao;
   const negs = await db.negociacao.findMany({
     where: { status: "ganha", tipoPagamento: "crd_pme" } as any,
     include: { cliente: { include: { municipio: true } } },

@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
+import { lerParametros } from "@/lib/parametros";
 
 export type FraseDoDia = { data: string; texto: string; frase: string; autor: string };
 
@@ -62,10 +63,11 @@ async function gravarConfig(chave: string, valor: string): Promise<void> {
 const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 async function gerarComIA(usadas: string[]): Promise<{ texto: string; frase: string; autor: string } | null> {
+  const param = await lerParametros();
   if (!iaHabilitada()) return null;
   try {
     const raw = await llmTexto(
-      `Você escreve a "Frase do dia" do painel de um vendedor de máquinas pesadas (New Holland Construction e Dynapac) no sul do Espírito Santo.
+      `Você escreve a "Frase do dia" do painel de um vendedor de máquinas pesadas (${param.marcas}) no ${param.regiao}.
 Devolva SOMENTE um JSON válido com as chaves:
 { "texto": string, "frase": string, "autor": string }
 - "texto": 2 a 3 frases motivacionais, em português do Brasil, tom direto e humano, ligadas ao dia a dia de vendas (visitas, propostas, obra, cliente, persistência). Sem emojis.

@@ -2,12 +2,13 @@ import { db } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, DollarSign } from "lucide-react";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 
-const TAXA = 0.005;
 
 export default async function ComissoesPage() {
+  const TAXA = (await lerParametros()).taxaComissao;
   const negocios = await db.negociacao.findMany({
     where: { status: "ganha", comissaoPaga: false },
     include: { cliente: { select: { nome: true } } },

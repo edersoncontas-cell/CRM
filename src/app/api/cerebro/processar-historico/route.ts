@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { llmTexto } from "@/lib/ai";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
+import { lerParametros, descricaoVendedor } from "@/lib/parametros";
 
 // POST /api/cerebro/processar-historico
 // Recebe o histórico de conversa exportado do WhatsApp (já parseado no cliente)
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Pergunta ao Cérebro para analisar o histórico e gerar atualizações
-    const prompt = `Você é o Cérebro do CRM do Ederson — vendedor de máquinas pesadas New Holland e Dynapac no sul do Espírito Santo.
+    const p = await lerParametros();
+    const prompt = `Você é o Cérebro do CRM de ${descricaoVendedor(p)}.
 
 Acabo de importar o histórico completo de uma conversa do WhatsApp com o contato ${historico.name} (telefone: ${externalPhone}).${dadosCliente}
 

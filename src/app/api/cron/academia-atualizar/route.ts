@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { cronAutorizado } from "@/lib/whatsapp-settings";
 import { temaDestaSeamana } from "@/lib/academia";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,7 +16,8 @@ export async function GET(req: NextRequest) {
 
   const tema = temaDestaSeamana();
 
-  const system = `Você é professor da Academia de Vendas de Máquinas Pesadas New Holland e Dynapac no sul do Espírito Santo.
+  const p = await lerParametros();
+  const system = `Você é professor da Academia de Vendas de Máquinas Pesadas ${p.marcas} no ${p.regiao}.
 Escreva uma estratégia de vendas prática, profunda e aplicável imediatamente.
 Use linguagem direta, exemplos reais de máquinas pesadas (escavadeiras, compactadores, retroescavadeiras), e referências às técnicas de Psicologia, Neurociência e Negociação de Elite quando relevante.
 O conteúdo deve ser de nível Mestrado/Doutorado — não básico.

@@ -4,6 +4,7 @@ import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,6 +15,7 @@ export const maxDuration = 60;
 // completar (função serverless encerrada antes da resposta). Usa o MESMO
 // contexto rico (cliente, negociações, visitas, alertas, Academia) do despacho rápido.
 export async function GET(req: NextRequest) {
+  const p = await lerParametros();
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   await tocarHeartbeat("agnes-dispatch");
   const settings = await getWaSettings();
@@ -37,14 +39,14 @@ export async function GET(req: NextRequest) {
 
     const historicoCompleto = msgs
       .map((m) => {
-        const quem = m.direction === "OUT" ? "Ederson" : "Cliente";
+        const quem = m.direction === "OUT" ? p.nomeVendedor : "Cliente";
         const hr = m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         return `[${hr}] ${quem}: ${m.body}`;
       })
       .join("\n");
     const ultimasMensagens = msgs
       .slice(-5)
-      .map((m) => `${m.direction === "OUT" ? "Ederson" : "Cliente"}: ${m.body}`)
+      .map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`)
       .join("\n");
 
     const contextoCliente = await montarContextoCliente({

@@ -21,14 +21,14 @@ function fmt(v?: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 
-export default function MesDetailClient({ negs, mes, mesLabel }: { negs: NegRow[]; mes: string; mesLabel: string }) {
+export default function MesDetailClient({ negs, mes, mesLabel, taxa }: { negs: NegRow[]; mes: string; mesLabel: string; taxa: number }) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [novoMes, setNovoMes] = useState(mes);
   const [novoAno, setNovoAno] = useState("2026");
   const [saved, setSaved] = useState<Record<string, string>>({});
 
   const totalValor = negs.reduce((s, n) => s + (n.valor ?? 0), 0);
-  const comissao = totalValor * 0.005;
+  const comissao = totalValor * taxa;
 
   async function salvar(id: string) {
     const ref = novoMes + "/" + novoAno;

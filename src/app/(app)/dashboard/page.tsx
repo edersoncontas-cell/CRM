@@ -10,7 +10,8 @@ import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
 import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
-import { carregarVendasFaturadas, resumoVendas, META_ANUAL_VENDAS } from "@/lib/vendas-dashboard";
+import { carregarVendasFaturadas, resumoVendas } from "@/lib/vendas-dashboard";
+import { lerParametros } from "@/lib/parametros";
 import { contarClientesConversados } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
 import { T } from "@/lib/dash-tema";
@@ -88,7 +89,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     obterNoticias(),
   ]);
 
-  const resumo = resumoVendas(vendasFaturadas, anoSel);
+  const { metaAnualVendas: META_ANUAL_VENDAS } = await lerParametros();
+  const resumo = resumoVendas(vendasFaturadas, anoSel, META_ANUAL_VENDAS);
   const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
 
   const novosNegociosSemana = negociosCriadosSemana.filter((n) => {

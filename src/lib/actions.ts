@@ -18,6 +18,7 @@ import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
 import { parseArquivoCsv, parseArquivoExcel, parseArquivoPdf } from "@/lib/importar-contatos-arquivo";
+import { lerParametros, descricaoVendedor } from "@/lib/parametros";
 
 // Validação de maior risco (grava direto no banco a partir de FormData bruto).
 const clienteInputSchema = z.object({
@@ -1482,6 +1483,7 @@ export async function reordenarColunasDemanda(ids: string[]) {
 // Gera um resumo completo do cliente via IA, baseado nas conversas de WhatsApp,
 // negociações e visitas registradas. Salva o resultado em resumoTexto no banco.
 export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boolean; resumo?: string; erro?: string }> {
+  const p = await lerParametros();
 
   const [cliente, conversas, negociacoes, visitas] = await Promise.all([
     db.cliente.findUnique({
@@ -1533,7 +1535,7 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
     const msgs = conv.messages ?? [];
     for (const m of msgs) {
       const hora = new Date(m.sentAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-      const autor = m.direction === "OUT" ? "Ederson" : cliente.nome;
+      const autor = m.direction === "OUT" ? p.nomeVendedor : cliente.nome;
       mensagensWA.push(`[${hora}] ${autor}: ${m.body}`);
     }
   }
@@ -1546,9 +1548,9 @@ export async function gerarResumoClienteIA(clienteId: string): Promise<{ ok: boo
     return { ok: false, erro: "Sem histórico suficiente para gerar resumo. Importe conversas do WhatsApp primeiro." };
   }
 
-  const prompt = `Você é o Cérebro de vendas do Ederson, vendedor New Holland e Dynapac no sul do Espírito Santo.
+  const prompt = `Você é o Cérebro de vendas de ${descricaoVendedor(p)}.
 
-Analise TODOS os dados abaixo do cliente e gere um resumo executivo completo e útil para o Ederson.
+Analise TODOS os dados abaixo do cliente e gere um resumo executivo completo e útil para ${p.nomeVendedor}.
 
 # CLIENTE: ${cliente.nome}
 - Telefone: ${cliente.telefone ?? "não cadastrado"}
@@ -1577,7 +1579,7 @@ Gere um resumo executivo em português brasileiro com:
 1. **Situação atual** do cliente (interesse, temperatura, momento de compra)
 2. **O que ele quer** (máquina, valor, condição)
 3. **Principais objeções ou pendências** se houver
-4. **Próximo passo recomendado** para Ederson
+4. **Próximo passo recomendado** para ${p.nomeVendedor}
 5. Se houver dados da conversa, extraia insights estratégicos
 
 Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos pontos chave.`;
@@ -1585,7 +1587,7 @@ Seja direto, prático. Use no máximo 400 palavras. Use markdown com negrito nos
   try {
     // Qualquer provedor via llmTexto (Gemini/Groq grátis, com fallback).
     const resumo = (await llmTexto(
-      "Você é o assistente comercial do CRM do Ederson. Responda em português brasileiro, direto e prático.",
+      `Você é o assistente comercial do CRM de ${p.nomeVendedor}. Responda em português brasileiro, direto e prático.`,
       prompt,
       { maxTokens: 1024 }
     )).trim();
@@ -1612,6 +1614,7 @@ export async function gerarResumoConversa(clienteId: string): Promise<{ ok: bool
 export async function sugerirAbordagemCliente(
   clienteId: string
 ): Promise<{ ok: boolean; perfil?: string | null; abordagem?: string; erro?: string }> {
+  const p = await lerParametros();
 
   const conversas = await db.whatsAppConversation.findMany({
     where: { clienteId },
@@ -1626,7 +1629,7 @@ export async function sugerirAbordagemCliente(
   });
 
   const textos = conversas
-    .map((c) => c.messages.map((m) => `${m.direction === "OUT" ? "Ederson" : m.senderName ?? "Cliente"}: ${m.body}`).join("\n"))
+    .map((c) => c.messages.map((m) => `${m.direction === "OUT" ? p.nomeVendedor : m.senderName ?? "Cliente"}: ${m.body}`).join("\n"))
     .filter(Boolean);
 
   if (!textos.length) {
@@ -2570,9 +2573,9 @@ export async function marcarComissoesPagas(ids: string[], mesPagamento: string) 
 
 // Calcula comissão de uma negociação (0.5% por padrão)
 // Para CRD PME, a comissão só é paga quando 75% do valor for pago
-export async function calcularComissao(valor: number | null, taxa = 0.005): Promise<number> {
+export async function calcularComissao(valor: number | null, taxa?: number): Promise<number> {
   if (!valor) return 0;
-  return valor * taxa;
+  return valor * (taxa ?? (await lerParametros()).taxaComissao);
 }
 
 // Calcula data prevista de pagamento da comissão CRD PME

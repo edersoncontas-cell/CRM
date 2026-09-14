@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { zeusReport } from "@/lib/zeus/eventos";
+import { lerParametros } from "@/lib/parametros";
 
 // Monta contexto rico do cliente para o Cérebro entender tudo antes de responder.
 export async function montarContextoCliente(conv: {
@@ -214,7 +215,8 @@ export async function gerarMensagemFollowUp(args: {
 }): Promise<string> {
   if (!iaHabilitada()) return "";
 
-  const system = `Você é o Orientador de Vendas, assistente comercial do vendedor (New Holland Construction / Dynapac, sul do Espírito Santo).
+  const p = await lerParametros();
+  const system = `Você é o Orientador de Vendas, assistente comercial de ${p.nomeVendedor} (${p.marcas}, ${p.regiao}).
 O cliente abaixo tem uma negociação ABERTA e QUENTE, mas o contato esfriou (alguns dias sem resposta).
 
 ## Contexto completo do cliente

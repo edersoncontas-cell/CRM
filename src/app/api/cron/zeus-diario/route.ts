@@ -7,6 +7,7 @@ import { tocarHeartbeat } from "@/lib/zeus/estado";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { agoraBrasiliaExtenso, inicioDoDiaBrasilia } from "@/lib/utils";
 import { sugerirProximaAcaoHeuristica } from "@/lib/zeus/nextbestaction";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,13 +92,13 @@ export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   await tocarHeartbeat("zeus-diario");
 
-  const destino = process.env.ZEUS_WHATSAPP_DESTINO;
+  const destino = (await lerParametros()).whatsappBriefing;
   if (!destino || !whatsappHabilitado()) {
     await registrarZeusEvent({
       tipo: "health", severidade: "baixa",
-      titulo: "Briefing diário não enviado — ZEUS_WHATSAPP_DESTINO ou WhatsApp não configurados",
+      titulo: "Briefing diário não enviado — número do briefing (Configurações › Parâmetros) ou WhatsApp não configurados",
     });
-    return NextResponse.json({ ok: false, erro: "ZEUS_WHATSAPP_DESTINO ou WhatsApp não configurados." });
+    return NextResponse.json({ ok: false, erro: "Número do briefing (Configurações › Parâmetros) ou WhatsApp não configurados." });
   }
 
   try {

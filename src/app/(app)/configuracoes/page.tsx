@@ -11,14 +11,17 @@ import { AtualizarCotacaoCafeForm } from "@/components/AtualizarCotacaoCafeForm"
 import { GoogleIntegracaoCard } from "@/components/GoogleIntegracaoCard";
 import { obterCotacoes } from "@/lib/mercado";
 import Link from "next/link";
+import { lerParametros } from "@/lib/parametros";
+import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [estilo, cotacoes, google] = await Promise.all([
+  const [estilo, cotacoes, google, parametros] = await Promise.all([
     db.estiloDeFala.findFirst(),
     obterCotacoes(),
     statusGoogle(),
+    lerParametros(),
   ]);
 
   const integracoes = [
@@ -51,6 +54,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         titulo="Configurações"
         subtitulo="Ative as integrações conforme você obtiver as credenciais"
       />
+
+      <ParametrosNegocioForm p={parametros} />
 
       {/* Visibilidade dos itens do menu lateral */}
       <Card className="mb-6">

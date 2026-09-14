@@ -7,6 +7,7 @@ import { agoraBrasiliaExtenso } from "@/lib/utils";
 import { TOOL_DEFS, executarFerramenta, rotuloFerramenta } from "@/lib/zeus/cerebro-tools";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { provedoresCompat, rodadaAgenteCompat } from "@/lib/ai/agente-compat";
+import { lerParametros } from "@/lib/parametros";
 
 export const runtime = "nodejs";
 // 60s é o teto do plano Hobby (grátis) da Vercel sem Fluid Compute — acima
@@ -35,10 +36,11 @@ function anthropicClient() {
 async function montarSystemPrompt(modoTreinamento: boolean): Promise<string> {
   const estilo = await db.estiloDeFala.findFirst().catch(() => null);
   const academiaTxt = resumoAcademia();
+  const p = await lerParametros();
 
-  return `Você é o CÉREBRO — agente do CRM de Ederson, vendedor de máquinas pesadas da linha amarela/construção
+  return `Você é o CÉREBRO — agente do CRM de ${p.nomeVendedor}, vendedor de máquinas pesadas da linha amarela/construção (${p.marcas})
 (New Holland Construction: escavadeiras, retroescavadeiras, pás-carregadeiras, motoniveladoras; Dynapac: rolos
-compactadores) no sul do Espírito Santo.
+compactadores) no ${p.regiao}.
 ${modoTreinamento ? `
 ## MODO TREINAMENTO DE ESTILO — ATIVO AGORA
 O vendedor está te ensinando como ele fala com os clientes, para você aprender e reproduzir depois nas respostas
@@ -76,7 +78,7 @@ extrair o texto; se for o caso, avise o vendedor e peça para reexportar como CS
 - Valores sempre em R$ formatados (pontos e vírgulas).
 - Se não souber algo mesmo depois de consultar as ferramentas, diga claramente e sugira como verificar.
 - Pode analisar documentos/imagens enviados (PDF, foto, contrato) quando anexados.
-${estilo?.guia ? `\n## Estilo de comunicação do Ederson (para textos sugeridos ao cliente)\n${estilo.guia}\n` : ""}
+${estilo?.guia ? `\n## Estilo de comunicação de ${p.nomeVendedor} (para textos sugeridos ao cliente)\n${estilo.guia}\n` : ""}
 ${academiaTxt ? `\n## Academia de vendas (resumo, use quando fizer sentido estratégico)\n${academiaTxt}\n` : ""}`;
 }
 

@@ -10,14 +10,10 @@ import { FinanceiroGraficos } from "@/components/FinanceiroGraficos";
 import { ComissoesPagasSection } from "@/components/ComissoesPagasSection";
 import { PopupComissoesPendentes } from "@/components/PopupComissoesPendentes";
 import { SeletorAno } from "@/components/SeletorAno";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 
-const TAXA_COMISSAO = 0.005; // 0.5%
-
-function calcComissao(valor: number | null) {
-  return (valor ?? 0) * TAXA_COMISSAO;
-}
 
 // Calcula previsão de pagamento da comissão CRD PME:
 // Comissão paga quando 75% do valor da máquina for pago (entrada + parcelas).
@@ -53,6 +49,8 @@ export default async function FinanceiroPage({
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth(); // 0-indexed
   const anoSelecionado: number | "todos" = searchParams.ano === "todos" ? "todos" : Number(searchParams.ano) || anoAtual;
+  const { taxaComissao: TAXA_COMISSAO } = await lerParametros();
+  const calcComissao = (valor: number | null) => (valor ?? 0) * TAXA_COMISSAO;
 
   // Busca todas as negociações faturadas (na coluna FATURADO ou status ganha)
   const negFaturadas = await db.negociacao.findMany({
