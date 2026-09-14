@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado, cookieOpts } from "@/lib/auth";
+import { ipDaRequisicao, minutosBloqueado, registrarFalhaLogin, limparFalhasLogin } from "@/lib/login-guard";
 import { ExcavatorIcon, RollerIcon } from "@/components/icons";
 import { EntradaAutomatica } from "@/components/EntradaAutomatica";
 
@@ -17,18 +18,26 @@ export const dynamic = "force-dynamic";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { erro?: string };
+  searchParams: { erro?: string; min?: string };
 }) {
   if (!authAtivo()) redirect("/dashboard");
 
   async function entrar(formData: FormData) {
     "use server";
+    // Força bruta: 5 senhas erradas em 15 min bloqueiam o IP por 15 min.
+    const ip = ipDaRequisicao();
+    const bloqueado = await minutosBloqueado(ip);
+    if (bloqueado > 0) redirect(`/login?erro=bloqueado&min=${bloqueado}`);
     const senha = String(formData.get("senha") ?? "");
     if (await senhaCorreta(senha)) {
+      await limparFalhasLogin(ip);
       cookies().set(COOKIE_NAME, await tokenEsperado(), cookieOpts());
       redirect("/dashboard");
     }
-    redirect("/login?erro=1");
+    const { bloqueadoMin } = await registrarFalhaLogin(ip);
+    // Atraso pequeno torna a tentativa em massa lenta sem atrapalhar quem errou uma vez.
+    await new Promise((r) => setTimeout(r, 800));
+    redirect(bloqueadoMin > 0 ? `/login?erro=bloqueado&min=${bloqueadoMin}` : "/login?erro=1");
   }
 
   return (
@@ -122,9 +131,11 @@ export default function LoginPage({
           autoFocus
           className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-agro-500 focus:ring-2 focus:ring-agro-200"
         />
-        {searchParams.erro && (
+        {searchParams.erro === "bloqueado" ? (
+          <p className="mt-2 text-sm text-red-500">Muitas tentativas. Aguarde {searchParams.min ?? "15"} min e tente de novo.</p>
+        ) : searchParams.erro ? (
           <p className="mt-2 text-sm text-red-500">Senha incorreta.</p>
-        )}
+        ) : null}
         <button className="mt-4 w-full rounded-lg bg-black py-2.5 font-bold text-agro-400 transition hover:bg-brand-800">
           Entrar
         </button>

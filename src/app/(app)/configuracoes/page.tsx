@@ -13,6 +13,7 @@ import { obterCotacoes } from "@/lib/mercado";
 import Link from "next/link";
 import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
+import { ExportarDadosCard } from "@/components/ExportarDadosCard";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       />
 
       <ParametrosNegocioForm p={parametros} />
+
+      <ExportarDadosCard />
 
       {/* Visibilidade dos itens do menu lateral */}
       <Card className="mb-6">
