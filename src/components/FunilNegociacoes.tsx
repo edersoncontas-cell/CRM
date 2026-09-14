@@ -18,6 +18,7 @@ import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
   AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check,
+  FileText,
 } from "lucide-react";
 
 interface CardData {
@@ -665,13 +666,23 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
         )}
       </div>
       {!arrastando && onEditar && (
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onEditar}
-          className="mt-2.5 flex w-full items-center justify-center gap-1 border-t border-white/10 pt-2 text-xs font-medium text-slate-300 hover:text-agro-400 transition-colors"
-        >
-          <Pencil size={11} /> Editar
-        </button>
+        <div className="mt-2.5 flex items-center border-t border-white/10 pt-2">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onEditar}
+            className="flex flex-1 items-center justify-center gap-1 text-xs font-medium text-slate-300 hover:text-agro-400 transition-colors"
+          >
+            <Pencil size={11} /> Editar
+          </button>
+          <Link
+            href={`/negociacoes/${card.id}/proposta`}
+            onPointerDown={(e) => e.stopPropagation()}
+            title="Proposta de uma página + calculadora de custo por hora"
+            className="flex flex-1 items-center justify-center gap-1 border-l border-white/10 text-xs font-medium text-slate-300 hover:text-agro-400 transition-colors"
+          >
+            <FileText size={11} /> Proposta
+          </Link>
+        </div>
       )}
     </div>
   );

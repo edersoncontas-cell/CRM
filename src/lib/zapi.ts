@@ -208,6 +208,22 @@ export async function sendAudio(phone: string, audioUrl: string): Promise<string
   return extractMessageId(data) ?? "";
 }
 
+// Envia um documento gerado no servidor (PDF) sem precisar hospedar o arquivo:
+// Z-API aceita data URL base64 no campo `document`; Evolution aceita base64 puro em `media`.
+export async function sendDocumentBase64(phone: string, base64: string, fileName: string, mimeType = "application/pdf", caption?: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
+      number: evoDestino(phone), mediatype: "document", mimetype: mimeType, media: base64, fileName, caption: caption ?? "",
+    });
+    return extractMessageId(data) ?? "";
+  }
+  const ext = (fileName.split(".").pop() || "pdf").toLowerCase();
+  const data = await zapiPost(`send-document/${ext}`, {
+    phone: normalizePhone(phone), document: `data:${mimeType};base64,${base64}`, fileName, caption: caption ?? "",
+  });
+  return extractMessageId(data) ?? "";
+}
+
 export async function sendDocument(phone: string, docUrl: string, fileName: string): Promise<string> {
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {

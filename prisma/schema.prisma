@@ -170,6 +170,20 @@ model Negociacao {
   comissaoPagaEm        DateTime? // timestamp de quando foi confirmada
   criadoEm             DateTime  @default(now())
   atualizadoEm         DateTime  @updatedAt
+  proposta              Proposta?
+}
+
+// Proposta comercial de uma página (situação → solução → retorno em reais →
+// condição → prova → validade) + calculadora de custo por hora / TCO. Os
+// dados ficam em JSON (`dados`) para evoluir sem migração a cada campo novo.
+model Proposta {
+  id            String     @id @default(cuid())
+  negociacao    Negociacao @relation(fields: [negociacaoId], references: [id], onDelete: Cascade)
+  negociacaoId  String     @unique
+  dados         String     // JSON: DadosProposta (lib/proposta.ts)
+  enviadaEm     DateTime?
+  criadoEm      DateTime   @default(now())
+  atualizadoEm  DateTime   @updatedAt
 }
 
 model Maquina {

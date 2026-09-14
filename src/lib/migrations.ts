@@ -164,6 +164,22 @@ export async function aplicarMigracoes(): Promise<void> {
     for (const t of ["AnaliseIA", "Conversa", "SugestaoVinculo", "MidiaPost", "CampanhaMarketing", "Motivacao", "Meta"]) {
       await db.$executeRawUnsafe(`DROP TABLE IF EXISTS "${t}" CASCADE`);
     }
+
+    // Proposta comercial de uma página + calculadora de custo por hora (v8).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Proposta" (
+        "id"           TEXT NOT NULL,
+        "negociacaoId" TEXT NOT NULL,
+        "dados"        TEXT NOT NULL,
+        "enviadaEm"    TIMESTAMP WITH TIME ZONE,
+        "criadoEm"     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "atualizadoEm" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "Proposta_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "Proposta_negociacaoId_key" UNIQUE ("negociacaoId"),
+        CONSTRAINT "Proposta_negociacaoId_fkey"
+          FOREIGN KEY ("negociacaoId") REFERENCES "Negociacao"("id") ON DELETE CASCADE
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }
