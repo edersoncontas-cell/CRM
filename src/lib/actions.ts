@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
 import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
+import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import type { AcaoPlano } from "./assistente";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas } from "./pipeline";
 import * as googleCalendar from "./integrations/googleCalendar";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
@@ -2597,24 +2598,164 @@ export async function calcularPrevisaoComissaoCrdPme(
 
 // ---------- Orientador de Vendas ----------
 
-// Lista todas as análises do Orientador, mais quentes/prováveis primeiro —
-// alimenta o painel /orientador.
-export async function listarOrientadorAnalises() {
-  const analises = await db.orientadorAnalise.findMany({
-    include: { cliente: { select: { id: true, nome: true, municipio: { select: { nome: true } } } } },
-    orderBy: [{ probabilidadeFechamento: "desc" }, { atualizadoEm: "desc" }],
+// Quantos clientes (cadastrados) conversaram no WhatsApp em cada janela —
+// mostrado no Orientador e no Dashboard.
+export async function contarClientesConversados(): Promise<Record<PeriodoOrientador, number>> {
+  const chaves = Object.keys(PERIODOS_ORIENTADOR) as PeriodoOrientador[];
+  const entradas = await Promise.all(
+    chaves.map(async (p) => {
+      const linhas = await db.whatsAppConversation.findMany({
+        where: { isGroup: false, clienteId: { not: null }, lastMessageAt: { gte: corteDoPeriodo(p) } },
+        select: { clienteId: true },
+        distinct: ["clienteId"],
+      });
+      return [p, linhas.length] as const;
+    })
+  );
+  return Object.fromEntries(entradas) as Record<PeriodoOrientador, number>;
+}
+
+// Cards do Orientador: um por cliente com conversa no período (a conversa
+// mais recente manda), com a análise da IA quando já existe. Cards ocultados
+// (X vermelho / ✓ negociação criada) só voltam se chegar mensagem nova.
+export async function listarOrientadorPorPeriodo(periodo: PeriodoOrientador) {
+  const convs = await db.whatsAppConversation.findMany({
+    where: { isGroup: false, clienteId: { not: null }, lastMessageAt: { gte: corteDoPeriodo(periodo) } },
+    orderBy: { lastMessageAt: "desc" },
+    take: 400,
+    select: {
+      id: true, clienteId: true, lastMessageAt: true,
+      messages: { where: { isDraft: false }, orderBy: { sentAt: "desc" }, take: 1, select: { body: true, direction: true } },
+    },
   });
-  return analises.map((a) => ({
-    clienteId: a.clienteId,
-    clienteNome: a.cliente.nome,
-    municipio: a.cliente.municipio?.nome ?? null,
-    estagioVenda: a.estagioVenda,
-    perfilComprador: a.perfilComprador,
-    temperatura: a.temperatura,
-    probabilidadeFechamento: a.probabilidadeFechamento,
-    proximaAcao: a.proximaAcao,
-    atualizadoEm: a.atualizadoEm.toISOString(),
-  }));
+
+  const porCliente = new Map<string, (typeof convs)[number]>();
+  for (const c of convs) if (c.clienteId && !porCliente.has(c.clienteId)) porCliente.set(c.clienteId, c);
+  const ids = Array.from(porCliente.keys());
+  if (!ids.length) return [];
+
+  const clientes = await db.cliente.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true, nome: true, orientadorOcultoEm: true,
+      municipio: { select: { nome: true } },
+      orientador: true,
+    },
+  });
+  const mapa = new Map(clientes.map((c) => [c.id, c]));
+
+  const itens = [];
+  for (const id of ids) {
+    const conv = porCliente.get(id)!;
+    const cli = mapa.get(id);
+    if (!cli) continue;
+    if (cli.orientadorOcultoEm && conv.lastMessageAt <= cli.orientadorOcultoEm) continue;
+    const a = cli.orientador;
+    const ult = conv.messages[0];
+    itens.push({
+      clienteId: id,
+      conversaId: conv.id,
+      clienteNome: cli.nome,
+      municipio: cli.municipio?.nome ?? null,
+      ultimaMensagem: ult ? `${ult.direction === "OUT" ? "Você: " : ""}${ult.body}` : null,
+      ultimaMensagemEm: conv.lastMessageAt.toISOString(),
+      estagioVenda: a?.estagioVenda ?? null,
+      perfilComprador: a?.perfilComprador ?? null,
+      temperatura: a?.temperatura ?? null,
+      probabilidadeFechamento: a?.probabilidadeFechamento ?? null,
+      proximaAcao: a?.proximaAcao ?? null,
+      atualizadoEm: a ? a.atualizadoEm.toISOString() : null,
+    });
+  }
+  return itens;
+}
+
+// X vermelho: some do Orientador até chegar mensagem nova.
+export async function descartarCardOrientador(clienteId: string): Promise<{ ok: boolean }> {
+  await db.cliente.update({ where: { id: clienteId }, data: { orientadorOcultoEm: new Date() } });
+  revalidatePath("/orientador");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+const TERMOMETRO_POR_TEMPERATURA: Record<string, number> = { muito_quente: 85, quente: 70, morna: 50, fria: 30 };
+
+// ✓ NEGOCIAÇÃO?: registra uma negociação na coluna "em negociação" do funil
+// (tenta descobrir a máquina pela conversa/análise; se não achar, fica em
+// branco para o vendedor preencher depois). Se o cliente já tem negociação
+// aberta, ela é reaproveitada (movida pra coluna) em vez de duplicar.
+export async function criarNegociacaoDoOrientador(clienteId: string): Promise<{
+  ok: boolean; negociacaoId?: string; criada?: boolean; coluna?: string; maquina?: string | null; erro?: string;
+}> {
+  const cliente = await db.cliente.findUnique({
+    where: { id: clienteId },
+    select: { id: true, nome: true, resumoMaquinas: true, orientador: true },
+  });
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+
+  await garantirColunasFunil();
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true }, orderBy: { ordem: "asc" } });
+  const categorizar = criarCategorizadorColunas(colunas);
+  const abertas = colunas.filter((c) => categorizar(c.titulo) === "em_negociacao");
+  const alvo = abertas.find((c) => /negocia/i.test(c.titulo)) ?? abertas[0];
+  if (!alvo) return { ok: false, erro: "Nenhuma coluna de negociação encontrada no funil." };
+
+  // Tenta identificar a máquina: modelos próprios citados na análise da IA,
+  // no resumo do cliente ou nas últimas mensagens da conversa.
+  const [maquinas, conv] = await Promise.all([
+    db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true } }),
+    db.whatsAppConversation.findFirst({
+      where: { clienteId, isGroup: false },
+      orderBy: { lastMessageAt: "desc" },
+      select: { messages: { where: { isDraft: false }, orderBy: { sentAt: "desc" }, take: 40, select: { body: true } } },
+    }),
+  ]);
+  const texto = [
+    cliente.orientador?.resumoNegociacao, cliente.orientador?.proximaAcao, cliente.resumoMaquinas,
+    ...(conv?.messages.map((m) => m.body) ?? []),
+  ].filter(Boolean).join("\n");
+  const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const achada = maquinas
+    .filter((m) => m.modelo.length >= 3)
+    .sort((a, b) => b.modelo.length - a.modelo.length)
+    .find((m) => new RegExp(`(^|[^A-Za-z0-9])${escapar(m.modelo)}([^A-Za-z0-9]|$)`, "i").test(texto)) ?? null;
+
+  const termometro = TERMOMETRO_POR_TEMPERATURA[cliente.orientador?.temperatura ?? ""] ?? 50;
+  const proximaAcao = cliente.orientador?.proximaAcao ?? "Qualificar interesse e agendar visita";
+
+  const aberta = await db.negociacao.findFirst({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" } });
+  let negociacaoId: string;
+  let criada = false;
+  if (aberta) {
+    await db.negociacao.update({
+      where: { id: aberta.id },
+      data: {
+        ...(categorizar(aberta.estagio) === "em_negociacao" ? {} : { estagio: alvo.titulo }),
+        ...(!aberta.maquinaModelo && achada ? { maquinaModelo: achada.modelo, marca: achada.marca } : {}),
+        ultimoContato: new Date(),
+      },
+    });
+    negociacaoId = aberta.id;
+  } else {
+    const nova = await db.negociacao.create({
+      data: {
+        clienteId, estagio: alvo.titulo, status: "aberta", termometro, proximaAcao,
+        marca: achada?.marca ?? null, maquinaModelo: achada?.modelo ?? null, ultimoContato: new Date(),
+      },
+    });
+    negociacaoId = nova.id;
+    criada = true;
+  }
+
+  await db.cliente.update({ where: { id: clienteId }, data: { orientadorOcultoEm: new Date() } });
+  await registrarAudit({
+    acao: criada ? "negociacao_criada" : "negociacao_atualizada",
+    origem: "usuario",
+    descricao: `${criada ? "Negociação criada" : "Negociação movida"} pelo Orientador de Vendas para "${alvo.titulo}" (${cliente.nome}).`,
+    entidade: "Negociacao", entidadeId: negociacaoId, clienteId,
+  }).catch(() => {});
+  for (const p of ["/orientador", "/negociacoes", "/pipeline", "/dashboard"]) revalidatePath(p);
+  return { ok: true, negociacaoId, criada, coluna: alvo.titulo, maquina: achada ? `${achada.marca} ${achada.modelo}` : null };
 }
 
 // Análise completa de um cliente (drill-down do painel + badge compacto em

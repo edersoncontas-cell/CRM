@@ -55,6 +55,9 @@ model Cliente {
   resumoTexto     String?
   leadScore       Int       @default(50) // Fase 5: score 0-100 recalculado pelo ZEUS (recência+sentimento+valor+estágio+sinais de compra)
   leadScoreAtualizadoEm DateTime?
+  // Orientador de Vendas: card ocultado (X vermelho ou ✓ negociação criada)
+  // nesta data — volta a aparecer quando chega mensagem nova depois dela.
+  orientadorOcultoEm DateTime?
   indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId   String?
   indicados       Cliente[] @relation("Indicacoes")

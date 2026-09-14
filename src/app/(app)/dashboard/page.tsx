@@ -1,25 +1,22 @@
 import { db } from "@/lib/db";
-import { diasDesde, saudacaoBrasilia, semCodigoPais, formatCurrency } from "@/lib/utils";
+import { diasDesde, saudacaoBrasilia, formatCurrency } from "@/lib/utils";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
-import { DicaVendas, FraseMotivacional } from "@/components/MotivacaoWidget";
+import { FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
-import { CadastrarContatoWhatsApp } from "@/components/CadastrarContatoWhatsApp";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
 import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
 import { carregarVendasFaturadas, resumoVendas, META_ANUAL_VENDAS } from "@/lib/vendas-dashboard";
+import { contarClientesConversados } from "@/lib/actions";
+import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
 import { T } from "@/lib/dash-tema";
 import Link from "next/link";
 import {
-  Target, AlertTriangle, Clock, Bell, Snowflake, ArrowRight, MessageCircle, UserX,
-  Calendar, Trophy, MapPin, Wallet, Receipt, Handshake, Landmark, ListTodo, TrendingUp,
+  Target, Clock, Bell, Snowflake, ArrowRight, Calendar, Trophy, MapPin, Wallet, Receipt, Handshake, Landmark, ListTodo, TrendingUp, Users,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
-const DESPEDIDA_RE =
-  /\b(obrigad[ao]|valeu|até logo|tchau|tchauzinho|boa noite|boa tarde|bom dia(?! pessoal)|até mais|abraços?|foi um prazer|tudo certo|combinado|fechado|até amanhã|até segunda|pode ser|ok obrigad[ao])\b/i;
 
 export default async function DashboardPage({ searchParams }: { searchParams: { ano?: string } }) {
   const hoje = new Date();
@@ -48,24 +45,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const fimMesCal = new Date(anoAtual, hoje.getMonth() + 1, 1);
 
   const [
-    alertas, negociacoes,
-    clientesAguardandoRaw, futuros,
-    demandasHoje,
-    proximasVisitas,
+    negociacoes, futuros, demandasHoje, proximasVisitas,
     visitasSemanaAgendadas, negociosCriadosSemana,
-    clientes30DiasSemContato, conversasSemCadastro,
-    municipios,
-    colunasFunil,
-    vendasFaturadas,
-    visitasMes, clientesProximaVisitaMes,
+    clientes30DiasSemContato, colunasFunil,
+    vendasFaturadas, visitasMes, clientesProximaVisitaMes, conversados,
   ] = await Promise.all([
-    db.alerta.findMany({ where: { resolvido: false }, include: { cliente: true }, orderBy: { diasDesde: "desc" } }),
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
-    db.cliente.findMany({
-      where: { aguardandoResposta: true },
-      include: { conversas: { orderBy: { criadoEm: "desc" }, take: 1 } },
-      orderBy: { ultimoContato: "asc" },
-    }),
     db.cliente.findMany({
       where: { interesseFuturo: true },
       orderBy: { interesseFuturoData: "asc" },
@@ -90,17 +75,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       take: 8,
       select: { id: true, nome: true, ultimoContato: true },
     }),
-    db.whatsAppConversation.findMany({
-      where: { clienteId: null, isGroup: false },
-      orderBy: { lastMessageAt: "desc" },
-      take: 8,
-      select: { id: true, contactName: true, externalPhone: true, lastMessageAt: true },
-    }),
-    db.municipio.findMany({ select: { id: true, nome: true, foraDeArea: true }, orderBy: { nome: "asc" } }),
     db.colunaFunil.findMany({ select: { titulo: true } }),
     carregarVendasFaturadas(),
     db.visita.findMany({ where: { data: { gte: inicioMesCal, lt: fimMesCal } }, select: { data: true } }),
     db.cliente.findMany({ where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } }, select: { proximaVisita: true } }),
+    contarClientesConversados(),
   ]);
 
   const resumo = resumoVendas(vendasFaturadas, anoSel);
@@ -146,15 +125,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     .sort((a, b) => (a.ultimoContato?.getTime() ?? 0) - (b.ultimoContato?.getTime() ?? 0))
     .slice(0, 6);
 
-  const clientesAguardando = clientesAguardandoRaw
-    .filter((c) => {
-      const ultima = c.conversas[0];
-      if (!ultima) return true;
-      if (ultima.remetente === "vendedor") return false;
-      return !DESPEDIDA_RE.test(ultima.conteudo);
-    })
-    .slice(0, 8);
-
   const diasComVisita = new Map<number, number>();
   for (const v of visitasMes) diasComVisita.set(v.data.getDate(), (diasComVisita.get(v.data.getDate()) ?? 0) + 1);
   for (const c of clientesProximaVisitaMes) {
@@ -165,15 +135,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   const cidadesTop = resumo.pontosMapa.slice(0, 8).map((p) => ({ nome: p.nome, qtd: p.vendas }));
 
-  const painelWhats = [
+  const termometro = [
     { rotulo: "Em negociação", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
     { rotulo: "Em banco", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
-    { rotulo: "Aguardando resposta", valor: clientesAguardando.length, cor: T.rosa, icone: MessageCircle, href: "/atendimento" },
-    { rotulo: "Sem cadastro", valor: conversasSemCadastro.length, cor: T.laranja, icone: UserX, href: "/atendimento" },
     { rotulo: "30+ dias sem contato", valor: clientes30DiasSemContato.length, cor: T.amarelo, icone: Snowflake, href: "/radar-silencio" },
     { rotulo: "Demandas de hoje", valor: demandasHoje, cor: T.verde, icone: ListTodo, href: "/pipeline" },
   ];
-  const maxPainel = Math.max(1, ...painelWhats.map((p) => p.valor));
+  const maxTermometro = Math.max(1, ...termometro.map((p) => p.valor));
+
+  const periodosConversados = Object.entries(PERIODOS_ORIENTADOR) as [PeriodoOrientador, (typeof PERIODOS_ORIENTADOR)[PeriodoOrientador]][];
+  const coresConversados = [T.rosa, T.violeta, T.ciano, T.verde, T.amarelo, T.laranja];
 
   return (
     <div style={{ background: T.fundo, minHeight: "100%", color: T.texto }} className="-m-4 space-y-4 p-4 md:-m-8 md:p-6">
@@ -243,14 +214,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </Painel>
 
         <Painel className="col-span-2 md:col-span-3 xl:col-span-2" titulo="Termômetro comercial" subtitulo="o que está na mesa agora">
-          <ul className="space-y-2">
-            {painelWhats.map((p) => (
+          <ul className="space-y-2.5">
+            {termometro.map((p) => (
               <li key={p.rotulo}>
                 <Link href={p.href} className="flex items-center gap-2 text-xs">
                   <p.icone size={13} style={{ color: p.cor, flexShrink: 0 }} />
                   <span className="w-36 shrink-0 truncate" style={{ color: T.texto2 }}>{p.rotulo}</span>
                   <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
-                    <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (p.valor / maxPainel) * 100)}%`, background: `linear-gradient(90deg, ${p.cor}, ${p.cor}88)`, boxShadow: `0 0 8px ${p.cor}66` }} />
+                    <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (p.valor / maxTermometro) * 100)}%`, background: `linear-gradient(90deg, ${p.cor}, ${p.cor}88)`, boxShadow: `0 0 8px ${p.cor}66` }} />
                   </span>
                   <span className="w-7 text-right font-black" style={{ color: p.cor }}>{p.valor}</span>
                 </Link>
@@ -259,6 +230,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </ul>
         </Painel>
       </div>
+
+      {/* ── Clientes conversados no WhatsApp (mesma régua do Orientador) ── */}
+      <Painel titulo="Clientes conversados no WhatsApp" subtitulo="clientes cadastrados com conversa em cada janela · clique para abrir no Orientador de Vendas">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+          {periodosConversados.map(([k, p], i) => (
+            <Link key={k} href={`/orientador?periodo=${k}`} className="rounded-xl p-3 text-center transition hover:brightness-110" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${T.borda}` }}>
+              <div className="flex items-center justify-center gap-1 text-2xl font-black" style={{ color: coresConversados[i] }}>
+                <Users size={16} /> {conversados[k]}
+              </div>
+              <div className="mt-0.5 text-[11px] font-semibold" style={{ color: T.texto2 }}>{p.label}</div>
+            </Link>
+          ))}
+        </div>
+      </Painel>
 
       {/* ── Linha 2: evolução + ticket por ano ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -346,10 +331,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </Painel>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DicaVendas />
-        <FraseMotivacional />
-      </div>
+      <FraseMotivacional />
 
       {/* ── Operacional ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -369,42 +351,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </Painel>
         )}
 
-        {clientesAguardando.length > 0 && (
-          <Painel titulo="Aguardando resposta no WhatsApp">
-            <Lista>
-              {clientesAguardando.map((c) => (
-                <Linha key={c.id} href={"/clientes/" + c.id} esquerda={<MessageCircle size={16} style={{ color: T.rosa }} />}
-                  titulo={c.nome} sub={`${diasDesde(c.ultimoContato)}d sem contato`} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
         {clientes30DiasSemContato.length > 0 && (
           <Painel titulo="Clientes com 30+ dias sem contato">
             <Lista>
               {clientes30DiasSemContato.map((c) => (
                 <Linha key={c.id} href={"/clientes/" + c.id} esquerda={<Snowflake size={16} style={{ color: T.amarelo }} />}
                   titulo={c.nome} sub={c.ultimoContato ? `há ${diasDesde(c.ultimoContato)}d sem contato` : "sem registro de contato"} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
-        {conversasSemCadastro.length > 0 && (
-          <Painel titulo="Conversas sem cadastro">
-            <Lista>
-              {conversasSemCadastro.map((c) => (
-                <li key={c.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <Link href={"/atendimento?conversa=" + c.id} className="flex min-w-0 flex-1 items-center gap-3">
-                    <UserX size={16} style={{ color: T.laranja, flexShrink: 0 }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{c.contactName || c.externalPhone}</p>
-                      <p className="text-xs" style={{ color: T.mudo }}>{c.externalPhone} · sem cliente vinculado</p>
-                    </div>
-                  </Link>
-                  <CadastrarContatoWhatsApp telefone={semCodigoPais(c.externalPhone.replace(/\D/g, ""))} municipios={municipios} />
-                </li>
               ))}
             </Lista>
           </Painel>
@@ -434,18 +386,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </Painel>
         )}
 
-        {alertas.length > 0 && (
-          <Painel titulo="Alertas do sistema">
-            <Lista>
-              {alertas.slice(0, 6).map((a) => (
-                <Linha key={a.id} href={"/clientes/" + a.clienteId} esquerda={<AlertTriangle size={16} style={{ color: T.amarelo }} />}
-                  titulo={a.cliente?.nome ?? "—"} sub={a.mensagem} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
-        {topAtacar.length === 0 && clientesAguardando.length === 0 && alertas.length === 0 && (
+        {topAtacar.length === 0 && clientes30DiasSemContato.length === 0 && precisamDeVisita.length === 0 && futurosNaHora.length === 0 && (
           <Painel titulo="Tudo em dia">
             <p className="flex items-center gap-2 text-sm" style={{ color: T.verde }}><Target size={16} /> Nenhuma pendência urgente agora.</p>
           </Painel>

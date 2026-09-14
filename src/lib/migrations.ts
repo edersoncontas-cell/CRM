@@ -151,6 +151,9 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "resumoRelatorio"   TEXT,
         ADD COLUMN IF NOT EXISTS "resumoRelatorioEm" TIMESTAMP WITH TIME ZONE
     `);
+
+    // Orientador de Vendas: card ocultado (X / ✓ negociação) até nova mensagem.
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "orientadorOcultoEm" TIMESTAMP WITH TIME ZONE`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

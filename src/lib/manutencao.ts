@@ -27,7 +27,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // precisar rodar em bancos que já passaram pela versão anterior — sem isso,
 // bancos com a versão antiga marcada NUNCA rodariam a migração sozinhos e
 // toda página que usa as colunas novas quebra (já aconteceu em produção).
-export const CHAVE_MANUTENCAO = "manutencao.v4";
+export const CHAVE_MANUTENCAO = "manutencao.v5";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

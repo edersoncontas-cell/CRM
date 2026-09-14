@@ -1,5 +1,4 @@
 import { Sidebar } from "@/components/Sidebar";
-import { AssistenteIA } from "@/components/AssistenteIA";
 import { InstalarIOS } from "@/components/InstalarIOS";
 import { AuthPersist } from "@/components/AuthPersist";
 import { SplashBoot } from "@/components/SplashBoot";
@@ -18,7 +17,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
       <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8">{children}</main>
-      <AssistenteIA />
       <InstalarIOS />
       <AuthPersist modo="guardar" />
       <SplashBoot />
