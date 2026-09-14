@@ -143,7 +143,8 @@ export default async function FinanceiroPage({
   );
 
   // Comissões futuras CRD PME (pagas quando 75% do valor for pago)
-  const negCrdPme = todasGanhas.filter((n: any) => n.tipoPagamento === "crd_pme");
+  // Comissão já marcada como paga sai daqui (mesmo critério da relação).
+  const negCrdPme = todasGanhas.filter((n: any) => n.tipoPagamento === "crd_pme" && !n.comissaoPaga);
   const comissoesFuturas = negCrdPme.map((n: any) => ({
     id: n.id,
     cliente: n.cliente.nome,

@@ -240,3 +240,19 @@ img, video, iframe {
 .mapa-escuro {
   filter: invert(1) hue-rotate(200deg) brightness(0.8) contrast(0.95) saturate(0.55);
 }
+
+/* Letreiro de notícias do Dashboard (estilo bolsa): corre para a esquerda,
+   conteúdo duplicado para o laço ser contínuo; pausa no hover/toque. */
+@keyframes letreiro {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.letreiro-faixa {
+  animation-name: letreiro;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .letreiro-faixa { animation-duration: 240s !important; }
+}

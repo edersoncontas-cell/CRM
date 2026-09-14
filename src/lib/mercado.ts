@@ -134,6 +134,12 @@ export async function atualizarCotacoesMercado(): Promise<CotacoesMercado> {
   return dados;
 }
 
+// Depois que o robô do café grava uma leitura nova, o cache de 60 s precisa
+// ser descartado para o letreiro ver o valor na hora.
+export function limparCacheCotacoes(): void {
+  cacheMem = null;
+}
+
 // Leitura rápida para as telas: cache em memória (60 s) → último valor
 // gravado pelo robô → busca ao vivo só se nunca houve leitura (primeiro uso).
 export async function obterCotacoes(): Promise<CotacoesMercado> {
