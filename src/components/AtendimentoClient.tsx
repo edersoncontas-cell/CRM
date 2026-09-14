@@ -468,6 +468,11 @@ export function AtendimentoClient({
               {sincronizando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
               <span className="hidden sm:inline">{sincMsg ?? "Sincronizar"}</span>
             </button>
+            <Link href="/atendimento/relatorio" title="Relatório em PDF das conversas"
+              className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25">
+              <FileText size={13} />
+              <span className="hidden sm:inline">Relatório</span>
+            </Link>
             <div className="relative">
               <button onClick={() => setCfgAberto((v) => !v)} title="Configurar Cérebro"
                 className="flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-white hover:bg-white/25">
@@ -609,6 +614,11 @@ export function AtendimentoClient({
                         <FileText size={15} style={{ color: "#BFDE4D" }} />
                         {gerandoResumo ? "Gerando resumo…" : "Gerar resumo pelo Cérebro"}
                       </button>
+                      <Link href={`/atendimento/relatorio?conversa=${sel.id}`}
+                        onClick={() => setMenuAberto(false)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
+                        <FileText size={15} style={{ color: "#f59e0b" }} /> Relatório em PDF desta conversa
+                      </Link>
                       <button onClick={() => abrirModalNegociacao(sel)}
                         className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10">
                         <Handshake size={15} style={{ color: "#60a5fa" }} /> Gerar Negociação

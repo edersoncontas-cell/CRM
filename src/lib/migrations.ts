@@ -144,6 +144,13 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PosVendaContato_clienteId_data_idx" ON "PosVendaContato" ("clienteId", "data")`);
+
+    // Relatório de conversas do WhatsApp (PDF): cache do resumo IA por conversa.
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "WhatsAppConversation"
+        ADD COLUMN IF NOT EXISTS "resumoRelatorio"   TEXT,
+        ADD COLUMN IF NOT EXISTS "resumoRelatorioEm" TIMESTAMP WITH TIME ZONE
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

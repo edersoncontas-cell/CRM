@@ -415,6 +415,10 @@ model WhatsAppConversation {
   lastAccessedAt   DateTime?
   contactPhotoUrl  String?
   agnesScheduledAt DateTime?
+  // Relatório de conversas (PDF): resumo IA em cache, válido enquanto
+  // resumoRelatorioEm >= lastMessageAt (nova mensagem invalida).
+  resumoRelatorio   String?
+  resumoRelatorioEm DateTime?
   clienteId        String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

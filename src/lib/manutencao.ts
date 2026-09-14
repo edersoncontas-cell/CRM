@@ -22,7 +22,12 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // (era o caso: "Algo deu errado" ao abrir o cadastro de cliente/Orientador/
 // Pós-venda/Aplicações em produção). Bump aqui sempre que uma migração nova
 // precisar rodar em bancos que já passaram pela versão anterior.
-export const CHAVE_MANUTENCAO = "manutencao.v3";
+// v4: colunas de cache do Relatório de conversas (WhatsAppConversation.
+// resumoRelatorio/resumoRelatorioEm). Bump aqui sempre que uma migração nova
+// precisar rodar em bancos que já passaram pela versão anterior — sem isso,
+// bancos com a versão antiga marcada NUNCA rodariam a migração sozinhos e
+// toda página que usa as colunas novas quebra (já aconteceu em produção).
+export const CHAVE_MANUTENCAO = "manutencao.v4";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
