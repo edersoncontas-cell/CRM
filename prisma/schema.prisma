@@ -157,7 +157,14 @@ model Visita {
   // Evento correspondente na Google Agenda (integração OAuth) — para apagar
   // junto quando a visita é removida.
   googleEventId String?
+  // agendada | realizada | nao_realizada. A meta de visitas conta só as
+  // realizadas (confirmadas pelo vendedor com o ✓).
+  status         String    @default("agendada")
+  realizadaEm    DateTime?
+  // Visita criada ao reagendar outra (aponta para a original não realizada).
+  reagendadaDeId String?
   criadoEm  DateTime @default(now())
+  @@index([status, data])
 }
 
 model Negociacao {

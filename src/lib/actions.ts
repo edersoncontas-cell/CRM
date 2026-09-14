@@ -282,6 +282,35 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+// ✓ / ✗ da visita. A meta de visitas conta só as "realizada".
+export async function marcarVisitaAction(id: string, status: "realizada" | "nao_realizada" | "agendada"): Promise<{ ok: boolean }> {
+  const v = await db.visita.findUnique({ where: { id }, select: { clienteId: true } });
+  if (!v) return { ok: false };
+  await db.visita.update({ where: { id }, data: { status, realizadaEm: status === "realizada" ? new Date() : null } });
+  if (status === "realizada") await db.cliente.update({ where: { id: v.clienteId }, data: { visitado: true, ultimoContato: new Date() } }).catch(() => {});
+  revalidatePath("/visitas"); revalidatePath("/dashboard"); revalidatePath("/alertas"); revalidatePath(`/clientes/${v.clienteId}`);
+  return { ok: true };
+}
+
+// ✗ com reagendamento: marca a original como não realizada e cria a nova na
+// data escolhida (mesmo cliente, cidade e observação), ligada à original.
+export async function reagendarVisitaAction(id: string, dataISO: string, horario: string): Promise<{ ok: boolean; erro?: string; novaId?: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) return { ok: false, erro: "Data inválida." };
+  const hora = /^\d{2}:\d{2}$/.test(horario) ? horario : "09:00";
+  const original = await db.visita.findUnique({ where: { id } });
+  if (!original) return { ok: false, erro: "Visita não encontrada." };
+  const nova = await db.visita.create({
+    data: {
+      clienteId: original.clienteId, data: new Date(`${dataISO}T${hora}:00-03:00`), cidade: original.cidade, observacao: original.observacao,
+      status: "agendada", reagendadaDeId: original.id,
+    },
+  });
+  await db.visita.update({ where: { id }, data: { status: "nao_realizada", realizadaEm: null } });
+  await sincronizarVisitaComAgenda(nova.id).catch((e) => console.error("[google] visita:", e));
+  revalidatePath("/visitas"); revalidatePath("/dashboard"); revalidatePath("/alertas"); revalidatePath(`/clientes/${original.clienteId}`);
+  return { ok: true, novaId: nova.id };
+}
+
 export async function removerVisita(id: string, clienteId: string) {
   await removerEventoDaVisita(id);
   await db.visita.delete({ where: { id } });

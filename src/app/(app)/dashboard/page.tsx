@@ -64,7 +64,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       select: { id: true, nome: true, interesseFuturoData: true, interesseFuturoNota: true },
     }),
     db.tarefaKanban.count({ where: { dueDate: { gte: inicioDia, lte: fimDia } } }).catch(() => 0),
-    db.visita.count({ where: { data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
+    // Só visitas confirmadas como realizadas (✓ em Visitas) contam para a meta.
+    db.visita.count({ where: { status: "realizada", data: { gte: inicioSemanaSegunda, lt: fimSemanaDomingo } } }),
     ehDomingoHoje ? Promise.resolve([]) : db.negociacao.findMany({
       where: { criadoEm: { gte: inicioSemanaSegunda, lte: fimSemanaSabado } },
       select: { estagio: true },
@@ -182,7 +183,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <span className="text-[10px]" style={{ color: T.mudo }}>/{metaVisitasSemana}</span>
           </Anel>
           <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Visitas na semana</p>
-          <p className="text-[11px]" style={{ color: T.mudo }}>zera toda segunda</p>
+          <p className="text-[11px]" style={{ color: T.mudo }}>realizadas (✓) · zera toda segunda</p>
         </Painel>
 
         <Painel className="flex flex-col items-center text-center">

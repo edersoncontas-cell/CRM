@@ -18,6 +18,8 @@ export type VisitaMapa = {
   dataIso: string; // YYYY-MM-DD (Brasília)
   lat: number | null;
   lng: number | null;
+  status?: string;   // agendada | realizada | nao_realizada
+  fixo?: boolean;    // compromisso fixo (reunião PME de segunda), sem cliente
 };
 
 export type DiaMapa = { iso: string; nome: string; label: string; ehHoje: boolean };
@@ -47,7 +49,8 @@ export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: 
     return () => { ativo = false; };
   }, []);
 
-  const doDia = useMemo(() => visitas.filter((v) => v.dataIso === dia).sort((a, b) => a.hora.localeCompare(b.hora)), [visitas, dia]);
+  // Compromisso fixo (reunião de segunda) sempre primeiro; depois por hora.
+  const doDia = useMemo(() => visitas.filter((v) => v.dataIso === dia).sort((a, b) => Number(!!b.fixo) - Number(!!a.fixo) || a.hora.localeCompare(b.hora)), [visitas, dia]);
   const comCoord = doDia.filter((v) => v.lat != null && v.lng != null);
   const semCoord = doDia.filter((v) => v.lat == null || v.lng == null);
   const diaSel = dias.find((d) => d.iso === dia);
@@ -69,7 +72,7 @@ export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_300px]">
         <MapContainer center={CENTRO_ES} zoom={8} minZoom={6} maxBounds={LIMITES_ES} maxBoundsViscosity={0.8} scrollWheelZoom={false}
           style={{ height: 460, width: "100%", borderRadius: "1rem", border: "1px solid #e2e8f0" }}>
-          <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+          <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {contorno && <GeoJSON data={contorno} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />}
           {rota.length > 1 && <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />}
           {comCoord.map((v, i) => (
@@ -79,7 +82,7 @@ export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: 
                   <b>{i + 1}. {v.clienteNome}</b><br />
                   {v.hora}{v.cidade ? ` · ${v.cidade}` : ""}<br />
                   {v.observacao && <span className="text-xs text-slate-600">{v.observacao}<br /></span>}
-                  <Link href={`/clientes/${v.clienteId}`} className="text-brand-600 underline">Abrir cadastro</Link>
+                  {!v.fixo && <Link href={`/clientes/${v.clienteId}`} className="text-brand-600 underline">Abrir cadastro</Link>}
                 </div>
               </Popup>
             </Marker>
@@ -94,11 +97,13 @@ export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: 
               {doDia.map((v, i) => {
                 const idx = comCoord.indexOf(v);
                 return (
-                  <li key={v.id} className="flex items-start gap-2 rounded-xl bg-slate-50 p-2 text-xs">
+                  <li key={v.id} className={`flex items-start gap-2 rounded-xl p-2 text-xs ${v.fixo ? "bg-agro-400/20 ring-1 ring-agro-400/60" : v.status === "realizada" ? "bg-emerald-50" : v.status === "nao_realizada" ? "bg-red-50" : "bg-slate-50"}`}>
                     <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${idx >= 0 ? "bg-slate-900 text-agro-400" : "bg-slate-200 text-slate-500"}`}>{idx >= 0 ? idx + 1 : "?"}</span>
                     <div className="min-w-0 flex-1">
-                      <Link href={`/clientes/${v.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{v.clienteNome}</Link>
-                      <div className="text-slate-500">{v.hora}{v.cidade ? ` · ${v.cidade}` : " · sem cidade"}</div>
+                      {v.fixo
+                        ? <span className="font-black uppercase tracking-wide text-slate-900">{v.clienteNome}</span>
+                        : <Link href={`/clientes/${v.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{v.clienteNome}</Link>}
+                      <div className="text-slate-500">{v.hora}{v.cidade ? ` · ${v.cidade}` : " · sem cidade"}{v.status === "realizada" ? " · ✓ realizada" : v.status === "nao_realizada" ? " · ✗ não realizada" : ""}</div>
                       {v.observacao && <div className="line-clamp-2 text-slate-500">{v.observacao}</div>}
                     </div>
                   </li>

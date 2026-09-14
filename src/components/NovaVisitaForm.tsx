@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { adicionarVisita } from "@/lib/actions";
 import { Plus, X, Calendar, Clock } from "lucide-react";
 import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
@@ -20,13 +21,19 @@ export function NovaVisitaForm({
   dataFixa,
   rotuloDataFixa,
   compacto,
+  clienteInicial,
+  abrirInicial,
 }: {
   clientes: { id: string; nome: string; cidade?: string | null }[];
   cidades?: string[];
   dataFixa?: string;
   rotuloDataFixa?: string;
   compacto?: boolean;
+  // Vindo do Orientador ("Agendar visita"): já abre com o cliente escolhido.
+  clienteInicial?: string;
+  abrirInicial?: boolean;
 }) {
+  const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [salvando, startSalvar] = useTransition();
   const [data, setData] = useState(dataFixa ?? new Date().toISOString().slice(0, 10));
@@ -36,9 +43,23 @@ export function NovaVisitaForm({
   const [cidade, setCidade] = useState("");
   const [pickerAberto, setPickerAberto] = useState<"data" | "horario" | null>(null);
 
+  useEffect(() => {
+    if (!abrirInicial) return;
+    const c = clienteInicial ? clientes.find((x) => x.id === clienteInicial) : null;
+    if (c) { setClienteId(c.id); if (c.cidade) setCidade(c.cidade); }
+    setAberto(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirInicial, clienteInicial]);
+
   function abrir() {
     setData(dataFixa ?? new Date().toISOString().slice(0, 10));
     setAberto(true);
+  }
+
+  function fechar() {
+    setAberto(false);
+    // Limpa ?cliente=&novo= da URL para não reabrir no próximo refresh.
+    if (abrirInicial) router.replace("/visitas");
   }
 
   function submeter() {
@@ -50,10 +71,10 @@ export function NovaVisitaForm({
     fd.set("cidade", cidade);
     startSalvar(async () => {
       await adicionarVisita(clienteId, fd);
-      setAberto(false);
       setClienteId("");
       setObservacao("");
       setCidade("");
+      fechar();
     });
   }
 
@@ -73,7 +94,7 @@ export function NovaVisitaForm({
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800">Nova visita</h2>
-              <button type="button" onClick={() => setAberto(false)}>
+              <button type="button" onClick={fechar}>
                 <X className="text-slate-400" />
               </button>
             </div>

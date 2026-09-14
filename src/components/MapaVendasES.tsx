@@ -99,9 +99,11 @@ export default function MapaVendasES({
         scrollWheelZoom={false}
         style={{ height: 420, width: "100%", borderRadius: "1rem", background: T.fundoSolido, border: `1px solid ${T.borda}` }}
       >
+        {/* OpenStreetMap (sem chave). O tom escuro vem do filtro CSS .mapa-escuro. */}
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="mapa-escuro"
         />
         {contorno && (
           <GeoJSON data={contorno} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />

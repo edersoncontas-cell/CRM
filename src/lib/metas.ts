@@ -63,9 +63,10 @@ export async function calcularRitmoMetas(agora = new Date()): Promise<RitmoMetas
     db.negociacao.count({ where: { status: "ganha", faturadoEm: { gte: inicioTri, lt: fimTri } } }),
     db.negociacao.count({ where: { status: "ganha", faturadoEm: { gte: dozeMeses } } }),
     db.negociacao.count({ where: { status: "perdida", atualizadoEm: { gte: dozeMeses } } }),
-    db.visita.count({ where: { data: { gte: dozeMeses, lte: agora } } }),
+    // A meta é de visitas REALIZADAS (confirmadas com o ✓ na tela de Visitas).
+    db.visita.count({ where: { status: "realizada", data: { gte: dozeMeses, lte: agora } } }),
     db.negociacao.count({ where: { status: "ganha", faturadoEm: { gte: dozeMeses } } }),
-    db.visita.count({ where: { data: { gte: inicioSemana, lt: fimSemana } } }),
+    db.visita.count({ where: { status: "realizada", data: { gte: inicioSemana, lt: fimSemana } } }),
     db.negociacao.count({ where: { criadoEm: { gte: inicioSemana, lt: fimSemana } } }),
   ]);
 

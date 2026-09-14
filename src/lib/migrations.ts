@@ -273,6 +273,22 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "AlertaOculto_chave_key" ON "AlertaOculto"("chave")`);
+
+    // Confirmação de visitas (v15): status, data da realização e reagendamento.
+    // As visitas antigas (já passadas) entram como realizadas UMA vez, só
+    // quando a coluna nasce — depois disso, quem decide é o ✓/✗ do vendedor.
+    const colStatus = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'Visita' AND column_name = 'status'`);
+    const statusJaExistia = (colStatus?.[0]?.n ?? 0) > 0;
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "Visita"
+        ADD COLUMN IF NOT EXISTS "status"         TEXT NOT NULL DEFAULT 'agendada',
+        ADD COLUMN IF NOT EXISTS "realizadaEm"    TIMESTAMP WITH TIME ZONE,
+        ADD COLUMN IF NOT EXISTS "reagendadaDeId" TEXT
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Visita_status_data_idx" ON "Visita"("status", "data")`);
+    if (!statusJaExistia) {
+      await db.$executeRawUnsafe(`UPDATE "Visita" SET "status" = 'realizada', "realizadaEm" = "data" WHERE "status" = 'agendada' AND "data" < NOW() - interval '1 day'`);
+    }
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

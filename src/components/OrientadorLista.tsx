@@ -13,6 +13,7 @@ import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-pe
 import { formatDateTime, cn } from "@/lib/utils";
 import {
   Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles, GripVertical, Handshake, RefreshCw, Eraser,
+  CalendarPlus,
 } from "lucide-react";
 
 type Item = {
@@ -142,6 +143,13 @@ function CardOrientador({ a, emAndamento, analisando, onAbrir, onConfirmar, onDe
         </button>
 
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3" {...pararArrasto}>
+          <Link
+            href={`/visitas?cliente=${a.clienteId}&novo=1`}
+            title="Agendar visita para este cliente (abre o calendário de visitas)"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-sky-800 ring-1 ring-sky-200 hover:bg-sky-200"
+          >
+            <CalendarPlus size={15} strokeWidth={2.5} /> Agendar visita
+          </Link>
           <button
             onClick={onConfirmar}
             disabled={emAndamento}

@@ -130,25 +130,12 @@ não é cobrado; escolha sempre recursos marcados *Always Free*).
    - Baixe a chave SSH que ele gera.
 3. Libere a porta 8080:
    - **Networking → Virtual Cloud Networks → sua VCN → Security Lists → Default → Add Ingress Rule**: Source `0.0.0.0/0`, protocol TCP, destination port `8080`.
-4. Conecte por SSH (`ssh -i sua-chave.key ubuntu@IP-DA-VM`) e cole, um bloco por vez:
-   ```bash
-   # firewall interno da VM
-   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 8080 -j ACCEPT
-   sudo netfilter-persistent save 2>/dev/null || true
-
-   # docker
-   curl -fsSL https://get.docker.com | sudo sh
-   sudo usermod -aG docker ubuntu && newgrp docker
-
-   # arquivos da Evolution (do próprio repositório do CRM)
-   git clone https://github.com/edersoncontas-cell/CRM.git
-   cd CRM/evolution
-   nano docker-compose.yml   # troque SERVER_URL (http://IP-DA-VM:8080) e AUTHENTICATION_API_KEY
-   docker compose up -d
-   docker compose logs -f evolution-api   # espere aparecer "HTTP - ON: 8080" e dê Ctrl+C
-   ```
-5. Abra no navegador: `http://IP-DA-VM:8080/manager` → entre com a
-   `AUTHENTICATION_API_KEY` que você definiu.
+4. Conecte por SSH (`ssh -i sua-chave.key ubuntu@IP-DA-VM`) e cole o
+   comando único do "Caminho rápido" acima (ele libera o iptables da Oracle,
+   instala o Docker, sobe tudo e cria a instância). Ao final, copie as três
+   variáveis para a Vercel e faça o Redeploy.
+5. Se quiser ver o painel da Evolution: `http://IP-DA-VM:8080/manager`, com a
+   chave que o comando imprimiu.
 
 ### Opção B — seu próprio computador (se ele puder ficar ligado)
 1. Instale o **Docker Desktop** (Windows/Mac) e o **Tailscale** (https://tailscale.com, grátis).

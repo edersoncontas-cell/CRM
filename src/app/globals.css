@@ -235,3 +235,8 @@ img, video, iframe {
         -webkit-overflow-scrolling: touch;
     }
 }
+
+/* Mapa do Dashboard: azulejos do OpenStreetMap (sem chave) escurecidos por CSS */
+.mapa-escuro {
+  filter: invert(1) hue-rotate(200deg) brightness(0.8) contrast(0.95) saturate(0.55);
+}
