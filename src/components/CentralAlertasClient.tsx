@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
-import { resolverAlerta, registrarContatoPosVenda } from "@/lib/actions";
+import { resolverAlerta, registrarContatoPosVenda, ocultarItemCentralAction } from "@/lib/actions";
 import type { GrupoCentral, ItemCentral, SeveridadeAlerta, GraficosCentral } from "@/lib/central-alertas";
 import { PosVendaModal } from "@/components/PosVendaClient";
 import { cn } from "@/lib/utils";
@@ -54,10 +54,12 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const criados14 = graficos.tendencia.reduce((s, d) => s + d.criados, 0);
   const resolvidos14 = graficos.tendencia.reduce((s, d) => s + d.resolvidos, 0);
 
+  // "Resolvido" em qualquer item: alerta do ZEUS é resolvido na tabela; os
+  // demais ficam ocultos até o cliente mandar mensagem nova.
   async function resolver(item: ItemCentral) {
-    if (!item.alertaId) return;
     setOcupado(item.id);
-    await resolverAlerta(item.alertaId);
+    if (item.alertaId) await resolverAlerta(item.alertaId);
+    else await ocultarItemCentralAction(item.id, item.clienteId ?? null);
     setOcupado(null);
     setResolvidos((s) => new Set(s).add(item.id));
     startTransition(() => router.refresh());
@@ -151,7 +153,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
       )}
 
       {totalVisivel === 0 ? (
-        <EmptyState icone={<Bell size={28} />} texto="Nenhum alerta pendente" subtexto="Rascunhos da IA, clientes aguardando resposta, alertas do ZEUS, pós-venda, visitas e demandas aparecem aqui assim que precisarem de você." />
+        <EmptyState icone={<Bell size={28} />} texto="Nenhum alerta pendente" subtexto="Clientes aguardando resposta, top 5 para atacar, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas e demandas aparecem aqui assim que precisarem de você." />
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -211,17 +213,18 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                                   </button>
                                 )}
                                 <Link href={item.href} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Cliente <ArrowRight size={13} /></Link>
+                                <button onClick={() => resolver(item)} disabled={ocupado === item.id} title="Some da lista até o cliente falar de novo" className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
+                                  {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
+                                </button>
                               </>
                             ) : (
                               <>
                                 <Link href={item.href} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800">
                                   {item.hrefLabel} <ArrowRight size={13} />
                                 </Link>
-                                {item.alertaId && (
-                                  <button onClick={() => resolver(item)} disabled={ocupado === item.id} title="Marcar como resolvido" className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
-                                    {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
-                                  </button>
-                                )}
+                                <button onClick={() => resolver(item)} disabled={ocupado === item.id} title={item.alertaId ? "Marcar como resolvido" : "Some da lista até o cliente falar de novo"} className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
+                                  {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
+                                </button>
                               </>
                             )}
                           </div>

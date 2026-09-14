@@ -25,7 +25,17 @@ export type ItemCentral = {
   // Só no grupo pós-venda: dados completos para o modal de histórico/contato.
   posVenda?: ItemPosVenda;
   telefone?: string | null;
+  // Cliente ligado ao item (quando há): o "Resolvido" some até o cliente
+  // mandar mensagem nova.
+  clienteId?: string | null;
 };
+
+// Descobre o cliente de um item pelo href (/clientes/<id>) quando o grupo não
+// preencheu clienteId explicitamente.
+function clienteIdDoItem(i: ItemCentral): string | null {
+  const m = i.href.match(/^\/clientes\/([^/?#]+)/);
+  return m ? m[1] : null;
+}
 
 export type ItemPosVenda = Awaited<ReturnType<typeof listarClientesPosVenda>>[number];
 
@@ -64,13 +74,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
 
   const trintaDiasAtras = new Date(Date.now() - 30 * 24 * HORA);
 
-  const [rascunhos, aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, atacar, semContato, negAbertas, colunasFunil] = await Promise.all([
-    db.whatsAppMessage.findMany({
-      where: { isDraft: true, draftStatus: "PENDING" },
-      orderBy: { sentAt: "desc" },
-      take: 50,
-      select: { id: true, body: true, sentAt: true, conversation: { select: { id: true, contactName: true, externalPhone: true, clienteId: true } } },
-    }),
+  const [aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, atacar, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
     db.cliente.findMany({
       where: { aguardandoResposta: true },
       orderBy: { ultimoContato: "asc" },
@@ -128,8 +132,30 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       select: { id: true, estagio: true, maquinaModelo: true, valor: true, proximaAcao: true, ultimoContato: true, clienteId: true, cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
     }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
+    // Itens que o vendedor marcou como resolvidos. Voltam sozinhos quando o
+    // cliente manda mensagem nova depois de resolvido (conversa nova).
+    db.alertaOculto.findMany({ take: 1000 }).catch(() => [] as { id: string; chave: string; clienteId: string | null; ocultoEm: Date }[]),
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
+
+  // Reabre o que foi resolvido se o cliente voltou a falar depois.
+  const ocultosComCliente = ocultos.filter((o) => o.clienteId);
+  if (ocultosComCliente.length) {
+    const maisAntigo = ocultosComCliente.reduce((m, o) => (o.ocultoEm < m ? o.ocultoEm : m), ocultosComCliente[0].ocultoEm);
+    const novasMsgs = await db.whatsAppMessage.findMany({
+      where: { direction: "IN", isDraft: false, sentAt: { gt: maisAntigo }, conversation: { clienteId: { in: ocultosComCliente.map((o) => o.clienteId!) } } },
+      select: { sentAt: true, conversation: { select: { clienteId: true } } },
+    }).catch(() => []);
+    const ultimaPorCliente = new Map<string, Date>();
+    for (const m of novasMsgs) {
+      const cid = m.conversation.clienteId;
+      if (cid && (!ultimaPorCliente.has(cid) || ultimaPorCliente.get(cid)! < m.sentAt)) ultimaPorCliente.set(cid, m.sentAt);
+    }
+    const reabrir = ocultosComCliente.filter((o) => (ultimaPorCliente.get(o.clienteId!) ?? new Date(0)) > o.ocultoEm).map((o) => o.id);
+    if (reabrir.length) await db.alertaOculto.deleteMany({ where: { id: { in: reabrir } } }).catch(() => {});
+    for (const o of ocultos) if (reabrir.includes(o.id)) o.chave = `__reaberto__${o.id}`;
+  }
+  const chavesOcultas = new Set(ocultos.map((o) => o.chave));
   const precisamDeVisita = negAbertas.filter((n) => { const cat = categorizar(n.estagio); return cat === "em_negociacao" || cat === "banco"; });
   const diasSem = (d: Date | null) => (d ? Math.floor((Date.now() - d.getTime()) / (24 * HORA)) : null);
   const catorzeDias = new Date(Date.now() - 14 * 24 * HORA);
@@ -150,21 +176,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   const convPorCliente = new Map<string, string>();
   for (const c of convsAguardando) if (c.clienteId && !convPorCliente.has(c.clienteId)) convPorCliente.set(c.clienteId, c.id);
 
-  const grupos: GrupoCentral[] = [
-    {
-      id: "rascunhos",
-      titulo: "Rascunhos da IA aguardando sua revisão",
-      descricao: "Respostas e follow-ups que o Cérebro preparou. Nada é enviado sem você aprovar.",
-      itens: rascunhos.map((r) => ({
-        id: `rascunho:${r.id}`,
-        titulo: r.conversation.contactName ?? r.conversation.externalPhone,
-        detalhe: r.body.length > 140 ? r.body.slice(0, 140) + "…" : r.body,
-        severidade: "media" as const,
-        href: `/atendimento?conversa=${r.conversation.id}`,
-        hrefLabel: "Revisar no WhatsApp",
-        quando: formatDateTime(r.sentAt),
-      })),
-    },
+  const gruposBrutos: GrupoCentral[] = [
     {
       id: "aguardando",
       titulo: "Clientes aguardando a sua resposta",
@@ -342,6 +354,12 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     },
   ];
 
+  // Itens resolvidos pelo vendedor saem da relação (e cada item leva o
+  // clienteId para o "Resolvido" saber quando reabrir).
+  const grupos: GrupoCentral[] = gruposBrutos.map((g) => ({
+    ...g,
+    itens: g.itens.filter((i) => !chavesOcultas.has(i.id)).map((i) => ({ ...i, clienteId: i.clienteId ?? clienteIdDoItem(i) })),
+  }));
   const todos = grupos.flatMap((g) => g.itens);
 
   // Gráficos: por grupo, por severidade e tendência de 14 dias dos alertas do ZEUS.

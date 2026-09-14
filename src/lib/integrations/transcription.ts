@@ -38,7 +38,7 @@ export async function transcreverBuffer(
     );
   }
 
-  const ext = mimeType.includes("mp3") ? "mp3" : mimeType.includes("wav") ? "wav" : "ogg";
+  const ext = mimeType.includes("mp3") ? "mp3" : mimeType.includes("wav") ? "wav" : mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") || mimeType.includes("m4a") ? "m4a" : "ogg";
   const form = new FormData();
   form.append("file", new Blob([audio], { type: mimeType }), `audio.${ext}`);
   form.append("model", p.model);

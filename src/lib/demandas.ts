@@ -16,6 +16,7 @@ export const COLUNA_CONCLUIDA = "demandas_concluida";
 
 export const ROTULO_ORIGEM: Record<string, string> = {
   manual: "Você",
+  audio: "Por áudio",
   orientador: "Orientador",
   cadencia: "Cadência",
   posvenda: "Pós-venda",
@@ -48,13 +49,14 @@ export type DemandaDTO = {
   concluida: boolean;
   concluidaEm: string | null;
   criadoEm: string;
+  ordem: number;
 };
 
 export type GrupoDemandas = { id: "atrasadas" | "hoje" | "semana" | "depois" | "sem_prazo" | "concluidas"; titulo: string; itens: DemandaDTO[] };
 
 export async function listarDemandas(): Promise<{ grupos: GrupoDemandas[]; abertas: number; atrasadas: number; hoje: number }> {
   const tarefas = await db.tarefaKanban.findMany({
-    orderBy: [{ dueDate: "asc" }, { criadoEm: "desc" }],
+    orderBy: [{ ordem: "asc" }, { dueDate: "asc" }, { criadoEm: "desc" }],
     include: { cliente: { select: { nome: true } } },
     take: 400,
   });
@@ -69,7 +71,7 @@ export async function listarDemandas(): Promise<{ grupos: GrupoDemandas[]; abert
     dueDate: t.dueDate?.toISOString() ?? null,
     prioridade: (["alta", "normal", "baixa"].includes(t.prioridade) ? t.prioridade : "normal") as Prioridade,
     origem: t.origem, concluida: t.coluna === COLUNA_CONCLUIDA, concluidaEm: t.concluidaEm?.toISOString() ?? null,
-    criadoEm: t.criadoEm.toISOString(),
+    criadoEm: t.criadoEm.toISOString(), ordem: t.ordem,
   });
 
   const grupos: GrupoDemandas[] = [
@@ -93,7 +95,9 @@ export async function listarDemandas(): Promise<{ grupos: GrupoDemandas[]; abert
     else if (t.dueDate < fimSemana) grupos[2].itens.push(d);
     else grupos[3].itens.push(d);
   }
-  for (const g of grupos) g.itens.sort((a, b) => peso[a.prioridade] - peso[b.prioridade] || (a.dueDate ?? "9").localeCompare(b.dueDate ?? "9"));
+  // Ordem manual primeiro (quem arrastou manda); novas (ordem 0) entram no
+  // topo; empate por prioridade e prazo.
+  for (const g of grupos) g.itens.sort((a, b) => a.ordem - b.ordem || peso[a.prioridade] - peso[b.prioridade] || (a.dueDate ?? "9").localeCompare(b.dueDate ?? "9"));
   const abertas = grupos.slice(0, 5).reduce((s, g) => s + g.itens.length, 0);
   return { grupos, abertas, atrasadas: grupos[0].itens.length, hoje: grupos[1].itens.length };
 }

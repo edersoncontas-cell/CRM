@@ -261,6 +261,18 @@ export async function aplicarMigracoes(): Promise<void> {
     await db.$executeRawUnsafe(`UPDATE "TarefaKanban" SET "coluna" = 'demandas' WHERE "coluna" NOT IN ('demandas', 'demandas_concluida')`);
     await db.$executeRawUnsafe(`ALTER TABLE "Visita" ADD COLUMN IF NOT EXISTS "cidade" TEXT`);
     await db.$executeRawUnsafe(`DROP TABLE IF EXISTS "ColunaDemanda"`);
+
+    // Itens resolvidos da Central de alertas (v14).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "AlertaOculto" (
+        "id"        TEXT NOT NULL,
+        "chave"     TEXT NOT NULL,
+        "clienteId" TEXT,
+        "ocultoEm"  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "AlertaOculto_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "AlertaOculto_chave_key" ON "AlertaOculto"("chave")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

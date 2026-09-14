@@ -16,7 +16,6 @@
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
-import { inserirMensagem } from "@/lib/whatsapp-store";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
@@ -34,6 +33,9 @@ export type AnaliseOrientador = {
   proximaAcao: string;
   oportunidadesPerdidas: string[];
   alertas: string[];
+  // true quando a conversa não deixou pendência (cliente agradeceu, assunto
+  // resolvido, sem pergunta em aberto): o cliente sai de "aguardando resposta".
+  conversaEncerrada: boolean;
 };
 
 const ESTAGIOS = [
@@ -55,6 +57,7 @@ function fallback(motivo: string): AnaliseOrientador {
     proximaAcao: motivo,
     oportunidadesPerdidas: [],
     alertas: [],
+    conversaEncerrada: false,
   };
 }
 
@@ -95,7 +98,8 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "temperatura": "muito_quente"|"quente"|"morna"|"fria",
   "proximaAcao": string,                   // uma ação: o quê + como + quando, com máquina/valor/concorrente reais
   "oportunidadesPerdidas": string[],       // perguntas que faltaram, sinais de compra ignorados, objeções não tratadas
-  "alertas": string[]                      // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
+  "alertas": string[],                     // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
+  "conversaEncerrada": boolean             // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto.
@@ -199,6 +203,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
       proximaAcao: typeof parsed.proximaAcao === "string" ? parsed.proximaAcao : "",
       oportunidadesPerdidas,
       alertas,
+      conversaEncerrada: parsed.conversaEncerrada === true,
     };
   } catch (e) {
     console.error("[orientador] falha na análise:", e);
@@ -244,23 +249,13 @@ export async function processarOrientador(args: {
     estilo: args.estilo,
   });
 
-  let respondido = false;
-  if (reply) {
-    // Resposta automática DESLIGADA por decisão do vendedor: a IA só sugere
-    // rascunho, nunca envia sozinha.
-    {
-      // Sem envio automático (Cérebro desligado, ou modo auditoria ligado):
-      // salva como rascunho — o vendedor vê a sugestão no painel e decide se envia.
-      await inserirMensagem(args.conv.id, {
-        direction: "OUT", body: reply, origin: "CRM", operatorDisplayName: "Orientador de Vendas (rascunho)",
-        isDraft: true, draftStatus: "PENDING",
-      });
-      respondido = true;
-    }
-  }
+  // Nada é enviado nem vira rascunho sozinho (decisão do vendedor): a melhor
+  // resposta fica guardada no painel do Orientador e aparece dentro da
+  // conversa quando ele chama o Cérebro. "respondido" fica true porque a
+  // mensagem foi tratada (não precisa do fallback de resposta).
+  const respondido = !!reply;
 
-  // 2) Análise completa (painel) — mais lenta, roda depois de já ter
-  // respondido/rascunhado, sem atrasar o cliente.
+  // 2) Análise completa (painel).
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -275,7 +270,7 @@ export async function processarOrientador(args: {
     return { respondido };
   }
 
-  const { alertas, ...campos } = analise;
+  const { alertas, conversaEncerrada, ...campos } = analise;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
     create: { clienteId: args.conv.clienteId, ...campos, melhorResposta: reply || null },
@@ -285,8 +280,16 @@ export async function processarOrientador(args: {
   for (const mensagem of alertas) {
     await criarAlertaOrientadorSeNovo(args.conv.clienteId, mensagem).catch(() => {});
   }
+  await aplicarConversaEncerrada(args.conv.clienteId, conversaEncerrada);
 
   return { respondido };
+}
+
+// A IA reconheceu que a conversa terminou sem pendência: o cliente sai de
+// "aguardando resposta" (e some dos alertas "aguardando"/"top 5").
+async function aplicarConversaEncerrada(clienteId: string, encerrada: boolean) {
+  if (!encerrada) return;
+  await db.cliente.updateMany({ where: { id: clienteId, aguardandoResposta: true }, data: { aguardandoResposta: false } }).catch(() => {});
 }
 
 
@@ -322,13 +325,14 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
         : Promise.resolve(""),
     ]);
     await consumirOrcamentoIA();
-    const { alertas, ...campos } = analise;
+    const { alertas, conversaEncerrada, ...campos } = analise;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
       create: { clienteId: conv.clienteId, ...campos, melhorResposta: resposta || null },
       update: { ...campos, ...(resposta ? { melhorResposta: resposta } : {}) },
     });
     for (const mensagem of alertas) await criarAlertaOrientadorSeNovo(conv.clienteId, mensagem).catch(() => {});
+    await aplicarConversaEncerrada(conv.clienteId, conversaEncerrada);
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };

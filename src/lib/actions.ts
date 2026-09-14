@@ -1305,6 +1305,33 @@ export async function editarDemandaAction(id: string, dados: {
   return { ok: true };
 }
 
+// Ordem manual (arrastar na lista): grava a posição de cada demanda do grupo.
+export async function reordenarDemandasAction(ids: string[]): Promise<{ ok: boolean }> {
+  const limpos = ids.filter((id) => typeof id === "string" && id).slice(0, 200);
+  if (!limpos.length) return { ok: false };
+  await db.$transaction(limpos.map((id, i) => db.tarefaKanban.update({ where: { id }, data: { ordem: i + 1 } })));
+  revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// Central de alertas: "Resolvido" em qualquer item. Some da relação e só
+// volta quando o cliente mandar mensagem nova (ver central-alertas.ts).
+export async function ocultarItemCentralAction(chave: string, clienteId?: string | null): Promise<{ ok: boolean }> {
+  if (!chave || chave.length > 200) return { ok: false };
+  await db.alertaOculto.upsert({
+    where: { chave },
+    create: { chave, clienteId: clienteId ?? null },
+    update: { clienteId: clienteId ?? null, ocultoEm: new Date() },
+  });
+  if (chave.startsWith("aguardando:") || chave.startsWith("atacar:")) {
+    // Resolver um "aguardando resposta" também tira o cliente da fila.
+    const id = chave.split(":")[1];
+    if (id) await db.cliente.updateMany({ where: { id }, data: { aguardandoResposta: false } }).catch(() => {});
+  }
+  revalidatePath("/alertas"); revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function alternarDemandaAction(id: string, concluida: boolean): Promise<{ ok: boolean }> {
   await db.tarefaKanban.update({ where: { id }, data: concluida ? { coluna: "demandas_concluida", concluidaEm: new Date() } : { coluna: "demandas", concluidaEm: null } });
   revalidatePath("/pipeline"); revalidatePath("/alertas"); revalidatePath("/dashboard");

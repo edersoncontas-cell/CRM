@@ -34,7 +34,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v11: janela de horário e limite diário da resposta automática.
 // v12: respostas prontas do WhatsApp.
 // v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
-export const CHAVE_MANUTENCAO = "manutencao.v13";
+// v14: itens resolvidos da Central de alertas (AlertaOculto).
+export const CHAVE_MANUTENCAO = "manutencao.v14";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

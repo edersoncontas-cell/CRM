@@ -289,6 +289,16 @@ model TarefaKanban {
 }
 
 
+// Itens da Central de alertas que o vendedor marcou como resolvidos. A chave
+// é o id do item (ex.: "aguardando:<clienteId>"). Quando o cliente manda
+// mensagem nova depois de ocultoEm, a linha é apagada e o item volta.
+model AlertaOculto {
+  id        String   @id @default(cuid())
+  chave     String   @unique
+  clienteId String?
+  ocultoEm  DateTime @default(now())
+}
+
 model ColunaFunil {
   id        String   @id @default(cuid())
   titulo    String
