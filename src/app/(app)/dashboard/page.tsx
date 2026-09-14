@@ -3,6 +3,9 @@ import { diasDesde, saudacaoBrasilia, formatCurrency } from "@/lib/utils";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
 import { FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
+import { NoticiasSetor } from "@/components/NoticiasSetor";
+import { obterCotacoes } from "@/lib/mercado";
+import { obterNoticias } from "@/lib/noticias";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
@@ -48,7 +51,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     negociacoes, futuros, demandasHoje, proximasVisitas,
     visitasSemanaAgendadas, negociosCriadosSemana,
     clientes30DiasSemContato, colunasFunil,
-    vendasFaturadas, visitasMes, clientesProximaVisitaMes, conversados,
+    vendasFaturadas, visitasMes, clientesProximaVisitaMes, conversados, cotacoes, noticias,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
     db.cliente.findMany({
@@ -80,6 +83,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     db.visita.findMany({ where: { data: { gte: inicioMesCal, lt: fimMesCal } }, select: { data: true } }),
     db.cliente.findMany({ where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } }, select: { proximaVisita: true } }),
     contarClientesConversados(),
+    obterCotacoes(),
+    obterNoticias(),
   ]);
 
   const resumo = resumoVendas(vendasFaturadas, anoSel);
@@ -138,7 +143,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const termometro = [
     { rotulo: "Em negociação", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
     { rotulo: "Em banco", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
-    { rotulo: "30+ dias sem contato", valor: clientes30DiasSemContato.length, cor: T.amarelo, icone: Snowflake, href: "/radar-silencio" },
+    { rotulo: "30+ dias sem contato", valor: clientes30DiasSemContato.length, cor: T.amarelo, icone: Snowflake, href: "/clientes" },
     { rotulo: "Demandas de hoje", valor: demandasHoje, cor: T.verde, icone: ListTodo, href: "/pipeline" },
   ];
   const maxTermometro = Math.max(1, ...termometro.map((p) => p.valor));
@@ -165,7 +170,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
       </div>
 
-      <TickerMercado />
+      <TickerMercado inicial={{ cotacoes, noticias: noticias.itens }} />
 
       {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -332,6 +337,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       <FraseMotivacional />
+
+      <NoticiasSetor />
 
       {/* ── Operacional ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

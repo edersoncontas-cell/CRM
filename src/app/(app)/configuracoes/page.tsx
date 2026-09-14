@@ -128,8 +128,12 @@ export default async function ConfiguracoesPage() {
           <Coffee size={18} className="text-brand-600" /> Cotação do café (letreiro do Dashboard)
         </div>
         <p className="mb-3 text-sm text-slate-600">
-          Não existe API gratuita confiável para café arábica/conilon — atualize aqui manualmente (o dólar do letreiro é
-          buscado ao vivo, automaticamente).
+          A cotação agora é <b>automática</b>: café arábica (bolsa de Nova York) e conilon/robusta (bolsa de Londres),
+          convertidos para R$/saca pelo dólar do momento e atualizados a cada minuto no letreiro do Dashboard.
+          Os valores abaixo são só uma <b>reserva</b>, usados se a bolsa ficar indisponível.
+          {cotacoes.fonte === "mercado" && cotacoes.cafeAtualizadoEm && (
+            <> Última leitura automática: {new Date(cotacoes.cafeAtualizadoEm).toLocaleString("pt-BR")}.</>
+          )}
         </p>
         <AtualizarCotacaoCafeForm arabica={cotacoes.cafeArabica} conilon={cotacoes.cafeConilon} />
       </Card>

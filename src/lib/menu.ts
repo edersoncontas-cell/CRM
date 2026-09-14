@@ -2,11 +2,8 @@
 // Configurações (visibilidade dos itens). Mantém ícones e rótulos num só lugar.
 
 import {
-  LayoutDashboard, Users, KanbanSquare, Calendar,
-  TrendingDown, Sparkles, Megaphone, Settings, Calculator,
-  Swords, Send, CalendarRange, BrainCircuit, MessageCircle,
-  Banknote, ClipboardList, Smartphone, GraduationCap, Star, FileText,
-  Truck, Brain, Handshake, ListTodo, ShieldCheck, Radar, MapPin, Compass, Layers, HeartHandshake,
+  LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, HeartHandshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,22 +27,9 @@ export const GRUPOS: GrupoMenu[] = [
   {
     label: "Vendas",
     links: [
-      { href: "/maquinas", label: "Modelos em Foco", icon: Star },
-      { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
-      { href: "/aplicacoes", label: "Aplicações & Nichos", icon: Layers },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
-      { href: "/resumos", label: "Resumos IA", icon: ClipboardList },
-      { href: "/agenda", label: "Agenda", icon: Calendar },
-      { href: "/simulador", label: "Simulador", icon: Calculator },
-    ],
-  },
-  {
-    label: "Marketing",
-    links: [
-      { href: "/marketing", label: "Marketing IA", icon: BrainCircuit },
-      { href: "/campanhas", label: "Campanhas", icon: Send },
-      { href: "/midia", label: "Mídia", icon: Megaphone },
+      { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
     ],
   },
   {
@@ -58,11 +42,6 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Análise",
     links: [
       { href: "/financeiro", label: "Financeiro", icon: Banknote },
-      { href: "/historico", label: "Histórico de Negócios", icon: ClipboardList },
-      { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
-      { href: "/sugestoes", label: "Sugestões IA", icon: Sparkles },
-      { href: "/radar", label: "Radar de safra", icon: CalendarRange },
-      { href: "/radar-silencio", label: "Radar de Silêncio", icon: Radar },
     ],
   },
   {
