@@ -9,6 +9,11 @@ import { EntradaAutomatica } from "@/components/EntradaAutomatica";
 const NH_SRC = "/api/foto/nh-escavadeiras.jpg";
 const DYN_SRC = "/api/foto/dynapac-rolos.jpg";
 
+// Sempre renderizado por requisição: a decisão de redirecionar depende de
+// APP_PASSWORD em tempo de execução. Se a página fosse pré-renderizada num
+// build sem a variável, o redirect ficaria congelado no cache estático.
+export const dynamic = "force-dynamic";
+
 export default function LoginPage({
   searchParams,
 }: {
