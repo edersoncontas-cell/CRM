@@ -12,7 +12,7 @@ export function Painel({ titulo, subtitulo, acao, children, className = "", dest
   return (
     <section
       className={`rounded-2xl p-4 ${className}`}
-      style={{ background: destaque ? T.card2 : T.card, border: `1px solid ${T.borda}`, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }}
+      style={{ background: destaque ? T.card2 : T.card, border: `1px solid ${T.borda}`, boxShadow: T.sombra }}
     >
       {(titulo || acao) && (
         <div className="mb-3 flex items-start justify-between gap-2">
@@ -44,7 +44,7 @@ export function Anel({ id, valor, max, cor1, cor2, tamanho = 92, espessura = 9, 
             <stop offset="100%" stopColor={cor2} />
           </linearGradient>
         </defs>
-        <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={espessura} />
+        <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke={T.sobre2} strokeWidth={espessura} />
         <circle
           cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none"
           stroke={`url(#anel-${id})`} strokeWidth={espessura} strokeLinecap="round"
@@ -73,7 +73,7 @@ export function Chip({ ativo, href, children }: { ativo: boolean; href: string; 
     <Link
       href={href}
       className="rounded-lg px-3 py-1 text-xs font-bold transition"
-      style={ativo ? { background: T.rosa, color: "#fff", boxShadow: `0 0 14px ${T.rosa}66` } : { background: "rgba(255,255,255,0.06)", color: T.texto2 }}
+      style={ativo ? { background: T.rosa, color: "#fff", boxShadow: `0 0 14px ${T.rosa}66` } : { background: T.sobre2, color: T.texto2 }}
     >
       {children}
     </Link>
@@ -108,7 +108,7 @@ export function CalendarioVisitas({ ano, mes, diasComVisita, hoje }: { ano: numb
               className="relative flex h-7 items-center justify-center rounded-lg font-semibold"
               style={{
                 color: visitas ? "#111" : ehHoje ? T.texto : T.texto2,
-                background: visitas ? `linear-gradient(135deg, ${T.rosa}, ${T.violeta})` : ehHoje ? "rgba(255,255,255,0.10)" : "transparent",
+                background: visitas ? `linear-gradient(135deg, ${T.rosa}, ${T.violeta})` : ehHoje ? T.sobre3 : "transparent",
                 boxShadow: visitas ? `0 0 10px ${T.rosa}66` : undefined,
                 border: ehHoje && !visitas ? `1px solid ${T.ciano}` : undefined,
               }}

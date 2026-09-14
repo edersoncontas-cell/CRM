@@ -1,50 +1,25 @@
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
-import { KanbanBoard } from "@/components/KanbanBoard";
+import { DemandasLista } from "@/components/DemandasLista";
+import { listarDemandas } from "@/lib/demandas";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
-export default async function PipelinePage() {
+export default async function DemandasPage() {
   await garantirManutencaoSeNecessario();
-
-  const [clientes, colunasDemanda, tarefas] = await Promise.all([
+  const [clientes, { grupos, abertas, atrasadas, hoje }] = await Promise.all([
     db.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
-    db.colunaDemanda.findMany({ orderBy: { ordem: "asc" } }),
-    db.tarefaKanban.findMany({ orderBy: { ordem: "asc" } }),
+    listarDemandas(),
   ]);
-
-  const colunas = colunasDemanda.map((c) => ({
-    id: c.id,
-    titulo: c.titulo,
-    cor: c.cor,
-    fixa: c.fixa,
-  }));
-
-  const demandas = tarefas.map((t) => ({
-    id: t.id,
-    titulo: t.titulo,
-    descricao: t.descricao,
-    coluna: t.coluna,
-    checklist: t.checklist,
-    clienteId: t.clienteId,
-    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-    cidade: t.cidade ?? null,
-  }));
 
   return (
     <div>
       <PageHeader
         titulo="Demandas"
-        subtitulo="Organize suas tarefas e demandas em colunas estilo Kanban"
+        subtitulo="Uma lista só, por prazo: o que você anota e o que o CRM cria sozinho (ligações e visitas da cadência, marcos de pós-venda, próximas ações do Orientador). Toque no círculo para concluir."
       />
-      <KanbanBoard
-        cards={[]}
-        clientes={clientes}
-        colunasDemanda={colunas}
-        demandas={demandas}
-        somenteDemandas={true}
-      />
+      <DemandasLista grupos={grupos} clientes={clientes} abertas={abertas} atrasadas={atrasadas} hoje={hoje} />
     </div>
   );
 }

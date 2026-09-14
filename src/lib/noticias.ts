@@ -73,8 +73,8 @@ async function buscarRss(q: string, tema: string): Promise<Noticia[]> {
 
 const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
-export async function obterNoticias(): Promise<{ itens: Noticia[]; atualizadoEm: string | null }> {
-  if (cacheMem && Date.now() - cacheMem.em < CACHE_MS) return { itens: cacheMem.itens, atualizadoEm: new Date(cacheMem.em).toISOString() };
+// Busca AO VIVO (Google Notícias RSS). Chamada pelo cron /api/cron/mercado.
+export async function atualizarNoticias(): Promise<{ itens: Noticia[]; atualizadoEm: string | null }> {
 
   const listas = await Promise.all(BUSCAS.map((b) => buscarRss(b.q, b.tema)));
   const vistos = new Set<string>();
@@ -95,6 +95,10 @@ export async function obterNoticias(): Promise<{ itens: Noticia[]; atualizadoEm:
   }
 
   // Sem rede/falha: última lista boa.
+  return lerUltimasNoticias();
+}
+
+async function lerUltimasNoticias(): Promise<{ itens: Noticia[]; atualizadoEm: string | null }> {
   try {
     const ultima = JSON.parse((await getConfig(CHAVE_ULTIMAS)) ?? "null") as { em: string; itens: Noticia[] } | null;
     if (ultima?.itens?.length) {
@@ -103,4 +107,13 @@ export async function obterNoticias(): Promise<{ itens: Noticia[]; atualizadoEm:
     }
   } catch {}
   return { itens: [], atualizadoEm: null };
+}
+
+// Leitura rápida para as telas: memória → gravado pelo robô → busca ao vivo
+// só no primeiro uso (nunca houve leitura).
+export async function obterNoticias(): Promise<{ itens: Noticia[]; atualizadoEm: string | null }> {
+  if (cacheMem && Date.now() - cacheMem.em < CACHE_MS) return { itens: cacheMem.itens, atualizadoEm: new Date(cacheMem.em).toISOString() };
+  const gravadas = await lerUltimasNoticias();
+  if (gravadas.itens.length) return gravadas;
+  return atualizarNoticias();
 }

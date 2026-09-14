@@ -151,6 +151,9 @@ model Visita {
   clienteId  String
   data       DateTime
   observacao String?
+  // Cidade/local da visita (pode ser diferente do município do cadastro —
+  // obra em outra cidade). Usada no mapa da semana.
+  cidade     String?
   // Evento correspondente na Google Agenda (integração OAuth) — para apagar
   // junto quando a visita é removida.
   googleEventId String?
@@ -263,28 +266,28 @@ model NotaMaquina {
   @@index([maquinaId])
 }
 
+// Demandas: lista única de tarefas do vendedor (manuais e automáticas).
+// coluna: "demandas" (aberta) | "demandas_concluida" (feita) — nome mantido
+// por compatibilidade com dados antigos.
 model TarefaKanban {
   id         String    @id @default(cuid())
   titulo     String
   descricao  String?
-  coluna     String    @default("a_fazer")
+  coluna     String    @default("demandas")
   ordem      Int       @default(0)
   checklist  String?
   cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   clienteId  String?
   dueDate    DateTime?
   cidade     String?
+  prioridade String    @default("normal") // alta | normal | baixa
+  origem     String    @default("manual") // manual | orientador | cadencia | posvenda | cerebro | zeus
+  chave      String?   // chave de deduplicação das automáticas (origem:cliente:tipo)
+  concluidaEm DateTime?
   criadoEm  DateTime  @default(now())
+  @@index([coluna, dueDate])
 }
 
-model ColunaDemanda {
-  id        String   @id @default(cuid())
-  titulo    String
-  cor       String   @default("border-t-slate-400")
-  ordem     Int      @default(0)
-  fixa      Boolean  @default(false)
-  criadoEm DateTime @default(now())
-}
 
 model ColunaFunil {
   id        String   @id @default(cuid())

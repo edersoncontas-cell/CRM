@@ -21,6 +21,17 @@ export type ItemCentral = {
   quando: string | null;
   // Só nos alertas comerciais do ZEUS: id na tabela Alerta (botão "Resolvido").
   alertaId?: string;
+  // Só no grupo pós-venda: dados completos para o modal de histórico/contato.
+  posVenda?: ItemPosVenda;
+  telefone?: string | null;
+};
+
+export type ItemPosVenda = Awaited<ReturnType<typeof listarClientesPosVenda>>[number];
+
+export type GraficosCentral = {
+  porGrupo: { grupo: string; id: string; total: number; alta: number }[];
+  porSeveridade: { severidade: SeveridadeAlerta; total: number }[];
+  tendencia: { dia: string; criados: number; resolvidos: number }[];
 };
 
 export type GrupoCentral = {
@@ -44,7 +55,7 @@ const ROTULO_TIPO_ALERTA: Record<string, string> = {
   cadencia: "Cadência: ligar ou visitar",
 };
 
-export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; total: number; alta: number }> {
+export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; total: number; alta: number; graficos: GraficosCentral }> {
   const hoje = inicioDoDiaBrasilia();
   const amanha = inicioDoDiaBrasilia(new Date(), 1);
   const depoisDeAmanha = inicioDoDiaBrasilia(new Date(), 2);
@@ -88,6 +99,12 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     }),
     calcularRitmoMetas().catch(() => null),
   ]);
+  const catorzeDias = new Date(Date.now() - 14 * 24 * HORA);
+  const [alertasRecentes, telefones] = await Promise.all([
+    db.alerta.findMany({ where: { criadoEm: { gte: catorzeDias } }, select: { criadoEm: true, resolvido: true } }),
+    db.cliente.findMany({ where: { id: { in: posVenda.map((p) => p.clienteId) } }, select: { id: true, telefone: true } }),
+  ]);
+  const telefonePorCliente = new Map(telefones.map((t) => [t.id, t.telefone]));
 
   // Conversa de cada cliente aguardando resposta (para o link ir direto ao chat).
   const convsAguardando = aguardando.length
@@ -150,19 +167,27 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     },
     {
       id: "posvenda",
-      titulo: "Pós-venda com marco vencido",
-      descricao: "Clientes que compraram e ainda não receberam o contato de 30, 60, 180 ou 365 dias.",
+      titulo: "Pós-venda",
+      descricao: "Quem já comprou e precisa de atenção: marco de 30/60/180/365 dias vencido ou 90+ dias sem contato. Registre o contato ou mande a mensagem daqui.",
       itens: posVenda
-        .filter((p) => p.marcoPendente)
-        .slice(0, 50)
+        .filter((p) => p.marcoPendente || (p.diasSemContato ?? 0) >= 90 || !p.entregaTecnica)
+        .slice(0, 80)
         .map((p) => ({
           id: `posvenda:${p.clienteId}`,
-          titulo: p.nome,
-          detalhe: `Marco de ${p.marcoPendente?.label} pendente${p.maquina ? ` · ${p.maquina}` : ""}${p.diasSemContato != null ? ` · ${p.diasSemContato} dia(s) sem contato` : ""}.`,
-          severidade: (p.diasSemContato ?? 0) >= 60 ? ("alta" as const) : ("media" as const),
-          href: "/pos-venda",
-          hrefLabel: "Abrir pós-venda",
+          titulo: `${p.nome}${p.maquina ? ` · ${p.maquina}` : ""}`,
+          detalhe: [
+            p.marcoPendente ? `Marco de ${p.marcoPendente.label} pendente` : null,
+            !p.entregaTecnica ? "Entrega técnica não registrada" : null,
+            p.diasSemContato != null ? `${p.diasSemContato} dia(s) sem contato` : null,
+            p.dataCompra ? `faturado em ${new Date(p.dataCompra).toLocaleDateString("pt-BR")}` : null,
+            p.municipio,
+          ].filter(Boolean).join(" · "),
+          severidade: (p.diasSemContato ?? 0) >= 120 ? ("alta" as const) : p.marcoPendente ? ("media" as const) : ("baixa" as const),
+          href: `/clientes/${p.clienteId}`,
+          hrefLabel: "Abrir cliente",
           quando: null,
+          posVenda: p,
+          telefone: telefonePorCliente.get(p.clienteId) ?? null,
         })),
     },
     {
@@ -232,5 +257,21 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   ];
 
   const todos = grupos.flatMap((g) => g.itens);
-  return { grupos, total: todos.length, alta: todos.filter((i) => i.severidade === "alta").length };
+
+  // Gráficos: por grupo, por severidade e tendência de 14 dias dos alertas do ZEUS.
+  const porDia = new Map<string, { criados: number; resolvidos: number }>();
+  for (let i = 13; i >= 0; i--) porDia.set(new Date(Date.now() - i * 24 * HORA).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }), { criados: 0, resolvidos: 0 });
+  for (const a of alertasRecentes) {
+    const k = a.criadoEm.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+    const p = porDia.get(k);
+    if (!p) continue;
+    p.criados++;
+    if (a.resolvido) p.resolvidos++;
+  }
+  const graficos: GraficosCentral = {
+    porGrupo: grupos.filter((g) => g.itens.length).map((g) => ({ grupo: g.titulo, id: g.id, total: g.itens.length, alta: g.itens.filter((i) => i.severidade === "alta").length })),
+    porSeveridade: (["alta", "media", "baixa"] as SeveridadeAlerta[]).map((sev) => ({ severidade: sev, total: todos.filter((i) => i.severidade === sev).length })),
+    tendencia: Array.from(porDia.entries()).map(([dia, v]) => ({ dia, ...v })),
+  };
+  return { grupos, total: todos.length, alta: todos.filter((i) => i.severidade === "alta").length, graficos };
 }

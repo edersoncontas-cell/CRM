@@ -36,6 +36,8 @@ const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-
 
 const INDICE = new Map(MUNICIPIOS_ES.map(([nome, lat, lng]) => [normalizar(nome), { lat, lng }]));
 
+export const NOMES_MUNICIPIOS_ES: string[] = MUNICIPIOS_ES.map(([nome]) => nome);
+
 export function coordenadasMunicipioES(nome: string): { lat: number; lng: number } | null {
   return INDICE.get(normalizar(nome)) ?? null;
 }

@@ -58,7 +58,6 @@ type Mensagem = {
 };
 
 type Conexao = { configurado: boolean; conectado: boolean; provedor: "evolution" | "zapi" | null };
-type Settings = { auditMode: boolean; autoHoraInicio: number; autoHoraFim: number; autoLimiteDia: number };
 type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo" | "ignoradas";
 
 const FILTROS: { id: Filtro; label: string }[] = [
@@ -175,7 +174,14 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
   vendedorNome?: string;
 }) {
   const router = useRouter();
-  const [selId, setSelId] = useState<string | null>(convInicial ?? null);
+  const [selId, setSelIdRaw] = useState<string | null>(convInicial ?? null);
+  const [lidas, setLidas] = useState<Set<string>>(() => new Set(convInicial ? [convInicial] : []));
+  // Abrir a conversa marca como lida na hora (a bolinha some), sem esperar a
+  // lista recarregar do servidor.
+  const setSelId = useCallback((id: string | null) => {
+    setSelIdRaw(id);
+    if (id) setLidas((l) => (l.has(id) ? l : new Set(l).add(id)));
+  }, []);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -189,8 +195,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [flags, setFlags] = useState<Record<string, Partial<{ aiActive: boolean; ignored: boolean; contactName: string; clienteId: string | null }>>>({});
   const [menuAberto, setMenuAberto] = useState(false);
-  const [cfgAberto, setCfgAberto] = useState(false);
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [renomeando, setRenomeando] = useState(false);
   const [novoNome, setNovoNome] = useState("");
   const [syncCliente, setSyncCliente] = useState(false);
@@ -234,11 +238,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
     return () => window.removeEventListener("resize", medir);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/whatsapp/settings").then((r) => r.json()).then((d) => setSettings({ auditMode: !!d.auditMode, autoHoraInicio: d.autoHoraInicio ?? 7, autoHoraFim: d.autoHoraFim ?? 20, autoLimiteDia: d.autoLimiteDia ?? 40 })).catch(() => {});
-  }, []);
-
-  const curr = useCallback((c: ConvLista) => ({ ...c, ...(flags[c.id] ?? {}) }), [flags]);
+  const curr = useCallback((c: ConvLista) => ({ ...c, ...(flags[c.id] ?? {}), naoLida: c.naoLida && !lidas.has(c.id) }), [flags, lidas]);
 
   async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; contactName: string; clienteId: string | null; syncCliente: boolean }>) {
     const { syncCliente: _s, ...overlay } = patch;
@@ -247,13 +247,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
       await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     } catch {}
     router.refresh();
-  }
-
-  async function salvarSettings(patch: Partial<Settings>) {
-    setSettings((s) => (s ? { ...s, ...patch } : s));
-    try {
-      await fetch("/api/whatsapp/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
-    } catch {}
   }
 
   async function excluirConversa(c: ConvLista) {
@@ -480,6 +473,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
         if (!vivo) return;
         setMensagens(d.messages ?? []);
         setTemMais(!!d.temMais);
+        // O GET acima gravou lastAccessedAt no servidor; recarrega a lista
+        // para o estado persistido bater com o local.
+        setTimeout(() => router.refresh(), 500);
         const ultimo = d.messages?.[d.messages.length - 1]?.id ?? "";
         const es = new EventSource(`/api/conversations/${selId}/stream${ultimo ? `?after=${ultimo}` : ""}`);
         es.addEventListener("messages", (e) => { try { mergeMsgs(JSON.parse((e as MessageEvent).data)); } catch {} });
@@ -487,7 +483,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
       })
       .catch(() => {});
     return () => { vivo = false; esRef.current?.close(); };
-  }, [selId, mergeMsgs, carregarContexto]);
+  }, [selId, mergeMsgs, carregarContexto, router]);
 
   useEffect(() => {
     const el = chatRef.current;
@@ -542,7 +538,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
     }
   }
 
-  const naoLidas = conversas.filter((c) => c.naoLida && !curr(c).ignored).length;
+  const naoLidas = conversas.filter((c) => { const x = curr(c); return x.naoLida && !x.ignored; }).length;
   const filtradas = conversas
     .map(curr)
     .filter((c) => (filtro === "ignoradas" ? c.ignored : !c.ignored))
@@ -559,7 +555,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
       return nomeConv(c, c.contactName).toLowerCase().includes(q) || c.externalPhone.includes(q.replace(/\D/g, "") || q) || c.previa.toLowerCase().includes(q);
     });
 
-  const modoIA = settings ? (settings.auditMode ? "Rascunho" : "Automática") : "…";
   const negociacaoAberta = contexto?.negociacoes[0] ?? null;
 
   // Mensagens agrupadas por dia (para os separadores).
@@ -593,34 +588,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                 {importando ? <Loader2 size={17} className="animate-spin" /> : <DownloadCloud size={17} />}
               </button>
               <Link href="/atendimento/relatorio" title="Relatório em PDF das conversas" className={botaoIcone}><FileText size={17} /></Link>
-              <div className="relative">
-                <button onClick={() => setCfgAberto((v) => !v)} title={`Modo do Cérebro: ${modoIA}`} className={cn("flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-xs font-bold transition", settings && !settings.auditMode ? "bg-agro-400 text-black" : "bg-white/5 text-brand-200 hover:bg-white/10")}>
-                  <Brain size={15} /> {modoIA}
-                </button>
-                {cfgAberto && settings && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setCfgAberto(false)} />
-                    <div className="absolute right-0 top-11 z-20 w-80 rounded-2xl border border-brand-700 bg-brand-900 p-4 text-left shadow-2xl">
-                      <div className="mb-1 flex items-center gap-1.5 font-bold text-white"><Brain size={15} className="text-agro-400" /> Cérebro no WhatsApp</div>
-                      <p className="mb-3 text-xs text-brand-300">Toda mensagem de cliente é analisada pelo Orientador. O que muda é se a resposta sai sozinha.</p>
-                      <label className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-white/5">
-                        <input type="radio" name="modo" checked={settings.auditMode} onChange={() => salvarSettings({ auditMode: true })} className="mt-0.5 accent-agro-400" />
-                        <span className="text-sm text-brand-100"><b>Rascunho</b> — a IA sugere, você revisa e envia <span className="text-emerald-300">(recomendado)</span></span>
-                      </label>
-                      <label className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-white/5">
-                        <input type="radio" name="modo" checked={!settings.auditMode} onChange={() => salvarSettings({ auditMode: false })} className="mt-0.5 accent-agro-400" />
-                        <span className="text-sm text-brand-100"><b>Automática</b> — só nas conversas com “Auto” ligado, dentro do horário e do limite abaixo</span>
-                      </label>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-brand-300">
-                        <label>Das<input type="number" min={0} max={23} value={settings.autoHoraInicio} onChange={(e) => salvarSettings({ autoHoraInicio: Number(e.target.value) })} className="mt-1 w-full rounded-lg bg-brand-800 px-2 py-1 text-sm text-white" />h</label>
-                        <label>Até<input type="number" min={1} max={24} value={settings.autoHoraFim} onChange={(e) => salvarSettings({ autoHoraFim: Number(e.target.value) })} className="mt-1 w-full rounded-lg bg-brand-800 px-2 py-1 text-sm text-white" />h</label>
-                        <label>Máx/dia<input type="number" min={0} max={1000} value={settings.autoLimiteDia} onChange={(e) => salvarSettings({ autoLimiteDia: Number(e.target.value) })} className="mt-1 w-full rounded-lg bg-brand-800 px-2 py-1 text-sm text-white" /></label>
-                      </div>
-                      <p className="mt-2 text-[11px] text-brand-400">Fora do horário ou acima do limite, a resposta vira rascunho.</p>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
           </div>
           {importMsg && <p className="mt-2 text-[11px] text-agro-300">{importMsg}</p>}
@@ -631,7 +598,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
               className="w-full rounded-xl bg-brand-800 py-2 text-sm text-white placeholder:text-brand-400 outline-none ring-1 ring-transparent focus:ring-agro-400/60" />
             {busca && <button onClick={() => setBusca("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-400 hover:text-white" aria-label="Limpar"><X size={14} /></button>}
           </div>
-          <div className="mt-2 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none]">
+          <div className="mt-2 flex flex-wrap gap-1">
             {FILTROS.map((f) => (
               <button key={f.id} onClick={() => setFiltro(f.id)} className={chip(filtro === f.id)} style={{ minHeight: 28 }}>
                 {f.label}{f.id === "nao_lidas" && naoLidas > 0 ? ` · ${naoLidas}` : ""}
@@ -711,12 +678,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                 )}
               </div>
               <button onClick={() => setBuscaMsg((v) => (v == null ? "" : null))} title="Buscar nas mensagens" className={cn(botaoIcone, buscaMsg != null && "bg-white/10 text-white")}><Search size={17} /></button>
-              {settings && !settings.auditMode && selAtual.clienteId && (
-                <button onClick={() => patchConv(sel, { aiActive: !selAtual.aiActive })} title="Resposta automática nesta conversa"
-                  className={cn("flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-bold transition", selAtual.aiActive ? "bg-agro-400 text-black" : "bg-white/5 text-brand-200 hover:bg-white/10")}>
-                  <Sparkles size={14} /> Auto {selAtual.aiActive ? "on" : "off"}
-                </button>
-              )}
               <button onClick={() => setPainelAberto((v) => !v)} title="Painel do Orientador" className={cn(botaoIcone, "xl:hidden", painelAberto && "bg-white/10 text-white")}><PanelRightOpen size={18} /></button>
               <div className="relative">
                 <button onClick={() => setMenuAberto((v) => !v)} className={botaoIcone} aria-label="Mais opções"><MoreVertical size={18} /></button>

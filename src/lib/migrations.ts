@@ -247,6 +247,20 @@ export async function aplicarMigracoes(): Promise<void> {
         CONSTRAINT "RespostaPronta_pkey" PRIMARY KEY ("id")
       )
     `);
+
+    // Demandas como lista única (v13) + cidade da visita.
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "TarefaKanban"
+        ADD COLUMN IF NOT EXISTS "prioridade"  TEXT NOT NULL DEFAULT 'normal',
+        ADD COLUMN IF NOT EXISTS "origem"      TEXT NOT NULL DEFAULT 'manual',
+        ADD COLUMN IF NOT EXISTS "chave"       TEXT,
+        ADD COLUMN IF NOT EXISTS "concluidaEm" TIMESTAMP WITH TIME ZONE
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TarefaKanban_coluna_dueDate_idx" ON "TarefaKanban"("coluna", "dueDate")`);
+    // Tarefas de colunas personalizadas antigas viram "abertas".
+    await db.$executeRawUnsafe(`UPDATE "TarefaKanban" SET "coluna" = 'demandas' WHERE "coluna" NOT IN ('demandas', 'demandas_concluida')`);
+    await db.$executeRawUnsafe(`ALTER TABLE "Visita" ADD COLUMN IF NOT EXISTS "cidade" TEXT`);
+    await db.$executeRawUnsafe(`DROP TABLE IF EXISTS "ColunaDemanda"`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

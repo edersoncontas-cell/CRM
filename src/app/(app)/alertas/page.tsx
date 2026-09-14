@@ -5,9 +5,9 @@ import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
 
-export default async function AlertasPage() {
+export default async function AlertasPage({ searchParams }: { searchParams: { grupo?: string } }) {
   await garantirManutencaoSeNecessario();
-  const { grupos, total, alta } = await listarCentralAlertas();
+  const { grupos, total, alta, graficos } = await listarCentralAlertas();
 
   return (
     <div>
@@ -15,9 +15,9 @@ export default async function AlertasPage() {
         titulo="Central de alertas"
         subtitulo={total === 0
           ? "Nada pendente. Tudo o que pedir a sua ação aparece aqui."
-          : `${total} item(ns) pedindo ação${alta ? ` · ${alta} urgente(s)` : ""}: rascunhos da IA, clientes aguardando resposta, alertas do ZEUS, pós-venda, visitas, demandas e sistema.`}
+          : `${total} item(ns) pedindo ação${alta ? ` · ${alta} urgente(s)` : ""}: rascunhos da IA, clientes aguardando resposta, alertas do ZEUS, pós-venda, visitas, demandas e meta.`}
       />
-      <CentralAlertasClient grupos={grupos} />
+      <CentralAlertasClient grupos={grupos} graficos={graficos} grupoInicial={searchParams.grupo ?? null} />
     </div>
   );
 }

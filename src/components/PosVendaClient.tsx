@@ -48,7 +48,8 @@ function urgencia(dias: number | null): { tom: "red" | "yellow" | "green" | "sla
   return { tom: "green", label: `${dias} dias sem contato` };
 }
 
-function ModalCliente({ item, onClose }: { item: ItemLista; onClose: () => void }) {
+export type { ItemLista as ItemPosVendaModal };
+export function PosVendaModal({ item, onClose }: { item: ItemLista; onClose: () => void }) {
   const [contatos, setContatos] = useState<Contato[] | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [tipo, setTipo] = useState("ligacao");
@@ -284,7 +285,7 @@ export function PosVendaClient({ clientes }: { clientes: ItemLista[] }) {
         })}
       </div>
 
-      {aberto && <ModalCliente item={aberto} onClose={() => setAberto(null)} />}
+      {aberto && <PosVendaModal item={aberto} onClose={() => setAberto(null)} />}
     </>
   );
 }

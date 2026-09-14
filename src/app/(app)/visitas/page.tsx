@@ -4,6 +4,9 @@ import { formatDate, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils"
 import { NovaVisitaForm } from "@/components/NovaVisitaForm";
 import { BotaoRemoverVisita } from "@/components/BotaoRemoverVisita";
 import { MapPin, Calendar, Clock } from "lucide-react";
+import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
+import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
+import { dataIsoBrasilia } from "@/lib/utils";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -28,14 +31,16 @@ export default async function VisitasPage() {
   // Sábado 00:00 — corte do quadro de dias úteis (seg-sex, só isso vira coluna)
   const fimDiasUteis = new Date(inicioSemana); fimDiasUteis.setDate(inicioSemana.getDate() + 5);
 
-  const [visitas, clientes] = await Promise.all([
+  const [visitas, clientesRaw] = await Promise.all([
     db.visita.findMany({
       include: { cliente: { include: { municipio: true } } },
       orderBy: { data: "asc" },
       take: 300,
     }),
-    db.cliente.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
+    db.cliente.findMany({ select: { id: true, nome: true, municipio: { select: { nome: true } } }, orderBy: { nome: "asc" } }),
   ]);
+  const clientes = clientesRaw.map((c) => ({ id: c.id, nome: c.nome, cidade: c.municipio?.nome ?? null }));
+  const cidades = NOMES_MUNICIPIOS_ES;
 
   const estaSemanaCompleta = visitas.filter((v) => v.data >= inicioSemana && v.data < fimSemanaCompleta);
   const estaSemanaUtil = estaSemanaCompleta.filter((v) => v.data < fimDiasUteis);
@@ -55,13 +60,30 @@ export default async function VisitasPage() {
     };
   });
 
+  // Pontos do mapa: cidade da visita (ou município do cadastro) → coordenada.
+  const visitasMapa = estaSemanaCompleta.map((v) => {
+    const cidade = v.cidade ?? v.cliente.municipio?.nome ?? null;
+    const coord = cidade ? coordenadasMunicipioES(cidade) ?? (v.cliente.municipio?.lat != null && v.cliente.municipio.lng != null ? { lat: v.cliente.municipio.lat, lng: v.cliente.municipio.lng } : null) : null;
+    return {
+      id: v.id, clienteId: v.clienteId, clienteNome: v.cliente.nome, cidade, observacao: v.observacao,
+      hora: horaLocal(v.data), dataIso: dataIsoBrasilia(v.data), lat: coord?.lat ?? null, lng: coord?.lng ?? null,
+    };
+  });
+  const diasMapa = dias.map((d) => ({ iso: d.iso, nome: d.nome, label: d.label, ehHoje: d.ehHoje }));
+  const diaInicial = dias.find((d) => d.ehHoje)?.iso ?? dias[0].iso;
+
   return (
     <div>
       <PageHeader
         titulo="Visitas"
         subtitulo={`${estaSemanaCompleta.length}/20 agendadas esta semana · ${visitas.length} no total`}
-        acao={<NovaVisitaForm clientes={clientes} />}
+        acao={<NovaVisitaForm clientes={clientes} cidades={cidades} />}
       />
+
+      <section className="mb-6">
+        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
+        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} />
+      </section>
 
       <section>
         <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Agenda da semana</h2>
@@ -92,7 +114,7 @@ export default async function VisitasPage() {
                       </div>
                       <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
                         <Clock size={10} /> {horaLocal(v.data)}
-                        {v.cliente.municipio && <> · <MapPin size={10} className="inline" /> {v.cliente.municipio.nome}</>}
+                        {(v.cidade ?? v.cliente.municipio?.nome) && <> · <MapPin size={10} className="inline" /> {v.cidade ?? v.cliente.municipio?.nome}</>}
                       </div>
                       {v.observacao && <p className="mt-1 text-[11px] text-slate-500 line-clamp-2">{v.observacao}</p>}
                     </div>
@@ -100,7 +122,7 @@ export default async function VisitasPage() {
                 )}
               </div>
               <div className="mt-2">
-                <NovaVisitaForm clientes={clientes} dataFixa={dia.iso} rotuloDataFixa={`${dia.nome}, ${dia.label}`} compacto />
+                <NovaVisitaForm clientes={clientes} cidades={cidades} dataFixa={dia.iso} rotuloDataFixa={`${dia.nome}, ${dia.label}`} compacto />
               </div>
             </div>
           ))}
@@ -135,6 +157,7 @@ type VisitaComCliente = {
   id: string;
   data: Date;
   observacao: string | null;
+  cidade: string | null;
   clienteId: string;
   cliente: { nome: string; municipio: { nome: string } | null };
 };
@@ -149,7 +172,7 @@ function LinhaVisita({ visita: v }: { visita: VisitaComCliente }) {
         </Link>
         <p className="text-xs text-slate-400">
           {formatDate(v.data)} às {horaLocal(v.data)}
-          {v.cliente.municipio && <> · <MapPin size={10} className="inline" /> {v.cliente.municipio.nome}</>}
+          {(v.cidade ?? v.cliente.municipio?.nome) && <> · <MapPin size={10} className="inline" /> {v.cidade ?? v.cliente.municipio?.nome}</>}
           {v.observacao && ` · ${v.observacao}`}
         </p>
       </div>

@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, HeartHandshake, Bell,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,7 +22,6 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/atendimento", label: "WhatsApp", icon: MessageCircle },
       { href: "/visitas", label: "Visitas", icon: MapPin },
       { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/pos-venda", label: "Pós-venda", icon: HeartHandshake },
     ],
   },
   {
@@ -31,6 +30,7 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
+      { href: "/calculadora", label: "Calculadora custo/hora", icon: Calculator },
     ],
   },
   {

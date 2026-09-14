@@ -230,7 +230,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 <Link href={p.href} className="flex items-center gap-2 text-xs">
                   <p.icone size={13} style={{ color: p.cor, flexShrink: 0 }} />
                   <span className="w-36 shrink-0 truncate" style={{ color: T.texto2 }}>{p.rotulo}</span>
-                  <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full" style={{ background: T.sobre2 }}>
                     <span className="block h-full rounded-full" style={{ width: `${Math.max(4, (p.valor / maxTermometro) * 100)}%`, background: `linear-gradient(90deg, ${p.cor}, ${p.cor}88)`, boxShadow: `0 0 8px ${p.cor}66` }} />
                   </span>
                   <span className="w-7 text-right font-black" style={{ color: p.cor }}>{p.valor}</span>
@@ -257,7 +257,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               { rotulo: "Visitas/semana", valor: `${ritmo.visitasSemana}/${Math.ceil(ritmo.visitasPorSemanaNecessarias)}`, sub: "feitas / necessárias", cor: T.ciano },
               { rotulo: "Negociações/semana", valor: `${ritmo.negociacoesSemana}/${Math.ceil(ritmo.negociacoesPorSemanaNecessarias)}`, sub: "novas / necessárias", cor: T.verde },
             ].map((k) => (
-              <div key={k.rotulo} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${T.borda}` }}>
+              <div key={k.rotulo} className="rounded-xl p-3" style={{ background: T.sobre, border: `1px solid ${T.borda}` }}>
                 <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>{k.rotulo}</div>
                 <div className="mt-1 text-xl font-black leading-none" style={{ color: k.cor }}>{k.valor}</div>
                 <div className="mt-1 text-[11px]" style={{ color: T.texto2 }}>{k.sub}</div>
@@ -274,7 +274,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       <Painel titulo="Clientes conversados no WhatsApp" subtitulo="clientes cadastrados com conversa em cada janela · clique para abrir no Orientador de Vendas">
         <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
           {periodosConversados.map(([k, p], i) => (
-            <Link key={k} href={`/orientador?periodo=${k}`} className="rounded-xl p-3 text-center transition hover:brightness-110" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${T.borda}` }}>
+            <Link key={k} href={`/orientador?periodo=${k}`} className="rounded-xl p-3 text-center transition hover:brightness-110" style={{ background: T.sobre, border: `1px solid ${T.borda}` }}>
               <div className="flex items-center justify-center gap-1 text-2xl font-black" style={{ color: coresConversados[i] }}>
                 <Users size={16} /> {conversados[k]}
               </div>
@@ -286,7 +286,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── Linha 2: evolução + ticket por ano ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Painel className="lg:col-span-2" titulo="Evolução de vendas" subtitulo={`faturamento por mês em ${anoSel} · linha rosa = vendas · tracejado = meta mensal (${resumo.metaMensal.toFixed(1)})`}>
+        <Painel className="lg:col-span-2" titulo="Evolução de vendas" subtitulo={`faturamento por mês em ${anoSel} · linha cheia = vendas · tracejado = meta mensal (${resumo.metaMensal.toFixed(1)})`}>
           <GraficoEvolucao dados={resumo.porMes} metaMensal={resumo.metaMensal} />
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: T.mudo }}>
             <span><TrendingUp size={11} className="mr-1 inline" style={{ color: T.verde }} />Ritmo: <b style={{ color: T.texto }}>{ritmoMensal}</b> vendas/mês</span>
@@ -332,7 +332,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                     <tr key={c.id} style={{ borderTop: `1px solid ${T.borda}` }}>
                       <td className="py-2 pr-2">
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black"
-                          style={{ background: i < 3 ? `linear-gradient(135deg, ${[T.amarelo, T.ciano, T.laranja][i]}, ${T.rosa})` : "rgba(255,255,255,0.08)", color: i < 3 ? "#111" : T.texto2 }}>
+                          style={{ background: i < 3 ? `linear-gradient(135deg, ${[T.amarelo, T.ciano, T.laranja][i]}, ${T.rosa})` : T.sobre2, color: i < 3 ? "#111" : T.texto2 }}>
                           {i < 3 ? <Trophy size={12} /> : i + 1}
                         </span>
                       </td>
@@ -446,7 +446,7 @@ function Lista({ children }: { children: React.ReactNode }) {
 function Linha({ href, esquerda, titulo, sub, direita }: { href: string; esquerda: React.ReactNode; titulo: string; sub?: string; direita?: React.ReactNode }) {
   return (
     <li>
-      <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2 transition active:opacity-70" style={{ background: "rgba(255,255,255,0.04)" }}>
+      <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2 transition active:opacity-70" style={{ background: T.sobre }}>
         <span className="shrink-0">{esquerda}</span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{titulo}</p>

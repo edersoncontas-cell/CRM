@@ -34,7 +34,8 @@ function previsaoComissaoCrdPme(neg: {
 export default async function ComissoesFuturasPage() {
   const TAXA = (await lerParametros()).taxaComissao;
   const negs = await db.negociacao.findMany({
-    where: { status: "ganha", tipoPagamento: "crd_pme" } as any,
+    // Comissão já confirmada como paga (botão em Financeiro/Comissões) sai desta lista.
+    where: { status: "ganha", tipoPagamento: "crd_pme", comissaoPaga: false } as any,
     include: { cliente: { include: { municipio: true } } },
     orderBy: { faturadoEm: "desc" },
   } as any);

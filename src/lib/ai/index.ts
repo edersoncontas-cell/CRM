@@ -65,7 +65,7 @@ function deepseekClient() {
 }
 
 // Gemini usa um formato de API próprio (REST, sem SDK) — chamada direta via fetch.
-async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean }): Promise<string> {
+async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }): Promise<string> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
@@ -75,8 +75,11 @@ async function gemini(system: string, user: string, opts?: { maxTokens?: number;
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
         generationConfig: {
-          maxOutputTokens: opts?.maxTokens ?? 1024,
+          maxOutputTokens: (opts?.maxTokens ?? 1024) + (opts?.raciocinio ? 2048 : 0),
           ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+          // Raciocínio antes de responder (Gemini 2.5): melhora muito análise
+          // de conversa e extração; custa alguns segundos a mais.
+          ...(opts?.raciocinio ? { thinkingConfig: { thinkingBudget: 2048 } } : {}),
         },
       }),
     }
@@ -97,7 +100,7 @@ async function chamarProvedorTexto(
   prov: ProvedorTexto,
   system: string,
   user: string,
-  opts?: { maxTokens?: number; json?: boolean }
+  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }
 ): Promise<string> {
   const maxTokens = opts?.maxTokens ?? 1024;
 
@@ -179,7 +182,7 @@ async function chamarProvedorTexto(
 export async function llmTexto(
   system: string,
   user: string,
-  opts?: { maxTokens?: number; json?: boolean }
+  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }
 ): Promise<string> {
   const provs = provedoresDisponiveis();
   if (!provs.length) throw new Error("Nenhum provedor de IA configurado.");
@@ -359,6 +362,7 @@ export async function analisarConversaIA(
     const raw = await llmTexto(schemaInstrucao(p.marcas, p.regiao) + contextoData + modelos + tom, `Conversa:\n${texto}`, {
       maxTokens: 1024,
       json: true,
+      raciocinio: true,
     });
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);

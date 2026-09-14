@@ -8,11 +8,11 @@ import {
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { Card, Badge, EmptyState } from "@/components/ui";
-import { buscarOrientadorAnalise, criarNegociacaoDoOrientador, descartarCardOrientador } from "@/lib/actions";
+import { buscarOrientadorAnalise, criarNegociacaoDoOrientador, descartarCardOrientador, zerarOrientadorAction, analisarLoteOrientadorAction } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
 import { formatDateTime, cn } from "@/lib/utils";
 import {
-  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles, GripVertical, Handshake,
+  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles, GripVertical, Handshake, RefreshCw, Eraser,
 } from "lucide-react";
 
 type Item = {
@@ -90,31 +90,30 @@ function ZonaColuna({ coluna, arrastando }: { coluna: Coluna; arrastando: boolea
 }
 
 // ── Card arrastável (pelo punho, para não brigar com o toque que abre o detalhe) ──
-function CardOrientador({ a, emAndamento, onAbrir, onConfirmar, onDescartar }: {
-  a: Item; emAndamento: boolean; onAbrir: () => void; onConfirmar: () => void; onDescartar: () => void;
+function CardOrientador({ a, emAndamento, analisando, onAbrir, onConfirmar, onDescartar, onAnalisar }: {
+  a: Item; emAndamento: boolean; analisando: boolean; onAbrir: () => void; onConfirmar: () => void; onDescartar: () => void; onAnalisar: () => void;
 }) {
+  // O card INTEIRO é arrastável (os sensores só ativam depois de mover alguns
+  // pixels, então clique e toque continuam abrindo o detalhe). Os botões
+  // interrompem o arrasto.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: a.clienteId, data: { item: a } });
+  const pararArrasto = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
   return (
-    <div ref={setNodeRef} className={cn("h-full", isDragging && "opacity-40")}>
-      <Card className="flex h-full flex-col transition hover:border-brand-300 hover:shadow-md">
+    <div ref={setNodeRef} {...attributes} {...listeners} className={cn("h-full touch-none", isDragging && "opacity-40")}>
+      <Card className="flex h-full cursor-grab flex-col transition hover:border-brand-300 hover:shadow-md active:cursor-grabbing">
         <div className="mb-2 flex items-start gap-2">
-          <span
-            {...attributes}
-            {...listeners}
-            title="Arraste para uma coluna do funil"
-            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
-          >
+          <span title="Arraste o card até a coluna do funil" className="mt-0.5 shrink-0 rounded-md p-1 text-slate-300">
             <GripVertical size={16} />
           </span>
           <button onClick={onAbrir} className="min-w-0 flex-1 text-left">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-slate-800">{a.clienteNome}</div>
-                {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
-              </div>
-              {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : <Badge tom="slate"><Sparkles size={12} className="mr-1 inline" />analisando</Badge>}
-            </div>
+            <div className="truncate font-semibold text-slate-800">{a.clienteNome}</div>
+            {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
           </button>
+          {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : (
+            <button {...pararArrasto} onClick={(e) => { e.stopPropagation(); onAnalisar(); }} disabled={analisando} title="Pedir a leitura da IA agora" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-agro-400/20 px-2 py-0.5 text-[11px] font-bold text-agro-700 hover:bg-agro-400/40 disabled:opacity-60">
+              {analisando ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {analisando ? "analisando" : "analisar"}
+            </button>
+          )}
         </div>
 
         <button onClick={onAbrir} className="flex-1 text-left">
@@ -142,7 +141,7 @@ function CardOrientador({ a, emAndamento, onAbrir, onConfirmar, onDescartar }: {
           )}
         </button>
 
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3" {...pararArrasto}>
           <button
             onClick={onConfirmar}
             disabled={emAndamento}
@@ -176,11 +175,50 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string; link?: string } | null>(null);
   const [arrastando, setArrastando] = useState<Item | null>(null);
+  const [analisando, setAnalisando] = useState<Set<string>>(new Set());
+  const [lote, setLote] = useState<{ total: number; feitas: number } | null>(null);
   const [, startTransition] = useTransition();
 
+  async function analisarUm(item: Item) {
+    setAnalisando((s) => new Set(s).add(item.clienteId));
+    const r = await analisarLoteOrientadorAction([item.conversaId]);
+    setAnalisando((s) => { const n = new Set(s); n.delete(item.clienteId); return n; });
+    if (r.erros.length) setAviso({ tipo: "erro", texto: r.erros[0] });
+    startTransition(() => router.refresh());
+  }
+
+  // Analisa as conversas sem leitura, das mais recentes para as mais antigas,
+  // em lotes de 3 (limite de tempo de cada chamada).
+  async function analisarRecentes() {
+    const alvo = itens.filter((i) => !removidos.has(i.clienteId) && !i.temperatura).slice(0, 15);
+    if (!alvo.length) { setAviso({ tipo: "ok", texto: "Todos os cards visíveis já têm leitura da IA." }); return; }
+    setLote({ total: alvo.length, feitas: 0 });
+    let feitas = 0;
+    for (let i = 0; i < alvo.length; i += 3) {
+      const grupo = alvo.slice(i, i + 3);
+      setAnalisando((s) => { const n = new Set(s); grupo.forEach((g) => n.add(g.clienteId)); return n; });
+      const r = await analisarLoteOrientadorAction(grupo.map((g) => g.conversaId));
+      feitas += r.feitas;
+      setLote({ total: alvo.length, feitas });
+      setAnalisando((s) => { const n = new Set(s); grupo.forEach((g) => n.delete(g.clienteId)); return n; });
+      if (r.erros.some((e) => e.includes("Orçamento") || e.includes("Nenhuma chave"))) { setAviso({ tipo: "erro", texto: r.erros[0] }); break; }
+      startTransition(() => router.refresh());
+    }
+    setLote(null);
+    startTransition(() => router.refresh());
+  }
+
+  async function zerar() {
+    if (!window.confirm("Zerar o Orientador? Todas as leituras antigas da IA são apagadas e os cards escondidos voltam. As análises novas são feitas sob demanda (botão “analisar” em cada card ou “Analisar recentes”).")) return;
+    const r = await zerarOrientadorAction();
+    setRemovidos(new Set());
+    setAviso({ tipo: "ok", texto: `Orientador zerado: ${r.apagadas} leitura(s) antiga(s) apagada(s). Use “Analisar recentes” para a IA reler as conversas.` });
+    startTransition(() => router.refresh());
+  }
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } })
   );
 
   async function abrir(clienteId: string) {
@@ -250,6 +288,16 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
         ))}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button onClick={analisarRecentes} disabled={!!lote} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60">
+          {lote ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {lote ? `Analisando ${lote.feitas}/${lote.total}…` : "Analisar recentes com a IA"}
+        </button>
+        <button onClick={zerar} disabled={!!lote} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
+          <Eraser size={14} /> Zerar e recomeçar
+        </button>
+        <span className="text-xs text-slate-500">A IA lê a conversa inteira, o cadastro e as negociações antes de opinar. Arraste o card inteiro até a coluna do funil.</span>
+      </div>
+
       {aviso && (
         <div className={`mb-4 flex items-start justify-between gap-3 rounded-xl border p-3 text-sm ${aviso.tipo === "ok" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700"}`}>
           <span>{aviso.texto}{aviso.link && <> <Link href={aviso.link} className="font-semibold underline">Abrir funil</Link></>}</span>
@@ -260,11 +308,11 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
       {/* pointerWithin: a coluna alvo é a que está sob o dedo/ponteiro — com a
           colisão por retângulo, o card (grande) "encostava" em várias colunas
           e o soltar caía na vizinha. */}
-      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setArrastando(null)}>
+      <DndContext id="dnd-orientador" sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setArrastando(null)}>
         {colunas.length > 0 && visiveis.length > 0 && (
-          <div className={cn("mb-4 rounded-2xl border bg-slate-50 p-3 transition md:sticky md:top-2 md:z-20", arrastando ? "border-brand-400 ring-2 ring-brand-200" : "border-slate-200")}>
+          <div className={cn("sticky top-14 z-20 mb-4 rounded-2xl border bg-slate-50 p-3 shadow-sm transition md:top-2", arrastando ? "border-brand-400 ring-2 ring-brand-200" : "border-slate-200")}>
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              <GripVertical size={13} /> {arrastando ? `Solte “${arrastando.clienteNome}” na coluna do funil` : "Arraste um card pelo punho até a coluna do funil (★ = Em negociação, o padrão do botão ✓)"}
+              <GripVertical size={13} /> {arrastando ? `Solte “${arrastando.clienteNome}” na coluna do funil` : "Arraste um card até a coluna do funil (★ = Em negociação, o padrão do botão ✓)"}
             </div>
             <div className="flex flex-wrap gap-2">
               {colunas.map((c) => <ZonaColuna key={c.id} coluna={c} arrastando={!!arrastando} />)}
@@ -285,6 +333,8 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
                 key={a.clienteId}
                 a={a}
                 emAndamento={ocupado === a.clienteId}
+                analisando={analisando.has(a.clienteId)}
+                onAnalisar={() => analisarUm(a)}
                 onAbrir={() => abrir(a.clienteId)}
                 onConfirmar={() => confirmarNegociacao(a)}
                 onDescartar={() => descartar(a)}

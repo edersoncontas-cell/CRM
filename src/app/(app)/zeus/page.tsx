@@ -6,6 +6,7 @@ import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
+import { calcularRitmoMetas } from "@/lib/metas";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ const CRONS_MONITORADOS = [
 export default async function ZeusPage() {
   const inicioDia = inicioDoDiaBrasilia();
 
-  const [status, ativo, settings, heartbeats, eventos, audits, mensagensHoje, acoesHoje, correcoes, alertasAbertos] = await Promise.all([
+  const [status, ativo, , heartbeats, eventos, audits, mensagensHoje, acoesHoje, correcoes, alertasAbertos, rascunhos, cadenciasAtivas, demandasAuto, followUpsHoje, ritmo] = await Promise.all([
     statusConexao().catch(() => null),
     zeusAtivo(),
     getWaSettings(),
@@ -35,6 +36,11 @@ export default async function ZeusPage() {
     db.auditLog.count({ where: { origem: "zeus", criadoEm: { gte: inicioDia } } }),
     db.zeusEvent.count({ where: { tipo: "fix" } }),
     db.alerta.count({ where: { resolvido: false } }),
+    db.whatsAppMessage.count({ where: { isDraft: true, draftStatus: "PENDING" } }),
+    db.cadencia.count({ where: { ativa: true } }),
+    db.tarefaKanban.count({ where: { coluna: "demandas", origem: { not: "manual" } } }),
+    db.zeusEvent.count({ where: { tipo: "acao", criadoEm: { gte: inicioDia } } }),
+    calcularRitmoMetas().catch(() => null),
   ]);
 
   const eventosRows: ZeusEventoRow[] = eventos.map((e) => ({
@@ -56,12 +62,15 @@ export default async function ZeusPage() {
 
       <ZeusPainel
         ativo={ativo}
-        auditMode={settings.auditMode}
         statusZapi={status ? { configurado: status.configurado, conectado: status.conectado, erro: status.erro ?? null } : null}
         heartbeats={heartbeats.map((h) => ({ nome: h.nome, minutosEsperados: h.minutosEsperados, ultimo: h.ultimo ? h.ultimo.toISOString() : null }))}
         iaConfigurada={iaHabilitada()}
         provedorIA={provedorIANome()}
         contadores={{ mensagensHoje, acoesHoje, correcoes, alertasAbertos }}
+        hoje={{
+          rascunhos, cadenciasAtivas, demandasAuto, followUpsHoje,
+          meta: ritmo ? { situacao: ritmo.situacao, resumo: ritmo.resumo, vendasAno: ritmo.vendasAno, metaAnual: ritmo.metaAnual } : null,
+        }}
         eventos={eventosRows}
         audits={auditRows}
       />

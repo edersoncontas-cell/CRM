@@ -19,6 +19,8 @@ import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
 import { processarCadenciasVencidas, type ResumoCadencias } from "@/lib/cadencias";
 import { calcularRitmoMetas } from "@/lib/metas";
+import { garantirDemandaAutomatica } from "@/lib/demandas";
+import { listarClientesPosVenda } from "@/lib/actions";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -293,6 +295,22 @@ async function alertasComerciais(): Promise<number> {
     }
   } catch (e) {
     console.error("[zeus-tick] metas:", e);
+  }
+
+  // Pós-venda: marco vencido vira demanda (uma por cliente e marco).
+  try {
+    const posVenda = await listarClientesPosVenda();
+    for (const p of posVenda.filter((x) => x.marcoPendente).slice(0, 40)) {
+      const r = await garantirDemandaAutomatica({
+        chave: `posvenda:${p.clienteId}:${p.marcoPendente!.tipo}`,
+        titulo: `Pós-venda ${p.marcoPendente!.label}: ligar para ${p.nome}${p.maquina ? ` (${p.maquina})` : ""}`,
+        descricao: "Perguntar da máquina, horímetro, revisão e se tem alguém para indicar. Registrar o contato na Central de alertas.",
+        clienteId: p.clienteId, cidade: p.municipio ?? null, dueDate: new Date(), prioridade: "normal", origem: "posvenda",
+      });
+      if (r.criada) criados++;
+    }
+  } catch (e) {
+    console.error("[zeus-tick] pós-venda → demandas:", e);
   }
 
   // Aguardando resposta há mais de 4h.

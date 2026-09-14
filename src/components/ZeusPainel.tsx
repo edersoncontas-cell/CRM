@@ -5,7 +5,7 @@ import {
   Activity, Power, ShieldAlert, Wrench, Bot, MessageCircle, Database, Zap, Copy, Check, RefreshCw, CheckCircle2, Users,
 } from "lucide-react";
 import {
-  alternarZeusAtivoAction, alternarAuditModeAction, forcarZeusTickAction, resolverZeusEventoAction,
+  alternarZeusAtivoAction, forcarZeusTickAction, resolverZeusEventoAction,
 } from "@/lib/zeus/actions";
 import type { ResumoTick } from "@/lib/zeus/tick";
 import { MesclarClientesModal } from "@/components/MesclarClientesModal";
@@ -61,20 +61,19 @@ function StatusCard({ ok, label, valor, icon: Icon }: { ok: boolean | null; labe
 }
 
 export function ZeusPainel({
-  ativo: ativoInicial, auditMode: auditModeInicial, statusZapi, heartbeats, iaConfigurada, provedorIA, contadores, eventos, audits,
+  ativo: ativoInicial, statusZapi, heartbeats, iaConfigurada, provedorIA, contadores, hoje, eventos, audits,
 }: {
   ativo: boolean;
-  auditMode: boolean;
   statusZapi: { configurado: boolean; conectado: boolean; erro: string | null } | null;
   heartbeats: Heartbeat[];
   iaConfigurada: boolean;
   provedorIA: string | null;
   contadores: { mensagensHoje: number; acoesHoje: number; correcoes: number; alertasAbertos: number };
+  hoje?: { rascunhos: number; cadenciasAtivas: number; demandasAuto: number; followUpsHoje: number; meta: { situacao: string; resumo: string; vendasAno: number; metaAnual: number } | null };
   eventos: ZeusEventoRow[];
   audits: AuditRow[];
 }) {
   const [ativo, setAtivo] = useState(ativoInicial);
-  const [auditMode, setAuditMode] = useState(auditModeInicial);
   const [pending, startTransition] = useTransition();
   const [tickResultado, setTickResultado] = useState<ResumoTick | null>(null);
   const [eventosLocais, setEventosLocais] = useState(eventos);
@@ -90,12 +89,6 @@ export function ZeusPainel({
     const novo = !ativo;
     setAtivo(novo);
     startTransition(async () => { await alternarZeusAtivoAction(novo); });
-  }
-
-  function toggleAuditMode() {
-    const novo = !auditMode;
-    setAuditMode(novo);
-    startTransition(async () => { await alternarAuditModeAction(novo); });
   }
 
   function forcarTick() {
@@ -160,6 +153,31 @@ export function ZeusPainel({
         ))}
       </div>
 
+      {/* O que o ZEUS está cuidando agora */}
+      {hoje && (
+        <div className="rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a" }}>
+          <div className="mb-3 text-xs font-bold uppercase tracking-wide text-zinc-400">No radar do ZEUS</div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { label: "Rascunhos da IA esperando você", valor: hoje.rascunhos, href: "/atendimento", cor: "#BFDE4D" },
+              { label: "Cadências de 7 toques ativas", valor: hoje.cadenciasAtivas, href: "/pipeline", cor: "#f59e0b" },
+              { label: "Demandas criadas pelo CRM em aberto", valor: hoje.demandasAuto, href: "/pipeline", cor: "#34d399" },
+              { label: "Ações automáticas hoje (follow-ups, toques)", valor: hoje.followUpsHoje, href: "/auditoria", cor: "#60a5fa" },
+            ].map((m) => (
+              <a key={m.label} href={m.href} className="rounded-xl p-3 transition hover:brightness-125" style={{ background: "#0f0f11", border: "1px solid #27272a" }}>
+                <div className="text-2xl font-black" style={{ color: m.cor }}>{m.valor}</div>
+                <div className="mt-0.5 text-[11px] text-zinc-500">{m.label}</div>
+              </a>
+            ))}
+          </div>
+          {hoje.meta && (
+            <p className="mt-3 text-xs text-zinc-400">
+              <span className="font-bold" style={{ color: hoje.meta.situacao === "atrasado" ? "#f87171" : hoje.meta.situacao === "adiantado" ? "#4ade80" : "#60a5fa" }}>Meta {hoje.meta.vendasAno}/{hoje.meta.metaAnual} ({hoje.meta.situacao.replace("_", " ")}).</span> {hoje.meta.resumo}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Controles */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl p-4" style={{ background: "#18181b", border: "1px solid #27272a" }}>
         <button
@@ -169,14 +187,6 @@ export function ZeusPainel({
           style={ativo ? { background: "rgba(191,222,77,0.15)", color: "#BFDE4D" } : { background: "rgba(248,113,113,0.15)", color: "#f87171" }}
         >
           <Power size={14} /> {ativo ? "ZEUS ativo — clique para pausar" : "ZEUS pausado — clique para reativar"}
-        </button>
-        <button
-          onClick={toggleAuditMode}
-          disabled={pending}
-          className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-50"
-          style={{ background: "rgba(96,165,250,0.15)", color: "#60a5fa" }}
-        >
-          <ShieldAlert size={14} /> Auto-resposta: {auditMode ? "modo rascunho" : "envio automático"}
         </button>
         <button
           onClick={forcarTick}

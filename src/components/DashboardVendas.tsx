@@ -51,7 +51,7 @@ export function GraficoTicketPorAno({ dados }: { dados: { ano: string; ticket: n
         <CartesianGrid stroke={T.borda} vertical={false} />
         <XAxis dataKey="ano" tick={EIXO} axisLine={false} tickLine={false} />
         <YAxis tick={EIXO} axisLine={false} tickLine={false} tickFormatter={compacto} width={60} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [formatCurrency(v), "Ticket médio"]} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [formatCurrency(v), "Ticket médio"]} cursor={{ fill: T.sobre }} />
         <Bar dataKey="ticket" radius={[8, 8, 0, 0]}>
           {dados.map((_, i) => <Cell key={i} fill={[T.verde, T.ciano, T.violeta][i % 3]} />)}
           <LabelList dataKey="ticket" position="top" formatter={(v: number) => compacto(v)} style={{ fill: T.texto, fontSize: 11, fontWeight: 700 }} />
@@ -97,7 +97,7 @@ export function GraficoBarrasHorizontais({ dados, rotulo = "Vendas" }: { dados: 
       <BarChart data={dados} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }} barCategoryGap={7}>
         <XAxis type="number" hide allowDecimals={false} />
         <YAxis type="category" dataKey="nome" width={112} tick={{ ...EIXO, fill: T.texto2 }} axisLine={false} tickLine={false} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [v, rotulo]} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [v, rotulo]} cursor={{ fill: T.sobre }} />
         <Bar dataKey="qtd" radius={[0, 8, 8, 0]}>
           {dados.map((_, i) => <Cell key={i} fill={CORES_SERIE[i % CORES_SERIE.length]} />)}
           <LabelList dataKey="qtd" position="right" style={{ fill: T.texto, fontSize: 11, fontWeight: 700 }} />

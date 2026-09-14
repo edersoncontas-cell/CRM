@@ -167,43 +167,12 @@ export async function excluirRespostaProntaAction(id: string): Promise<{ ok: boo
 // Roda o Orientador de Vendas sob demanda para a conversa (painel + melhor
 // resposta), sem criar rascunho nem enviar nada. Respeita o orçamento de IA.
 export async function reanalisarConversaAction(conversationId: string): Promise<{ ok: boolean; erro?: string }> {
-  const { iaHabilitada } = await import("@/lib/ai");
-  if (!iaHabilitada()) return { ok: false, erro: "Nenhuma chave de IA configurada." };
-  const { orcamentoIADisponivel, consumirOrcamentoIA } = await import("@/lib/zeus/estado");
-  if (!(await orcamentoIADisponivel())) return { ok: false, erro: "Orçamento diário de IA esgotado. Tente amanhã." };
-  const { montarContextoCliente, montarContextoAcademia } = await import("@/lib/zeus/cerebro-resposta");
-  const { gerarAnaliseOrientador, gerarRespostaRapida } = await import("@/lib/zeus/orientador");
-  const { lerParametros } = await import("@/lib/parametros");
-
-  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId } });
-  if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
-  const p = await lerParametros();
-  const [msgs, estilo] = await Promise.all([
-    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "asc" }, take: 120 }),
-    db.estiloDeFala.findFirst().catch(() => null),
-  ]);
-  if (msgs.length === 0) return { ok: false, erro: "Conversa sem mensagens." };
-  const historico = msgs.map((m) => `[${m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}] ${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
-  const ultimas = msgs.slice(-5).map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
-  const contextoCliente = await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: conv.clienteId, externalPhone: conv.externalPhone });
-  const contextoAcademia = montarContextoAcademia(historico);
-  try {
-    const [analise, resposta] = await Promise.all([
-      gerarAnaliseOrientador({ historico: historico.slice(-2500), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null }),
-      msgs[msgs.length - 1].direction === "IN"
-        ? gerarRespostaRapida({ historico: historico.slice(-2500), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null })
-        : Promise.resolve(""),
-    ]);
-    await consumirOrcamentoIA();
-    const { alertas: _a, ...campos } = analise;
-    await db.orientadorAnalise.upsert({
-      where: { clienteId: conv.clienteId },
-      create: { clienteId: conv.clienteId, ...campos, melhorResposta: resposta || null },
-      update: { ...campos, ...(resposta ? { melhorResposta: resposta } : {}) },
-    });
-    await registrarAudit({ acao: "conversa_analisada", origem: "usuario", descricao: `Orientador reanalisado a pedido na conversa com ${conv.contactName ?? conv.externalPhone}.`, entidade: "WhatsAppConversation", entidadeId: conv.id, clienteId: conv.clienteId }).catch(() => {});
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  const { analisarConversaSemResposta } = await import("@/lib/zeus/orientador");
+  const r = await analisarConversaSemResposta(conversationId);
+  if (r.ok) {
+    const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true, contactName: true, externalPhone: true } });
+    await registrarAudit({ acao: "conversa_analisada", origem: "usuario", descricao: `Orientador reanalisado a pedido na conversa com ${conv?.contactName ?? conv?.externalPhone ?? "cliente"}.`, entidade: "WhatsAppConversation", entidadeId: conversationId, clienteId: conv?.clienteId ?? undefined }).catch(() => {});
+    revalidatePath("/orientador");
   }
+  return r;
 }

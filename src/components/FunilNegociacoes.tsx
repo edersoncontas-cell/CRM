@@ -257,7 +257,7 @@ export function FunilNegociacoes({
       </button>
 
       {/* Funil Kanban com DnD suave */}
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <DndContext id="dnd-funil" sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {colunas.map((col) => {

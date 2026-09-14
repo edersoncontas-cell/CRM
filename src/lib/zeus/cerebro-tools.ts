@@ -717,7 +717,85 @@ const excluirNegociacao: CerebroTool = {
   },
 };
 
+
+// ── Ferramentas novas (inteligência do Cérebro v2) ─────────────────────────
+
+const historicoCliente: CerebroTool = {
+  def: {
+    name: "historico_cliente",
+    description: "Linha do tempo completa de um cliente (mensagens, visitas, negociações, pós-venda, cadência, ações da IA), da mais recente para a mais antiga. Use antes de opinar sobre um cliente ou escrever uma mensagem para ele.",
+    input_schema: { type: "object", properties: { clienteId: { type: "string" }, limite: { type: "number", description: "máximo de eventos (padrão 40)" } }, required: ["clienteId"] },
+  },
+  async executar(input) {
+    const { linhaDoTempoCliente } = await import("@/lib/linha-tempo");
+    const eventos = await linhaDoTempoCliente(s(input.clienteId), { mensagens: 30, auditoria: 20 });
+    const lim = n(input.limite) ?? 40;
+    return { eventos: eventos.slice(0, lim).map((e) => ({ quando: e.quando, tipo: e.tipo, titulo: e.titulo, detalhe: e.detalhe })) };
+  },
+};
+
+const leituraOrientador: CerebroTool = {
+  def: {
+    name: "leitura_orientador",
+    description: "Leitura atual do Orientador de Vendas sobre um cliente: estágio, temperatura, probabilidade, objeções, próxima ação, melhor resposta e oportunidades perdidas.",
+    input_schema: { type: "object", properties: { clienteId: { type: "string" } }, required: ["clienteId"] },
+  },
+  async executar(input) {
+    const a = await db.orientadorAnalise.findUnique({ where: { clienteId: s(input.clienteId) } });
+    if (!a) return { leitura: null, aviso: "Sem leitura ainda. Peça para reanalisar na tela de WhatsApp ou no Orientador." };
+    return { leitura: { estagio: a.estagioVenda, temperatura: a.temperatura, probabilidade: a.probabilidadeFechamento, explicacao: a.probabilidadeExplicacao, perfil: a.perfilComprador, objecoes: a.objecoes, proximaAcao: a.proximaAcao, melhorResposta: a.melhorResposta, oportunidadesPerdidas: a.oportunidadesPerdidas, resumo: a.resumoNegociacao, atualizadoEm: a.atualizadoEm } };
+  },
+};
+
+const ritmoMetas: CerebroTool = {
+  def: {
+    name: "ritmo_metas",
+    description: "Situação da meta do ano: vendas feitas, esperado até hoje, faltam, vendas/visitas/negociações necessárias por semana, previsão do ano. Use para responder 'como estou' ou planejar a semana.",
+    input_schema: { type: "object", properties: {} },
+  },
+  async executar() {
+    const { calcularRitmoMetas } = await import("@/lib/metas");
+    const r = await calcularRitmoMetas();
+    return {
+      metaAnual: r.metaAnual, vendasAno: r.vendasAno, esperadoAteHoje: Math.round(r.esperadoAteHoje * 10) / 10, situacao: r.situacao,
+      faltamAno: r.faltamAno, vendasMes: r.vendasMes, metaMes: Math.ceil(r.metaMes), semanasRestantesAno: Math.ceil(r.semanasRestantesAno),
+      vendasPorSemanaNecessarias: Math.round(r.vendasPorSemanaNecessarias * 10) / 10, visitasPorSemanaNecessarias: Math.ceil(r.visitasPorSemanaNecessarias),
+      negociacoesPorSemanaNecessarias: Math.ceil(r.negociacoesPorSemanaNecessarias), taxaConversao: Math.round(r.taxaConversao * 100), previsaoAno: r.previsaoAno, resumo: r.resumo,
+    };
+  },
+};
+
+const iniciarCadenciaTool: CerebroTool = {
+  def: {
+    name: "iniciar_cadencia",
+    description: "Inicia a cadência de follow-up de 7 toques para um cliente que não responde (30 dias, WhatsApp/ligação/visita). tipo: construtora | pedreira | cafe | prefeitura | locadora | geral.",
+    input_schema: { type: "object", properties: { clienteId: { type: "string" }, tipo: { type: "string" } }, required: ["clienteId"] },
+  },
+  async executar(input) {
+    const { iniciarCadencia } = await import("@/lib/cadencias");
+    const tipo = ["construtora", "pedreira", "cafe", "prefeitura", "locadora", "geral"].includes(s(input.tipo)) ? s(input.tipo) : "geral";
+    const r = await iniciarCadencia(s(input.clienteId), tipo as "geral");
+    if (!r.ok) return { erro: r.erro };
+    await registrarAudit({ acao: "tarefa_criada", origem: "cerebro", descricao: `Cérebro iniciou a cadência de 7 toques (${tipo}).`, entidade: "Cliente", entidadeId: s(input.clienteId), clienteId: s(input.clienteId) });
+    return { ok: true, cadenciaId: r.id };
+  },
+};
+
+const alertasAbertos: CerebroTool = {
+  def: {
+    name: "alertas_abertos",
+    description: "Central de alertas: rascunhos pendentes, clientes aguardando, alertas comerciais, pós-venda vencido, visitas de hoje/amanhã, demandas e meta. Use para 'o que preciso fazer hoje'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  async executar() {
+    const { listarCentralAlertas } = await import("@/lib/central-alertas");
+    const { grupos, total, alta } = await listarCentralAlertas();
+    return { total, urgentes: alta, grupos: grupos.filter((g) => g.itens.length).map((g) => ({ grupo: g.titulo, itens: g.itens.slice(0, 8).map((i) => ({ titulo: i.titulo, detalhe: i.detalhe, severidade: i.severidade })) })) };
+  },
+};
+
 export const CEREBRO_TOOLS: CerebroTool[] = [
+  historicoCliente, leituraOrientador, ritmoMetas, alertasAbertos, iniciarCadenciaTool,
   buscarCliente, detalhesCliente, listarNegociacoes, agenda, buscarMaquina, estoqueUsadas, metricasFunil, conversasAguardando,
   criarCliente, atualizarCliente, atualizarResumoCliente, atualizarEstiloFala, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
   criarTarefa, adicionarVisita, enviarResposta, excluirCliente, excluirNegociacao,
@@ -730,6 +808,11 @@ const TOOL_BY_NAME = new Map(CEREBRO_TOOLS.map((t) => [t.def.name, t]));
 export function rotuloFerramenta(nome: string, input: Record<string, unknown>): string {
   const rotulos: Record<string, string> = {
     buscar_cliente: `Buscando cliente${input.nome ? ` "${s(input.nome)}"` : ""}…`,
+    historico_cliente: "Lendo a linha do tempo do cliente…",
+    leitura_orientador: "Consultando a leitura do Orientador…",
+    ritmo_metas: "Calculando o ritmo da meta…",
+    alertas_abertos: "Consultando a central de alertas…",
+    iniciar_cadencia: "Iniciando cadência de 7 toques…",
     detalhes_cliente: "Consultando ficha do cliente…",
     listar_negociacoes: "Consultando negociações…",
     agenda: "Consultando agenda…",

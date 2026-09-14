@@ -17,6 +17,7 @@ import { registrarZeusEvent } from "@/lib/zeus/eventos";
 import { orcamentoIADisponivel, consumirOrcamentoIA } from "@/lib/zeus/estado";
 import { montarContextoCliente, gerarMensagemToqueCadencia } from "@/lib/zeus/cerebro-resposta";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
+import { garantirDemandaAutomatica } from "@/lib/demandas";
 
 const DIA = 24 * 60 * 60 * 1000;
 
@@ -241,6 +242,12 @@ async function prepararRascunhoToque(cadenciaId: string, cliente: { id: string; 
 
 async function criarAlertaToque(cliente: { id: string; nome: string }, t: Toque, numero: number) {
   const mensagem = `Toque ${numero}/7 da cadência: ${t.titulo}. ${t.objetivo}`;
+  // Também vira uma demanda para hoje (a lista única do vendedor).
+  await garantirDemandaAutomatica({
+    chave: `cadencia:${cliente.id}:${numero}`,
+    titulo: `${t.canal === "ligacao" ? "Ligar para" : "Visitar"} ${cliente.nome} (toque ${numero}/7)`,
+    descricao: t.objetivo, clienteId: cliente.id, dueDate: new Date(), prioridade: "alta", origem: "cadencia",
+  }).catch(() => {});
   const existente = await db.alerta.findFirst({ where: { clienteId: cliente.id, tipo: "cadencia", resolvido: false } });
   if (existente) await db.alerta.update({ where: { id: existente.id }, data: { mensagem, severidade: "media", diasDesde: t.dia } });
   else await db.alerta.create({ data: { clienteId: cliente.id, tipo: "cadencia", mensagem, severidade: "media", diasDesde: t.dia } });

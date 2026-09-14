@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
-import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
@@ -261,10 +260,17 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
   const horarioRaw = String(formData.get("horario") ?? "").trim();
   const horario = /^\d{2}:\d{2}$/.test(horarioRaw) ? horarioRaw : "12:00";
   const data = new Date(`${dataRaw}T${horario}:00-03:00`);
+  // Cidade da visita: a informada no formulário; senão, o município do cadastro.
+  let cidade = String(formData.get("cidade") ?? "").trim() || null;
+  if (!cidade) {
+    const cli = await db.cliente.findUnique({ where: { id: clienteId }, select: { municipio: { select: { nome: true } } } });
+    cidade = cli?.municipio?.nome ?? null;
+  }
   const visita = await db.visita.create({
     data: {
       clienteId,
       data,
+      cidade,
       observacao: String(formData.get("observacao") ?? "") || null,
     },
   });
@@ -1159,10 +1165,6 @@ export async function desconectarZapi(): Promise<{ ok: boolean }> {
 }
 
 // ---------- Kanban de tarefas ----------
-export async function moverTarefa(id: string, coluna: string) {
-  await db.tarefaKanban.update({ where: { id }, data: { coluna } });
-  revalidatePath("/pipeline");
-}
 
 export async function gerarEstrategiaAction(formData: FormData): Promise<{
   ok: boolean;
@@ -1253,40 +1255,60 @@ export async function excluirProspecto(clienteId: string): Promise<{ ok: boolean
   return { ok: true };
 }
 
-// ---------- Demandas (cards estilo Trello) ----------
+// ---------- Demandas (lista única) ----------
 
-// Cria uma tarefa (card livre) em uma coluna de demandas.
-export async function criarTarefa(formData: FormData) {
-  const titulo = String(formData.get("titulo") ?? "").trim();
-  const coluna = String(formData.get("coluna") ?? "demandas") || "demandas";
-  if (!titulo) return;
-  const descricao = String(formData.get("descricao") ?? "").trim() || null;
-  const checklist = String(formData.get("checklist") ?? "").trim() || null;
-  const cidade = String(formData.get("cidade") ?? "").trim();
-  const dueDate = String(formData.get("dueDate") ?? "").trim();
-  const ultima = await db.tarefaKanban.findFirst({
-    where: { coluna },
-    orderBy: { ordem: "desc" },
-    select: { ordem: true },
-  });
+export async function criarDemandaAction(dados: {
+  titulo: string; descricao?: string; clienteId?: string | null; cidade?: string; dueDate?: string; prioridade?: string; checklist?: string;
+}): Promise<{ ok: boolean; erro?: string }> {
+  const titulo = (dados.titulo ?? "").trim();
+  if (!titulo) return { ok: false, erro: "Escreva o que precisa ser feito." };
+  const prioridade = ["alta", "normal", "baixa"].includes(dados.prioridade ?? "") ? dados.prioridade! : "normal";
   await db.tarefaKanban.create({
-    data: { titulo, descricao, coluna, checklist, ordem: (ultima?.ordem ?? 0) + 1, cidade: cidade || null, dueDate: dueDate ? new Date(dueDate) : null },
+    data: {
+      titulo: titulo.slice(0, 160), descricao: (dados.descricao ?? "").trim() || null, clienteId: dados.clienteId || null,
+      cidade: (dados.cidade ?? "").trim() || null, dueDate: dados.dueDate ? new Date(dados.dueDate) : null, prioridade, origem: "manual",
+      checklist: (dados.checklist ?? "").trim() || null, coluna: "demandas",
+    },
   });
-  revalidatePath("/pipeline");
+  revalidatePath("/pipeline"); revalidatePath("/alertas"); revalidatePath("/dashboard");
+  return { ok: true };
 }
 
-// Edita título, descrição e checklist de uma tarefa.
-export async function editarTarefa(id: string, formData: FormData) {
-  const titulo = String(formData.get("titulo") ?? "").trim();
-  if (!titulo) return;
+export async function editarDemandaAction(id: string, dados: {
+  titulo: string; descricao?: string; clienteId?: string | null; cidade?: string; dueDate?: string; prioridade?: string; checklist?: string;
+}): Promise<{ ok: boolean; erro?: string }> {
+  const titulo = (dados.titulo ?? "").trim();
+  if (!titulo) return { ok: false, erro: "Escreva o que precisa ser feito." };
+  const prioridade = ["alta", "normal", "baixa"].includes(dados.prioridade ?? "") ? dados.prioridade! : "normal";
   await db.tarefaKanban.update({
     where: { id },
     data: {
-      titulo,
-      descricao: String(formData.get("descricao") ?? "").trim() || null,
-      checklist: String(formData.get("checklist") ?? "").trim() || null,
+      titulo: titulo.slice(0, 160), descricao: (dados.descricao ?? "").trim() || null, clienteId: dados.clienteId || null,
+      cidade: (dados.cidade ?? "").trim() || null, dueDate: dados.dueDate ? new Date(dados.dueDate) : null, prioridade,
+      checklist: (dados.checklist ?? "").trim() || null,
+    },
+  });
+  revalidatePath("/pipeline"); revalidatePath("/alertas");
+  return { ok: true };
+}
+
+export async function alternarDemandaAction(id: string, concluida: boolean): Promise<{ ok: boolean }> {
+  await db.tarefaKanban.update({ where: { id }, data: concluida ? { coluna: "demandas_concluida", concluidaEm: new Date() } : { coluna: "demandas", concluidaEm: null } });
+  revalidatePath("/pipeline"); revalidatePath("/alertas"); revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+// Compatibilidade (Cérebro e Next Best Action): cria uma demanda a partir de
+// FormData ou de uma ação sugerida.
+export async function criarTarefa(formData: FormData) {
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  if (!titulo) return;
+  await db.tarefaKanban.create({
+    data: {
+      titulo: titulo.slice(0, 160), descricao: String(formData.get("descricao") ?? "").trim() || null, coluna: "demandas",
       cidade: String(formData.get("cidade") ?? "").trim() || null,
       dueDate: String(formData.get("dueDate") ?? "").trim() ? new Date(String(formData.get("dueDate"))) : null,
+      origem: String(formData.get("origem") ?? "cerebro") || "cerebro",
     },
   });
   revalidatePath("/pipeline");
@@ -1294,49 +1316,7 @@ export async function editarTarefa(id: string, formData: FormData) {
 
 export async function excluirTarefa(id: string) {
   await db.tarefaKanban.delete({ where: { id } });
-  revalidatePath("/pipeline");
-}
-
-// ---------- Colunas de demandas ----------
-
-export async function criarColunaDemanda(titulo: string) {
-  const nome = titulo.trim();
-  if (!nome) return { ok: false };
-  await garantirColunasDemanda();
-  const total = await db.colunaDemanda.count();
-  const cor = CORES_COLUNA[total % CORES_COLUNA.length];
-  await db.colunaDemanda.create({ data: { titulo: nome, cor, ordem: total } });
-  revalidatePath("/pipeline");
-  return { ok: true };
-}
-
-// Exclui uma coluna personalizada. As fixas não podem ser removidas. Os cards
-// da coluna voltam para "Demandas" para não se perderem.
-export async function excluirColunaDemanda(id: string) {
-  const col = await db.colunaDemanda.findUnique({ where: { id } });
-  if (!col || col.fixa) return { ok: false, erro: "Coluna fixa não pode ser excluída." };
-  await db.tarefaKanban.updateMany({ where: { coluna: id }, data: { coluna: "demandas" } });
-  await db.colunaDemanda.delete({ where: { id } });
-  revalidatePath("/pipeline");
-  return { ok: true };
-}
-
-// Renomeia uma coluna de demanda (o id permanece o mesmo).
-export async function renomearColunaDemanda(id: string, titulo: string) {
-  const nome = titulo.trim();
-  if (!nome) return { ok: false };
-  await db.colunaDemanda.update({ where: { id }, data: { titulo: nome } });
-  revalidatePath("/pipeline");
-  return { ok: true };
-}
-
-// Reordena as colunas de demanda conforme a lista de ids recebida.
-export async function reordenarColunasDemanda(ids: string[]) {
-  await Promise.all(
-    ids.map((id, i) => db.colunaDemanda.update({ where: { id }, data: { ordem: i } }))
-  );
-  revalidatePath("/pipeline");
-  return { ok: true };
+  revalidatePath("/pipeline"); revalidatePath("/alertas");
 }
 
 // ---------- Resumos de conversa (página /resumos) ----------
@@ -1553,10 +1533,13 @@ export async function criarTarefaDeAcao(clienteId: string, acao: string): Promis
   const ultima = await db.tarefaKanban.findFirst({ where: { coluna: "demandas" }, orderBy: { ordem: "desc" }, select: { ordem: true } });
   await db.tarefaKanban.create({
     data: {
-      titulo: acao.slice(0, 140),
+      titulo: acao.slice(0, 160),
       descricao: cliente ? `Cliente: ${cliente.nome}` : null,
       coluna: "demandas",
       clienteId,
+      origem: "orientador",
+      prioridade: "alta",
+      dueDate: new Date(Date.now() + 2 * 86400000),
       ordem: (ultima?.ordem ?? 0) + 1,
     },
   });
@@ -2245,6 +2228,35 @@ export async function listarOrientadorPorPeriodo(periodo: PeriodoOrientador) {
     });
   }
   return itens;
+}
+
+// "Zerar e recomeçar": apaga todas as leituras antigas do Orientador (e os
+// alertas gerados por elas) e volta a mostrar cards escondidos. As análises
+// novas são feitas sob demanda (botão em cada card / "Analisar recentes").
+export async function zerarOrientadorAction(): Promise<{ ok: boolean; apagadas: number }> {
+  const r = await db.orientadorAnalise.deleteMany({});
+  await db.alerta.updateMany({ where: { tipo: "orientador", resolvido: false }, data: { resolvido: true } }).catch(() => {});
+  await db.cliente.updateMany({ where: { orientadorOcultoEm: { not: null } }, data: { orientadorOcultoEm: null } }).catch(() => {});
+  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Orientador de Vendas zerado: ${r.count} leitura(s) antiga(s) apagada(s).` }).catch(() => {});
+  revalidatePath("/orientador");
+  revalidatePath("/atendimento");
+  return { ok: true, apagadas: r.count };
+}
+
+// Analisa até 3 conversas por chamada (limite de tempo da função); o cliente
+// chama em lotes até acabar.
+export async function analisarLoteOrientadorAction(conversaIds: string[]): Promise<{ feitas: number; erros: string[] }> {
+  const { analisarConversaSemResposta } = await import("@/lib/zeus/orientador");
+  let feitas = 0;
+  const erros: string[] = [];
+  for (const id of conversaIds.slice(0, 3)) {
+    const r = await analisarConversaSemResposta(id);
+    if (r.ok) feitas++;
+    else erros.push(r.erro ?? "falha");
+    if (r.erro?.includes("Orçamento") || r.erro?.includes("Nenhuma chave")) break;
+  }
+  revalidatePath("/orientador");
+  return { feitas, erros };
 }
 
 // X vermelho: some do Orientador até chegar mensagem nova.

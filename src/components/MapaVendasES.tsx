@@ -76,7 +76,7 @@ export default function MapaVendasES({
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1 rounded-lg p-0.5" style={{ background: "rgba(0,0,0,0.35)" }}>
+        <div className="flex gap-1 rounded-lg p-0.5" style={{ background: T.sobreEscuro }}>
           {(["ano", "tudo"] as const).map((m) => (
             <button key={m} onClick={() => setModo(m)}
               className="rounded-md px-2.5 py-1 text-xs font-bold"

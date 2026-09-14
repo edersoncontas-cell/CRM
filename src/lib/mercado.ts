@@ -1,4 +1,5 @@
 import { getConfig, setConfig } from "@/lib/config";
+import { lerCafeES, type CotacaoCafeES } from "@/lib/cafe-es";
 
 // Cotações do letreiro do Dashboard — AUTOMÁTICAS, sem chave de API:
 //   • Dólar (USD/BRL): AwesomeAPI (pública).
@@ -36,6 +37,9 @@ export type CotacoesMercado = {
   cafeAtualizadoEm: string | null;
   detalhe: { dolar: Cotacao | null; arabica: Cotacao | null; conilon: Cotacao | null };
   fonte: "mercado" | "reserva-manual" | "indisponivel";
+  // Preço físico do conilon no ES (robô lib/cafe-es.ts) — o que o produtor
+  // recebe de fato, diferente da bolsa de Londres.
+  cafeES?: CotacaoCafeES | null;
 };
 
 let cacheMem: { em: number; dados: CotacoesMercado } | null = null;
@@ -80,8 +84,9 @@ async function lerReservaManual(): Promise<{ arabica: number | null; conilon: nu
   return { arabica: a ? parseFloat(a) : null, conilon: c ? parseFloat(c) : null, atualizadoEm: em };
 }
 
-export async function obterCotacoes(): Promise<CotacoesMercado> {
-  if (cacheMem && Date.now() - cacheMem.em < CACHE_MS) return cacheMem.dados;
+// Busca AO VIVO (bolsa + dólar). Chamada pelo cron /api/cron/mercado; as
+// telas usam obterCotacoes(), que só lê o que já está gravado.
+export async function atualizarCotacoesMercado(): Promise<CotacoesMercado> {
 
   const [dolar, kc, rc] = await Promise.all([buscarDolar(), buscarFuturo("KC=F"), buscarFuturo("RC=F")]);
 
@@ -124,8 +129,23 @@ export async function obterCotacoes(): Promise<CotacoesMercado> {
     }
   }
 
+  dados.cafeES = await lerCafeES().catch(() => null);
   cacheMem = { em: Date.now(), dados };
   return dados;
+}
+
+// Leitura rápida para as telas: cache em memória (60 s) → último valor
+// gravado pelo robô → busca ao vivo só se nunca houve leitura (primeiro uso).
+export async function obterCotacoes(): Promise<CotacoesMercado> {
+  if (cacheMem && Date.now() - cacheMem.em < CACHE_MS) return cacheMem.dados;
+  let ultima: CotacoesMercado | null = null;
+  try { ultima = JSON.parse((await getConfig(CHAVE_ULTIMA_AUTO)) ?? "null"); } catch { ultima = null; }
+  if (ultima && (ultima.cafeArabica || ultima.cafeConilon || ultima.dolar)) {
+    const dados: CotacoesMercado = { ...ultima, fonte: "mercado", cafeES: await lerCafeES().catch(() => null) };
+    cacheMem = { em: Date.now(), dados };
+    return dados;
+  }
+  return atualizarCotacoesMercado();
 }
 
 // Reserva manual (Configurações) — usada só se a cotação automática falhar.

@@ -16,11 +16,13 @@ function formatarDataLabel(iso: string): string {
 // (botão genérico "Nova visita"), também deixa escolher o dia.
 export function NovaVisitaForm({
   clientes,
+  cidades = [],
   dataFixa,
   rotuloDataFixa,
   compacto,
 }: {
-  clientes: { id: string; nome: string }[];
+  clientes: { id: string; nome: string; cidade?: string | null }[];
+  cidades?: string[];
   dataFixa?: string;
   rotuloDataFixa?: string;
   compacto?: boolean;
@@ -31,6 +33,7 @@ export function NovaVisitaForm({
   const [horario, setHorario] = useState("09:00");
   const [clienteId, setClienteId] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [cidade, setCidade] = useState("");
   const [pickerAberto, setPickerAberto] = useState<"data" | "horario" | null>(null);
 
   function abrir() {
@@ -44,11 +47,13 @@ export function NovaVisitaForm({
     fd.set("data", data);
     fd.set("horario", horario);
     fd.set("observacao", observacao);
+    fd.set("cidade", cidade);
     startSalvar(async () => {
       await adicionarVisita(clienteId, fd);
       setAberto(false);
       setClienteId("");
       setObservacao("");
+      setCidade("");
     });
   }
 
@@ -75,10 +80,15 @@ export function NovaVisitaForm({
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Cliente *</label>
-                <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className="campo">
+                <select value={clienteId} onChange={(e) => { setClienteId(e.target.value); const c = clientes.find((x) => x.id === e.target.value); if (c?.cidade && !cidade) setCidade(c.cidade); }} className="campo">
                   <option value="">— Selecionar —</option>
                   {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Cidade da visita</label>
+                <input list="cidades-es" value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Ex.: Marataízes (aparece no mapa)" className="campo" />
+                <datalist id="cidades-es">{cidades.map((c) => <option key={c} value={c} />)}</datalist>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -102,7 +112,7 @@ export function NovaVisitaForm({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Observação</label>
-                <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={3} placeholder="O que será tratado na visita..." className="campo" />
+                <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={3} placeholder="Onde é (obra, fazenda, endereço) e o que será tratado" className="campo" />
               </div>
             </div>
             <button onClick={submeter} disabled={salvando || !clienteId} className="mt-5 w-full rounded-lg bg-brand-600 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-60">

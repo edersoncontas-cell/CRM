@@ -1,54 +1,116 @@
-// Colunas de "demandas" (estilo Trello), separadas do funil de negociação.
-// Garante as duas colunas fixas e oferece helpers de cor para colunas novas.
+// Demandas: a lista única de tarefas do vendedor. Junta o que ele anota à
+// mão com o que o CRM gera sozinho (toque de ligação/visita da cadência,
+// marco de pós-venda vencido, próxima ação do Orientador aceita, tarefa do
+// Cérebro), tudo com prazo, prioridade, cliente e cidade. Sem colunas de
+// Kanban: a organização é por prazo (atrasadas, hoje, esta semana, depois).
 
 import { db } from "@/lib/db";
+import { inicioDoDiaBrasilia } from "@/lib/utils";
 
 export type ItemChecklist = { t: string; d: boolean };
+export type Prioridade = "alta" | "normal" | "baixa";
+export type OrigemDemanda = "manual" | "orientador" | "cadencia" | "posvenda" | "cerebro" | "zeus";
 
-// Paleta de cores para colunas personalizadas (borda superior Tailwind).
-export const CORES_COLUNA = [
-  "border-t-slate-400",
-  "border-t-sky-400",
-  "border-t-violet-400",
-  "border-t-amber-400",
-  "border-t-rose-400",
-  "border-t-teal-400",
-  "border-t-indigo-400",
-  "border-t-orange-400",
-];
+export const COLUNA_ABERTA = "demandas";
+export const COLUNA_CONCLUIDA = "demandas_concluida";
 
-const COLUNA_DEMANDAS = "demandas";
-const COLUNA_CONCLUIDA = "demandas_concluida";
+export const ROTULO_ORIGEM: Record<string, string> = {
+  manual: "Você",
+  orientador: "Orientador",
+  cadencia: "Cadência",
+  posvenda: "Pós-venda",
+  cerebro: "Cérebro",
+  zeus: "ZEUS",
+};
 
-let colunasGarantidas = false;
-
-// Cria as colunas fixas "Demandas" e "Demandas Concluída" se ainda não existirem.
-// Idempotente — usa upsert por id fixo para não duplicar.
-export async function garantirColunasDemanda(): Promise<void> {
-  if (colunasGarantidas) return;
-  await db.colunaDemanda.upsert({
-    where: { id: COLUNA_DEMANDAS },
-    update: {},
-    create: { id: COLUNA_DEMANDAS, titulo: "Demandas", cor: "border-t-slate-400", ordem: 0, fixa: true },
-  });
-  await db.colunaDemanda.upsert({
-    where: { id: COLUNA_CONCLUIDA },
-    update: {},
-    create: { id: COLUNA_CONCLUIDA, titulo: "Demandas Concluída", cor: "border-t-green-500", ordem: 1, fixa: true },
-  });
-  colunasGarantidas = true;
-}
-
-// Lê o checklist serializado em JSON de uma tarefa, com fallback seguro.
 export function lerChecklist(raw: string | null | undefined): ItemChecklist[] {
   if (!raw) return [];
   try {
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return [];
-    return arr
-      .filter((i) => i && typeof i.t === "string")
-      .map((i) => ({ t: String(i.t), d: !!i.d }));
+    return arr.filter((i) => i && typeof i.t === "string").map((i) => ({ t: String(i.t), d: !!i.d }));
   } catch {
     return [];
   }
+}
+
+export type DemandaDTO = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  checklist: ItemChecklist[];
+  clienteId: string | null;
+  clienteNome: string | null;
+  cidade: string | null;
+  dueDate: string | null;
+  prioridade: Prioridade;
+  origem: string;
+  concluida: boolean;
+  concluidaEm: string | null;
+  criadoEm: string;
+};
+
+export type GrupoDemandas = { id: "atrasadas" | "hoje" | "semana" | "depois" | "sem_prazo" | "concluidas"; titulo: string; itens: DemandaDTO[] };
+
+export async function listarDemandas(): Promise<{ grupos: GrupoDemandas[]; abertas: number; atrasadas: number; hoje: number }> {
+  const tarefas = await db.tarefaKanban.findMany({
+    orderBy: [{ dueDate: "asc" }, { criadoEm: "desc" }],
+    include: { cliente: { select: { nome: true } } },
+    take: 400,
+  });
+  const inicioHoje = inicioDoDiaBrasilia();
+  const amanha = inicioDoDiaBrasilia(new Date(), 1);
+  const fimSemana = inicioDoDiaBrasilia(new Date(), 7);
+  const seteDiasAtras = new Date(Date.now() - 7 * 86400000);
+
+  const dto = (t: (typeof tarefas)[number]): DemandaDTO => ({
+    id: t.id, titulo: t.titulo, descricao: t.descricao, checklist: lerChecklist(t.checklist),
+    clienteId: t.clienteId, clienteNome: t.cliente?.nome ?? null, cidade: t.cidade,
+    dueDate: t.dueDate?.toISOString() ?? null,
+    prioridade: (["alta", "normal", "baixa"].includes(t.prioridade) ? t.prioridade : "normal") as Prioridade,
+    origem: t.origem, concluida: t.coluna === COLUNA_CONCLUIDA, concluidaEm: t.concluidaEm?.toISOString() ?? null,
+    criadoEm: t.criadoEm.toISOString(),
+  });
+
+  const grupos: GrupoDemandas[] = [
+    { id: "atrasadas", titulo: "Atrasadas", itens: [] },
+    { id: "hoje", titulo: "Hoje", itens: [] },
+    { id: "semana", titulo: "Próximos 7 dias", itens: [] },
+    { id: "depois", titulo: "Depois", itens: [] },
+    { id: "sem_prazo", titulo: "Sem prazo", itens: [] },
+    { id: "concluidas", titulo: "Concluídas (últimos 7 dias)", itens: [] },
+  ];
+  const peso: Record<Prioridade, number> = { alta: 0, normal: 1, baixa: 2 };
+  for (const t of tarefas) {
+    const d = dto(t);
+    if (d.concluida) {
+      if (t.concluidaEm && t.concluidaEm >= seteDiasAtras) grupos[5].itens.push(d);
+      continue;
+    }
+    if (!t.dueDate) grupos[4].itens.push(d);
+    else if (t.dueDate < inicioHoje) grupos[0].itens.push(d);
+    else if (t.dueDate < amanha) grupos[1].itens.push(d);
+    else if (t.dueDate < fimSemana) grupos[2].itens.push(d);
+    else grupos[3].itens.push(d);
+  }
+  for (const g of grupos) g.itens.sort((a, b) => peso[a.prioridade] - peso[b.prioridade] || (a.dueDate ?? "9").localeCompare(b.dueDate ?? "9"));
+  const abertas = grupos.slice(0, 5).reduce((s, g) => s + g.itens.length, 0);
+  return { grupos, abertas, atrasadas: grupos[0].itens.length, hoje: grupos[1].itens.length };
+}
+
+// Cria uma demanda automática só se não existir uma aberta com a mesma chave
+// (ex.: "cadencia:<clienteId>:3" ou "posvenda:<clienteId>:marco_30d").
+export async function garantirDemandaAutomatica(args: {
+  chave: string; titulo: string; descricao?: string | null; clienteId?: string | null; cidade?: string | null;
+  dueDate?: Date | null; prioridade?: Prioridade; origem: OrigemDemanda;
+}): Promise<{ criada: boolean; id: string }> {
+  const existente = await db.tarefaKanban.findFirst({ where: { chave: args.chave, coluna: COLUNA_ABERTA }, select: { id: true } });
+  if (existente) return { criada: false, id: existente.id };
+  const t = await db.tarefaKanban.create({
+    data: {
+      titulo: args.titulo.slice(0, 160), descricao: args.descricao ?? null, clienteId: args.clienteId ?? null, cidade: args.cidade ?? null,
+      dueDate: args.dueDate ?? null, prioridade: args.prioridade ?? "normal", origem: args.origem, chave: args.chave, coluna: COLUNA_ABERTA,
+    },
+  });
+  return { criada: true, id: t.id };
 }

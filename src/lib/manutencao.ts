@@ -11,7 +11,6 @@ import { db } from "@/lib/db";
 import { aplicarMigracoes } from "@/lib/migrations";
 import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
 import { garantirColunasFunil } from "@/lib/actions";
-import { garantirColunasDemanda } from "@/lib/demandas";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 
@@ -34,7 +33,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v10: papel e probabilidade das colunas do funil.
 // v11: janela de horário e limite diário da resposta automática.
 // v12: respostas prontas do WhatsApp.
-export const CHAVE_MANUTENCAO = "manutencao.v12";
+// v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
+export const CHAVE_MANUTENCAO = "manutencao.v13";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -47,7 +47,6 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Regiões e municípios", garantirRegioes],
     ["Limpeza de contatos descartados", limparContatosDescartados],
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
-    ["Colunas de demandas", garantirColunasDemanda],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
   ];

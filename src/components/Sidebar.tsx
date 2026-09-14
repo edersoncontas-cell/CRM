@@ -255,7 +255,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
           {reorganizando ? (
             <div className="px-3">
               <p className="mb-2 px-2 text-[11px] text-brand-400">Arraste pelo ícone para reordenar.</p>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <DndContext id="dnd-sidebar" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={itensOrdenados.map((i) => i.href)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-1">
                     {itensOrdenados.map((item) => (
