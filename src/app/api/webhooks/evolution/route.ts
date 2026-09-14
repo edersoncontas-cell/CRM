@@ -101,7 +101,11 @@ export async function POST(req: NextRequest) {
       conteudo: {
         text: conteudo.text,
         mediaType: conteudo.mediaType,
-        mediaUrl: null,
+        // Foto/documento/vídeo: o CRM busca o conteúdo na Evolution sob demanda
+        // (rota /api/whatsapp/midia) — sem hospedar nada.
+        mediaUrl: chaveMsg.id && conteudo.mediaType && ["image", "document", "video"].includes(conteudo.mediaType)
+          ? `/api/whatsapp/midia/${encodeURIComponent(chaveMsg.id)}`
+          : null,
         mediaName: conteudo.mediaName,
         transcript: null,
       },

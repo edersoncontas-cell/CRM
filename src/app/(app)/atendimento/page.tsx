@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { papelDaColuna } from "@/lib/pipeline";
 import { AtendimentoClient, type ConvLista } from "@/components/AtendimentoClient";
 import * as zapi from "@/lib/zapi";
+import { lerParametros } from "@/lib/parametros";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export default async function AtendimentoPage({
 }: {
   searchParams: { conversa?: string };
 }) {
-  const [conversas, maquinasProprias, colunasFunil, rascunhos, aguardando, status] = await Promise.all([
+  const [conversas, maquinasProprias, colunasFunil, rascunhos, aguardando, status, parametros] = await Promise.all([
     db.whatsAppConversation.findMany({
       orderBy: { lastMessageAt: "desc" },
       take: 400,
@@ -21,6 +22,7 @@ export default async function AtendimentoPage({
     db.whatsAppMessage.findMany({ where: { isDraft: true, draftStatus: "PENDING" }, select: { conversationId: true }, distinct: ["conversationId"] }),
     db.cliente.findMany({ where: { aguardandoResposta: true }, select: { id: true } }),
     zapi.statusConexao().catch(() => null),
+    lerParametros(),
   ]);
 
   const comRascunho = new Set(rascunhos.map((r) => r.conversationId));
@@ -54,6 +56,7 @@ export default async function AtendimentoPage({
       convInicial={searchParams.conversa ?? null}
       maquinasProprias={maquinasProprias}
       colunasFunil={colunasFunil}
+      vendedorNome={parametros.nomeVendedor}
     />
   );
 }

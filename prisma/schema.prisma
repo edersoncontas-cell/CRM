@@ -96,6 +96,15 @@ model Cadencia {
   @@index([clienteId])
 }
 
+// Respostas prontas do WhatsApp (modelos por situação, com {nome} e {vendedor}).
+model RespostaPronta {
+  id        String   @id @default(cuid())
+  titulo    String
+  texto     String
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+}
+
 model PosVendaContato {
   id        String   @id @default(cuid())
   cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)

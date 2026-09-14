@@ -13,13 +13,15 @@ import {
   DownloadCloud, Loader2, Brain, Trash2, Pencil, X, FileText, Handshake, Link2,
   CheckCircle2, Compass, Flame, ThermometerSun, Snowflake, EyeOff, Eye, Calendar, Repeat,
   ChevronUp, PanelRightOpen, Sparkles, AlertTriangle, MapPin, Wallet, Bell,
+  Paperclip, Mic, Square, Zap, RefreshCw, FileDown, Plus,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
 import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
   contextoConversaAction, marcarRespondidoAction, ignorarConversaAction, resolverAlertaConversaAction, registrarUsoRespostaAction,
-  type ContextoConversa,
+  listarRespostasProntasAction, salvarRespostaProntaAction, excluirRespostaProntaAction, reanalisarConversaAction,
+  type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -49,6 +51,7 @@ type Mensagem = {
   operatorDisplayName: string | null;
   mediaType: string | null;
   mediaUrl: string | null;
+  mediaName?: string | null;
   sentAt: string;
   sendStatus: string | null;
   isDraft: boolean;
@@ -119,15 +122,57 @@ function Temperatura({ t }: { t: string }) {
   return <span className="inline-flex items-center gap-1 text-amber-300"><ThermometerSun size={13} /> Morna</span>;
 }
 
+type Anexo = { kind: "image" | "audio" | "document"; base64: string; mimeType: string; fileName: string; preview: string | null; thumb: string | null; tamanho: number };
+
+function blobParaBase64(blob: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).replace(/^data:[^;]+;base64,/, ""));
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+// Reduz a foto no navegador (máx. 1600px, JPEG) para caber no limite de envio
+// e gera uma miniatura (480px) que fica guardada na mensagem enviada.
+async function prepararImagem(file: File): Promise<{ base64: string; thumb: string; mimeType: string }> {
+  const bitmap = await createImageBitmap(file);
+  const desenhar = (max: number, q: number) => {
+    const escala = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bitmap.width * escala);
+    c.height = Math.round(bitmap.height * escala);
+    c.getContext("2d")!.drawImage(bitmap, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", q);
+  };
+  const grande = desenhar(1600, 0.82);
+  const thumb = desenhar(480, 0.7);
+  return { base64: grande.replace(/^data:[^;]+;base64,/, ""), thumb, mimeType: "image/jpeg" };
+}
+
+// {nome}: primeiro nome da pessoa; nome inteiro quando o contato é uma
+// empresa (Construtora X, Pedreira Y, Prefeitura...) ou está vazio.
+function aplicarPlaceholders(texto: string, nomeContato: string, vendedor: string): string {
+  const limpo = nomeContato.trim();
+  const empresa = /construtora|pedreira|prefeitura|ltda|s\.?a\.?$|locadora|terraplen|mineradora|engenharia|empreiteira|fazenda|transportes|comércio|comercio|indústria|industria/i.test(limpo);
+  const nome = empresa ? limpo : (limpo.split(/\s+/)[0] ?? limpo);
+  return texto
+    .replace(/\{nome\},?\s*/g, nome ? `${nome}, ` : "")
+    .replace(/\{vendedor\}/g, vendedor)
+    .replace(/^\s*,\s*/, "")
+    .replace(/^([a-zà-ú])/, (m) => m.toUpperCase());
+}
+
 const botaoIcone = "flex h-9 w-9 items-center justify-center rounded-lg text-brand-300 hover:bg-white/10 hover:text-white transition";
 const chip = (ativo: boolean) => cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition", ativo ? "bg-agro-400 text-black" : "bg-white/5 text-brand-300 hover:bg-white/10");
 
-export function AtendimentoClient({ conversas, conexao, convInicial, maquinasProprias, colunasFunil }: {
+export function AtendimentoClient({ conversas, conexao, convInicial, maquinasProprias, colunasFunil, vendedorNome = "" }: {
   conversas: ConvLista[];
   conexao: Conexao;
   convInicial?: string | null;
   maquinasProprias: { marca: string; modelo: string }[];
   colunasFunil: { id: string; titulo: string; papel?: string | null }[];
+  vendedorNome?: string;
 }) {
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(convInicial ?? null);
@@ -155,6 +200,19 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
   const [contexto, setContexto] = useState<ContextoConversa | null>(null);
   const [carregandoContexto, setCarregandoContexto] = useState(false);
   const [topo, setTopo] = useState(0);
+  const [anexo, setAnexo] = useState<Anexo | null>(null);
+  const [legenda, setLegenda] = useState("");
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [segundos, setSegundos] = useState(0);
+  const [respostasAbertas, setRespostasAbertas] = useState(false);
+  const [respostas, setRespostas] = useState<RespostaPronta[] | null>(null);
+  const [reanalisando, setReanalisando] = useState(false);
+  const [avisoPainel, setAvisoPainel] = useState<string | null>(null);
+  const anexoRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -229,6 +287,98 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
     setTexto(textoResposta);
     textareaRef.current?.focus();
     if (selId) registrarUsoRespostaAction(selId).catch(() => {});
+  }
+
+  async function escolherAnexo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      if (file.type.startsWith("image/")) {
+        const img = await prepararImagem(file);
+        setAnexo({ kind: "image", base64: img.base64, mimeType: img.mimeType, fileName: file.name, preview: img.thumb, thumb: img.thumb, tamanho: Math.round(img.base64.length * 0.75) });
+      } else {
+        if (file.size > 3 * 1024 * 1024) { window.alert("Arquivo acima de 3 MB. Reduza o tamanho antes de enviar."); return; }
+        setAnexo({ kind: "document", base64: await blobParaBase64(file), mimeType: file.type || "application/octet-stream", fileName: file.name, preview: null, thumb: null, tamanho: file.size });
+      }
+      setLegenda("");
+    } catch (err) {
+      console.error(err);
+      window.alert("Não foi possível ler o arquivo.");
+    }
+  }
+
+  async function iniciarGravacao() {
+    if (gravando) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/mp4"].find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) ?? "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || mime || "audio/webm" });
+        if (blob.size < 1000) return;
+        const base64 = await blobParaBase64(blob);
+        const tipo = (blob.type || "audio/webm").split(";")[0];
+        setAnexo({ kind: "audio", base64, mimeType: tipo, fileName: "audio", preview: URL.createObjectURL(blob), thumb: null, tamanho: blob.size });
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setGravando(true);
+      setSegundos(0);
+      timerRef.current = setInterval(() => setSegundos((v) => v + 1), 1000);
+    } catch {
+      window.alert("Sem acesso ao microfone. Libere a permissão no navegador.");
+    }
+  }
+
+  function pararGravacao() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setGravando(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  async function enviarAnexo() {
+    if (!anexo || !selId || enviandoAnexo) return;
+    setEnviandoAnexo(true);
+    autoScrollRef.current = true;
+    try {
+      const r = await fetch(`/api/conversations/${selId}/media`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: anexo.kind, base64: anexo.base64, mimeType: anexo.mimeType, fileName: anexo.fileName, caption: legenda.trim(), thumb: anexo.thumb }),
+      }).then((res) => res.json()).catch(() => null);
+      if (!r?.ok) { window.alert(r?.erro ?? "Não foi possível enviar."); return; }
+      if (r.message) mergeMsgs([r.message]);
+      setAnexo(null); setLegenda("");
+      router.refresh();
+    } finally {
+      setEnviandoAnexo(false);
+    }
+  }
+
+  async function abrirRespostas() {
+    setRespostasAbertas(true);
+    if (!respostas) setRespostas(await listarRespostasProntasAction().catch(() => []));
+  }
+
+  function aplicarRespostaPronta(r: RespostaPronta) {
+    if (!sel) return;
+    const nome = nomeConv(sel, selAtual?.contactName);
+    setTexto(aplicarPlaceholders(r.texto, /^\+?\d[\d\s()-]+$/.test(nome) ? "" : nome, vendedorNome).replace(/^,\s*/, "").replace(/^\s*,/, ""));
+    setRespostasAbertas(false);
+    textareaRef.current?.focus();
+  }
+
+  async function reanalisar() {
+    if (!selId || reanalisando) return;
+    setReanalisando(true); setAvisoPainel(null);
+    const r = await reanalisarConversaAction(selId).catch(() => ({ ok: false, erro: "Falha ao reanalisar." }));
+    if (!r.ok) setAvisoPainel(r.erro ?? "Falha ao reanalisar.");
+    await carregarContexto(selId);
+    setReanalisando(false);
   }
 
   function htmlParaTexto(html: string): string {
@@ -652,8 +802,23 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                           {!meu && sel.isGroup && m.senderName && <div className="text-[11px] font-bold text-agro-300">{m.senderName}</div>}
                           {meu && m.operatorDisplayName && m.operatorDisplayName !== "Você" && <div className="text-[10px] font-semibold text-agro-300/80">{m.operatorDisplayName}</div>}
                           {m.mediaType === "image" && m.mediaUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={m.mediaUrl} alt="" className="mb-1 max-h-60 rounded-lg" />
+                            <a href={m.mediaUrl} target="_blank" rel="noreferrer" title="Abrir a foto">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={m.mediaUrl} alt="" className="mb-1 max-h-64 rounded-lg" loading="lazy" />
+                            </a>
+                          )}
+                          {m.mediaType === "image" && !m.mediaUrl && <span className="mr-1 text-brand-400">📷</span>}
+                          {(m.mediaType === "document" || m.mediaType === "video") && (
+                            m.mediaUrl ? (
+                              <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-lg bg-black/20 px-2.5 py-2 text-xs font-semibold text-agro-200 hover:bg-black/30">
+                                <FileDown size={15} /> {m.mediaName ?? (m.mediaType === "video" ? "Vídeo" : "Documento")}
+                              </a>
+                            ) : (
+                              <span className="mb-1 flex items-center gap-2 text-xs text-brand-400"><FileDown size={13} /> {m.mediaName ?? "Documento"} · sem cópia no CRM</span>
+                            )
+                          )}
+                          {m.mediaType === "audio" && m.mediaUrl && !m.mediaUrl.startsWith("/api/") && (
+                            <audio controls preload="none" src={m.mediaUrl} className="mb-1 h-9 max-w-full" />
                           )}
                           <span className="whitespace-pre-wrap break-words">{m.body}</span>
                           <span className="ml-2 inline-flex items-center gap-0.5 align-bottom text-[10px] text-brand-400">
@@ -676,7 +841,37 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                   <span className="line-clamp-2"><b className="text-agro-300">Usar resposta do Orientador:</b> {contexto.orientador.melhorResposta}</span>
                 </button>
               )}
-              <div className="flex items-end gap-2">
+              {anexo && (
+                <div className="mb-2 flex items-start gap-3 rounded-xl bg-white/[0.05] p-2.5">
+                  {anexo.kind === "image" && anexo.preview && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={anexo.preview} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
+                  )}
+                  {anexo.kind === "document" && <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-800 text-agro-300"><FileDown size={20} /></div>}
+                  {anexo.kind === "audio" && anexo.preview && <audio controls src={anexo.preview} className="h-9 max-w-[220px]" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-semibold text-white">{anexo.kind === "audio" ? "Áudio gravado" : anexo.fileName} <span className="font-normal text-brand-400">· {Math.max(1, Math.round(anexo.tamanho / 1024))} KB</span></div>
+                    {anexo.kind !== "audio" && (
+                      <input value={legenda} onChange={(e) => setLegenda(e.target.value)} placeholder="Legenda (opcional)" style={{ paddingLeft: 10, paddingRight: 10 }}
+                        className="mt-1 w-full rounded-lg bg-brand-800 py-1.5 text-sm text-white placeholder:text-brand-400 outline-none" />
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={enviarAnexo} disabled={enviandoAnexo || !conexao.conectado} className="inline-flex items-center gap-1 rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black disabled:opacity-40" style={{ minHeight: 30 }}>
+                        {enviandoAnexo ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Enviar {anexo.kind === "image" ? "foto" : anexo.kind === "audio" ? "áudio" : "arquivo"}
+                      </button>
+                      <button onClick={() => setAnexo(null)} className="rounded-full px-3 py-1 text-xs font-semibold text-brand-300 hover:bg-white/10" style={{ minHeight: 30 }}>Cancelar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-end gap-1.5">
+                <input ref={anexoRef} type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" onChange={escolherAnexo} className="hidden" />
+                <button onClick={() => anexoRef.current?.click()} disabled={!conexao.conectado} title="Enviar foto ou documento" className={cn(botaoIcone, "h-11 disabled:opacity-40")}><Paperclip size={18} /></button>
+                <button onClick={gravando ? pararGravacao : iniciarGravacao} disabled={!conexao.conectado} title={gravando ? "Parar gravação" : "Gravar áudio"} className={cn(botaoIcone, "h-11 disabled:opacity-40", gravando && "bg-red-500/20 text-red-300")}>
+                  {gravando ? <Square size={16} /> : <Mic size={18} />}
+                </button>
+                {gravando && <span className="self-center text-xs font-bold text-red-300">{Math.floor(segundos / 60)}:{String(segundos % 60).padStart(2, "0")}</span>}
+                <button onClick={abrirRespostas} title="Respostas prontas" className={cn(botaoIcone, "h-11")}><Zap size={18} /></button>
                 <textarea ref={textareaRef} value={texto}
                   onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
@@ -700,9 +895,17 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
         )}>
           <div className="flex shrink-0 items-center justify-between border-b border-brand-800 px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-bold text-white"><Compass size={16} className="text-agro-400" /> Orientador de Vendas</div>
-            <button onClick={() => setPainelAberto(false)} className={cn(botaoIcone, "xl:hidden")} aria-label="Fechar painel"><X size={16} /></button>
+            <div className="flex items-center gap-1">
+              {contexto?.cliente && (
+                <button onClick={reanalisar} disabled={reanalisando} title="Reanalisar a conversa agora" className={cn("flex h-8 items-center gap-1 rounded-lg px-2 text-[11px] font-bold transition", reanalisando ? "text-brand-400" : "bg-white/5 text-agro-300 hover:bg-white/10")}>
+                  <RefreshCw size={13} className={reanalisando ? "animate-spin" : ""} /> {reanalisando ? "Analisando…" : "Reanalisar"}
+                </button>
+              )}
+              <button onClick={() => setPainelAberto(false)} className={cn(botaoIcone, "xl:hidden")} aria-label="Fechar painel"><X size={16} /></button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm">
+            {avisoPainel && <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">{avisoPainel}</p>}
             {carregandoContexto && !contexto ? (
               <div className="flex items-center gap-2 text-brand-400"><Loader2 size={14} className="animate-spin" /> Carregando…</div>
             ) : !contexto?.cliente ? (
@@ -831,6 +1034,14 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
         </aside>
       )}
 
+      {respostasAbertas && (
+        <RespostasProntasModal
+          respostas={respostas}
+          onFechar={() => setRespostasAbertas(false)}
+          onUsar={aplicarRespostaPronta}
+          onAtualizar={async () => setRespostas(await listarRespostasProntasAction().catch(() => []))}
+        />
+      )}
       {novaNegoConv && (
         <FormNovaNegociacao
           titulo="Nova Negociação"
@@ -912,6 +1123,86 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
           <div className="border-t border-brand-800 pt-2">
             <p className="text-xs text-brand-400">Não encontrou? <Link href={`/clientes?q=${encodeURIComponent(conv.externalPhone.replace(/\D/g, ""))}`} className="text-agro-300 hover:underline">Abrir Clientes</Link> e cadastrar com este telefone (o ZEUS vincula sozinho na próxima mensagem).</p>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Respostas prontas ────────────────────────────────────────────────────────
+function RespostasProntasModal({ respostas, onFechar, onUsar, onAtualizar }: {
+  respostas: RespostaPronta[] | null;
+  onFechar: () => void;
+  onUsar: (r: RespostaPronta) => void;
+  onAtualizar: () => Promise<void>;
+}) {
+  const [editando, setEditando] = useState<{ id?: string; titulo: string; texto: string } | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
+
+  async function salvar() {
+    if (!editando) return;
+    setSalvando(true);
+    const r = await salvarRespostaProntaAction(editando).catch(() => ({ ok: false, erro: "Falha ao salvar." }));
+    setSalvando(false);
+    if (!r.ok) { window.alert(r.erro ?? "Falha ao salvar."); return; }
+    setEditando(null);
+    await onAtualizar();
+  }
+
+  async function excluir(id: string) {
+    if (!window.confirm("Excluir esta resposta pronta?")) return;
+    await excluirRespostaProntaAction(id);
+    await onAtualizar();
+  }
+
+  const lista = (respostas ?? []).filter((r) => !busca.trim() || `${r.titulo} ${r.texto}`.toLowerCase().includes(busca.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onFechar}>
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-brand-700 bg-brand-900 text-brand-100 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-brand-800 px-4 py-3">
+          <h3 className="flex items-center gap-2 font-bold text-white"><Zap size={16} className="text-agro-400" /> Respostas prontas</h3>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setEditando({ titulo: "", texto: "" })} className="inline-flex h-9 items-center gap-1 rounded-lg bg-white/5 px-2.5 text-xs font-bold text-agro-300 hover:bg-white/10"><Plus size={13} /> Nova</button>
+            <button onClick={onFechar} className={botaoIcone}><X size={18} /></button>
+          </div>
+        </div>
+        <div className="px-4 pt-3">
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar resposta" style={{ paddingLeft: 12, paddingRight: 12 }}
+            className="w-full rounded-xl bg-brand-800 py-2 text-sm text-white placeholder:text-brand-400 outline-none" />
+          <p className="mt-1 text-[11px] text-brand-400">Use {"{nome}"} para o primeiro nome do cliente e {"{vendedor}"} para o seu.</p>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+          {editando && (
+            <div className="rounded-xl border border-agro-400/40 bg-agro-400/5 p-3">
+              <input value={editando.titulo} onChange={(e) => setEditando({ ...editando, titulo: e.target.value })} placeholder="Título (ex.: Pedido de preço)" style={{ paddingLeft: 10, paddingRight: 10 }}
+                className="mb-2 w-full rounded-lg bg-brand-800 py-1.5 text-sm font-semibold text-white placeholder:text-brand-400 outline-none" />
+              <textarea value={editando.texto} onChange={(e) => setEditando({ ...editando, texto: e.target.value })} rows={4} placeholder="Texto da resposta"
+                className="w-full rounded-lg bg-brand-800 px-3 py-2 text-sm text-white placeholder:text-brand-400 outline-none" />
+              <div className="mt-2 flex gap-2">
+                <button onClick={salvar} disabled={salvando} className="rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black disabled:opacity-50" style={{ minHeight: 30 }}>{salvando ? "Salvando…" : "Salvar"}</button>
+                <button onClick={() => setEditando(null)} className="rounded-full px-3 py-1 text-xs font-semibold text-brand-300 hover:bg-white/10" style={{ minHeight: 30 }}>Cancelar</button>
+              </div>
+            </div>
+          )}
+          {respostas === null ? (
+            <div className="flex justify-center py-6"><Loader2 size={20} className="animate-spin text-brand-400" /></div>
+          ) : lista.length === 0 ? (
+            <p className="py-6 text-center text-sm text-brand-400">Nenhuma resposta. Crie a primeira em “Nova”.</p>
+          ) : lista.map((r) => (
+            <div key={r.id} className="group rounded-xl bg-white/[0.04] p-3 transition hover:bg-white/[0.08]">
+              <button onClick={() => onUsar(r)} className="w-full text-left">
+                <div className="text-sm font-bold text-white">{r.titulo}</div>
+                <p className="mt-0.5 line-clamp-3 text-xs text-brand-300">{r.texto}</p>
+              </button>
+              <div className="mt-2 flex gap-2 text-[11px]">
+                <button onClick={() => onUsar(r)} className="font-bold text-agro-300 hover:underline">Usar</button>
+                <button onClick={() => setEditando({ id: r.id, titulo: r.titulo, texto: r.texto })} className="text-brand-300 hover:underline">Editar</button>
+                <button onClick={() => excluir(r.id)} className="text-red-300 hover:underline">Excluir</button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

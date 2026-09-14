@@ -33,7 +33,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v9: tabela Cadencia (follow-up de 7 toques).
 // v10: papel e probabilidade das colunas do funil.
 // v11: janela de horário e limite diário da resposta automática.
-export const CHAVE_MANUTENCAO = "manutencao.v11";
+// v12: respostas prontas do WhatsApp.
+export const CHAVE_MANUTENCAO = "manutencao.v12";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

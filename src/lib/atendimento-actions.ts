@@ -123,3 +123,87 @@ export async function registrarUsoRespostaAction(conversationId: string): Promis
     entidade: "WhatsAppConversation", entidadeId: conversationId, clienteId: conv?.clienteId ?? undefined,
   }).catch(() => {});
 }
+
+// ── Respostas prontas ────────────────────────────────────────────────────────
+export type RespostaPronta = { id: string; titulo: string; texto: string; ordem: number };
+
+const RESPOSTAS_PADRAO: { titulo: string; texto: string }[] = [
+  { titulo: "Pedido de preço", texto: "{nome}, pra te passar o valor certo preciso de 2 coisas: qual a aplicação (obra, lavoura, pedreira) e quantas horas por mês a máquina vai rodar. Com isso te mando a condição hoje ainda. Pode me dizer?" },
+  { titulo: "Marcar visita", texto: "{nome}, posso passar aí pra ver a aplicação e te levar a proposta pronta. Quinta de manhã ou sexta à tarde, qual fica melhor?" },
+  { titulo: "Financiamento", texto: "{nome}, dá pra fazer pelo Finame ou pelo banco da fábrica, com carência e parcela que cabe no que a máquina produz. Se me passar a sua usada e o valor de entrada, simulo agora." },
+  { titulo: "Concorrente mais barato", texto: "{nome}, entendo. Preço de nota é uma parte da conta; a outra é custo por hora, revenda e assistência. Me deixa montar a comparação com os seus números e você decide com tudo na mesa. Posso te mandar hoje?" },
+  { titulo: "Retomada de contato", texto: "{nome}, aqui é {vendedor}. Passando pra saber se a máquina ainda está no radar pra este ano. Se mudou alguma coisa na obra, me conta que eu ajusto a proposta." },
+  { titulo: "Encerramento educado", texto: "{nome}, não quero ser inconveniente. Vou parar por aqui; se em algum momento a máquina virar prioridade, me chama que eu resolvo rápido. Posso te mandar uma novidade a cada 2 meses?" },
+];
+
+export async function listarRespostasProntasAction(): Promise<RespostaPronta[]> {
+  const total = await db.respostaPronta.count().catch(() => -1);
+  if (total === 0) {
+    await db.respostaPronta.createMany({ data: RESPOSTAS_PADRAO.map((r, i) => ({ ...r, ordem: i })) }).catch(() => {});
+  }
+  const lista = await db.respostaPronta.findMany({ orderBy: [{ ordem: "asc" }, { criadoEm: "asc" }] }).catch(() => []);
+  return lista.map((r) => ({ id: r.id, titulo: r.titulo, texto: r.texto, ordem: r.ordem }));
+}
+
+export async function salvarRespostaProntaAction(dados: { id?: string; titulo: string; texto: string }): Promise<{ ok: boolean; erro?: string }> {
+  const titulo = dados.titulo.trim();
+  const texto = dados.texto.trim();
+  if (!titulo || !texto) return { ok: false, erro: "Título e texto são obrigatórios." };
+  if (dados.id) {
+    await db.respostaPronta.update({ where: { id: dados.id }, data: { titulo, texto } });
+  } else {
+    const max = await db.respostaPronta.aggregate({ _max: { ordem: true } });
+    await db.respostaPronta.create({ data: { titulo, texto, ordem: (max._max.ordem ?? 0) + 1 } });
+  }
+  return { ok: true };
+}
+
+export async function excluirRespostaProntaAction(id: string): Promise<{ ok: boolean }> {
+  await db.respostaPronta.delete({ where: { id } }).catch(() => {});
+  return { ok: true };
+}
+
+// ── Reanalisar agora ─────────────────────────────────────────────────────────
+// Roda o Orientador de Vendas sob demanda para a conversa (painel + melhor
+// resposta), sem criar rascunho nem enviar nada. Respeita o orçamento de IA.
+export async function reanalisarConversaAction(conversationId: string): Promise<{ ok: boolean; erro?: string }> {
+  const { iaHabilitada } = await import("@/lib/ai");
+  if (!iaHabilitada()) return { ok: false, erro: "Nenhuma chave de IA configurada." };
+  const { orcamentoIADisponivel, consumirOrcamentoIA } = await import("@/lib/zeus/estado");
+  if (!(await orcamentoIADisponivel())) return { ok: false, erro: "Orçamento diário de IA esgotado. Tente amanhã." };
+  const { montarContextoCliente, montarContextoAcademia } = await import("@/lib/zeus/cerebro-resposta");
+  const { gerarAnaliseOrientador, gerarRespostaRapida } = await import("@/lib/zeus/orientador");
+  const { lerParametros } = await import("@/lib/parametros");
+
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId } });
+  if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
+  const p = await lerParametros();
+  const [msgs, estilo] = await Promise.all([
+    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "asc" }, take: 120 }),
+    db.estiloDeFala.findFirst().catch(() => null),
+  ]);
+  if (msgs.length === 0) return { ok: false, erro: "Conversa sem mensagens." };
+  const historico = msgs.map((m) => `[${m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}] ${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
+  const ultimas = msgs.slice(-5).map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
+  const contextoCliente = await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: conv.clienteId, externalPhone: conv.externalPhone });
+  const contextoAcademia = montarContextoAcademia(historico);
+  try {
+    const [analise, resposta] = await Promise.all([
+      gerarAnaliseOrientador({ historico: historico.slice(-2500), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null }),
+      msgs[msgs.length - 1].direction === "IN"
+        ? gerarRespostaRapida({ historico: historico.slice(-2500), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null })
+        : Promise.resolve(""),
+    ]);
+    await consumirOrcamentoIA();
+    const { alertas: _a, ...campos } = analise;
+    await db.orientadorAnalise.upsert({
+      where: { clienteId: conv.clienteId },
+      create: { clienteId: conv.clienteId, ...campos, melhorResposta: resposta || null },
+      update: { ...campos, ...(resposta ? { melhorResposta: resposta } : {}) },
+    });
+    await registrarAudit({ acao: "conversa_analisada", origem: "usuario", descricao: `Orientador reanalisado a pedido na conversa com ${conv.contactName ?? conv.externalPhone}.`, entidade: "WhatsAppConversation", entidadeId: conv.id, clienteId: conv.clienteId }).catch(() => {});
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}

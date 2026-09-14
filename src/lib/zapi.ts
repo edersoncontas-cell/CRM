@@ -224,6 +224,53 @@ export async function sendDocumentBase64(phone: string, base64: string, fileName
   return extractMessageId(data) ?? "";
 }
 
+// Foto enviada a partir do CRM (base64 puro, sem hospedar).
+export async function sendImageBase64(phone: string, base64: string, mimeType: string, caption?: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
+      number: evoDestino(phone), mediatype: "image", mimetype: mimeType, media: base64, caption: caption ?? "", fileName: "foto.jpg",
+    });
+    return extractMessageId(data) ?? "";
+  }
+  const data = await zapiPost("send-image", { phone: normalizePhone(phone), image: `data:${mimeType};base64,${base64}`, caption: caption ?? "" });
+  return extractMessageId(data) ?? "";
+}
+
+// Áudio gravado no CRM (base64). A Evolution converte para o formato de
+// mensagem de voz do WhatsApp; a Z-API aceita data URL.
+export async function sendAudioBase64(phone: string, base64: string, mimeType: string): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendWhatsAppAudio/${evoInstancia()}`, {
+      number: evoDestino(phone), audio: base64, encoding: true,
+    });
+    return extractMessageId(data) ?? "";
+  }
+  const data = await zapiPost("send-audio", { phone: normalizePhone(phone), audio: `data:${mimeType};base64,${base64}`, waveform: true });
+  return extractMessageId(data) ?? "";
+}
+
+// Baixa a mídia de uma mensagem recebida pela Evolution (foto, documento,
+// vídeo) a partir do id da mensagem — a Evolution guarda a mensagem no banco
+// dela (DATABASE_SAVE_DATA_NEW_MESSAGE) e devolve o conteúdo em base64.
+export async function baixarMidiaEvolution(messageId: string): Promise<{ base64: string; mimeType: string; fileName: string | null } | null> {
+  if (provedorWhatsApp() !== "evolution") return null;
+  try {
+    const data = await evoFetch("POST", `/chat/getBase64FromMediaMessage/${evoInstancia()}`, {
+      message: { key: { id: messageId } }, convertToMp4: false,
+    });
+    const base64 = typeof data.base64 === "string" ? data.base64 : null;
+    if (!base64) return null;
+    return {
+      base64,
+      mimeType: (typeof data.mimetype === "string" && data.mimetype) || "application/octet-stream",
+      fileName: typeof data.fileName === "string" ? data.fileName : null,
+    };
+  } catch (e) {
+    console.error("[evolution] mídia:", e);
+    return null;
+  }
+}
+
 export async function sendDocument(phone: string, docUrl: string, fileName: string): Promise<string> {
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {

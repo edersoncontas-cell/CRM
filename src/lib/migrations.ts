@@ -235,6 +235,18 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "autoHoraFim"    INTEGER NOT NULL DEFAULT 20,
         ADD COLUMN IF NOT EXISTS "autoLimiteDia"  INTEGER NOT NULL DEFAULT 40
     `);
+
+    // Respostas prontas do WhatsApp (v12).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "RespostaPronta" (
+        "id"       TEXT NOT NULL,
+        "titulo"   TEXT NOT NULL,
+        "texto"    TEXT NOT NULL,
+        "ordem"    INTEGER NOT NULL DEFAULT 0,
+        "criadoEm" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "RespostaPronta_pkey" PRIMARY KEY ("id")
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }
