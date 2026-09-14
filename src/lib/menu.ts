@@ -30,7 +30,7 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/maquinas/fichas", label: "Fichas Técnicas", icon: FileText },
       { href: "/comparativo", label: "Comparativo", icon: Swords },
       { href: "/usadas", label: "Máquinas Usadas", icon: Truck },
-      { href: "/calculadora", label: "Calculadora custo/hora", icon: Calculator },
+      { href: "/calculadora", label: "Calculadora de combustível", icon: Calculator },
     ],
   },
   {

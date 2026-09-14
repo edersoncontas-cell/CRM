@@ -5,9 +5,9 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Calculadora avulsa de custo por hora e TCO — a mesma conta da proposta,
-// sem precisar de negociação aberta (para usar na visita, no balcão, no
-// telefone). Para gerar a proposta em PDF, abra pela negociação no funil.
+// Calculadora avulsa de economia de combustível (New Holland × concorrente),
+// para usar na visita, no balcão, no telefone. A conta completa de custo por
+// hora e TCO continua na proposta, aberta pela negociação no funil.
 export default async function CalculadoraPage() {
   const abertas = await db.negociacao.findMany({
     where: { status: "aberta" },
@@ -18,8 +18,8 @@ export default async function CalculadoraPage() {
   return (
     <div>
       <PageHeader
-        titulo="Calculadora de custo por hora e TCO"
-        subtitulo="Máquina atual × máquina nova × concorrente, com os números do cliente. Para transformar em proposta de uma página, abra a calculadora pela negociação no funil."
+        titulo="Calculadora de combustível"
+        subtitulo="Quanto o cliente economiza em diesel com a New Holland em vez do concorrente, com os números dele. Para a proposta completa (custo por hora e TCO), abra pela negociação no funil."
       />
       {abertas.length > 0 && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 text-sm">
