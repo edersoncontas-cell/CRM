@@ -30,7 +30,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v6: coluna Visita.googleEventId (integração real com a Google Agenda).
 // v7: remove as 7 tabelas de telas excluídas (ver migrations.ts).
 // v8: tabela Proposta (proposta comercial + calculadora).
-export const CHAVE_MANUTENCAO = "manutencao.v8";
+// v9: tabela Cadencia (follow-up de 7 toques).
+export const CHAVE_MANUTENCAO = "manutencao.v9";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

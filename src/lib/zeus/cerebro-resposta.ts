@@ -238,3 +238,47 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
     return "";
   }
 }
+
+// Toque de WhatsApp da cadência de 7 toques (lib/cadencias.ts). Diferente do
+// follow-up de negociação quente, aqui o cliente ainda NÃO respondeu nada —
+// cada toque precisa entregar valor novo e terminar com pergunta fechada,
+// nunca cobrar. Recebe o modelo de texto do nicho como referência do tom.
+export async function gerarMensagemToqueCadencia(args: {
+  contextoCliente: string;
+  estilo: string | null;
+  toque: { numero: number; titulo: string; objetivo: string; canal: string };
+  nicho: string;
+  modelo: string;
+}): Promise<string> {
+  if (!iaHabilitada()) return "";
+
+  const p = await lerParametros();
+  const system = `Você é o Orientador de Vendas, assistente comercial de ${p.nomeVendedor} (${p.marcas}, ${p.regiao}).
+O cliente abaixo está numa cadência de prospecção de 7 toques e ainda não respondeu. Este é o toque ${args.toque.numero} de 7: "${args.toque.titulo}".
+Nicho do cliente: ${args.nicho}.
+
+## Objetivo deste toque
+${args.toque.objetivo}
+
+## Contexto do cliente (use ganchos reais daqui; se estiver vazio, use o modelo)
+${args.contextoCliente || "(sem histórico)"}
+${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
+
+## Modelo de referência (tom e tamanho — adapte, não copie)
+${args.modelo}
+
+## Regras absolutas
+- Mensagem de WhatsApp CURTA: no máximo 3 linhas
+- Valor novo neste toque; NUNCA "viu minha mensagem?" nem repetição do toque anterior
+- Termine com UMA pergunta fechada (sim/não ou escolha simples)
+- NUNCA invente preço, prazo, nome de obra ou dado que não esteja no contexto; use frases genéricas quando faltar informação
+- NUNCA use emojis — linguagem profissional e direta
+- Responda APENAS com o texto da mensagem, sem aspas nem comentários`;
+
+  try {
+    return (await llmTexto(system, "Escreva a mensagem deste toque.", { maxTokens: 180 })).trim();
+  } catch (e) {
+    await zeusReport(e, "gerarMensagemToqueCadencia (cadência de 7 toques)");
+    return "";
+  }
+}

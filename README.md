@@ -27,7 +27,8 @@ centro de comando (ZEUS) cuida da saúde do sistema e da higiene dos dados.
 - **WhatsApp** — caixa de entrada em tempo real (Z-API ou Evolution API),
   vínculo com cliente, rascunho ou resposta automática da IA, relatório em PDF.
 - **Visitas** — agenda semanal, registro por voz, sincronização com a Google Agenda.
-- **Clientes** — cadastro, região, mapeamento por município, importação, frota.
+- **Clientes** — cadastro, região, mapeamento por município, importação, frota,
+  cadência de follow-up de 7 toques (ZEUS prepara os textos e avisa nos dias certos).
 - **Pós-venda** — marcos de 30/60/180/365 dias após o faturamento.
 
 **Vendas** — Fichas Técnicas (IA lê PDF/imagem), Comparativo com concorrentes,

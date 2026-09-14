@@ -70,12 +70,32 @@ model Cliente {
   frota          ClienteMaquina[]
   orientador     OrientadorAnalise?
   posVendaContatos PosVendaContato[]
+  cadencias      Cadencia[]
   @@index([leadScore])
 }
 
 // Setor de Pós-venda: histórico de contatos/ações com um cliente que já
 // comprou (ligação, visita, manutenção, peça vendida, indicação pedida etc.)
 // — usado pra saber há quanto tempo o cliente não recebe atenção pós-venda.
+// Cadência de follow-up de 7 toques (Academia, m4a6): prospecção que não
+// respondeu recebe 7 contatos em 30 dias, alternando canais. O ZEUS prepara
+// os toques de WhatsApp como rascunho e cria alertas para ligação/visita.
+// Encerra sozinha quando o cliente responde ou quando o 7º toque sai.
+model Cadencia {
+  id                 String    @id @default(cuid())
+  cliente            Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId          String
+  tipo               String    @default("geral") // construtora | pedreira | cafe | prefeitura | locadora | geral
+  toqueAtual         Int       @default(0)       // último toque executado (0 = nenhum)
+  proximoToqueEm     DateTime
+  ativa              Boolean   @default(true)
+  iniciadaEm         DateTime  @default(now())
+  encerradaEm        DateTime?
+  motivoEncerramento String?   // respondeu | concluida | manual | sem_telefone
+  @@index([ativa, proximoToqueEm])
+  @@index([clienteId])
+}
+
 model PosVendaContato {
   id        String   @id @default(cuid())
   cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)

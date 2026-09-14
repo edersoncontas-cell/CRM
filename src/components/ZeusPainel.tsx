@@ -190,7 +190,7 @@ export function ZeusPainel({
           <span className="text-xs text-zinc-400">
             {tickResultado.pausado
               ? "ZEUS está pausado — tick não executou ações."
-              : `Tick concluído: ${tickResultado.fila.processadas} msg processada(s), ${tickResultado.alertas.criados} alerta(s), ${tickResultado.autoReparo.unconfirmedReconciliados + tickResultado.autoReparo.rascunhosDescartados} reparo(s).`}
+              : `Tick concluído: ${tickResultado.fila.processadas} msg processada(s), ${tickResultado.alertas.criados} alerta(s), ${tickResultado.autoReparo.unconfirmedReconciliados + tickResultado.autoReparo.rascunhosDescartados} reparo(s), ${(tickResultado.cadencias?.rascunhos ?? 0) + (tickResultado.cadencias?.alertas ?? 0)} toque(s) de cadência.`}
           </span>
         )}
       </div>

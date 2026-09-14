@@ -180,6 +180,26 @@ export async function aplicarMigracoes(): Promise<void> {
           FOREIGN KEY ("negociacaoId") REFERENCES "Negociacao"("id") ON DELETE CASCADE
       )
     `);
+
+    // Cadência de follow-up de 7 toques (v9).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Cadencia" (
+        "id"                 TEXT NOT NULL,
+        "clienteId"          TEXT NOT NULL,
+        "tipo"               TEXT NOT NULL DEFAULT 'geral',
+        "toqueAtual"         INTEGER NOT NULL DEFAULT 0,
+        "proximoToqueEm"     TIMESTAMP WITH TIME ZONE NOT NULL,
+        "ativa"              BOOLEAN NOT NULL DEFAULT TRUE,
+        "iniciadaEm"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "encerradaEm"        TIMESTAMP WITH TIME ZONE,
+        "motivoEncerramento" TEXT,
+        CONSTRAINT "Cadencia_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "Cadencia_clienteId_fkey"
+          FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cadencia_ativa_proximoToqueEm_idx" ON "Cadencia"("ativa", "proximoToqueEm")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cadencia_clienteId_idx" ON "Cadencia"("clienteId")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

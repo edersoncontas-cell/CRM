@@ -8,6 +8,8 @@ import { ResumoClienteForm } from "@/components/ResumoClienteForm";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { NextBestAction } from "@/components/NextBestAction";
 import { RegistroVisitaVoz } from "@/components/RegistroVisitaVoz";
+import { CadenciaCliente } from "@/components/CadenciaCliente";
+import { cadenciaDoCliente, TIPOS_CADENCIA, TOQUES } from "@/lib/cadencias";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake } from "lucide-react";
@@ -37,13 +39,14 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };
   type ConvRow = { id: string };
-  const [frotaRows, waConv, orientador, ultimoContatoPosVenda] = await Promise.all([
+  const [frotaRows, waConv, orientador, ultimoContatoPosVenda, cadencia] = await Promise.all([
     db.$queryRawUnsafe<FrotaRow[]>(`SELECT id, marca, modelo FROM "ClienteMaquina" WHERE "clienteId" = $1 ORDER BY "criadoEm" ASC`, cliente.id).catch(() => [] as FrotaRow[]),
     db.whatsAppConversation.findFirst({ where: { clienteId: cliente.id }, select: { id: true } }).catch(() => null as ConvRow | null),
     db.orientadorAnalise.findUnique({ where: { clienteId: cliente.id } }),
     cliente.jaComprou
       ? db.posVendaContato.findFirst({ where: { clienteId: cliente.id }, orderBy: { data: "desc" } })
       : Promise.resolve(null),
+    cadenciaDoCliente(cliente.id).catch(() => null),
   ]);
 
   const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
@@ -245,6 +248,17 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <NextBestAction clienteId={cliente.id} />
         <RegistroVisitaVoz clienteId={cliente.id} />
+      </div>
+
+      {/* Cadência de follow-up de 7 toques (Academia m4a6) */}
+      <div className="mb-6">
+        <CadenciaCliente
+          clienteId={cliente.id}
+          inicial={cadencia}
+          tipos={TIPOS_CADENCIA}
+          etapas={TOQUES.map((t) => ({ numero: t.numero, dia: t.dia, canal: t.canal, titulo: t.titulo }))}
+          temTelefone={!!cliente.telefone}
+        />
       </div>
 
       {/* Resumo do Cliente (substitui Negociações) */}

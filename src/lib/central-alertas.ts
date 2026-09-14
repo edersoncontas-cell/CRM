@@ -40,6 +40,7 @@ const ROTULO_TIPO_ALERTA: Record<string, string> = {
   visita_amanha: "Visita amanhã",
   concorrente: "Concorrente citado",
   aguardando_resposta: "Aguardando resposta",
+  cadencia: "Cadência: ligar ou visitar",
 };
 
 export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; total: number; alta: number }> {
@@ -133,7 +134,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     {
       id: "comerciais",
       titulo: "Alertas comerciais do ZEUS",
-      descricao: "Negociação esfriando, visita amanhã, concorrente citado. Marque como resolvido depois de agir.",
+      descricao: "Negociação esfriando, visita amanhã, concorrente citado, toque de ligação ou visita da cadência. Marque como resolvido depois de agir.",
       itens: alertas.map((a) => ({
         id: `alerta:${a.id}`,
         alertaId: a.id,
