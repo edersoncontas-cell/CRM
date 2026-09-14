@@ -77,6 +77,15 @@ export default async function NegociacoesPage({
     consorcioCredito: n.consorcioCredito,
     crdSaldoParcelasQtd: n.crdSaldoParcelasQtd,
     faturadoEm: n.faturadoEm ? n.faturadoEm.toISOString() : null,
+    motivoPerda: n.motivoPerda,
+    usadaTroca: n.usadaTroca,
+    usadaMarca: n.usadaMarca,
+    usadaModelo: n.usadaModelo,
+    usadaAno: n.usadaAno,
+    usadaHorimetro: n.usadaHorimetro,
+    usadaEstado: n.usadaEstado,
+    usadaValor: n.usadaValor,
+    usadaObs: n.usadaObs,
   }));
 
   const colunas = colunasFunil.map((c) => ({
@@ -85,6 +94,8 @@ export default async function NegociacoesPage({
     cor: c.cor,
     ordem: c.ordem,
     fixa: c.fixa,
+    papel: c.papel,
+    probabilidade: c.probabilidade,
   }));
 
   return (

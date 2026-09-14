@@ -8,6 +8,7 @@
 import { db } from "@/lib/db";
 import { analisarConversaIA, classificarConversaIA, type ExtracaoConversa } from "@/lib/ai";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
+import { papelDaColuna } from "@/lib/pipeline";
 import { deveDescartarContato } from "@/lib/utils";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { registrarAudit } from "@/lib/audit";
@@ -66,10 +67,18 @@ export async function alimentarNegociacao(
     orderBy: { atualizadoEm: "desc" },
   });
 
+  // Títulos REAIS das colunas do funil (o usuário pode renomear): a primeira
+  // "em negociação" recebe contato novo; a que tem "visita" + "pendente"
+  // recebe quem marcou visita.
+  const colunas = await db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { titulo: true, papel: true } });
+  const abertasCol = colunas.filter((c) => papelDaColuna(c) === "em_negociacao");
+  const colInicial = abertasCol[0]?.titulo ?? ESTAGIO_INICIAL;
+  const colVisita = abertasCol.find((c) => /visita/i.test(c.titulo) && /pend/i.test(c.titulo))?.titulo ?? abertasCol[1]?.titulo ?? colInicial;
+
   if (aberta) {
     const estagio =
-      ex.dataVisita && ESTAGIOS_PRE_VISITA.includes(aberta.estagio)
-        ? "visita_pendente"
+      ex.dataVisita && (ESTAGIOS_PRE_VISITA.includes(aberta.estagio) || aberta.estagio === colInicial)
+        ? colVisita
         : aberta.estagio;
     const termometro = Math.max(0, Math.min(100, aberta.termometro + ajusteTermometro(ex.sentimento)));
     await db.negociacao.update({
@@ -92,7 +101,7 @@ export async function alimentarNegociacao(
     const nova = await db.negociacao.create({
       data: {
         clienteId,
-        estagio: ex.dataVisita ? "visita_pendente" : ESTAGIO_INICIAL,
+        estagio: ex.dataVisita ? colVisita : colInicial,
         termometro: ex.sentimento === "positivo" ? 65 : 50,
         proximaAcao: ex.dataVisita ? "Confirmar e realizar a visita" : "Retornar contato e qualificar interesse",
         ...(ex.maquina ? { maquinaModelo: ex.maquina } : {}),

@@ -7,6 +7,7 @@
 import { db } from "@/lib/db";
 import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
+import { calcularRitmoMetas } from "@/lib/metas";
 
 export type SeveridadeAlerta = "alta" | "media" | "baixa";
 
@@ -49,7 +50,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   const depoisDeAmanha = inicioDoDiaBrasilia(new Date(), 2);
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * HORA);
 
-  const [rascunhos, aguardando, alertas, posVenda, visitas, demandas, eventos] = await Promise.all([
+  const [rascunhos, aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo] = await Promise.all([
     db.whatsAppMessage.findMany({
       where: { isDraft: true, draftStatus: "PENDING" },
       orderBy: { sentAt: "desc" },
@@ -85,6 +86,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       orderBy: { criadoEm: "desc" },
       take: 20,
     }),
+    calcularRitmoMetas().catch(() => null),
   ]);
 
   // Conversa de cada cliente aguardando resposta (para o link ir direto ao chat).
@@ -196,6 +198,22 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           quando: d.dueDate ? formatDateTime(d.dueDate) : null,
         };
       }),
+    },
+    {
+      id: "meta",
+      titulo: "Meta do ano",
+      descricao: "Ritmo necessário por semana para bater a meta. Aparece só quando está atrasado.",
+      itens: ritmo && ritmo.situacao === "atrasado" && ritmo.faltamAno > 0
+        ? [{
+            id: "meta:ano",
+            titulo: `Meta atrasada: ${ritmo.vendasAno} de ${ritmo.esperadoAteHoje.toFixed(1)} esperadas até hoje`,
+            detalhe: ritmo.resumo,
+            severidade: "media" as const,
+            href: "/dashboard",
+            hrefLabel: "Ver ritmo",
+            quando: null,
+          }]
+        : [],
     },
     {
       id: "sistema",

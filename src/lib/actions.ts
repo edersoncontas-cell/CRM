@@ -7,7 +7,7 @@ import { garantirColunasDemanda, CORES_COLUNA } from "./demandas";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas, papelDaColuna, PAPEIS_COLUNA, type PapelColuna } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
@@ -672,39 +672,61 @@ export async function editarNegociacao(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function moverNegociacao(id: string, estagio: string) {
-  const isPerdido = estagio.toLowerCase().includes("perdid");
-  const isFaturado = estagio.toLowerCase().includes("faturad");
-  const isConfirmado = estagio === "proposta_aprovada" || estagio.toLowerCase().includes("confirm") || estagio.toLowerCase().includes("ganho") || estagio.toLowerCase().includes("vendid");
-  
-  if (isPerdido) {
+// Coluna do funil pelo título (exato ou sem diferenciar maiúsculas), ou por
+// id legado (primeiro_contato, proposta_bcnh...). Retorna null se não existir.
+export async function resolverColunaFunil(estagio: string): Promise<{ titulo: string; papel: PapelColuna } | null> {
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true, ordem: true }, orderBy: { ordem: "asc" } });
+  const legado: Record<string, string> = {
+    primeiro_contato: "Primeiro contato", visita_pendente: "Visitas pendentes", visita_realizada: "Visita realizada",
+    proposta_bcnh: "Proposta no BCNH", proposta_aprovada: "Vendas Confirmadas", perdido: "Venda perdida",
+    novo: "Primeiro contato", contato: "Primeiro contato", proposta: "Proposta no BCNH", negociacao: "Proposta no BCNH", fechamento: "Vendas Confirmadas",
+  };
+  const alvo = (legado[estagio] ?? estagio).trim().toLowerCase();
+  const col = colunas.find((c) => c.titulo === estagio) ?? colunas.find((c) => c.titulo.toLowerCase() === alvo);
+  if (col) return { titulo: col.titulo, papel: papelDaColuna(col) };
+  return null;
+}
+
+async function colunaComPapel(papel: PapelColuna): Promise<string | null> {
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true }, orderBy: { ordem: "asc" } });
+  return colunas.find((c) => papelDaColuna(c) === papel)?.titulo ?? null;
+}
+
+export async function moverNegociacao(id: string, estagio: string, motivoPerda?: string) {
+  // O que acontece com a negociação depende do PAPEL da coluna, não do nome.
+  const col = await resolverColunaFunil(estagio);
+  const tituloFinal = col?.titulo ?? estagio;
+  const papel: PapelColuna = col?.papel ?? "em_negociacao";
+
+  if (papel === "perdida") {
     await db.negociacao.update({
       where: { id },
-      data: { status: "perdida", estagio, ultimoContato: new Date() },
+      data: { status: "perdida", estagio: tituloFinal, ultimoContato: new Date(), ...(motivoPerda ? { motivoPerda } : {}) },
     });
-  } else if (isFaturado) {
+  } else if (papel === "faturado") {
     // FATURADO: marca como ganha, registra faturadoEm, atualiza cliente
     const neg = await db.negociacao.update({
       where: { id },
-      data: { status: "ganha", estagio, faturadoEm: new Date(), ultimoContato: new Date() },
+      data: { status: "ganha", estagio: tituloFinal, faturadoEm: new Date(), ultimoContato: new Date() },
       include: { cliente: true },
     });
     await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
     await registrarAudit({
-      acao: "negociacao_criada" as any,
+      acao: "negociacao_ganha",
       origem: "usuario",
       descricao: `Negociação FATURADA! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
       entidade: "Negociacao",
       entidadeId: id,
       clienteId: neg.clienteId,
-      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: (neg.cliente as any)?.nome, tipoPagamento: (neg as any).tipoPagamento ?? null } as any,
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome, tipoPagamento: neg.tipoPagamento ?? null },
     });
+    await usadaDaTrocaParaEstoque(id).catch((e) => console.error("[usada-troca] estoque:", e));
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
-  } else if (isConfirmado) {
+  } else if (papel === "confirmada") {
     const neg = await db.negociacao.update({
       where: { id },
-      data: { status: "ganha", estagio, ultimoContato: new Date() },
+      data: { status: "ganha", estagio: tituloFinal, ultimoContato: new Date() },
       include: { cliente: true },
     });
     await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
@@ -715,32 +737,32 @@ export async function moverNegociacao(id: string, estagio: string) {
       entidade: "Negociacao",
       entidadeId: id,
       clienteId: neg.clienteId,
-      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: (neg.cliente as any)?.nome } as any,
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
     });
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
   } else {
     await db.negociacao.update({
       where: { id },
-      data: { status: "aberta", estagio, ultimoContato: new Date() },
+      data: { status: "aberta", estagio: tituloFinal, ultimoContato: new Date(), faturadoEm: null },
     });
   }
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
-  revalidatePath("/vendas-perdidas");
+  revalidatePath("/dashboard");
 }
 
 export async function excluirNegociacao(id: string) {
   await db.negociacao.delete({ where: { id } });
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
-  revalidatePath("/vendas-perdidas");
 }
 
 export async function marcarPerdida(id: string, motivo: string) {
+  const colPerdida = await colunaComPapel("perdida");
   const neg = await db.negociacao.update({
     where: { id },
-    data: { status: "perdida", motivoPerda: motivo, estagio: COL_PERDIDO.id },
+    data: { status: "perdida", motivoPerda: motivo, estagio: colPerdida ?? COL_PERDIDO.titulo },
     include: { cliente: true },
   });
   await registrarAudit({
@@ -753,7 +775,7 @@ export async function marcarPerdida(id: string, motivo: string) {
     extra: { motivo, maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
   });
   revalidatePath("/pipeline");
-  revalidatePath("/vendas-perdidas");
+  revalidatePath("/negociacoes");
   revalidatePath("/financeiro");
 }
 
@@ -762,12 +784,13 @@ export async function marcarGanha(id: string) {
   // pelo usuário) — sem isso, a negociação vira "ganha" com um estagio legado
   // que não bate com nenhuma coluna do funil (some do funil, mas continua
   // aparecendo no Financeiro, que lista todo status "ganha").
-  const colFaturado = await db.colunaFunil.findFirst({ where: { titulo: { contains: "faturad", mode: "insensitive" } } });
+  const colFaturado = await colunaComPapel("faturado");
   const neg = await db.negociacao.update({
     where: { id },
-    data: { status: "ganha", estagio: colFaturado?.titulo ?? "FATURADO", faturadoEm: new Date() },
+    data: { status: "ganha", estagio: colFaturado ?? "FATURADO", faturadoEm: new Date() },
     include: { cliente: true },
   });
+  await usadaDaTrocaParaEstoque(id).catch((e) => console.error("[usada-troca] estoque:", e));
   await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
   await registrarAudit({
     acao: "negociacao_ganha",
@@ -1713,13 +1736,13 @@ export async function garantirColunasFunil() {
   if (count === 0) {
     // Cria as colunas padrão com base nos estágios fixos do pipeline
     const defaults = [
-      { titulo: "Primeiro contato",    cor: "border-t-sky-400",    ordem: 1, fixa: true },
-      { titulo: "Visitas pendentes",   cor: "border-t-agro-400",   ordem: 2, fixa: true },
-      { titulo: "Visita realizada",    cor: "border-t-emerald-400",ordem: 3, fixa: false },
-      { titulo: "Proposta no BCNH",    cor: "border-t-violet-400", ordem: 4, fixa: false },
-      { titulo: "Vendas Confirmadas",  cor: "border-t-green-500",  ordem: 5, fixa: false },
-      { titulo: "Venda perdida",       cor: "border-t-red-400",    ordem: 6, fixa: true },
-      { titulo: "FATURADO",            cor: "border-t-yellow-500",  ordem: 7, fixa: true },
+      { titulo: "Primeiro contato",    cor: "border-t-sky-400",    ordem: 1, fixa: true,  papel: "em_negociacao", probabilidade: 20 },
+      { titulo: "Visitas pendentes",   cor: "border-t-agro-400",   ordem: 2, fixa: true,  papel: "em_negociacao", probabilidade: 35 },
+      { titulo: "Visita realizada",    cor: "border-t-emerald-400",ordem: 3, fixa: false, papel: "em_negociacao", probabilidade: 50 },
+      { titulo: "Proposta no BCNH",    cor: "border-t-violet-400", ordem: 4, fixa: false, papel: "banco",         probabilidade: 70 },
+      { titulo: "Vendas Confirmadas",  cor: "border-t-green-500",  ordem: 5, fixa: false, papel: "confirmada",    probabilidade: 90 },
+      { titulo: "Venda perdida",       cor: "border-t-red-400",    ordem: 6, fixa: true,  papel: "perdida",       probabilidade: 0 },
+      { titulo: "FATURADO",            cor: "border-t-yellow-500",  ordem: 7, fixa: true,  papel: "faturado",      probabilidade: 100 },
     ];
     await db.colunaFunil.createMany({ data: defaults });
   }
@@ -1757,13 +1780,32 @@ export async function criarColunaFunil(titulo: string) {
 export async function excluirColunaFunil(id: string) {
   const col = await db.colunaFunil.findUnique({ where: { id } });
   if (!col || col.fixa) return; // protege colunas fixas
-  // Move negociações desta coluna para "primeiro_contato"
+  // Move negociações desta coluna para a primeira coluna "em negociação".
+  const primeira = await db.colunaFunil.findFirst({ where: { NOT: { id } }, orderBy: { ordem: "asc" }, select: { titulo: true, papel: true } });
   await db.negociacao.updateMany({
     where: { estagio: col.titulo },
-    data: { estagio: "primeiro_contato" },
+    data: { estagio: primeira?.titulo ?? "Primeiro contato" },
   });
   await db.colunaFunil.delete({ where: { id } });
   revalidatePath("/negociacoes");
+}
+
+// Papel e probabilidade da coluna (menu "⋮" da coluna no funil).
+export async function definirPapelColunaFunil(id: string, papel: string, probabilidade: number): Promise<{ ok: boolean; erro?: string }> {
+  const col = await db.colunaFunil.findUnique({ where: { id } });
+  if (!col) return { ok: false, erro: "Coluna não encontrada." };
+  if (!PAPEIS_COLUNA.some((p) => p.id === papel)) return { ok: false, erro: "Papel inválido." };
+  const prob = Math.max(0, Math.min(100, Math.round(Number(probabilidade) || 0)));
+  // Só pode haver UMA coluna "faturado" e UMA "perdida": são as que alimentam
+  // Financeiro, Dashboard e pós-venda.
+  if (papel === "faturado" || papel === "perdida") {
+    const outra = await db.colunaFunil.findFirst({ where: { papel, NOT: { id } }, select: { titulo: true } });
+    if (outra) return { ok: false, erro: `A coluna "${outra.titulo}" já tem esse papel. Troque o papel dela primeiro.` };
+  }
+  await db.colunaFunil.update({ where: { id }, data: { papel, probabilidade: prob } });
+  revalidatePath("/negociacoes");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function renomearColunaFunil(id: string, novoTitulo: string) {
@@ -1789,6 +1831,69 @@ export async function reordenarColunasFunil(ids: string[]) {
 // ---------- Nova Negociação (popup completo) ----------
 // Cria uma negociação completa com marca, máquina, valor formatado, tipo de pagamento
 // e todos os campos condicionais (financiamento, consórcio, CRD PME, à vista).
+// ── Usada na troca ─────────────────────────────────────────────────────────
+function valorBrlOuNull(v: FormDataEntryValue | null): number | null {
+  const raw = String(v ?? "").replace(/[^0-9,.]/g, "").replace(/\./g, "").replace(",", ".");
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : null;
+}
+function intOuNull(v: FormDataEntryValue | null): number | null {
+  const raw = String(v ?? "").replace(/\D/g, "");
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function lerUsadaDoForm(formData: FormData) {
+  const usadaTroca = formData.get("usadaTroca") === "true";
+  if (!usadaTroca) {
+    return { usadaTroca: false, usadaMarca: null, usadaModelo: null, usadaAno: null, usadaHorimetro: null, usadaEstado: null, usadaValor: null, usadaObs: null };
+  }
+  const estado = String(formData.get("usadaEstado") ?? "");
+  return {
+    usadaTroca: true,
+    usadaMarca: String(formData.get("usadaMarca") ?? "").trim() || null,
+    usadaModelo: String(formData.get("usadaModelo") ?? "").trim() || null,
+    usadaAno: intOuNull(formData.get("usadaAno")),
+    usadaHorimetro: intOuNull(formData.get("usadaHorimetro")),
+    usadaEstado: ["seminova", "boa", "regular"].includes(estado) ? estado : "boa",
+    usadaValor: valorBrlOuNull(formData.get("usadaValor")),
+    usadaObs: String(formData.get("usadaObs") ?? "").trim() || null,
+  };
+}
+
+// Ao faturar uma negociação com usada na troca, a usada entra no estoque de
+// Máquinas Usadas uma única vez (usadaEstoqueId evita duplicar).
+export async function usadaDaTrocaParaEstoque(negociacaoId: string): Promise<{ criada: boolean }> {
+  const neg = await db.negociacao.findUnique({
+    where: { id: negociacaoId },
+    include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+  });
+  if (!neg || !neg.usadaTroca || neg.usadaEstoqueId || !neg.usadaModelo) return { criada: false };
+  const usada = await db.maquinaUsada.create({
+    data: {
+      marca: neg.usadaMarca ?? "Outra",
+      modelo: neg.usadaModelo,
+      ano: neg.usadaAno,
+      horimetro: neg.usadaHorimetro,
+      preco: neg.usadaValor,
+      estado: neg.usadaEstado ?? "boa",
+      localizacao: neg.cliente.municipio?.nome ?? null,
+      descricao: `Recebida na troca de ${neg.cliente.nome}${neg.maquinaModelo ? ` (venda de ${neg.maquinaModelo})` : ""}.${neg.usadaObs ? ` ${neg.usadaObs}` : ""}`,
+      status: "disponivel",
+    },
+  });
+  await db.negociacao.update({ where: { id: negociacaoId }, data: { usadaEstoqueId: usada.id } });
+  await registrarAudit({
+    acao: "negociacao_atualizada", origem: "sistema",
+    descricao: `Usada ${neg.usadaMarca ?? ""} ${neg.usadaModelo} recebida na troca de ${neg.cliente.nome} entrou no estoque de Máquinas Usadas.`,
+    entidade: "Negociacao", entidadeId: negociacaoId, clienteId: neg.clienteId,
+  }).catch(() => {});
+  revalidatePath("/usadas");
+  return { criada: true };
+}
+
 export async function criarNegociacaoCompleta(formData: FormData) {
   let clienteId = String(formData.get("clienteId") ?? "") || null;
   const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
@@ -1809,7 +1914,9 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const estagio = String(formData.get("estagio") ?? "") || "Primeiro contato";
   const negociacaoAntiga = formData.get("negociacaoAntiga") === "true";
   const mesAnoReferencia = negociacaoAntiga ? String(formData.get("mesAnoReferencia") ?? "") || null : null;
-  const isFaturadoEstagio = estagio.toLowerCase().includes("faturad");
+  const papelEstagio = (await resolverColunaFunil(estagio))?.papel ?? "em_negociacao";
+  const isFaturadoEstagio = papelEstagio === "faturado";
+  const usada = lerUsadaDoForm(formData);
 
   // Data de faturamento: usa a informada manualmente (ex: CRD PME) ou, se a
   // coluna já é FATURADO, a data de agora.
@@ -1836,7 +1943,7 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const crdQtdRaw = String(formData.get("crdSaldoParcelasQtd") ?? "");
   const crdParcelaRaw = String(formData.get("crdParcelaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
 
-  await db.negociacao.create({
+  const criada = await db.negociacao.create({
     data: {
       clienteId,
       marca: String(formData.get("marca") ?? "") || null,
@@ -1861,17 +1968,19 @@ export async function criarNegociacaoCompleta(formData: FormData) {
       negociacaoAntiga,
       mesAnoReferencia,
       ultimoContato: new Date(),
-      // Se estagio é FATURADO, marca como ganha imediatamente
-      status: isFaturadoEstagio ? "ganha" : "aberta",
+      // O papel da coluna decide o status inicial.
+      status: isFaturadoEstagio || papelEstagio === "confirmada" ? "ganha" : papelEstagio === "perdida" ? "perdida" : "aberta",
       faturadoEm: faturadoEmFinal,
-    } as any,
+      ...usada,
+    },
   });
 
-  if (isFaturadoEstagio) {
+  if (isFaturadoEstagio || papelEstagio === "confirmada") {
     await db.cliente.update({ where: { id: clienteId }, data: { jaComprou: true } });
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
   }
+  if (isFaturadoEstagio) await usadaDaTrocaParaEstoque(criada.id).catch((e) => console.error("[usada-troca] estoque:", e));
 
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
@@ -1892,7 +2001,9 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
 
   const tipoPagamento = String(formData.get("tipoPagamento") ?? "") || null;
   const estagio = String(formData.get("estagio") ?? "") || undefined;
-  const isFaturadoEstagio = !!estagio && estagio.toLowerCase().includes("faturad");
+  const papelEstagio = estagio ? ((await resolverColunaFunil(estagio))?.papel ?? "em_negociacao") : null;
+  const isFaturadoEstagio = papelEstagio === "faturado";
+  const usada = lerUsadaDoForm(formData);
 
   const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
   const faturadoEmFinal = dataFaturamentoRaw
@@ -1939,13 +2050,18 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
       dataVisita: dataVisitaRaw ? new Date(dataVisitaRaw + ":00-03:00") : null,
       estagio,
       ultimoContato: new Date(),
+      ...usada,
       ...(isFaturadoEstagio ? { status: "ganha" as const, faturadoEm: faturadoEmFinal } : {}),
-    } as any,
+      ...(papelEstagio === "confirmada" ? { status: "ganha" as const } : {}),
+      ...(papelEstagio === "perdida" ? { status: "perdida" as const } : {}),
+      ...(papelEstagio === "em_negociacao" || papelEstagio === "banco" ? { status: "aberta" as const, faturadoEm: null } : {}),
+    },
   });
 
-  if (isFaturadoEstagio) {
+  if (isFaturadoEstagio || papelEstagio === "confirmada") {
     await db.cliente.update({ where: { id: antes.clienteId }, data: { jaComprou: true } });
   }
+  if (isFaturadoEstagio) await usadaDaTrocaParaEstoque(id).catch((e) => console.error("[usada-troca] estoque:", e));
 
   // Interesse futuro: mês/ano para retomar contato.
   const interesseFuturoMes = String(formData.get("interesseFuturoMes") ?? "");
@@ -2147,7 +2263,7 @@ export async function criarNegociacaoDoOrientador(clienteId: string, colunaTitul
   if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
 
   await garantirColunasFunil();
-  const colunas = await db.colunaFunil.findMany({ select: { titulo: true }, orderBy: { ordem: "asc" } });
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true }, orderBy: { ordem: "asc" } });
   const categorizar = criarCategorizadorColunas(colunas);
   const abertas = colunas.filter((c) => categorizar(c.titulo) === "em_negociacao");
   const escolhida = colunaTitulo

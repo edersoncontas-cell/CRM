@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { X, Calendar, Bell, Trash2 } from "lucide-react";
+import { X, Calendar, Bell, Trash2, Repeat } from "lucide-react";
+import { papelDaColuna } from "@/lib/pipeline";
 import { criarNegociacaoCompleta, editarNegociacaoCompleta, excluirNegociacao } from "@/lib/actions";
 import { WheelDatePicker, WheelDateTimePicker, WheelMonthPicker } from "@/components/WheelDatePicker";
 
 type Cliente = { id: string; nome: string };
-type ColunaOpcao = { id: string; titulo: string };
+type ColunaOpcao = { id: string; titulo: string; papel?: string | null };
 type MaquinaPropria = { marca: string; modelo: string };
 
 // Valores de uma negociação já existente — usados para pré-preencher o
@@ -29,7 +30,21 @@ export type ValoresNegociacao = {
   dataFaturamento?: string | null;
   concorrenteMencionado?: string | null;
   proximaAcao?: string | null;
+  usadaTroca?: boolean;
+  usadaMarca?: string | null;
+  usadaModelo?: string | null;
+  usadaAno?: number | null;
+  usadaHorimetro?: number | null;
+  usadaEstado?: string | null;
+  usadaValor?: number | null;
+  usadaObs?: string | null;
 };
+
+const ESTADOS_USADA = [
+  { id: "seminova", label: "Seminova" },
+  { id: "boa", label: "Boa" },
+  { id: "regular", label: "Regular" },
+];
 
 const MESES_LABEL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 function formatMesAnoLabel(mesAno: string): string {
@@ -146,9 +161,13 @@ export function FormNovaNegociacao({
   const [concorrente, setConcorrente] = useState(vi?.concorrenteMencionado ?? "");
   const [proximaAcao, setProximaAcao] = useState(vi?.proximaAcao ?? "");
   const [interesseFuturoMes, setInteresseFuturoMes] = useState("");
+  const [usadaTroca, setUsadaTroca] = useState(vi?.usadaTroca ?? false);
+  const [usadaValorStr, setUsadaValorStr] = useState(vi?.usadaValor ? formatBRL(String(Math.round(vi.usadaValor))) : "");
+  const [usadaEstado, setUsadaEstado] = useState(vi?.usadaEstado ?? "boa");
   const [pickerAberto, setPickerAberto] = useState<"visita" | "faturamento" | "avista" | "interesse" | null>(null);
 
-  const isFaturado = estagio.toLowerCase().includes("faturad");
+  const colunaSel = colunas.find((c) => c.titulo === estagio);
+  const isFaturado = colunaSel ? papelDaColuna(colunaSel) === "faturado" : estagio.toLowerCase().includes("faturad");
   const valorNum = parseNum(valorStr);
 
   function onValorChange(v: string) {
@@ -208,6 +227,11 @@ export function FormNovaNegociacao({
     if (concorrente) fd.set("concorrenteMencionado", concorrente);
     if (proximaAcao) fd.set("proximaAcao", proximaAcao);
     if (interesseFuturoMes) fd.set("interesseFuturoMes", interesseFuturoMes);
+    fd.set("usadaTroca", usadaTroca ? "true" : "false");
+    if (usadaTroca) {
+      fd.set("usadaValor", String(parseNum(usadaValorStr) || ""));
+      fd.set("usadaEstado", usadaEstado);
+    }
 
     startTransition(async () => {
       const r = negociacaoId ? await editarNegociacaoCompleta(negociacaoId, fd) : await criarNegociacaoCompleta(fd);
@@ -404,6 +428,59 @@ export function FormNovaNegociacao({
               <label className={labelCls}>Concorrente</label>
               <input value={concorrente} onChange={(e) => setConcorrente(e.target.value)} placeholder="Ex: CAT, Komatsu..." className={inputCls} />
             </div>
+          </div>
+
+          {/* Usada na troca: entra como parte da entrada; ao faturar vai para o estoque */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-amber-900">
+              <input type="checkbox" checked={usadaTroca} onChange={(e) => setUsadaTroca(e.target.checked)} className="h-4 w-4 accent-amber-600" />
+              <Repeat size={14} /> Tem usada na troca
+            </label>
+            {usadaTroca && (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Marca da usada</label>
+                    <input name="usadaMarca" defaultValue={vi?.usadaMarca ?? ""} placeholder="Ex: Caterpillar" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Modelo da usada</label>
+                    <input name="usadaModelo" defaultValue={vi?.usadaModelo ?? ""} placeholder="Ex: 416E" className={inputCls} required />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelCls}>Ano</label>
+                    <input name="usadaAno" defaultValue={vi?.usadaAno ?? ""} inputMode="numeric" placeholder="2016" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Horímetro</label>
+                    <input name="usadaHorimetro" defaultValue={vi?.usadaHorimetro ?? ""} inputMode="numeric" placeholder="8500" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Estado</label>
+                    <select value={usadaEstado} onChange={(e) => setUsadaEstado(e.target.value)} className={inputCls}>
+                      {ESTADOS_USADA.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Valor avaliado da usada (R$) — vale como entrada</label>
+                  <input value={usadaValorStr} onChange={(e) => setUsadaValorStr(formatBRL(e.target.value))} inputMode="numeric" placeholder="0" className={inputCls} />
+                  {valorNum > 0 && parseNum(usadaValorStr) > 0 && (
+                    <p className="mt-1 text-[11px] text-amber-800">
+                      Saldo a financiar após a usada: {(valorNum - parseNum(usadaValorStr)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      {" "}({Math.round((parseNum(usadaValorStr) / valorNum) * 100)}% de entrada)
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Checklist / observações da usada</label>
+                  <input name="usadaObs" defaultValue={vi?.usadaObs ?? ""} placeholder="Pneus 60%, vazamento no cilindro, cabine ok…" className={inputCls} />
+                </div>
+                <p className="text-[11px] text-amber-800/80">Ao faturar, a usada entra sozinha no estoque de Máquinas Usadas com estes dados.</p>
+              </div>
+            )}
           </div>
 
           <div>

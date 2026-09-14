@@ -184,6 +184,17 @@ model Negociacao {
   status                String    @default("aberta") // aberta | ganha | perdida
   motivoPerda           String?
   faturadoEm            DateTime? // data em que chegou na coluna FATURADO
+  // Usada na troca: entra como parte da entrada; ao faturar, vai sozinha
+  // para o estoque de Máquinas Usadas (usadaEstoqueId guarda o vínculo).
+  usadaTroca            Boolean   @default(false)
+  usadaMarca            String?
+  usadaModelo           String?
+  usadaAno              Int?
+  usadaHorimetro        Int?
+  usadaEstado           String?   // seminova | boa | regular
+  usadaValor            Float?
+  usadaObs              String?
+  usadaEstoqueId        String?
   // Controle de pagamento da comissão (0,5% sobre o valor faturado)
   comissaoPaga          Boolean   @default(false)
   comissaoPagaMes       String?   // "YYYY-MM" — mês em que a comissão foi paga
@@ -272,6 +283,12 @@ model ColunaFunil {
   cor       String   @default("border-t-slate-400")
   ordem     Int      @default(0)
   fixa      Boolean  @default(false)
+  // Papel da coluna no funil (independe do título, que o usuário pode
+  // renomear): em_negociacao | banco | confirmada | faturado | perdida.
+  papel     String?
+  // Probabilidade de fechamento (0-100) de quem está nesta coluna — base do
+  // valor ponderado do funil.
+  probabilidade Int  @default(50)
   criadoEm DateTime @default(now())
 }
 

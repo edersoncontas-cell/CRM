@@ -7,18 +7,21 @@ import {
   useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import {
-  moverNegociacao, marcarPerdida, marcarGanha,
-  criarColunaFunil, excluirColunaFunil, renomearColunaFunil,
+  moverNegociacao,
+  criarColunaFunil, excluirColunaFunil, renomearColunaFunil, definirPapelColunaFunil,
   definirFaturadoEm,
 } from "@/lib/actions";
-import { criarCategorizadorColunas } from "@/lib/pipeline";
+import {
+  criarCategorizadorColunas, papelDaColuna, probabilidadeDaColuna, valorPonderado,
+  PAPEIS_COLUNA, MOTIVOS_PERDA, rotuloMotivoPerda, rotuloPapel,
+} from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
   AlertTriangle, CheckCircle2, Clock, BarChart3, MoreVertical, Check,
-  FileText,
+  FileText, Percent, Repeat,
 } from "lucide-react";
 
 interface CardData {
@@ -46,10 +49,19 @@ interface CardData {
   consorcioCredito: number | null;
   crdSaldoParcelasQtd: number | null;
   faturadoEm: string | null;
+  motivoPerda: string | null;
+  usadaTroca: boolean;
+  usadaMarca: string | null;
+  usadaModelo: string | null;
+  usadaAno: number | null;
+  usadaHorimetro: number | null;
+  usadaEstado: string | null;
+  usadaValor: number | null;
+  usadaObs: string | null;
 }
 
 type Cliente = { id: string; nome: string };
-type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean };
+type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean; papel: string | null; probabilidade: number };
 type MaquinaPropria = { marca: string; modelo: string };
 
 function temaCalor(t: number): string {
@@ -83,9 +95,10 @@ export function FunilNegociacoes({
   const [filtro, setFiltro] = useState("");
   const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
   const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
+  const [confirmPerda, setConfirmPerda] = useState<{ cardId: string; cliente: string; estagio: string } | null>(null);
   const [novaNegociacaoAberta, setNovaNegociacaoAberta] = useState(false);
   const [estagioPreSelecionado, setEstagioPreSelecionado] = useState<string | null>(null);
-  const colunasParaNova = colunas.filter((c) => !c.titulo.toLowerCase().includes("perdid"));
+  const colunasParaNova = colunas.filter((c) => papelDaColuna(c) !== "perdida");
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -108,9 +121,21 @@ export function FunilNegociacoes({
     return cat === "em_negociacao" || cat === "banco";
   });
   const faturados = cards.filter((c) => c.status === "ganha");
+  const perdidos = cards.filter((c) => c.status === "perdida");
   const totalAberto = abertos.reduce((s, c) => s + (c.valor ?? 0), 0);
   const totalFaturado = faturados.reduce((s, c) => s + (c.valor ?? 0), 0);
-  const taxaConversao = cards.length > 0 ? Math.round((faturados.length / cards.length) * 100) : 0;
+  // Previsão ponderada: valor × probabilidade da coluna (só abertas).
+  const previsaoPonderada = valorPonderado(abertos, colunas);
+  const encerrados = faturados.length + perdidos.length;
+  const taxaConversao = encerrados > 0 ? Math.round((faturados.length / encerrados) * 100) : 0;
+  // Por que perdemos: contagem por motivo (lista fixa + texto livre antigo).
+  const motivosPerda = Object.entries(
+    perdidos.reduce<Record<string, { qtd: number; valor: number }>>((acc, c) => {
+      const k = rotuloMotivoPerda(c.motivoPerda).split(" · ")[0];
+      acc[k] = { qtd: (acc[k]?.qtd ?? 0) + 1, valor: (acc[k]?.valor ?? 0) + (c.valor ?? 0) };
+      return acc;
+    }, {})
+  ).sort((a, b) => b[1].qtd - a[1].qtd);
 
   // Filtrar cards
   const cardsFiltrados = cards.filter((c) => {
@@ -138,21 +163,25 @@ export function FunilNegociacoes({
     if (!card) return;
     const novaColuna = colunas.find((col) => col.id === String(over.id));
     if (!novaColuna) return;
-    // Usa o titulo da coluna como estagio (chave dinamica)
+    // Usa o titulo da coluna como estagio (chave dinamica); o que acontece
+    // com o card depende do PAPEL da coluna (mesma regra do servidor).
     const novoEstagio = novaColuna.titulo;
-    const tituloNovo = novaColuna.titulo.toLowerCase();
-    const isPerdido = tituloNovo.includes("perdid");
-    // FATURADO e colunas de venda ganha viram status "ganha" (mesma regra do servidor)
-    const isGanha = tituloNovo.includes("faturad") || tituloNovo.includes("ganho") || tituloNovo.includes("confirm") || tituloNovo.includes("vendid");
+    const papel = papelDaColuna(novaColuna);
     if (card.estagio === novoEstagio) return;
+    if (papel === "perdida") {
+      // Só marca como perdida depois de escolher o motivo (pop-up).
+      setConfirmPerda({ cardId: card.id, cliente: card.cliente, estagio: novoEstagio });
+      return;
+    }
+    const isGanha = papel === "faturado" || papel === "confirmada";
     setCards((cs) =>
       cs.map((c) =>
-        c.id === card.id ? { ...c, estagio: novoEstagio, status: isPerdido ? "perdida" : isGanha ? "ganha" : "aberta" } : c
+        c.id === card.id ? { ...c, estagio: novoEstagio, status: isGanha ? "ganha" : "aberta", faturadoEm: papel === "faturado" ? new Date().toISOString() : c.faturadoEm } : c
       )
     );
     moverNegociacao(card.id, novoEstagio);
     // Ao cair na coluna FATURADO, pergunta se o faturamento foi hoje (ou retroativo).
-    if (tituloNovo.includes("faturad")) {
+    if (papel === "faturado") {
       setConfirmFaturamento({ cardId: card.id, cliente: card.cliente });
     }
   }
@@ -162,10 +191,29 @@ export function FunilNegociacoes({
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard icone={<Target size={20} />} rotulo="Em aberto" valor={abertos.length.toString()} sub={formatCurrency(totalAberto)} cor="azul" />
-        <KpiCard icone={<DollarSign size={20} />} rotulo="Volume aberto" valor={formatCurrency(totalAberto)} sub={`${abertos.length} negoc.`} cor="verde" />
+        <KpiCard icone={<DollarSign size={20} />} rotulo="Previsão ponderada" valor={formatCurrency(previsaoPonderada)} sub="valor × probabilidade da coluna" cor="verde" />
         <KpiCard icone={<Trophy size={20} />} rotulo="Vendas faturadas" valor={faturados.length.toString()} sub={formatCurrency(totalFaturado)} cor="amarelo" />
-        <KpiCard icone={<BarChart3 size={20} />} rotulo="Taxa conversão" valor={`${taxaConversao}%`} sub={`${cards.length} total`} cor="roxo" />
+        <KpiCard icone={<BarChart3 size={20} />} rotulo="Taxa conversão" valor={`${taxaConversao}%`} sub={`${faturados.length} ganhas · ${perdidos.length} perdidas`} cor="roxo" />
       </div>
+
+      {abaFiltro === "perdidos" && (
+        <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4">
+          <div className="mb-2 text-sm font-bold text-red-800">Por que perdemos</div>
+          {motivosPerda.length === 0 ? (
+            <p className="text-xs text-red-700/80">Nenhuma venda perdida no período.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {motivosPerda.map(([motivo, m]) => (
+                <div key={motivo} className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-700">{motivo}</div>
+                  <div className="text-sm font-bold text-red-700">{m.qtd} {m.qtd === 1 ? "negociação" : "negociações"}</div>
+                  <div className="text-[11px] text-slate-500">{formatCurrency(m.valor)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Barra de filtros + botão nova coluna */}
       <div className="flex flex-wrap items-center gap-3">
@@ -213,19 +261,17 @@ export function FunilNegociacoes({
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {colunas.map((col) => {
-              const tituloCol = col.titulo.toLowerCase();
-              const isFaturado = tituloCol.includes("faturad");
-              const colunaGanha = isFaturado || tituloCol.includes("ganho") || tituloCol.includes("confirm") || tituloCol.includes("vendid");
+              const papel = papelDaColuna(col);
               // FATURADO é a coluna "chão-de-fábrica" do dinheiro faturado: mostra
-              // TODOS os cards ganha (mesmo padrão da coluna Perdidos), não só os
-              // que têm estagio === "FATURADO" — senão negociações ganhas por um
-              // caminho legado (ex.: marcar_ganha da IA) somem do funil mas
-              // continuam aparecendo no Financeiro, ficando as duas telas inconsistentes.
-              const lista = tituloCol.includes("perdid")
+              // TODOS os cards ganha com data de faturamento (mesmo padrão da
+              // coluna Perdidos) — senão negociações ganhas por um caminho
+              // legado (ex.: marcar_ganha da IA) somem do funil mas continuam
+              // no Financeiro, ficando as duas telas inconsistentes.
+              const lista = papel === "perdida"
                 ? cardsFiltrados.filter((c) => c.status === "perdida")
-                : isFaturado
-                ? cardsFiltrados.filter((c) => c.status === "ganha")
-                : colunaGanha
+                : papel === "faturado"
+                ? cardsFiltrados.filter((c) => c.status === "ganha" && (c.faturadoEm || c.estagio === col.titulo))
+                : papel === "confirmada"
                 ? cardsFiltrados.filter((c) => c.status === "ganha" && c.estagio === col.titulo)
                 : cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo);
               const totalCol = lista.reduce((s, c) => s + (c.valor ?? 0), 0);
@@ -236,6 +282,11 @@ export function FunilNegociacoes({
                   cards={lista}
                   total={totalCol}
                   onEditar={setEditando}
+                  onPapel={async (novoPapel, prob) => {
+                    const r = await definirPapelColunaFunil(col.id, novoPapel, prob);
+                    if (!r.ok) { alert(r.erro ?? "Não foi possível alterar."); return; }
+                    setColunas((cs) => cs.map((c) => c.id === col.id ? { ...c, papel: novoPapel, probabilidade: prob } : c));
+                  }}
                   onRenomear={async (novoTitulo) => {
                     setColunas((cs) => cs.map((c) => c.id === col.id ? { ...c, titulo: novoTitulo } : c));
                     await renomearColunaFunil(col.id, novoTitulo);
@@ -282,6 +333,14 @@ export function FunilNegociacoes({
             dataFaturamento: editando.faturadoEm,
             concorrenteMencionado: editando.concorrente,
             proximaAcao: editando.proximaAcao,
+            usadaTroca: editando.usadaTroca,
+            usadaMarca: editando.usadaMarca,
+            usadaModelo: editando.usadaModelo,
+            usadaAno: editando.usadaAno,
+            usadaHorimetro: editando.usadaHorimetro,
+            usadaEstado: editando.usadaEstado,
+            usadaValor: editando.usadaValor,
+            usadaObs: editando.usadaObs,
           }}
           onFechar={() => setEditando(null)}
         />
@@ -298,6 +357,19 @@ export function FunilNegociacoes({
         />
       )}
 
+      {confirmPerda && (
+        <PopupMotivoPerda
+          cliente={confirmPerda.cliente}
+          onFechar={() => setConfirmPerda(null)}
+          onConfirmar={async (motivo) => {
+            const { cardId, estagio } = confirmPerda;
+            setCards((cs) => cs.map((c) => c.id === cardId ? { ...c, estagio, status: "perdida", motivoPerda: motivo } : c));
+            setConfirmPerda(null);
+            await moverNegociacao(cardId, estagio, motivo);
+          }}
+        />
+      )}
+
       {confirmFaturamento && (
         <PopupConfirmarFaturamento
           cliente={confirmFaturamento.cliente}
@@ -308,6 +380,58 @@ export function FunilNegociacoes({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── Pop-up do motivo da perda (ao arrastar para a coluna "perdida") ──────────
+function PopupMotivoPerda({ cliente, onFechar, onConfirmar }: {
+  cliente: string;
+  onFechar: () => void;
+  onConfirmar: (motivo: string) => Promise<void>;
+}) {
+  const [motivo, setMotivo] = useState(MOTIVOS_PERDA[0].id);
+  const [nota, setNota] = useState("");
+  const [isPending, startTransition] = useTransition();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900">Por que perdemos {cliente}?</h3>
+        <p className="mt-1 text-xs text-slate-500">O motivo entra no relatório “Por que perdemos”, na aba Perdidos. Escolha o principal.</p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {MOTIVOS_PERDA.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMotivo(m.id)}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-left text-xs font-semibold transition",
+                motivo === m.id ? "border-red-500 bg-red-50 text-red-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <input
+          id="perda-nota"
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder="Detalhe (opcional): qual concorrente, valor, o que o cliente disse"
+          className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-red-400"
+        />
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={onFechar} className="flex-1 rounded-xl border border-slate-300 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => startTransition(() => onConfirmar(nota.trim() ? `${motivo}: ${nota.trim()}` : motivo))}
+            className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {isPending ? "Salvando…" : "Marcar como perdida"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -460,7 +584,7 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, onEditar, onRenomear, onExcluir, onNovaAntiga,
+  coluna, cards, total, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
@@ -469,13 +593,19 @@ function ColunaFunilView({
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
   onNovaAntiga: () => void;
+  onPapel: (papel: string, probabilidade: number) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: coluna.id });
   const [renomeando, setRenomeando] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [editandoPapel, setEditandoPapel] = useState(false);
+  const [papelSel, setPapelSel] = useState(papelDaColuna(coluna));
+  const [probSel, setProbSel] = useState(String(probabilidadeDaColuna(coluna)));
   const [, startTransition] = useTransition();
 
-  const isPerdido = coluna.titulo.toLowerCase().includes("perdid");
+  const papel = papelDaColuna(coluna);
+  const isPerdido = papel === "perdida";
+  const probabilidade = probabilidadeDaColuna(coluna);
 
   return (
     <div
@@ -538,7 +668,13 @@ function ColunaFunilView({
                     >
                       <Pencil size={12} /> Renomear
                     </button>
-                    {coluna.titulo.toLowerCase().includes("faturad") && (
+                    <button
+                      onClick={() => { setEditandoPapel(true); setMenu(false); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 transition-colors"
+                    >
+                      <Percent size={12} /> Papel e chance
+                    </button>
+                    {papel === "faturado" && (
                 <button
                   onClick={() => {
                     setMenu(false);
@@ -569,10 +705,38 @@ function ColunaFunilView({
           </div>
         </div>
 
-        {total > 0 && (
-          <div className={cn("text-xs font-semibold", isPerdido ? "text-red-400/80" : "text-agro-300")}>
-            {formatCurrency(total)}
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" title="Papel da coluna">
+            {rotuloPapel(papel)}{papel !== "perdida" && papel !== "faturado" ? ` · ${probabilidade}%` : ""}
+          </span>
+          {total > 0 && (
+            <span className={cn("text-xs font-semibold", isPerdido ? "text-red-400/80" : "text-agro-300")}>
+              {formatCurrency(total)}
+            </span>
+          )}
+        </div>
+        {editandoPapel && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const prob = Math.max(0, Math.min(100, parseInt(probSel, 10) || 0));
+              startTransition(async () => { await onPapel(papelSel, prob); setEditandoPapel(false); });
+            }}
+            className="mt-2 space-y-1.5 rounded-xl bg-slate-800 p-2 ring-1 ring-slate-600"
+          >
+            <select value={papelSel} onChange={(e) => setPapelSel(e.target.value as typeof papelSel)} className="w-full rounded-lg bg-slate-900 px-2 py-1 text-xs text-white" aria-label="Papel da coluna">
+              {PAPEIS_COLUNA.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+            <p className="text-[10px] text-slate-400">{PAPEIS_COLUNA.find((p) => p.id === papelSel)?.descricao}</p>
+            <label className="flex items-center gap-2 text-[11px] text-slate-300">
+              Chance de fechar
+              <input type="number" min={0} max={100} value={probSel} onChange={(e) => setProbSel(e.target.value)} className="w-16 rounded-lg bg-slate-900 px-2 py-1 text-xs text-white" aria-label="Probabilidade" />%
+            </label>
+            <div className="flex gap-1">
+              <button className="flex-1 rounded-lg bg-agro-400 px-2 py-1 text-xs font-bold text-slate-900">Salvar</button>
+              <button type="button" onClick={() => setEditandoPapel(false)} className="rounded-lg px-2 py-1 text-xs text-slate-300">Cancelar</button>
+            </div>
+          </form>
         )}
         {!isPerdido && total > 0 && (
           <div className="mt-2 h-1 w-full rounded-full bg-slate-700">
@@ -659,10 +823,18 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
             <span className="line-clamp-2">{card.proximaAcao}</span>
           </div>
         )}
+        {card.usadaTroca && card.usadaModelo && (
+          <div className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-200 border border-amber-500/20" title="Usada na troca">
+            <Repeat size={10} /> troca: {card.usadaModelo}{card.usadaValor ? ` · ${formatCurrency(card.usadaValor)}` : ""}
+          </div>
+        )}
         {card.status === "ganha" && (
           <div className="mt-2 flex items-center gap-1 text-xs font-bold text-green-300">
             <CheckCircle2 size={12} /> VENDIDO
           </div>
+        )}
+        {card.status === "perdida" && (
+          <div className="mt-2 text-[11px] text-red-300/90">Motivo: {rotuloMotivoPerda(card.motivoPerda)}</div>
         )}
       </div>
       {!arrastando && onEditar && (

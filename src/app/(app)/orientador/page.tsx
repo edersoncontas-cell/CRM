@@ -14,7 +14,7 @@ export default async function OrientadorPage({ searchParams }: { searchParams: {
   const [itens, contagem, colunasFunil] = await Promise.all([
     listarOrientadorPorPeriodo(periodo),
     contarClientesConversados(),
-    db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true } }),
+    db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }),
   ]);
 
   // Colunas que aceitam negociação em aberto (em negociação / banco) — alvos

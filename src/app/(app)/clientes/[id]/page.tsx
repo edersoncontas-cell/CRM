@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { papelDaColuna } from "@/lib/pipeline";
 import { Card, Badge } from "@/components/ui";
 import { formatCurrency, formatDate, iniciais, diasDesde } from "@/lib/utils";
 import { EditarClienteForm } from "@/components/EditarClienteForm";
@@ -10,6 +11,8 @@ import { NextBestAction } from "@/components/NextBestAction";
 import { RegistroVisitaVoz } from "@/components/RegistroVisitaVoz";
 import { CadenciaCliente } from "@/components/CadenciaCliente";
 import { cadenciaDoCliente, TIPOS_CADENCIA, TOQUES } from "@/lib/cadencias";
+import { linhaDoTempoCliente } from "@/lib/linha-tempo";
+import { LinhaTempoCliente } from "@/components/LinhaTempoCliente";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake } from "lucide-react";
@@ -32,14 +35,14 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
     }),
     db.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, foraDeArea: true } }),
     db.maquina.findMany({ select: { id: true, marca: true, modelo: true, categoria: true, proprio: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
-    db.colunaFunil.findMany({ where: { NOT: { titulo: { contains: "perdid", mode: "insensitive" } } }, orderBy: { ordem: "asc" }, select: { id: true, titulo: true } }),
+    db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }).then((cs) => cs.filter((c) => papelDaColuna(c) !== "perdida")),
   ]);
   if (!cliente) notFound();
 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };
   type ConvRow = { id: string };
-  const [frotaRows, waConv, orientador, ultimoContatoPosVenda, cadencia] = await Promise.all([
+  const [frotaRows, waConv, orientador, ultimoContatoPosVenda, cadencia, linhaTempo] = await Promise.all([
     db.$queryRawUnsafe<FrotaRow[]>(`SELECT id, marca, modelo FROM "ClienteMaquina" WHERE "clienteId" = $1 ORDER BY "criadoEm" ASC`, cliente.id).catch(() => [] as FrotaRow[]),
     db.whatsAppConversation.findFirst({ where: { clienteId: cliente.id }, select: { id: true } }).catch(() => null as ConvRow | null),
     db.orientadorAnalise.findUnique({ where: { clienteId: cliente.id } }),
@@ -47,6 +50,7 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
       ? db.posVendaContato.findFirst({ where: { clienteId: cliente.id }, orderBy: { data: "desc" } })
       : Promise.resolve(null),
     cadenciaDoCliente(cliente.id).catch(() => null),
+    linhaDoTempoCliente(cliente.id).catch(() => []),
   ]);
 
   const status = (cliente as { status?: string }).status ?? (cliente.jaComprou ? "cliente" : "potencial");
@@ -259,6 +263,11 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
           etapas={TOQUES.map((t) => ({ numero: t.numero, dia: t.dia, canal: t.canal, titulo: t.titulo }))}
           temTelefone={!!cliente.telefone}
         />
+      </div>
+
+      {/* Linha do tempo: tudo o que aconteceu com este cliente, em ordem */}
+      <div className="mb-6">
+        <LinhaTempoCliente eventos={linhaTempo} />
       </div>
 
       {/* Resumo do Cliente (substitui Negociações) */}

@@ -48,7 +48,8 @@ const DIAS_SEMANA: Record<string, number> = {
 export function extrairValor(texto: string): number | null {
   const t = texto.toLowerCase();
   // "1,2 milhão" / "1.2 milhoes"
-  const milhao = t.match(/(\d+[.,]?\d*)\s*milh[õo]/);
+  // "milhão", "milhao", "milhões", "milhoes" (acentos não casam em \b nem em [õo] sem u).
+  const milhao = t.match(/(\d+[.,]?\d*)\s*milh[õãoe]/u);
   if (milhao) {
     return parseFloat(milhao[1].replace(".", "").replace(",", ".")) * 1_000_000;
   }
@@ -126,7 +127,8 @@ export function extrairDataVisita(texto: string, base = new Date()): Date | null
   }
 
   // "amanhã"
-  if (/\bamanh[ãa]\b/.test(t)) {
+  // \b não funciona depois de "ã" (não é caractere de palavra em JS): usa lookaround Unicode.
+  if (/(?<!\p{L})amanh[ãa](?!\p{L})/u.test(t)) {
     const d = new Date(base);
     d.setDate(d.getDate() + 1);
     d.setHours(hora, minuto, 0, 0);

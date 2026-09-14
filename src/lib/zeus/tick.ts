@@ -18,6 +18,7 @@ import { iaHabilitada, llmTexto } from "@/lib/ai";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
 import { processarCadenciasVencidas, type ResumoCadencias } from "@/lib/cadencias";
+import { calcularRitmoMetas } from "@/lib/metas";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -271,6 +272,27 @@ async function alertasComerciais(): Promise<number> {
   });
   for (const neg of comConcorrente) {
     if (await criarAlertaSeNovo(neg.clienteId, "concorrente", `${neg.cliente.nome} mencionou o concorrente ${neg.concorrenteMencionado}.`, 0, "media")) criados++;
+  }
+
+  // Desvio de meta (segunda-feira): atrasado 15%+ em relação ao esperado no
+  // ano vira um evento semanal com o ritmo necessário para recuperar.
+  try {
+    const ritmo = await calcularRitmoMetas();
+    if (ritmo.situacao === "atrasado" && ritmo.faltamAno > 0) {
+      const criado = await eventoSeNovo(
+        "alerta",
+        `Meta do ano atrasada: ${ritmo.vendasAno} vendida(s), esperado ${ritmo.esperadoAteHoje.toFixed(1)} até hoje`,
+        7 * 24 * 60,
+        "media",
+        { resumo: ritmo.resumo, faltamAno: ritmo.faltamAno, visitasPorSemana: Math.ceil(ritmo.visitasPorSemanaNecessarias), negociacoesPorSemana: Math.ceil(ritmo.negociacoesPorSemanaNecessarias) }
+      );
+      if (criado) {
+        criados++;
+        await enviarPushNotificacao({ title: "🎯 Meta do ano", body: ritmo.resumo, url: "/dashboard", tag: "zeus-meta" }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.error("[zeus-tick] metas:", e);
   }
 
   // Aguardando resposta há mais de 4h.

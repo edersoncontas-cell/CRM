@@ -504,7 +504,7 @@ const criarNegociacao: CerebroTool = {
 const moverNegociacao: CerebroTool = {
   def: {
     name: "mover_negociacao",
-    description: "Move uma negociação para outro estágio do funil (ex: visita_pendente, visita_realizada, proposta_bcnh, proposta_aprovada).",
+    description: "Move uma negociação para outra coluna do funil pelo TÍTULO da coluna (use listar_negociacoes/estatisticas para ver as colunas atuais, ex.: 'Primeiro contato', 'Visitas pendentes', 'Proposta no BCNH', 'FATURADO'). O que acontece com a negociação depende do papel da coluna: faturado marca ganha e alimenta o Financeiro; perdida encerra.",
     input_schema: {
       type: "object",
       properties: { negociacaoId: { type: "string" }, estagio: { type: "string" } },
@@ -548,7 +548,7 @@ const marcarGanha: CerebroTool = {
 const marcarPerdida: CerebroTool = {
   def: {
     name: "marcar_perdida",
-    description: "Marca uma negociação como perdida, com o motivo.",
+    description: "Marca uma negociação como perdida, com o motivo. Use um dos códigos: preco, concorrente, credito, adiou, usada, sem_retorno, prazo, outro — opcionalmente seguido de ': detalhe' (ex.: 'concorrente: comprou CAT 416 na Sotreq').",
     input_schema: {
       type: "object",
       properties: { negociacaoId: { type: "string" }, motivo: { type: "string" } },

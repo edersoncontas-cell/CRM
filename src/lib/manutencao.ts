@@ -31,7 +31,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v7: remove as 7 tabelas de telas excluídas (ver migrations.ts).
 // v8: tabela Proposta (proposta comercial + calculadora).
 // v9: tabela Cadencia (follow-up de 7 toques).
-export const CHAVE_MANUTENCAO = "manutencao.v9";
+// v10: papel e probabilidade das colunas do funil.
+export const CHAVE_MANUTENCAO = "manutencao.v10";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

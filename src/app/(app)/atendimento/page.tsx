@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { papelDaColuna } from "@/lib/pipeline";
 import { AtendimentoClient, type ConvLista } from "@/components/AtendimentoClient";
 import * as zapi from "@/lib/zapi";
 
@@ -16,7 +17,7 @@ export default async function AtendimentoPage({
       include: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { body: true, direction: true, sentAt: true, mediaType: true } } },
     }),
     db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
-    db.colunaFunil.findMany({ where: { NOT: { titulo: { contains: "perdid", mode: "insensitive" } } }, orderBy: { ordem: "asc" }, select: { id: true, titulo: true } }),
+    db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }).then((cs) => cs.filter((c) => papelDaColuna(c) !== "perdida")),
   ]);
 
   const lista: ConvLista[] = conversas.map((c) => {

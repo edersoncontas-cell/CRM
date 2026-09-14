@@ -14,6 +14,8 @@ export type Parametros = {
   regiao: string;           // território (texto livre para os prompts)
   taxaComissao: number;     // fração: 0.005 = 0,5%
   metaAnualVendas: number;  // máquinas por ano
+  metaVisitasSemana: number;  // visitas por semana (ritmo)
+  metaNegociosSemana: number; // negociações novas por semana (ritmo)
   whatsappBriefing: string | null; // número (só dígitos, com DDI) que recebe o briefing diário do ZEUS
 };
 
@@ -27,6 +29,8 @@ export const PARAMETROS_PADRAO: Parametros = {
   regiao: "sul do Espírito Santo",
   taxaComissao: 0.005,
   metaAnualVendas: 40,
+  metaVisitasSemana: 20,
+  metaNegociosSemana: 5,
   whatsappBriefing: process.env.ZEUS_WHATSAPP_DESTINO?.replace(/\D/g, "") || null,
 };
 
@@ -55,6 +59,8 @@ export const lerParametros = cache(async (): Promise<Parametros> => {
       regiao: texto(p.regiao, PARAMETROS_PADRAO.regiao),
       taxaComissao: limparNumero(p.taxaComissao, PARAMETROS_PADRAO.taxaComissao, 0, 1),
       metaAnualVendas: Math.round(limparNumero(p.metaAnualVendas, PARAMETROS_PADRAO.metaAnualVendas, 1, 100000)),
+      metaVisitasSemana: Math.round(limparNumero(p.metaVisitasSemana, PARAMETROS_PADRAO.metaVisitasSemana, 1, 1000)),
+      metaNegociosSemana: Math.round(limparNumero(p.metaNegociosSemana, PARAMETROS_PADRAO.metaNegociosSemana, 1, 1000)),
       whatsappBriefing: typeof p.whatsappBriefing === "string" && p.whatsappBriefing.replace(/\D/g, "") ? p.whatsappBriefing.replace(/\D/g, "") : PARAMETROS_PADRAO.whatsappBriefing,
     };
   } catch {

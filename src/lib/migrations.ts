@@ -200,6 +200,33 @@ export async function aplicarMigracoes(): Promise<void> {
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cadencia_ativa_proximoToqueEm_idx" ON "Cadencia"("ativa", "proximoToqueEm")`);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cadencia_clienteId_idx" ON "Cadencia"("clienteId")`);
+
+    // Funil robusto (v10): papel e probabilidade por coluna. O papel deixa de
+    // ser adivinhado pelo título; o backfill abaixo usa as palavras antigas
+    // uma única vez, para as colunas que já existem.
+    await db.$executeRawUnsafe(`ALTER TABLE "ColunaFunil" ADD COLUMN IF NOT EXISTS "papel" TEXT`);
+    await db.$executeRawUnsafe(`ALTER TABLE "ColunaFunil" ADD COLUMN IF NOT EXISTS "probabilidade" INTEGER NOT NULL DEFAULT 50`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'perdida', "probabilidade" = 0 WHERE "papel" IS NULL AND titulo ILIKE '%perdid%'`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'faturado', "probabilidade" = 100 WHERE "papel" IS NULL AND titulo ILIKE '%faturad%'`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'confirmada', "probabilidade" = 90 WHERE "papel" IS NULL AND (titulo ILIKE '%confirm%' OR titulo ILIKE '%aprovad%' OR titulo ILIKE '%vendid%' OR titulo ILIKE '%ganh%')`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'banco', "probabilidade" = 70 WHERE "papel" IS NULL AND (titulo ILIKE '%banco%' OR titulo ILIKE '%bcnh%')`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'em_negociacao', "probabilidade" = 20 WHERE "papel" IS NULL AND titulo ILIKE '%primeiro%'`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'em_negociacao', "probabilidade" = 35 WHERE "papel" IS NULL AND titulo ILIKE '%pendente%'`);
+    await db.$executeRawUnsafe(`UPDATE "ColunaFunil" SET "papel" = 'em_negociacao', "probabilidade" = 50 WHERE "papel" IS NULL`);
+
+    // Usada na troca dentro da negociação (v10).
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "Negociacao"
+        ADD COLUMN IF NOT EXISTS "usadaTroca"     BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "usadaMarca"     TEXT,
+        ADD COLUMN IF NOT EXISTS "usadaModelo"    TEXT,
+        ADD COLUMN IF NOT EXISTS "usadaAno"       INTEGER,
+        ADD COLUMN IF NOT EXISTS "usadaHorimetro" INTEGER,
+        ADD COLUMN IF NOT EXISTS "usadaEstado"    TEXT,
+        ADD COLUMN IF NOT EXISTS "usadaValor"     DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS "usadaObs"       TEXT,
+        ADD COLUMN IF NOT EXISTS "usadaEstoqueId" TEXT
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

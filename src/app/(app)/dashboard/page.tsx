@@ -12,6 +12,7 @@ import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizo
 import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
 import { carregarVendasFaturadas, resumoVendas } from "@/lib/vendas-dashboard";
 import { lerParametros } from "@/lib/parametros";
+import { calcularRitmoMetas } from "@/lib/metas";
 import { contarClientesConversados } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
 import { T } from "@/lib/dash-tema";
@@ -80,7 +81,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       take: 8,
       select: { id: true, nome: true, ultimoContato: true },
     }),
-    db.colunaFunil.findMany({ select: { titulo: true } }),
+    db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
     carregarVendasFaturadas(),
     db.visita.findMany({ where: { data: { gte: inicioMesCal, lt: fimMesCal } }, select: { data: true } }),
     db.cliente.findMany({ where: { proximaVisita: { gte: inicioMesCal, lt: fimMesCal } }, select: { proximaVisita: true } }),
@@ -89,7 +90,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     obterNoticias(),
   ]);
 
-  const { metaAnualVendas: META_ANUAL_VENDAS } = await lerParametros();
+  const { metaAnualVendas: META_ANUAL_VENDAS, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
+  const ritmo = await calcularRitmoMetas(hoje).catch(() => null);
   const resumo = resumoVendas(vendasFaturadas, anoSel, META_ANUAL_VENDAS);
   const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
 
@@ -187,18 +189,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </Painel>
 
         <Painel className="flex flex-col items-center text-center">
-          <Anel id="visitas" valor={visitasSemanaAgendadas} max={20} cor1={T.ciano} cor2={T.verde}>
+          <Anel id="visitas" valor={visitasSemanaAgendadas} max={metaVisitasSemana} cor1={T.ciano} cor2={T.verde}>
             <span className="text-2xl font-black leading-none">{visitasSemanaAgendadas}</span>
-            <span className="text-[10px]" style={{ color: T.mudo }}>/20</span>
+            <span className="text-[10px]" style={{ color: T.mudo }}>/{metaVisitasSemana}</span>
           </Anel>
           <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Visitas na semana</p>
           <p className="text-[11px]" style={{ color: T.mudo }}>zera toda segunda</p>
         </Painel>
 
         <Painel className="flex flex-col items-center text-center">
-          <Anel id="negocios" valor={novosNegociosSemana} max={5} cor1={T.amarelo} cor2={T.rosa}>
+          <Anel id="negocios" valor={novosNegociosSemana} max={metaNegociosSemana} cor1={T.amarelo} cor2={T.rosa}>
             <span className="text-2xl font-black leading-none">{novosNegociosSemana}</span>
-            <span className="text-[10px]" style={{ color: T.mudo }}>/5</span>
+            <span className="text-[10px]" style={{ color: T.mudo }}>/{metaNegociosSemana}</span>
           </Anel>
           <p className="mt-2 text-[11px] font-black uppercase tracking-widest" style={{ color: T.texto2 }}>Novos negócios</p>
           <p className="text-[11px]" style={{ color: T.mudo }}>na semana (seg–sáb)</p>
@@ -238,6 +240,35 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </ul>
         </Painel>
       </div>
+
+      {/* ── Ritmo para bater a meta (metas e cotas) ── */}
+      {ritmo && anoSel === anoAtual && (
+        <Painel
+          titulo="Ritmo para bater a meta"
+          subtitulo={`o que precisa acontecer por semana · taxas dos últimos 12 meses: ${Math.round(ritmo.taxaConversao * 100)}% de conversão, ${ritmo.visitasPorVenda.toFixed(1)} visitas por venda`}
+          destaque
+        >
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+            {[
+              { rotulo: "Situação", valor: ritmo.situacao === "adiantado" ? "Adiantado" : ritmo.situacao === "atrasado" ? "Atrasado" : "No ritmo", sub: `${ritmo.vendasAno} de ${ritmo.esperadoAteHoje.toFixed(1)} esperadas até hoje`, cor: ritmo.situacao === "atrasado" ? T.rosa : ritmo.situacao === "adiantado" ? T.verde : T.ciano },
+              { rotulo: "Mês", valor: `${ritmo.vendasMes}/${Math.ceil(ritmo.metaMes)}`, sub: `faltam ${ritmo.faltamMes} · ${Math.ceil(ritmo.semanasRestantesMes)} sem.`, cor: T.amarelo },
+              { rotulo: "Trimestre", valor: `${ritmo.vendasTrimestre}/${Math.ceil(ritmo.metaTrimestre)}`, sub: "máquinas faturadas", cor: T.violeta },
+              { rotulo: "Vendas/semana", valor: ritmo.vendasPorSemanaNecessarias.toFixed(1), sub: "necessárias até dez", cor: T.rosa },
+              { rotulo: "Visitas/semana", valor: `${ritmo.visitasSemana}/${Math.ceil(ritmo.visitasPorSemanaNecessarias)}`, sub: "feitas / necessárias", cor: T.ciano },
+              { rotulo: "Negociações/semana", valor: `${ritmo.negociacoesSemana}/${Math.ceil(ritmo.negociacoesPorSemanaNecessarias)}`, sub: "novas / necessárias", cor: T.verde },
+            ].map((k) => (
+              <div key={k.rotulo} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${T.borda}` }}>
+                <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>{k.rotulo}</div>
+                <div className="mt-1 text-xl font-black leading-none" style={{ color: k.cor }}>{k.valor}</div>
+                <div className="mt-1 text-[11px]" style={{ color: T.texto2 }}>{k.sub}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs" style={{ color: T.texto2 }}>
+            {ritmo.resumo} No ritmo atual, o ano fecha com <b style={{ color: T.texto }}>{ritmo.previsaoAno}</b> máquina(s).
+          </p>
+        </Painel>
+      )}
 
       {/* ── Clientes conversados no WhatsApp (mesma régua do Orientador) ── */}
       <Painel titulo="Clientes conversados no WhatsApp" subtitulo="clientes cadastrados com conversa em cada janela · clique para abrir no Orientador de Vendas">
