@@ -9,7 +9,7 @@ import type { AcaoPlano } from "./assistente";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas } from "./pipeline";
-import * as googleCalendar from "./integrations/googleCalendar";
+import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { registrarAudit } from "./audit";
@@ -263,13 +263,14 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
   const horarioRaw = String(formData.get("horario") ?? "").trim();
   const horario = /^\d{2}:\d{2}$/.test(horarioRaw) ? horarioRaw : "12:00";
   const data = new Date(`${dataRaw}T${horario}:00-03:00`);
-  await db.visita.create({
+  const visita = await db.visita.create({
     data: {
       clienteId,
       data,
       observacao: String(formData.get("observacao") ?? "") || null,
     },
   });
+  await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
   await db.cliente.update({ where: { id: clienteId }, data: { visitado: true } });
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
@@ -278,7 +279,9 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
 }
 
 export async function removerVisita(id: string, clienteId: string) {
+  await removerEventoDaVisita(id);
   await db.visita.delete({ where: { id } });
+  revalidatePath("/alertas");
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/visitas");
   revalidatePath("/dashboard");
@@ -1179,15 +1182,8 @@ export async function analisarConversaAction(formData: FormData) {
       negociacaoId = nova.id;
     }
 
-    // Visita detectada -> tenta criar na agenda (stub se não conectado)
-    if (extracao.dataVisita) {
-      const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
-      await googleCalendar.criarEvento({
-        titulo: `Visita — ${cliente?.nome ?? "cliente"}`,
-        inicio: extracao.dataVisita,
-        descricao: `Visita detectada pela IA. ${extracao.maquina ? "Máquina: " + extracao.maquina : ""}`,
-      });
-    }
+    // Visita detectada -> agenda do CRM (e Google Agenda, se conectada).
+    await registrarVisitaAgenda(clienteId, extracao.dataVisita);
   }
 
   await db.analiseIA.create({
@@ -1284,6 +1280,7 @@ export async function resolverSugestao(id: string, acao: "confirmar" | "rejeitar
 export async function resolverAlerta(id: string) {
   await db.alerta.update({ where: { id }, data: { resolvido: true } });
   revalidatePath("/dashboard");
+  revalidatePath("/alertas");
 }
 
 // ---------- Conexão WhatsApp (Z-API) ----------
@@ -1741,7 +1738,8 @@ export async function registrarVisitaPorVoz(
   const extracao = await analisarConversaIA(texto, { estiloDeFala: estilo?.guia, modelosDestaque });
 
   // 1) Registra a visita que acabou de acontecer (data = agora).
-  await db.visita.create({ data: { clienteId, data: new Date(), observacao: extracao.resumo || texto.slice(0, 200) } });
+  const visitaFeita = await db.visita.create({ data: { clienteId, data: new Date(), observacao: extracao.resumo || texto.slice(0, 200) } });
+  await sincronizarVisitaComAgenda(visitaFeita.id).catch((e) => console.error("[google] visita:", e));
 
   // 2) Se uma próxima visita/data futura for citada no relato, agenda também.
   await registrarVisitaAgenda(clienteId, extracao.dataVisita);
@@ -1840,10 +1838,12 @@ export async function agendarDeResumo(
   if (!clienteId || !dataRaw) return { ok: false, erro: "Informe a data." };
   // Campo type="date" (YYYY-MM-DD) → meio-dia em Brasília para não virar o dia.
   const data = new Date(`${dataRaw}T12:00:00-03:00`);
-  await db.visita.create({
+  const visita = await db.visita.create({
     data: { clienteId, data, observacao: observacao.trim() || "Agendada pelo resumo da conversa" },
   });
-  revalidatePath("/agenda");
+  await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
+  revalidatePath("/visitas");
+  revalidatePath("/alertas");
   revalidatePath(`/clientes/${clienteId}`);
   return { ok: true };
 }
@@ -2138,9 +2138,10 @@ export async function executarPlano(
         // Data inválida: reporta o erro em vez de silenciosamente agendar "hoje".
         const data = parseDataBR(s("data"));
         if (!data) throw new Error(`Data inválida: "${s("data")}"`);
-        await db.visita.create({
+        const visita = await db.visita.create({
           data: { clienteId: s("clienteId"), data, observacao: s("observacao") || "Agendada pelo assistente" },
         });
+        await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
       }
       feitos++;
     } catch (e) {
@@ -2684,7 +2685,9 @@ const TERMOMETRO_POR_TEMPERATURA: Record<string, number> = { muito_quente: 85, q
 // (tenta descobrir a máquina pela conversa/análise; se não achar, fica em
 // branco para o vendedor preencher depois). Se o cliente já tem negociação
 // aberta, ela é reaproveitada (movida pra coluna) em vez de duplicar.
-export async function criarNegociacaoDoOrientador(clienteId: string): Promise<{
+// `colunaTitulo` (opcional): coluna do funil escolhida ao ARRASTAR o card do
+// Orientador; sem ela (botão ✓), vai para a coluna "Em negociação".
+export async function criarNegociacaoDoOrientador(clienteId: string, colunaTitulo?: string): Promise<{
   ok: boolean; negociacaoId?: string; criada?: boolean; coluna?: string; maquina?: string | null; erro?: string;
 }> {
   const cliente = await db.cliente.findUnique({
@@ -2697,7 +2700,11 @@ export async function criarNegociacaoDoOrientador(clienteId: string): Promise<{
   const colunas = await db.colunaFunil.findMany({ select: { titulo: true }, orderBy: { ordem: "asc" } });
   const categorizar = criarCategorizadorColunas(colunas);
   const abertas = colunas.filter((c) => categorizar(c.titulo) === "em_negociacao");
-  const alvo = abertas.find((c) => /negocia/i.test(c.titulo)) ?? abertas[0];
+  const escolhida = colunaTitulo
+    ? colunas.find((c) => c.titulo === colunaTitulo && ["em_negociacao", "banco"].includes(categorizar(c.titulo)))
+    : undefined;
+  if (colunaTitulo && !escolhida) return { ok: false, erro: `A coluna "${colunaTitulo}" não aceita negociações em aberto.` };
+  const alvo = escolhida ?? abertas.find((c) => /negocia/i.test(c.titulo)) ?? abertas[0];
   if (!alvo) return { ok: false, erro: "Nenhuma coluna de negociação encontrada no funil." };
 
   // Tenta identificar a máquina: modelos próprios citados na análise da IA,
@@ -2730,7 +2737,9 @@ export async function criarNegociacaoDoOrientador(clienteId: string): Promise<{
     await db.negociacao.update({
       where: { id: aberta.id },
       data: {
-        ...(categorizar(aberta.estagio) === "em_negociacao" ? {} : { estagio: alvo.titulo }),
+        // Coluna escolhida ao arrastar vale sempre; pelo botão ✓, só move o que
+        // ainda não está numa coluna de negociação.
+        ...(escolhida || categorizar(aberta.estagio) !== "em_negociacao" ? { estagio: alvo.titulo } : {}),
         ...(!aberta.maquinaModelo && achada ? { maquinaModelo: achada.modelo, marca: achada.marca } : {}),
         ultimoContato: new Date(),
       },

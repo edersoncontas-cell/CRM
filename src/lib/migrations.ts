@@ -154,6 +154,9 @@ export async function aplicarMigracoes(): Promise<void> {
 
     // Orientador de Vendas: card ocultado (X / ✓ negociação) até nova mensagem.
     await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "orientadorOcultoEm" TIMESTAMP WITH TIME ZONE`);
+
+    // Google Agenda (OAuth real): id do evento criado para cada visita.
+    await db.$executeRawUnsafe(`ALTER TABLE "Visita" ADD COLUMN IF NOT EXISTS "googleEventId" TEXT`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

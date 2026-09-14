@@ -3,12 +3,16 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors, useDraggable, useDroppable, pointerWithin,
+  type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import { buscarOrientadorAnalise, criarNegociacaoDoOrientador, descartarCardOrientador } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, cn } from "@/lib/utils";
 import {
-  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles,
+  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles, GripVertical, Handshake,
 } from "lucide-react";
 
 type Item = {
@@ -25,6 +29,8 @@ type Item = {
   proximaAcao: string | null;
   atualizadoEm: string | null;
 };
+
+type Coluna = { id: string; titulo: string; padrao: boolean };
 
 type Detalhe = {
   clienteNome: string;
@@ -65,8 +71,102 @@ function tempoRelativo(iso: string): string {
   return `há ${d} dia${d > 1 ? "s" : ""}`;
 }
 
-export function OrientadorLista({ itens, contagem, periodo }: {
-  itens: Item[]; contagem: Record<PeriodoOrientador, number>; periodo: PeriodoOrientador;
+// ── Alvos do arrastar: colunas abertas do funil ─────────────────────────────
+function ZonaColuna({ coluna, arrastando }: { coluna: Coluna; arrastando: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `col:${coluna.titulo}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-[52px] flex-1 items-center justify-center rounded-xl border-2 border-dashed px-3 py-2 text-center text-xs font-black uppercase tracking-wide transition",
+        coluna.padrao ? "border-green-400 bg-green-50 text-green-700" : "border-slate-300 bg-white text-slate-500",
+        arrastando && "border-solid",
+        isOver && "scale-[1.03] border-brand-600 bg-brand-50 text-brand-800 shadow-md"
+      )}
+    >
+      <span className="flex items-center gap-1.5"><Handshake size={14} /> {coluna.titulo}{coluna.padrao ? " ★" : ""}</span>
+    </div>
+  );
+}
+
+// ── Card arrastável (pelo punho, para não brigar com o toque que abre o detalhe) ──
+function CardOrientador({ a, emAndamento, onAbrir, onConfirmar, onDescartar }: {
+  a: Item; emAndamento: boolean; onAbrir: () => void; onConfirmar: () => void; onDescartar: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: a.clienteId, data: { item: a } });
+  return (
+    <div ref={setNodeRef} className={cn("h-full", isDragging && "opacity-40")}>
+      <Card className="flex h-full flex-col transition hover:border-brand-300 hover:shadow-md">
+        <div className="mb-2 flex items-start gap-2">
+          <span
+            {...attributes}
+            {...listeners}
+            title="Arraste para uma coluna do funil"
+            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
+          >
+            <GripVertical size={16} />
+          </span>
+          <button onClick={onAbrir} className="min-w-0 flex-1 text-left">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-slate-800">{a.clienteNome}</div>
+                {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
+              </div>
+              {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : <Badge tom="slate"><Sparkles size={12} className="mr-1 inline" />analisando</Badge>}
+            </div>
+          </button>
+        </div>
+
+        <button onClick={onAbrir} className="flex-1 text-left">
+          {a.ultimaMensagem && (
+            <div className="mb-2 flex items-start gap-1.5 text-xs text-slate-500">
+              <MessageCircle size={12} className="mt-0.5 shrink-0 text-emerald-500" />
+              <span className="line-clamp-2">{a.ultimaMensagem}</span>
+            </div>
+          )}
+          <div className="mb-2 text-[11px] text-slate-400">Última mensagem {tempoRelativo(a.ultimaMensagemEm)}</div>
+          {a.estagioVenda && <div className="mb-2 text-sm text-slate-600">{a.estagioVenda}</div>}
+          {a.probabilidadeFechamento != null && (
+            <div className="mb-2 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-gradient-to-r from-agro-400 to-emerald-500" style={{ width: `${a.probabilidadeFechamento}%` }} />
+              </div>
+              <span className="text-xs font-semibold text-slate-500">{a.probabilidadeFechamento}%</span>
+            </div>
+          )}
+          {a.proximaAcao && (
+            <div className="mt-1 flex items-start gap-1.5 rounded-lg bg-brand-50 p-2 text-xs text-brand-700">
+              <Target size={13} className="mt-0.5 shrink-0" />
+              <span className="line-clamp-2">{a.proximaAcao}</span>
+            </div>
+          )}
+        </button>
+
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+          <button
+            onClick={onConfirmar}
+            disabled={emAndamento}
+            title="Registrar negociação na coluna EM NEGOCIAÇÃO"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            {emAndamento ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} strokeWidth={3} />} Negociação?
+          </button>
+          <button
+            onClick={onDescartar}
+            disabled={emAndamento}
+            title="Remover este card (volta se chegar mensagem nova)"
+            className="flex h-9 w-11 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            <X size={16} strokeWidth={3} />
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+export function OrientadorLista({ itens, contagem, periodo, colunas }: {
+  itens: Item[]; contagem: Record<PeriodoOrientador, number>; periodo: PeriodoOrientador; colunas: Coluna[];
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState<string | null>(null);
@@ -75,7 +175,13 @@ export function OrientadorLista({ itens, contagem, periodo }: {
   const [removidos, setRemovidos] = useState<Set<string>>(new Set());
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string; link?: string } | null>(null);
+  const [arrastando, setArrastando] = useState<Item | null>(null);
   const [, startTransition] = useTransition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } })
+  );
 
   async function abrir(clienteId: string) {
     setAberto(clienteId);
@@ -89,10 +195,10 @@ export function OrientadorLista({ itens, contagem, periodo }: {
     setRemovidos((s) => new Set(s).add(clienteId));
   }
 
-  async function confirmarNegociacao(item: Item) {
+  async function confirmarNegociacao(item: Item, colunaTitulo?: string) {
     setOcupado(item.clienteId);
     setAviso(null);
-    const r = await criarNegociacaoDoOrientador(item.clienteId);
+    const r = await criarNegociacaoDoOrientador(item.clienteId, colunaTitulo);
     setOcupado(null);
     if (!r.ok) { setAviso({ tipo: "erro", texto: r.erro ?? "Não foi possível registrar a negociação." }); return; }
     esconder(item.clienteId);
@@ -110,6 +216,19 @@ export function OrientadorLista({ itens, contagem, periodo }: {
     setOcupado(null);
     esconder(item.clienteId);
     startTransition(() => router.refresh());
+  }
+
+  function onDragStart(e: DragStartEvent) {
+    const item = (e.active.data.current as { item?: Item } | undefined)?.item ?? null;
+    setArrastando(item);
+  }
+
+  function onDragEnd(e: DragEndEvent) {
+    const item = (e.active.data.current as { item?: Item } | undefined)?.item ?? null;
+    setArrastando(null);
+    const over = e.over?.id ? String(e.over.id) : null;
+    if (!item || !over || !over.startsWith("col:")) return;
+    void confirmarNegociacao(item, over.slice(4));
   }
 
   const visiveis = itens.filter((i) => !removidos.has(i.clienteId));
@@ -138,75 +257,51 @@ export function OrientadorLista({ itens, contagem, periodo }: {
         </div>
       )}
 
-      {visiveis.length === 0 ? (
-        <EmptyState
-          icone={<Compass size={28} />}
-          texto={`Nenhum cliente com conversa no período (${PERIODOS_ORIENTADOR[periodo].label.toLowerCase()})`}
-          subtexto="Assim que um cliente cadastrado mandar mensagem no WhatsApp, o card dele aparece aqui automaticamente."
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {visiveis.map((a) => {
-            const emAndamento = ocupado === a.clienteId;
-            return (
-              <Card key={a.clienteId} className="flex h-full flex-col transition hover:border-brand-300 hover:shadow-md">
-                <button onClick={() => abrir(a.clienteId)} className="flex-1 text-left">
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-semibold text-slate-800">{a.clienteNome}</div>
-                      {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
-                    </div>
-                    {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : <Badge tom="slate"><Sparkles size={12} className="mr-1 inline" />analisando</Badge>}
-                  </div>
+      {/* pointerWithin: a coluna alvo é a que está sob o dedo/ponteiro — com a
+          colisão por retângulo, o card (grande) "encostava" em várias colunas
+          e o soltar caía na vizinha. */}
+      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setArrastando(null)}>
+        {colunas.length > 0 && visiveis.length > 0 && (
+          <div className={cn("mb-4 rounded-2xl border bg-slate-50 p-3 transition md:sticky md:top-2 md:z-20", arrastando ? "border-brand-400 ring-2 ring-brand-200" : "border-slate-200")}>
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <GripVertical size={13} /> {arrastando ? `Solte “${arrastando.clienteNome}” na coluna do funil` : "Arraste um card pelo punho até a coluna do funil (★ = Em negociação, o padrão do botão ✓)"}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {colunas.map((c) => <ZonaColuna key={c.id} coluna={c} arrastando={!!arrastando} />)}
+            </div>
+          </div>
+        )}
 
-                  {a.ultimaMensagem && (
-                    <div className="mb-2 flex items-start gap-1.5 text-xs text-slate-500">
-                      <MessageCircle size={12} className="mt-0.5 shrink-0 text-emerald-500" />
-                      <span className="line-clamp-2">{a.ultimaMensagem}</span>
-                    </div>
-                  )}
-                  <div className="mb-2 text-[11px] text-slate-400">Última mensagem {tempoRelativo(a.ultimaMensagemEm)}</div>
+        {visiveis.length === 0 ? (
+          <EmptyState
+            icone={<Compass size={28} />}
+            texto={`Nenhum cliente com conversa no período (${PERIODOS_ORIENTADOR[periodo].label.toLowerCase()})`}
+            subtexto="Assim que um cliente cadastrado mandar mensagem no WhatsApp, o card dele aparece aqui automaticamente."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {visiveis.map((a) => (
+              <CardOrientador
+                key={a.clienteId}
+                a={a}
+                emAndamento={ocupado === a.clienteId}
+                onAbrir={() => abrir(a.clienteId)}
+                onConfirmar={() => confirmarNegociacao(a)}
+                onDescartar={() => descartar(a)}
+              />
+            ))}
+          </div>
+        )}
 
-                  {a.estagioVenda && <div className="mb-2 text-sm text-slate-600">{a.estagioVenda}</div>}
-                  {a.probabilidadeFechamento != null && (
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-gradient-to-r from-agro-400 to-emerald-500" style={{ width: `${a.probabilidadeFechamento}%` }} />
-                      </div>
-                      <span className="text-xs font-semibold text-slate-500">{a.probabilidadeFechamento}%</span>
-                    </div>
-                  )}
-                  {a.proximaAcao && (
-                    <div className="mt-1 flex items-start gap-1.5 rounded-lg bg-brand-50 p-2 text-xs text-brand-700">
-                      <Target size={13} className="mt-0.5 shrink-0" />
-                      <span className="line-clamp-2">{a.proximaAcao}</span>
-                    </div>
-                  )}
-                </button>
-
-                <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
-                  <button
-                    onClick={() => confirmarNegociacao(a)}
-                    disabled={emAndamento}
-                    title="Registrar negociação na coluna EM NEGOCIAÇÃO"
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-60"
-                  >
-                    {emAndamento ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} strokeWidth={3} />} Negociação?
-                  </button>
-                  <button
-                    onClick={() => descartar(a)}
-                    disabled={emAndamento}
-                    title="Remover este card (volta se chegar mensagem nova)"
-                    className="flex h-9 w-11 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
-                  >
-                    <X size={16} strokeWidth={3} />
-                  </button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+        <DragOverlay>
+          {arrastando && (
+            <div className="rounded-xl border border-brand-400 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-xl">
+              {arrastando.clienteNome}
+              {arrastando.municipio && <span className="ml-1 text-xs font-normal text-slate-400">· {arrastando.municipio}</span>}
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {aberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAberto(null)}>

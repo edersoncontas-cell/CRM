@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, HeartHandshake,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, HeartHandshake, Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -15,6 +15,7 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Principal",
     links: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/alertas", label: "Alertas", icon: Bell },
       { href: "/orientador", label: "Orientador de Vendas", icon: Compass },
       { href: "/negociacoes", label: "Negociações", icon: Handshake },
       { href: "/pipeline", label: "Demandas", icon: ListTodo },

@@ -15,6 +15,7 @@ import { enviarPushNotificacao } from "@/lib/push";
 import { baixarAudio } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer } from "@/lib/integrations/transcription";
+import { sincronizarVisitaComAgenda } from "@/lib/integrations/google";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -121,9 +122,10 @@ export async function registrarVisitaAgenda(clienteId: string, dataVisita: Date 
     },
   });
   if (jaExiste) return;
-  await db.visita.create({
+  const visita = await db.visita.create({
     data: { clienteId, data: dataVisita, observacao: "Detectada automaticamente pela IA" },
   });
+  await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
 }
 
 // Processa UMA mensagem recebida (idempotente — mensagens já processadas ou

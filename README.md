@@ -3,6 +3,9 @@
 > 💸 **Rodando de graça?** Veja [`docs/GRATUITO.md`](docs/GRATUITO.md): Vercel
 > Hobby + Neon Free + Evolution API (WhatsApp aberto) + Gemini/Groq + cron-job.org
 > — custo mensal R$ 0, passo a passo.
+>
+> 📅 **Google Agenda e Contatos**: [`docs/GOOGLE.md`](docs/GOOGLE.md) — visitas
+> do CRM na sua agenda e nomes dos contatos preenchendo clientes, via OAuth.
 
 CRM pessoal para vendedor da linha **New Holland Construction** (mini
 escavadeira E35D até motoniveladoras) e **Dynapac** (rolos de solo e asfalto) no

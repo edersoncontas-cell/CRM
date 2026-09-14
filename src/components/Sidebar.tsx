@@ -60,12 +60,43 @@ function ItemArrastavel({ item, ativo, fechar }: { item: ItemMenu; ativo: boolea
   );
 }
 
+// Contador da Central de alertas (badge no item "Alertas"), atualizado a cada
+// minuto e sempre que a rota muda.
+function ContadorAlertas({ href, total, alta }: { href: string; total: number; alta: number }) {
+  if (href !== "/alertas" || total <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none",
+        alta > 0 ? "bg-red-500 text-white" : "bg-agro-400 text-black"
+      )}
+      title={`${total} alerta(s)${alta ? ` · ${alta} urgente(s)` : ""}`}
+    >
+      {total > 99 ? "99+" : total}
+    </span>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
   const [ocultos, setOcultos] = useState<string[]>([]);
   const [ordem, setOrdem] = useState<string[]>([]);
   const [reorganizando, setReorganizando] = useState(false);
+  const [alertas, setAlertas] = useState<{ total: number; alta: number }>({ total: 0, alta: 0 });
+
+  useEffect(() => {
+    let ativo = true;
+    const carregar = () => {
+      fetch("/api/alertas/contagem", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (ativo && j && typeof j.total === "number") setAlertas({ total: j.total, alta: Number(j.alta) || 0 }); })
+        .catch(() => {});
+    };
+    carregar();
+    const timer = setInterval(carregar, 60_000);
+    return () => { ativo = false; clearInterval(timer); };
+  }, [pathname]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -258,6 +289,7 @@ export function Sidebar() {
                       )}
                     />
                     <span className="truncate">{label}</span>
+                    <ContadorAlertas href={href} total={alertas.total} alta={alertas.alta} />
                     {ativo && <div className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-agro-400" />}
                   </Link>
                 );
@@ -291,6 +323,7 @@ export function Sidebar() {
                         )}
                       />
                       <span className="truncate">{label}</span>
+                      <ContadorAlertas href={href} total={alertas.total} alta={alertas.alta} />
                       {ativo && (
                         <div className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-agro-400" />
                       )}

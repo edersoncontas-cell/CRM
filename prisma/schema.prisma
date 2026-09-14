@@ -124,6 +124,9 @@ model Visita {
   clienteId  String
   data       DateTime
   observacao String?
+  // Evento correspondente na Google Agenda (integração OAuth) — para apagar
+  // junto quando a visita é removida.
+  googleEventId String?
   criadoEm  DateTime @default(now())
 }
 

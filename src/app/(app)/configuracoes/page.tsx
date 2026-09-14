@@ -2,22 +2,23 @@ import { Card, PageHeader, Badge } from "@/components/ui";
 import { db } from "@/lib/db";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as zapi from "@/lib/zapi";
-import * as googleCalendar from "@/lib/integrations/googleCalendar";
-import * as contacts from "@/lib/integrations/contacts";
 import * as transcription from "@/lib/integrations/transcription";
-import { Bot, MessageCircle, Calendar, Contact, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
+import { statusGoogle } from "@/lib/integrations/google";
+import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
 import { AtualizarCotacaoCafeForm } from "@/components/AtualizarCotacaoCafeForm";
+import { GoogleIntegracaoCard } from "@/components/GoogleIntegracaoCard";
 import { obterCotacoes } from "@/lib/mercado";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function ConfiguracoesPage() {
-  const [estilo, cotacoes] = await Promise.all([
+export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
+  const [estilo, cotacoes, google] = await Promise.all([
     db.estiloDeFala.findFirst(),
     obterCotacoes(),
+    statusGoogle(),
   ]);
 
   const integracoes = [
@@ -34,20 +35,6 @@ export default async function ConfiguracoesPage() {
       ativo: zapi.isEnabled(),
       desc: "Conecta por QR Code (estilo WhatsApp Web). O número continua no celular, sem migrar.",
       comoAtivar: "Grátis: Evolution API (EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE — ver docs/GRATUITO.md). Paga: Z-API (ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN).",
-    },
-    {
-      nome: "Google Agenda",
-      icon: Calendar,
-      ativo: googleCalendar.isEnabled(),
-      desc: "Lança automaticamente as visitas detectadas pela IA na sua agenda.",
-      comoAtivar: "Defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET (OAuth).",
-    },
-    {
-      nome: "Importar contatos",
-      icon: Contact,
-      ativo: contacts.isEnabled(),
-      desc: "Puxa nomes dos SEUS contatos (Google/WhatsApp) — caminho legal e seguro.",
-      comoAtivar: "Use a conexão Google ou importe um CSV (nome,telefone).",
     },
     {
       nome: "Transcrição de áudio",
@@ -87,6 +74,8 @@ export default async function ConfiguracoesPage() {
         </div>
         <ArrowRight size={18} className="text-emerald-600" />
       </Link>
+
+      <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {integracoes.map((i) => (
