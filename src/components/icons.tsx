@@ -1,12 +1,12 @@
 // Ícones de silhueta próprios (lucide não tem escavadeira/rolo).
-// Desenhados em viewBox 64×64, perfil lateral, fiéis à anatomia real.
-// Usam currentColor, então herdam a cor do texto.
+// Perfil lateral, fiéis à anatomia real. Usam currentColor, então herdam a
+// cor do texto.
 
 // Escavadeira hidráulica de esteiras (estilo New Holland série E), vista de
-// lado com a lança para a esquerda: esteira com roda motriz, roda guia e
-// roletes; mesa giratória; cabine com vidro; casa de máquinas com contrapeso
-// arredondado; lança "pescoço de ganso" com cilindro; braço com cilindro da
-// caçamba; caçamba com dentes.
+// lado com a lança para a esquerda, na pose clássica: lança erguida, braço
+// caído e caçamba apoiada no chão. Desenho em 640×640 (mais precisão nas
+// curvas) — lança, braço e cilindros são traços grossos com pontas redondas,
+// o que mantém a silhueta limpa em qualquer tamanho.
 export function ExcavatorIcon({
   size = 24,
   className,
@@ -18,37 +18,32 @@ export function ExcavatorIcon({
     <svg
       width={size}
       height={size}
-      viewBox="0 0 64 64"
+      viewBox="0 0 640 640"
       fill="currentColor"
       className={className}
       aria-hidden="true"
     >
-      {/* Esteira: banda com roda guia, roda motriz e roletes vazados */}
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M27 45H55A7 7 0 0 1 55 59H27A7 7 0 0 1 27 45ZM27 52m-3.4 0a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0ZM55 52m-3.4 0a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0ZM35 53.4m-1.7 0a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0ZM41 53.4m-1.7 0a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0ZM47 53.4m-1.7 0a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0Z"
-      />
-      {/* Mesa giratória */}
-      <path d="M31 41H51V46H31Z" />
-      {/* Cabine (vidro vazado) + casa de máquinas + contrapeso */}
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M30 42V24A3 3 0 0 1 33 21H41A2 2 0 0 1 43 23V28H56C60.5 28 63 31 63 35.5V42ZM32.5 23.5H40.5V32H32.5Z"
-      />
-      {/* Lança: sobe reta, dobra arredondada no alto, desce até o braço */}
-      <path d="M42.5 33.5L25 9.8C23.2 7.4 19.6 7 17.6 8.8L8 17.5L12 22L20 14.8C21 14 22.2 14.2 23 15.3L36.5 39.5Z" />
-      {/* Cilindro da lança */}
-      <path d="M30.5 40L26 25.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-      {/* Braço com articulações */}
-      <path d="M8 17.5L12 22L10.5 45.5L5.5 45Z" />
-      <circle cx="10" cy="19.8" r="3.1" />
-      <circle cx="8" cy="45.2" r="2.7" />
-      {/* Cilindro da caçamba */}
-      <path d="M13.2 26L12 41" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      {/* Caçamba com dentes */}
-      <path d="M5 42H14.5V48C14.5 53.5 11.5 57.5 7 58.5L3 58.5C1.5 58.5 0.7 57.3 1 56L3 47.5ZM3 58.5L1.5 62.5L5.2 58.5ZM7 58.4L6.3 62.3L9.7 58ZM10.5 57L11.2 60.5L12.6 55.5Z" />
+      <g transform="translate(0 -18)">
+        {/* Esteira: banda, roda guia, roda motriz, quadro e roletes */}
+        <path fillRule="evenodd" clipRule="evenodd" d="M262 482H572A59 59 0 0 1 572 600H262A59 59 0 0 1 262 482ZM262 506A35 35 0 0 0 262 576H572A35 35 0 0 0 572 506Z" />
+        <path d="M262 514a27 27 0 1 0 .1 0ZM572 514a27 27 0 1 0 .1 0ZM258 533H576V550H258Z" />
+        <path d="M330 551a12 12 0 1 0 .1 0ZM386 551a12 12 0 1 0 .1 0ZM442 551a12 12 0 1 0 .1 0ZM498 551a12 12 0 1 0 .1 0Z" />
+        {/* Mesa giratória */}
+        <path d="M340 452H530V488H340Z" />
+        {/* Cabine (vidro vazado) + capô + contrapeso arredondado */}
+        <path fillRule="evenodd" clipRule="evenodd" d="M302 458V346C302 312 322 300 348 300H400C410 300 416 308 416 320V352H558C608 352 640 382 640 430V480H302ZM318 332C318 322 324 316 334 316H380C388 316 392 320 392 328V412H318Z" />
+        {/* Cilindro da lança, entre a frente da cabine e a lança */}
+        <path d="M318 472L262 332" fill="none" stroke="currentColor" strokeWidth="30" strokeLinecap="round" />
+        {/* Lança em peça única, cotovelo arredondado */}
+        <path d="M365 425L225 205L118 152" fill="none" stroke="currentColor" strokeWidth="70" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Braço */}
+        <path d="M121 142L75 470" fill="none" stroke="currentColor" strokeWidth="52" strokeLinecap="round" />
+        {/* Cilindro da caçamba e articulação */}
+        <path d="M158 222L138 372" fill="none" stroke="currentColor" strokeWidth="26" strokeLinecap="round" />
+        <path d="M138 372L96 440" fill="none" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+        {/* Caçamba apoiada no chão, lábio inclinado e dentes para a frente */}
+        <path d="M62 462H106C150 462 170 520 150 570C138 598 116 606 90 606H40C32 606 27 600 28 592C34 546 46 500 62 462ZM29 590L-2 608L38 606ZM48 606L42 626L72 606Z" />
+      </g>
     </svg>
   );
 }

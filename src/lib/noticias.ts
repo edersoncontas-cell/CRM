@@ -1,8 +1,10 @@
 // Notícias do setor para o letreiro e o painel do Dashboard — café, crédito
 // e financiamento de máquinas, obras e infraestrutura (com foco no Espírito
 // Santo), máquinas pesadas e as marcas vendidas. Fonte: Google Notícias via
-// RSS (gratuito, sem chave, agrega os principais veículos). Cache de 10 min
-// em memória + última lista boa gravada em Configuracao (cold start / falha).
+// RSS (gratuito, sem chave, agrega os principais veículos). SÓ notícias de
+// hoje e de até 2 dias atrás, as mais recentes primeiro (pedido do vendedor:
+// "tempo real"). Cache de 5 min em memória + última lista boa gravada em
+// Configuracao (cold start / falha), também filtrada pela idade.
 
 import { getConfig, setConfig } from "@/lib/config";
 
@@ -15,9 +17,11 @@ export type Noticia = {
 };
 
 const CHAVE_ULTIMAS = "noticias_setor_ultimas";
-const CACHE_MS = 10 * 60_000;
+const CACHE_MS = 5 * 60_000;
 const TIMEOUT_MS = 8_000;
 const MAX_NOTICIAS = 40;
+// Idade máxima de uma notícia para aparecer: 2 dias.
+export const IDADE_MAXIMA_MS = 2 * 24 * 60 * 60_000;
 
 const BUSCAS: { q: string; tema: string }[] = [
   { q: "preço do café arábica conilon", tema: "Café" },
@@ -62,13 +66,21 @@ function parseRss(xml: string, tema: string): Noticia[] {
 
 async function buscarRss(q: string, tema: string): Promise<Noticia[]> {
   try {
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+    // "when:2d" pede ao Google só os últimos 2 dias; o filtro por data abaixo garante.
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:2d`)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; CRM-NewHolland/1.0)" }, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!res.ok) return [];
     return parseRss(await res.text(), tema).slice(0, 8);
   } catch {
     return [];
   }
+}
+
+// Mantém só o que tem data e é de até 2 dias atrás; mais recentes primeiro.
+export function recentesPrimeiro(itens: Noticia[], agora = Date.now()): Noticia[] {
+  return itens
+    .filter((n) => n.publicadoEm && agora - new Date(n.publicadoEm).getTime() <= IDADE_MAXIMA_MS && new Date(n.publicadoEm).getTime() <= agora + 60 * 60_000)
+    .sort((a, b) => (b.publicadoEm ?? "").localeCompare(a.publicadoEm ?? ""));
 }
 
 const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -85,8 +97,7 @@ export async function atualizarNoticias(): Promise<{ itens: Noticia[]; atualizad
     vistos.add(chave);
     todas.push(n);
   }
-  todas.sort((a, b) => (b.publicadoEm ?? "").localeCompare(a.publicadoEm ?? ""));
-  const itens = todas.slice(0, MAX_NOTICIAS);
+  const itens = recentesPrimeiro(todas).slice(0, MAX_NOTICIAS);
 
   if (itens.length) {
     cacheMem = { em: Date.now(), itens };
@@ -101,9 +112,10 @@ export async function atualizarNoticias(): Promise<{ itens: Noticia[]; atualizad
 async function lerUltimasNoticias(): Promise<{ itens: Noticia[]; atualizadoEm: string | null }> {
   try {
     const ultima = JSON.parse((await getConfig(CHAVE_ULTIMAS)) ?? "null") as { em: string; itens: Noticia[] } | null;
-    if (ultima?.itens?.length) {
-      cacheMem = { em: Date.now(), itens: ultima.itens };
-      return { itens: ultima.itens, atualizadoEm: ultima.em };
+    const itens = recentesPrimeiro(ultima?.itens ?? []);
+    if (itens.length) {
+      cacheMem = { em: Date.now(), itens };
+      return { itens, atualizadoEm: ultima!.em };
     }
   } catch {}
   return { itens: [], atualizadoEm: null };

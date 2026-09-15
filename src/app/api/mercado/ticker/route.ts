@@ -13,7 +13,7 @@ export const maxDuration = 60;
 // sem depender do cron externo. Com ?forcar=1 (botão "Atualizar"), refaz
 // tudo agora. Protegida pelo middleware (cookie de login).
 const VALIDADE_BOLSA_MS = 20 * 60_000;
-const VALIDADE_NOTICIAS_MS = 30 * 60_000;
+const VALIDADE_NOTICIAS_MS = 10 * 60_000; // notícias "em tempo real": rebusca a cada 10 min
 let atualizando = false;
 
 export async function GET(req: NextRequest) {

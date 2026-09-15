@@ -1,13 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#164de1"/>
-  <g fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="170" cy="330" r="86"/>
-    <circle cx="170" cy="330" r="30" fill="#ffffff"/>
-    <circle cx="360" cy="350" r="56"/>
-    <circle cx="360" cy="350" r="18" fill="#ffffff"/>
-    <path d="M120 250 L120 180 L210 180 L240 250"/>
-    <path d="M240 250 L300 250 L320 300 L300 350"/>
-    <path d="M210 180 L210 130 L260 130 L260 180"/>
+  <rect width="512" height="512" rx="112" fill="#ffcb2d"/>
+  <g fill="#0a0a0b" transform="translate(64 78) scale(0.6)">
+      <g transform="translate(0 -18)">
+        <!-- Esteira: banda, roda guia, roda motriz, quadro e roletes -->
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M262 482H572A59 59 0 0 1 572 600H262A59 59 0 0 1 262 482ZM262 506A35 35 0 0 0 262 576H572A35 35 0 0 0 572 506Z" />
+        <path d="M262 514a27 27 0 1 0 .1 0ZM572 514a27 27 0 1 0 .1 0ZM258 533H576V550H258Z" />
+        <path d="M330 551a12 12 0 1 0 .1 0ZM386 551a12 12 0 1 0 .1 0ZM442 551a12 12 0 1 0 .1 0ZM498 551a12 12 0 1 0 .1 0Z" />
+        <!-- Mesa giratória -->
+        <path d="M340 452H530V488H340Z" />
+        <!-- Cabine (vidro vazado) + capô + contrapeso arredondado -->
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M302 458V346C302 312 322 300 348 300H400C410 300 416 308 416 320V352H558C608 352 640 382 640 430V480H302ZM318 332C318 322 324 316 334 316H380C388 316 392 320 392 328V412H318Z" />
+        <!-- Cilindro da lança, entre a frente da cabine e a lança -->
+        <path d="M318 472L262 332" fill="none" stroke="currentColor" stroke-width="30" stroke-linecap="round" />
+        <!-- Lança em peça única, cotovelo arredondado -->
+        <path d="M365 425L225 205L118 152" fill="none" stroke="currentColor" stroke-width="70" stroke-linecap="round" stroke-linejoin="round" />
+        <!-- Braço -->
+        <path d="M121 142L75 470" fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round" />
+        <!-- Cilindro da caçamba e articulação -->
+        <path d="M158 222L138 372" fill="none" stroke="currentColor" stroke-width="26" stroke-linecap="round" />
+        <path d="M138 372L96 440" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" />
+        <!-- Caçamba apoiada no chão, lábio inclinado e dentes para a frente -->
+        <path d="M62 462H106C150 462 170 520 150 570C138 598 116 606 90 606H40C32 606 27 600 28 592C34 546 46 500 62 462ZM29 590L-2 608L38 606ZM48 606L42 626L72 606Z" />
+      </g>
   </g>
-  <rect x="120" y="118" width="150" height="26" rx="13" fill="#f5b417"/>
 </svg>
