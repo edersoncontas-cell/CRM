@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Card } from "@/components/ui";
 import {
   limparContatosIndesejadosAction, adicionarTermoFiltroAction, removerTermoFiltroAction, assistenteFiltroAction,
@@ -19,8 +19,6 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
   const [listas, setListas] = useState<ListasFiltro>({ termos, palavras });
   const [resultado, setResultado] = useState<ResultadoLimpeza | null>(null);
   const [rodando, start] = useTransition();
-  const [novo, setNovo] = useState<{ termo: string; palavra: string }>({ termo: "", palavra: "" });
-  const [ocupado, setOcupado] = useState<string | null>(null);
   const [comando, setComando] = useState("");
   const [pensando, setPensando] = useState(false);
   const [historico, setHistorico] = useState<{ pedido: string; r: RespostaAssistenteFiltro }[]>([]);
@@ -29,18 +27,14 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
     start(async () => { setResultado(await limparContatosIndesejadosAction()); });
   }
 
-  async function adicionar(tipo: TipoTermoBloqueio) {
-    const valor = novo[tipo].trim();
-    if (!valor) return;
-    setOcupado(`add:${tipo}`);
-    try { setListas(await adicionarTermoFiltroAction(tipo, valor)); setNovo((n) => ({ ...n, [tipo]: "" })); }
-    finally { setOcupado(null); }
+  async function adicionar(tipo: TipoTermoBloqueio, valores: string[]) {
+    let atual = listas;
+    for (const v of valores) atual = await adicionarTermoFiltroAction(tipo, v);
+    setListas(atual);
   }
 
   async function remover(tipo: TipoTermoBloqueio, valor: string) {
-    setOcupado(`${tipo}:${valor}`);
-    try { setListas(await removerTermoFiltroAction(tipo, valor)); }
-    finally { setOcupado(null); }
+    setListas(await removerTermoFiltroAction(tipo, valor));
   }
 
   async function pedir() {
@@ -57,31 +51,6 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
     }
   }
 
-  const Lista = ({ tipo, titulo, dica, itens }: { tipo: TipoTermoBloqueio; titulo: string; dica: string; itens: string[] }) => (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-      <div className="text-sm font-semibold text-slate-700">{titulo}</div>
-      <div className="mb-2 text-[11px] text-slate-500">{dica}</div>
-      <div className="flex flex-wrap gap-1.5">
-        {itens.length === 0 && <span className="text-xs text-slate-400">Nenhum.</span>}
-        {itens.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-red-50 pl-2.5 pr-1 py-0.5 text-xs font-semibold text-red-700">
-            {t}
-            <button type="button" onClick={() => remover(tipo, t)} disabled={ocupado === `${tipo}:${t}`} title="Remover" className="rounded-full p-0.5 hover:bg-red-100 disabled:opacity-50">
-              {ocupado === `${tipo}:${t}` ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
-            </button>
-          </span>
-        ))}
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); adicionar(tipo); }} className="mt-2 flex gap-1.5">
-        <input value={novo[tipo]} onChange={(e) => setNovo((n) => ({ ...n, [tipo]: e.target.value }))} placeholder={tipo === "termo" ? "ex.: cartor" : "ex.: despachante"}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-400" />
-        <button type="submit" disabled={!novo[tipo].trim() || ocupado === `add:${tipo}`} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50">
-          {ocupado === `add:${tipo}` ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Adicionar
-        </button>
-      </form>
-    </div>
-  );
-
   return (
     <Card className="mt-6">
       <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
@@ -94,8 +63,8 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Lista tipo="palavra" titulo="Palavras inteiras" dica='Bate só como palavra inteira: "banco" pega "Banco do Brasil", não pega "Bancorbrás".' itens={listas.palavras} />
-        <Lista tipo="termo" titulo="Pedaços de palavra" dica='Bate dentro de qualquer palavra: "contab" pega contabilidade, contábil, contábeis.' itens={listas.termos} />
+        <ListaTermos tipo="palavra" titulo="Palavras inteiras" dica='Bate só como palavra inteira: "banco" pega "Banco do Brasil", não pega "Bancorbrás".' exemplo="ex.: despachante" itens={listas.palavras} onAdicionar={adicionar} onRemover={remover} />
+        <ListaTermos tipo="termo" titulo="Pedaços de palavra" dica='Bate dentro de qualquer palavra: "contab" pega contabilidade, contábil, contábeis.' exemplo="ex.: cartor" itens={listas.termos} onAdicionar={adicionar} onRemover={remover} />
       </div>
 
       {/* Assistente de configuração */}
@@ -160,5 +129,77 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
         </ul>
       )}
     </Card>
+  );
+}
+
+// Fica fora do card de propósito: definido dentro do render, o React remontava
+// o input a cada tecla e o campo perdia o foco depois de uma letra.
+function ListaTermos({ tipo, titulo, dica, exemplo, itens, onAdicionar, onRemover }: {
+  tipo: TipoTermoBloqueio; titulo: string; dica: string; exemplo: string; itens: string[];
+  onAdicionar: (tipo: TipoTermoBloqueio, valores: string[]) => Promise<void>;
+  onRemover: (tipo: TipoTermoBloqueio, valor: string) => Promise<void>;
+}) {
+  const [texto, setTexto] = useState("");
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const campo = useRef<HTMLInputElement>(null);
+
+  const existentes = new Set(itens.map((t) => t.trim().toLowerCase()));
+  const digitados = texto.split(/[,;\n]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const novos = Array.from(new Set(digitados)).filter((v) => !existentes.has(v));
+  const repetidos = digitados.filter((v) => existentes.has(v));
+
+  async function adicionar() {
+    if (ocupado || novos.length === 0) {
+      if (repetidos.length > 0) setAviso(`"${repetidos[0]}" já está na lista.`);
+      return;
+    }
+    setOcupado("add");
+    setAviso(null);
+    try {
+      await onAdicionar(tipo, novos);
+      setTexto("");
+      if (repetidos.length > 0) setAviso(`Adicionado. "${repetidos[0]}" já estava na lista.`);
+    } catch {
+      setAviso("Não consegui salvar agora. Tente de novo.");
+    } finally {
+      setOcupado(null);
+      campo.current?.focus();
+    }
+  }
+
+  async function remover(valor: string) {
+    setOcupado(valor);
+    setAviso(null);
+    try { await onRemover(tipo, valor); }
+    catch { setAviso("Não consegui remover agora. Tente de novo."); }
+    finally { setOcupado(null); }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+      <div className="text-sm font-semibold text-slate-700">{titulo}</div>
+      <div className="mb-2 text-[11px] text-slate-500">{dica}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {itens.length === 0 && <span className="text-xs text-slate-400">Nenhum.</span>}
+        {itens.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-red-50 pl-2.5 pr-1 py-0.5 text-xs font-semibold text-red-700">
+            {t}
+            <button type="button" onClick={() => remover(t)} disabled={ocupado !== null} title="Remover" className="rounded-full p-0.5 hover:bg-red-100 disabled:opacity-50">
+              {ocupado === t ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+            </button>
+          </span>
+        ))}
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); adicionar(); }} className="mt-2 flex gap-1.5">
+        <input ref={campo} value={texto} onChange={(e) => { setTexto(e.target.value); if (aviso) setAviso(null); }} placeholder={`${exemplo} (vários: separe por vírgula)`}
+          autoComplete="off" autoCapitalize="none" spellCheck={false}
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand-400" />
+        <button type="submit" disabled={novos.length === 0 || ocupado === "add"} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50">
+          {ocupado === "add" ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} {novos.length > 1 ? `Adicionar ${novos.length}` : "Adicionar"}
+        </button>
+      </form>
+      {aviso && <div className="mt-1 text-[11px] text-amber-700">{aviso}</div>}
+    </div>
   );
 }
