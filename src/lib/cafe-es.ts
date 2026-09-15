@@ -15,7 +15,7 @@
 
 import { getConfig, setConfig } from "@/lib/config";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
-import { htmlParaTexto, trechosRelevantes, lerDireto, lerTabelaCCCV, lerNoticiasAgricolasConilon, lerJsonPainelDoCafe, valido, type Leitura } from "@/lib/cafe-parsers";
+import { htmlParaTexto, trechosRelevantes, lerDireto, lerTabelaCCCV, lerNoticiasAgricolasConilon, lerJsonPainelDoCafe, valido, variacaoDiaria, hojeBrasilia, type Leitura, type PontoHistoricoCafe } from "@/lib/cafe-parsers";
 
 const CHAVE_HISTORICO = "cafe.es.historico";
 const CHAVE_ULTIMO = "cafe.es.ultimo";
@@ -39,15 +39,16 @@ export type CotacaoCafeES = {
   fonte: string | null;
   praca?: string | null;       // praça/região do preço (ex.: "Vitória - ES")
   atualizadoEm: string;        // ISO da leitura
-  variacaoConilonPct: number | null; // da fonte ou vs. leitura anterior gravada
+  variacaoConilonPct: number | null; // vs. último dia diferente do histórico (ou vs. leitura anterior)
   variacaoArabicaPct?: number | null;
+  variacaoBase?: string | null;      // contra o que a variação foi calculada (ex.: "dia 14/09/2026")
   // Extras do Painel do Café
   dolar?: number | null;
   londres?: number | null;
   novaYork?: number | null;
 };
 
-export type PontoHistoricoCafe = { data: string; conilon: number | null; arabica: number | null; fonte: string | null };
+export type { PontoHistoricoCafe } from "@/lib/cafe-parsers";
 
 async function baixar(url: string, accept = "text/html,*/*"): Promise<string | null> {
   try {
@@ -157,16 +158,6 @@ export async function cafeESPrecisaAtualizar(): Promise<boolean> {
   return true;
 }
 
-// Variação (%) contra o último dia DIFERENTE do histórico — assim ela não
-// zera quando a mesma cotação é relida a cada minuto.
-function variacaoContraDiaAnterior(hist: PontoHistoricoCafe[], chaveHoje: string, campo: "conilon" | "arabica", valorHoje: number | null): number | null {
-  if (valorHoje == null) return null;
-  const anterior = [...hist].reverse().find((h) => h.data !== chaveHoje && h[campo] != null);
-  if (!anterior || !anterior[campo]) return null;
-  const v = ((valorHoje - anterior[campo]!) / anterior[campo]!) * 100;
-  return Math.abs(v) < 25 ? Math.round(v * 100) / 100 : null;
-}
-
 // Tenta as fontes em ordem; grava e devolve o resultado.
 export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | null; conilon: number | null }> {
   await setConfig(CHAVE_TENTATIVA, new Date().toISOString()).catch(() => {});
@@ -179,10 +170,13 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
   }
   if (!achado?.conilon) return { ok: false, fonte: null, conilon: anterior?.conilon ?? null };
 
-  // Histórico: um ponto por data de referência (ou por dia de leitura).
+  // Histórico: um ponto por DIA DE LEITURA (a data da fonte pode ser a do
+  // pregão anterior e travar o dia; por isso a chave é o dia de hoje).
   const hist = await lerHistoricoCafeES();
-  const chave = achado.dataReferencia ?? new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const chave = hojeBrasilia();
   const arabica = achado.arabica ?? anterior?.arabica ?? null;
+  const vc = variacaoDiaria(hist, chave, "conilon", achado.conilon, anterior?.conilon);
+  const va = variacaoDiaria(hist, chave, "arabica", arabica, anterior?.arabica);
   const novo: CotacaoCafeES = {
     conilon: achado.conilon,
     arabica,
@@ -190,15 +184,16 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
     fonte: achado.fonte,
     praca: achado.praca ?? null,
     atualizadoEm: new Date().toISOString(),
-    variacaoConilonPct: achado.variacaoConilonPct ?? variacaoContraDiaAnterior(hist, chave, "conilon", achado.conilon),
-    variacaoArabicaPct: achado.variacaoArabicaPct ?? variacaoContraDiaAnterior(hist, chave, "arabica", arabica),
+    variacaoConilonPct: achado.variacaoConilonPct ?? vc.pct,
+    variacaoArabicaPct: achado.variacaoArabicaPct ?? va.pct,
+    variacaoBase: vc.base ?? va.base,
     dolar: achado.dolar ?? null,
     londres: achado.londres ?? null,
     novaYork: achado.novaYork ?? null,
   };
   await setConfig(CHAVE_ULTIMO, JSON.stringify(novo));
   const semDup = hist.filter((h) => h.data !== chave);
-  semDup.push({ data: chave, conilon: novo.conilon, arabica: novo.arabica, fonte: novo.fonte });
+  semDup.push({ data: chave, conilon: novo.conilon, arabica: novo.arabica, fonte: novo.fonte, dataReferencia: novo.dataReferencia });
   await setConfig(CHAVE_HISTORICO, JSON.stringify(semDup.slice(-400)));
   return { ok: true, fonte: novo.fonte, conilon: novo.conilon };
 }

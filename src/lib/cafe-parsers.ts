@@ -15,6 +15,33 @@ export type Leitura = {
   variacaoArabicaPct?: number | null;
 };
 
+// Um ponto do histórico por DIA DE LEITURA (fuso de Brasília). "dataReferencia"
+// é a data que a fonte informa (pode ser o pregão anterior) — só informação.
+export type PontoHistoricoCafe = { data: string; conilon: number | null; arabica: number | null; fonte: string | null; dataReferencia?: string | null };
+
+export function hojeBrasilia(agora = new Date()): string {
+  return agora.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function pct(atual: number, base: number): number | null {
+  if (!(base > 0)) return null;
+  const v = ((atual - base) / base) * 100;
+  return Math.abs(v) < 25 ? Math.round(v * 100) / 100 : null;
+}
+
+// Variação (%) de hoje: contra o último dia DIFERENTE do histórico (assim ela
+// não zera quando a mesma cotação é relida a cada minuto). Sem dia anterior
+// gravado ainda, compara com a leitura anterior — a setinha nunca some.
+export function variacaoDiaria(
+  hist: PontoHistoricoCafe[], chaveHoje: string, campo: "conilon" | "arabica", valorHoje: number | null, leituraAnterior: number | null | undefined,
+): { pct: number | null; base: string | null } {
+  if (valorHoje == null) return { pct: null, base: null };
+  const anterior = [...hist].reverse().find((h) => h.data !== chaveHoje && h[campo] != null);
+  if (anterior?.[campo]) return { pct: pct(valorHoje, anterior[campo]!), base: `dia ${anterior.data}` };
+  if (leituraAnterior) return { pct: pct(valorHoje, leituraAnterior), base: "leitura anterior" };
+  return { pct: 0, base: "primeira leitura" };
+}
+
 // "1.234,56" → 1234.56 (só aceita valores plausíveis de saca).
 export const numBR = (s: string): number | null => {
   const n = parseFloat(String(s).replace(/\./g, "").replace(",", "."));

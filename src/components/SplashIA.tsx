@@ -3,90 +3,62 @@
 import { useEffect, useState } from "react";
 import { ExcavatorIcon } from "@/components/icons";
 
-const FASES = ["INICIALIZANDO", "CARREGANDO DADOS", "SINCRONIZANDO", "PREPARANDO PAINEL", "PRONTO"];
-const R = 70;
-const CIRC = 2 * Math.PI * R;
+const FASES = ["Iniciando", "Carregando seus dados", "Preparando o painel", "Pronto"];
+const DURACAO_BARRA_MS = 1900;
 
-// Splash de inicialização: emblema da escavadeira dentro de um anel de progresso.
+// Tela de abertura do CRM: emblema da marca (escavadeira em amarelo New
+// Holland), nome do sistema e uma barra de progresso discreta. Sóbria e
+// rápida — some sozinha (ver SplashBoot).
 export function SplashIA({ saindo = false }: { saindo?: boolean }) {
-  const [pct, setPct] = useState(0);
   const [fase, setFase] = useState(0);
 
   useEffect(() => {
-    const ip = setInterval(() => {
-      setPct((p) => (p >= 100 ? 100 : Math.min(100, p + Math.max(1, Math.round((100 - p) / 12)))));
-    }, 70);
-    return () => clearInterval(ip);
+    const passo = DURACAO_BARRA_MS / (FASES.length - 1);
+    const ids = FASES.slice(1).map((_, i) => setTimeout(() => setFase(i + 1), Math.round(passo * (i + 1))));
+    return () => ids.forEach(clearTimeout);
   }, []);
-
-  useEffect(() => {
-    setFase(Math.min(FASES.length - 1, Math.floor((pct / 100) * (FASES.length - 1))));
-  }, [pct]);
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex flex-col items-center justify-center overflow-hidden bg-[#050506]"
-      style={{ animation: saindo ? "splOut .45s ease-in forwards" : "splFade .5s ease-out both" }}
+      className="fixed inset-0 z-[120] flex flex-col items-center justify-center overflow-hidden"
+      style={{
+        background: "linear-gradient(160deg, #161b23 0%, #0f1319 55%, #0a0d12 100%)",
+        animation: saindo ? "splOut .4s ease-in forwards" : "splFade .35s ease-out both",
+      }}
+      aria-hidden="true"
     >
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 80% at 50% 0%, rgba(26,99,245,0.10), transparent 55%)" }} />
-      <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 240px 60px rgba(0,0,0,0.9)" }} />
+      {/* Brilho suave da marca atrás do emblema */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(circle, rgba(255,184,28,0.10) 0%, rgba(255,184,28,0.03) 40%, transparent 70%)" }} />
+      {/* Linhas finas de fundo (textura discreta) */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.05]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
 
-      <div className="relative flex h-[200px] w-[200px] items-center justify-center">
-        {/* Sheen cônico rotativo */}
+      <div className="relative flex flex-col items-center" style={{ animation: "splSubir .6s cubic-bezier(.2,.8,.2,1) both" }}>
         <div
-          className="absolute h-[176px] w-[176px] rounded-full opacity-60"
-          style={{
-            background: "conic-gradient(from 0deg, transparent 0deg, rgba(191,222,77,0.18) 40deg, transparent 120deg, transparent 360deg)",
-            filter: "blur(10px)",
-            animation: "splGirar 6s linear infinite",
-          }}
-        />
-
-        {/* Anel de progresso */}
-        <svg width="200" height="200" viewBox="0 0 160 160" className="absolute -rotate-90">
-          <defs>
-            <linearGradient id="splGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#BFDE4D" />
-              <stop offset="1" stopColor="#38bdf8" />
-            </linearGradient>
-          </defs>
-          <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2.5" />
-          <circle
-            cx="80" cy="80" r={R} fill="none" stroke="url(#splGrad)" strokeWidth="2.5" strokeLinecap="round"
-            strokeDasharray={CIRC}
-            strokeDashoffset={CIRC * (1 - pct / 100)}
-            style={{ transition: "stroke-dashoffset .25s cubic-bezier(.4,0,.2,1)", filter: "drop-shadow(0 0 5px rgba(191,222,77,0.55))" }}
-          />
-        </svg>
-
-        {/* Disco interno + emblema + shimmer */}
-        <div className="relative flex h-[112px] w-[112px] items-center justify-center overflow-hidden rounded-full" style={{ background: "radial-gradient(circle at 50% 35%, #14161b, #08090b)", border: "1px solid rgba(255,255,255,0.05)" }}>
-          <ExcavatorIcon size={58} className="text-agro-400" />
-          <div className="pointer-events-none absolute inset-0" style={{ filter: "drop-shadow(0 0 14px rgba(191,222,77,0.35))" }} />
-          <div
-            className="pointer-events-none absolute top-0 h-full w-1/2"
-            style={{ background: "linear-gradient(105deg, transparent, rgba(255,255,255,0.16), transparent)", animation: "splShimmer 2.8s ease-in-out infinite" }}
-          />
+          className="flex h-[92px] w-[92px] items-center justify-center rounded-[26px] bg-agro-400 text-black"
+          style={{ boxShadow: "0 24px 60px rgba(255,184,28,0.28), 0 2px 0 rgba(255,255,255,0.35) inset, 0 -2px 0 rgba(0,0,0,0.12) inset" }}
+        >
+          <ExcavatorIcon size={58} />
+        </div>
+        <div className="mt-7 text-center">
+          <div className="text-[24px] font-black tracking-tight text-white">CRM DO EDY</div>
+          <div className="mt-1.5 text-[10px] font-semibold tracking-[0.32em] text-agro-400">NEW HOLLAND CONSTRUCTION · DYNAPAC</div>
         </div>
       </div>
 
-      <div className="relative mt-9 text-center">
-        <div className="text-[15px] font-semibold tracking-[0.42em] text-white">CRM DO EDY</div>
-        <div className="mt-1.5 text-[9px] font-medium tracking-[0.45em] text-zinc-600">INTELIGÊNCIA DE VENDAS</div>
+      <div className="relative mt-10 flex flex-col items-center" style={{ animation: "splSubir .6s .15s cubic-bezier(.2,.8,.2,1) both" }}>
+        <div className="h-[3px] w-[220px] overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-agro-400" style={{ animation: `splBarra ${DURACAO_BARRA_MS}ms cubic-bezier(.3,.1,.2,1) forwards`, boxShadow: "0 0 10px rgba(255,203,45,0.6)" }} />
+        </div>
+        <div className="mt-3 h-4 text-[11px] font-medium tracking-wide text-slate-400">{FASES[fase]}…</div>
       </div>
 
-      <div className="relative mt-7 flex items-center gap-3 font-mono text-[10px] tracking-[0.25em] text-zinc-500">
-        <span className="h-1.5 w-1.5 rounded-full bg-agro-400" style={{ animation: "splBlink 1.2s ease-in-out infinite", boxShadow: "0 0 6px rgba(191,222,77,0.8)" }} />
-        <span className="min-w-[150px] text-left text-zinc-400">{FASES[fase]}</span>
-        <span className="tabular-nums text-zinc-300">{String(pct).padStart(3, "0")}%</span>
-      </div>
+      <div className="absolute bottom-7 text-[10px] font-medium tracking-[0.25em] text-slate-600">INTELIGÊNCIA DE VENDAS</div>
 
       <style>{`
         @keyframes splFade { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes splOut { from { opacity: 1 } to { opacity: 0 } }
-        @keyframes splGirar { to { transform: rotate(360deg) } }
-        @keyframes splShimmer { 0% { transform: translateX(-180%) } 60%,100% { transform: translateX(380%) } }
-        @keyframes splBlink { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+        @keyframes splOut { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(1.02) } }
+        @keyframes splSubir { from { opacity: 0; transform: translateY(14px) scale(.96) } to { opacity: 1; transform: none } }
+        @keyframes splBarra { from { width: 0 } 70% { width: 82% } to { width: 100% } }
       `}</style>
     </div>
   );

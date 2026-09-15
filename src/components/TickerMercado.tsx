@@ -12,11 +12,14 @@ export type DadosTicker = { cotacoes: CotacoesMercado; noticias: Noticia[] };
 const fmtBRL = (v: number | null, casas = 2) =>
   v == null ? "—" : `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}`;
 
-function Variacao({ pct }: { pct: number | null | undefined }) {
+// Seta + percentual. Só some quando não há variação calculável (pct null);
+// 0% aparece como "• 0,00%" para o vendedor saber que o preço não mexeu.
+function Variacao({ pct, base }: { pct: number | null | undefined; base?: string | null }) {
   if (pct == null) return null;
-  const cor = pct > 0 ? T.verde : pct < 0 ? T.vermelho : T.mudo;
+  const cor = pct > 0 ? T.verde : pct < 0 ? T.vermelho : T.texto2;
   const seta = pct > 0 ? "▲" : pct < 0 ? "▼" : "•";
-  return <span className="text-[11px] font-bold" style={{ color: cor }}>{seta} {Math.abs(pct).toFixed(2)}%</span>;
+  const titulo = base ? `Variação contra ${base}` : "Variação";
+  return <span className="text-[11px] font-bold" style={{ color: cor }} title={titulo}>{seta} {Math.abs(pct).toFixed(2).replace(".", ",")}%</span>;
 }
 
 const COR_TEMA: Record<string, string> = { Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde };
@@ -80,11 +83,11 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const doPainel = (es?.fonte ?? "").startsWith("Painel do Café");
   const lido = es ? `lido ${quando(es.atualizadoEm, agora)}` : "";
   const ref = es?.dataReferencia ? ` · ${es.dataReferencia}` : "";
-  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; sub?: string; destaque?: boolean }[] = [];
+  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; base?: string | null; sub?: string; destaque?: boolean }[] = [];
   // Arábica primeiro: é o café da região do vendedor.
-  if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio · ES" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, sub: `sc 60 kg · ${fonte}${ref} · ${lido}`, destaque: true });
+  if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio · ES" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, base: es.variacaoBase, sub: `sc 60 kg · ${fonte}${ref} · ${lido}`, destaque: true });
   else if (c.cafeArabica != null) cartoes.push({ icone: Coffee, label: "Arábica · NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct, sub: "sc 60 kg · bolsa", destaque: true });
-  if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, sub: `sc 60 kg · ${fonte}${ref} · ${lido}` });
+  if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, base: es.variacaoBase, sub: `sc 60 kg · ${fonte}${ref} · ${lido}` });
   else if (c.cafeConilon != null) cartoes.push({ icone: Coffee, label: "Conilon · Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct, sub: atualizando ? "sc 60 kg · bolsa · buscando o preço do ES…" : "sc 60 kg · bolsa · preço do ES indisponível agora" });
   const dolar = es?.dolar ?? c.dolar;
   if (dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct, sub: es?.dolar != null ? `${fonte}${ref}` : quando(c.cafeAtualizadoEm, agora) ? `atualizado ${quando(c.cafeAtualizadoEm, agora)}` : undefined });
@@ -113,7 +116,7 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
             <k.icone size={18} style={{ color: k.destaque ? T.amarelo : T.texto2 }} />
             <div className="leading-tight">
               <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>{k.label}</div>
-              <div className="flex items-baseline gap-1.5"><span className="text-base font-black" style={{ color: T.texto }}>{k.valor}</span><Variacao pct={k.pct} />{atualizando && k.destaque && <RefreshCw size={10} className="animate-spin" style={{ color: T.mudo }} />}</div>
+              <div className="flex items-baseline gap-1.5"><span className="text-base font-black" style={{ color: T.texto }}>{k.valor}</span><Variacao pct={k.pct} base={k.base} />{atualizando && k.destaque && <RefreshCw size={10} className="animate-spin" style={{ color: T.mudo }} />}</div>
               {k.sub && <div className="text-[10px]" style={{ color: T.mudo }}>{k.sub}</div>}
             </div>
           </div>
