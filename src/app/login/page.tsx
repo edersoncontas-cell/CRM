@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado, cookieOpts } from "@/lib/auth";
 import { ipDaRequisicao, minutosBloqueado, registrarFalhaLogin, limparFalhasLogin } from "@/lib/login-guard";
-import { ExcavatorIcon, RollerIcon } from "@/components/icons";
+import { ExcavatorIcon, LogoEscavadeira, RollerIcon } from "@/components/icons";
 import { EntradaAutomatica } from "@/components/EntradaAutomatica";
 
 // Rota de API usada como fonte primária (imune ao middleware de auth).
@@ -118,8 +118,8 @@ export default function LoginPage({
         className="relative z-10 w-full max-w-sm rounded-2xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-md"
       >
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-black shadow-lg ring-4 ring-agro-400/30">
-            <ExcavatorIcon size={36} className="text-agro-400" />
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg ring-4 ring-agro-400/30">
+            <LogoEscavadeira size={80} />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">CRM DO EDY</h1>
           <p className="text-sm text-slate-500">Vendas inteligentes com IA · New Holland · Dynapac</p>

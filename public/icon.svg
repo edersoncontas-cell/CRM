@@ -1,26 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#ffcb2d"/>
-  <g fill="#0a0a0b" transform="translate(64 78) scale(0.6)">
-      <g transform="translate(0 -18)">
-        <!-- Esteira: banda, roda guia, roda motriz, quadro e roletes -->
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M262 482H572A59 59 0 0 1 572 600H262A59 59 0 0 1 262 482ZM262 506A35 35 0 0 0 262 576H572A35 35 0 0 0 572 506Z" />
-        <path d="M262 514a27 27 0 1 0 .1 0ZM572 514a27 27 0 1 0 .1 0ZM258 533H576V550H258Z" />
-        <path d="M330 551a12 12 0 1 0 .1 0ZM386 551a12 12 0 1 0 .1 0ZM442 551a12 12 0 1 0 .1 0ZM498 551a12 12 0 1 0 .1 0Z" />
-        <!-- Mesa giratória -->
-        <path d="M340 452H530V488H340Z" />
-        <!-- Cabine (vidro vazado) + capô + contrapeso arredondado -->
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M302 458V346C302 312 322 300 348 300H400C410 300 416 308 416 320V352H558C608 352 640 382 640 430V480H302ZM318 332C318 322 324 316 334 316H380C388 316 392 320 392 328V412H318Z" />
-        <!-- Cilindro da lança, entre a frente da cabine e a lança -->
-        <path d="M318 472L262 332" fill="none" stroke="currentColor" stroke-width="30" stroke-linecap="round" />
-        <!-- Lança em peça única, cotovelo arredondado -->
-        <path d="M365 425L225 205L118 152" fill="none" stroke="currentColor" stroke-width="70" stroke-linecap="round" stroke-linejoin="round" />
-        <!-- Braço -->
-        <path d="M121 142L75 470" fill="none" stroke="currentColor" stroke-width="52" stroke-linecap="round" />
-        <!-- Cilindro da caçamba e articulação -->
-        <path d="M158 222L138 372" fill="none" stroke="currentColor" stroke-width="26" stroke-linecap="round" />
-        <path d="M138 372L96 440" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round" />
-        <!-- Caçamba apoiada no chão, lábio inclinado e dentes para a frente -->
-        <path d="M62 462H106C150 462 170 520 150 570C138 598 116 606 90 606H40C32 606 27 600 28 592C34 546 46 500 62 462ZM29 590L-2 608L38 606ZM48 606L42 626L72 606Z" />
-      </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 560 560">
+  <defs><clipPath id="r"><rect width="560" height="560" rx="122"/></clipPath></defs>
+  <g clip-path="url(#r)">
+    <rect width="560" height="560" fill="#ffffff"/>
+    <path d="M0 560 L0 386.1 Q0 386.1 7.0 387.0 Q14 387.8 21.0 382.6 Q28 377.4 35.0 375.1 Q42 372.9 49.0 372.8 Q56 372.7 63.0 377.1 Q70 381.6 77.0 379.1 Q84 376.5 91.0 378.9 Q98 381.2 105.0 385.9 Q112 390.6 119.0 388.2 Q126 385.8 133.0 387.9 Q140 389.9 147.0 391.5 Q154 393.2 161.0 394.0 Q168 394.9 175.0 391.9 Q182 389 189.0 387.5 Q196 386 203.0 387.1 Q210 388.3 217.0 388.4 Q224 388.4 231.0 389.4 Q238 390.5 245.0 388.3 Q252 386.1 259.0 390.1 Q266 394 273.0 389.2 Q280 384.4 287.0 389.1 Q294 393.9 301.0 389.5 Q308 385.1 315.0 388.5 Q322 391.8 329.0 394.1 Q336 396.4 343.0 399.0 Q350 401.6 357.0 404.1 Q364 406.5 371.0 409.1 Q378 411.6 385.0 414.3 Q392 416.9 399.0 416.8 Q406 416.6 413.0 422.6 Q420 428.7 427.0 425.9 Q434 423.1 441.0 426.1 Q448 429.1 455.0 434.2 Q462 439.3 469.0 444.6 Q476 449.9 483.0 446.5 Q490 443.2 497.0 450.1 Q504 457.1 511.0 458.2 Q518 459.3 525.0 462.6 Q532 466 539.0 464.4 Q546 462.7 553.0 467.2 L560 471.7 L560 560 Z" fill="#000000"/>
+    <g fill="#ffcb2d" color="#ffcb2d">
+      <!-- Esteira -->
+      <path d="M140 353L285 344A24 24 0 0 1 285 392L140 397A22 22 0 0 1 140 353Z" />
+      <!-- Casa de máquinas + contrapeso + cabine (moldura da janela e corrimão vazados) -->
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M92 350V310C92 300 98 296 108 296H205V278C205 271 210 266 217 266H282C288 266 292 270 292 276V350ZM214 278H284V322H214ZM217 281V319H281V281ZM166 296V272C166 268 169 266 173 266H198V296H195V269H169V296Z" />
+      <!-- Capô: filtro de ar e escapamento -->
+      <path d="M97 296V284C97 281 99 280 102 280H114V296ZM122 296V288H150V296Z" />
+      <!-- Lança -->
+      <path d="M218 296L354 140A20 20 0 0 1 392 165L268 300Z" />
+      <!-- Cilindro da lança e cilindro do braço (com fresta) -->
+      <path d="M293 284L348 224" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" />
+      <path d="M287 205L342 145" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" />
+      <!-- Braço -->
+      <path d="M372 152L450 255" fill="none" stroke="currentColor" stroke-width="34" stroke-linecap="round" />
+      <!-- Cilindro da caçamba + articulação -->
+      <path d="M407 157L447 209" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" />
+      <path d="M447 209L458 240" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" />
+      <!-- Caçamba com dentes -->
+      <path d="M428 246L465 250C486 262 490 300 478 328C468 350 448 360 425 358L392 350C400 332 412 306 428 292ZM400 338L372 352L402 360ZM412 358L392 372L420 360Z" />
+    </g>
   </g>
 </svg>

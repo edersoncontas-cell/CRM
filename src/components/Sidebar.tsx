@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, GripVertical, ArrowUpDown, Check } from "lucide-react";
-import { ExcavatorIcon } from "@/components/icons";
+import { LogoEscavadeira } from "@/components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { GRUPOS, TODOS_HREFS, lerMenuOcultos, lerOrdemMenu, salvarOrdemMenu, EVENTO_MENU, type ItemMenu } from "@/lib/menu";
@@ -159,8 +159,8 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
       {/* Topbar mobile */}
       <div id="topbar-mobile" className="sticky top-0 z-30 flex items-center justify-between border-b border-brand-800 bg-brand-900 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white md:hidden">
         <div className="flex items-center gap-2.5 font-bold tracking-tight">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-agro-400">
-            <ExcavatorIcon size={17} className="text-black" />
+          <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-white">
+            <LogoEscavadeira size={28} />
           </div>
           {nome}
         </div>
@@ -202,8 +202,8 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         {/* Cabeçalho mobile dentro do aside — com safe-area */}
         <div className="flex items-center justify-between border-b border-brand-800 px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] md:hidden">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-agro-400 shadow-md shadow-agro-500/20">
-              <ExcavatorIcon size={22} className="text-black" />
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white shadow-md shadow-agro-500/20">
+              <LogoEscavadeira size={36} />
             </div>
             <div>
               <div className="text-sm font-bold leading-none text-white">{nome}</div>
@@ -221,8 +221,8 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
 
         {/* Logo — desktop only */}
         <div className="hidden items-center gap-3 px-5 py-5 md:flex">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-agro-400 shadow-md shadow-agro-500/20">
-            <ExcavatorIcon size={22} className="text-black" />
+          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white shadow-md shadow-agro-500/20">
+            <LogoEscavadeira size={36} />
           </div>
           <div>
             <div className="text-sm font-bold leading-none text-white">{nome}</div>

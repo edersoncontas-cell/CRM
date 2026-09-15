@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExcavatorIcon } from "@/components/icons";
+import { LogoEscavadeira } from "@/components/icons";
 
 const FASES = ["Iniciando", "Carregando seus dados", "Preparando o painel", "Pronto"];
 const DURACAO_BARRA_MS = 1900;
@@ -34,10 +34,10 @@ export function SplashIA({ saindo = false }: { saindo?: boolean }) {
 
       <div className="relative flex flex-col items-center" style={{ animation: "splSubir .6s cubic-bezier(.2,.8,.2,1) both" }}>
         <div
-          className="flex h-[92px] w-[92px] items-center justify-center rounded-[26px] bg-agro-400 text-black"
-          style={{ boxShadow: "0 24px 60px rgba(255,184,28,0.28), 0 2px 0 rgba(255,255,255,0.35) inset, 0 -2px 0 rgba(0,0,0,0.12) inset" }}
+          className="flex h-[124px] w-[124px] items-center justify-center overflow-hidden rounded-[30px] bg-white"
+          style={{ boxShadow: "0 24px 60px rgba(255,184,28,0.28), 0 0 0 1px rgba(255,255,255,0.08)" }}
         >
-          <ExcavatorIcon size={58} />
+          <LogoEscavadeira size={124} recorte={false} />
         </div>
         <div className="mt-7 text-center">
           <div className="text-[24px] font-black tracking-tight text-white">CRM DO EDY</div>
