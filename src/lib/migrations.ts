@@ -320,6 +320,69 @@ export async function aplicarMigracoes(): Promise<void> {
 
     // Orientador (v19): coaching completo em JSON.
     await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "coaching" JSONB`);
+
+    // Alerta (v21): no máximo um alerta ABERTO por cliente+tipo — trava no
+    // banco a corrida entre chamadas concorrentes (ex.: webhook + fallback do
+    // cron do Orientador quase ao mesmo tempo) que criavam alertas duplicados
+    // para o mesmo cliente mesmo com o "verifica antes de criar" no código.
+    // Primeiro resolve os duplicados que já existem (mantém só o mais
+    // recente de cada cliente+tipo) — senão o índice único abaixo falha ao
+    // criar por já existirem linhas repetidas.
+    await db.$executeRawUnsafe(`
+      UPDATE "Alerta" a SET "resolvido" = true
+      WHERE a."resolvido" = false
+        AND a."id" <> (
+          SELECT b."id" FROM "Alerta" b
+          WHERE b."clienteId" = a."clienteId" AND b."tipo" = a."tipo" AND b."resolvido" = false
+          ORDER BY b."criadoEm" DESC, b."id" DESC
+          LIMIT 1
+        )
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "Alerta_clienteId_tipo_aberto_key"
+        ON "Alerta" ("clienteId", "tipo") WHERE "resolvido" = false
+    `);
+
+    // Cliente (v21): índice para a lista "aguardando resposta" da Central de
+    // Alertas, que hoje varre a tabela inteira toda vez que a página carrega.
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cliente_aguardandoResposta_ultimoContato_idx" ON "Cliente" ("aguardandoResposta", "ultimoContato")`);
+
+    // AlertaOculto (v22): "aguardando"/"atacar" não usam mais AlertaOculto
+    // (ver ocultarItemCentralAction) — limpa o que já tinha acumulado lá,
+    // que só inflava a tabela sem servir mais pra nada.
+    await db.$executeRawUnsafe(`DELETE FROM "AlertaOculto" WHERE "chave" LIKE 'aguardando:%' OR "chave" LIKE 'atacar:%'`);
+
+    // ZeusEvent (v23): mesmo problema do Alerta — um evento de erro repetido
+    // (ex.: rate limit do Groq) virava uma linha nova a cada ocorrência.
+    // Adiciona o contador de ocorrências, unifica o que já duplicou (mantém
+    // só o mais recente de cada tipo+título, soma as ocorrências no que
+    // sobra) e trava um índice único pra nunca mais duplicar.
+    await db.$executeRawUnsafe(`ALTER TABLE "ZeusEvent" ADD COLUMN IF NOT EXISTS "ocorrencias" INTEGER NOT NULL DEFAULT 1`);
+    // Soma as ocorrências no mais recente de cada grupo ANTES de resolver os
+    // outros — se fizesse na ordem inversa, o "count(*) > 1" do segundo passo
+    // já não veria mais os duplicados (foram resolvidos no primeiro).
+    await db.$executeRawUnsafe(`
+      WITH grupos AS (
+        SELECT tipo, titulo, count(*) AS qtd, max("criadoEm") AS mais_recente
+        FROM "ZeusEvent" WHERE "resolvido" = false GROUP BY tipo, titulo HAVING count(*) > 1
+      )
+      UPDATE "ZeusEvent" z SET "ocorrencias" = g.qtd
+      FROM grupos g
+      WHERE z."resolvido" = false AND z.tipo = g.tipo AND z.titulo = g.titulo AND z."criadoEm" = g.mais_recente
+    `);
+    await db.$executeRawUnsafe(`
+      WITH grupos AS (
+        SELECT tipo, titulo, max("criadoEm") AS mais_recente
+        FROM "ZeusEvent" WHERE "resolvido" = false GROUP BY tipo, titulo HAVING count(*) > 1
+      )
+      UPDATE "ZeusEvent" z SET "resolvido" = true
+      FROM grupos g
+      WHERE z."resolvido" = false AND z.tipo = g.tipo AND z.titulo = g.titulo AND z."criadoEm" < g.mais_recente
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "ZeusEvent_tipo_titulo_aberto_key"
+        ON "ZeusEvent" ("tipo", "titulo") WHERE "resolvido" = false
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

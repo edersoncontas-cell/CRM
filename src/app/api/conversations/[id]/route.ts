@@ -58,7 +58,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     // 1. Busca os dados da conversa antes de excluir (precisa do phone para deletar no Z-API)
     const conv = await db.whatsAppConversation.findUnique({
       where: { id: params.id },
-      select: { id: true, externalPhone: true, lid: true, isGroup: true },
+      select: { id: true, externalPhone: true, lid: true, isGroup: true, clienteId: true },
     });
 
     if (!conv) {
@@ -67,6 +67,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
     // 2. Exclui do banco (cascade apaga as mensagens tambem)
     await db.whatsAppConversation.delete({ where: { id: params.id } });
+
+    // 2b. Sem a conversa não faz sentido continuar alertando sobre ela: se o
+    // cliente não tem mais NENHUMA outra conversa de WhatsApp vinculada,
+    // resolve os alertas dele e tira do "aguardando resposta".
+    if (conv.clienteId) {
+      const outraConversa = await db.whatsAppConversation.findFirst({ where: { clienteId: conv.clienteId }, select: { id: true } });
+      if (!outraConversa) {
+        await db.alerta.updateMany({ where: { clienteId: conv.clienteId, resolvido: false }, data: { resolvido: true } }).catch(() => {});
+        await db.cliente.update({ where: { id: conv.clienteId }, data: { aguardandoResposta: false } }).catch(() => {});
+      }
+    }
 
     // 3. Tenta deletar o chat no Z-API (best-effort, nao falha se der erro)
     // O phone para o Z-API pode ser o externalPhone ou o lid

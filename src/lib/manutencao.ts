@@ -14,7 +14,6 @@ import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { garantirColunasFunil } from "@/lib/actions";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
-import { unificarAlertasOrientadorDuplicados } from "@/lib/zeus/orientador";
 
 // v3: adiciona as tabelas do Orientador de Vendas (OrientadorAnalise), do
 // Setor de Pós-venda (PosVendaContato) e a coluna Maquina.aplicacoes -- sem
@@ -38,9 +37,13 @@ import { unificarAlertasOrientadorDuplicados } from "@/lib/zeus/orientador";
 // v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
 // v14: itens resolvidos da Central de alertas (AlertaOculto).
 // v15: confirmação de visitas (status, realizadaEm, reagendadaDeId).
-// v20: unifica alertas "orientador" duplicados (vários por cliente viravam
-// um só desde que o Orientador passou a fazer upsert por cliente).
-export const CHAVE_MANUTENCAO = "manutencao.v20";
+// v21: resolve alertas duplicados (mesmo cliente+tipo) e trava um índice
+// único no banco pra nunca mais duplicar (ver migrations.ts).
+// v22: índice em Cliente.aguardandoResposta e limpeza do AlertaOculto que
+// "aguardando"/"atacar" não usam mais.
+// v23: unifica eventos do ZEUS repetidos (mesmo erro várias vezes) num só,
+// com contador de ocorrências, e trava índice único pra não duplicar de novo.
+export const CHAVE_MANUTENCAO = "manutencao.v23";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -55,7 +58,6 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
-    ["Alertas do Orientador duplicados por cliente", unificarAlertasOrientadorDuplicados],
   ];
 
   const relatorio: EtapaManutencao[] = [];

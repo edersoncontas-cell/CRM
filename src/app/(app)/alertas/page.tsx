@@ -15,7 +15,7 @@ export default async function AlertasPage({ searchParams }: { searchParams: { gr
         titulo="Central de alertas"
         subtitulo={total === 0
           ? "Nada pendente. Tudo o que pedir a sua ação aparece aqui."
-          : `${total} item(ns) pedindo ação${alta ? ` · ${alta} urgente(s)` : ""}: top 5 para atacar, clientes aguardando resposta, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas, demandas e meta. "Resolvido" tira da lista até o cliente falar de novo.`}
+          : `${total} item(ns) pedindo ação${alta ? ` · ${alta} urgente(s)` : ""}: clientes aguardando resposta, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas, demandas e meta. "Resolvido" tira da lista até o cliente falar de novo.`}
       />
       <CentralAlertasClient grupos={grupos} graficos={graficos} grupoInicial={searchParams.grupo ?? null} />
     </div>

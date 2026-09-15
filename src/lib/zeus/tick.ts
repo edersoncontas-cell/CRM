@@ -469,8 +469,12 @@ async function diagnosticarErros(): Promise<number> {
   }
 
   let gerados = 0;
-  for (const [assinatura, ocorrencias] of grupos) {
-    if (ocorrencias.length < 3) continue;
+  for (const [assinatura, linhas] of grupos) {
+    // Desde que registrarZeusEvent passou a unificar erro repetido numa só
+    // linha (ocorrencias++), "quantas vezes aconteceu" é a SOMA do contador
+    // de cada linha do grupo, não mais a quantidade de linhas.
+    const totalOcorrencias = linhas.reduce((s, e) => s + e.ocorrencias, 0);
+    if (totalOcorrencias < 3) continue;
     const jaExiste = await db.zeusEvent.findFirst({
       where: { tipo: "fix", titulo: { contains: assinatura.slice(0, 40) }, criadoEm: { gte: new Date(Date.now() - DIA) } },
     });
@@ -478,10 +482,10 @@ async function diagnosticarErros(): Promise<number> {
     if (!(await orcamentoIADisponivel())) break;
 
     try {
-      const exemplos = ocorrencias.slice(0, 3).map((e) => e.detalhe ?? e.titulo).join("\n---\n");
+      const exemplos = linhas.slice(0, 3).map((e) => e.detalhe ?? e.titulo).join("\n---\n");
       const texto = await llmTexto(
         "Você analisa erros de runtime de um CRM Next.js 14 (App Router) + Prisma + Postgres. Aponte, de forma BEM curta (3-5 linhas), o arquivo/módulo provável e a causa provável, para o desenvolvedor colar numa sessão do Claude Code e investigar. Não invente arquivos que não aparecem no contexto.",
-        `Erro ocorreu ${ocorrencias.length}x nas últimas 72h:\n${exemplos}`,
+        `Erro ocorreu ${totalOcorrencias}x nas últimas 72h:\n${exemplos}`,
         { maxTokens: 400 }
       );
       await consumirOrcamentoIA();
@@ -489,7 +493,7 @@ async function diagnosticarErros(): Promise<number> {
         tipo: "fix",
         severidade: "media",
         titulo: `Diagnóstico: ${assinatura}`,
-        detalhe: { ocorrencias: ocorrencias.length, diagnostico: texto },
+        detalhe: { ocorrencias: totalOcorrencias, diagnostico: texto },
       });
       gerados++;
     } catch (e) {

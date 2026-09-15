@@ -77,6 +77,7 @@ model Cliente {
   cadencias      Cadencia[]
   @@index([leadScore])
   @@index([googleContatoId])
+  @@index([aguardandoResposta, ultimoContato])
 }
 
 // Setor de Pós-venda: histórico de contatos/ações com um cliente que já
@@ -494,6 +495,9 @@ model ZeusEvent {
   severidade String   @default("media") // baixa | media | alta | critica
   titulo     String
   detalhe    String?  // JSON livre
+  // Quantas vezes esse MESMO evento (tipo+título) aconteceu seguido — em vez
+  // de uma linha nova a cada repetição (ver registrarZeusEvent).
+  ocorrencias Int     @default(1)
   resolvido  Boolean  @default(false)
   criadoEm   DateTime @default(now())
   @@index([tipo, criadoEm])

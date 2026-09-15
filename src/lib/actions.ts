@@ -1174,6 +1174,14 @@ export async function resolverAlerta(id: string) {
   revalidatePath("/alertas");
 }
 
+export async function resolverVariosAlertasAction(ids: string[]): Promise<{ ok: boolean }> {
+  if (!ids.length) return { ok: true };
+  await db.alerta.updateMany({ where: { id: { in: ids } }, data: { resolvido: true } });
+  revalidatePath("/dashboard");
+  revalidatePath("/alertas");
+  return { ok: true };
+}
+
 // ---------- Conexão WhatsApp (Z-API) ----------
 export async function reiniciarZapi(): Promise<{ ok: boolean }> {
   const ok = await zapi.reiniciar();
@@ -1351,18 +1359,75 @@ export async function reordenarDemandasAction(ids: string[]): Promise<{ ok: bool
 // volta quando o cliente mandar mensagem nova (ver central-alertas.ts).
 export async function ocultarItemCentralAction(chave: string, clienteId?: string | null): Promise<{ ok: boolean }> {
   if (!chave || chave.length > 200) return { ok: false };
+  if (chave.startsWith("aguardando:") || chave.startsWith("atacar:")) {
+    // "Aguardando resposta" já tem seu próprio critério de resolvido
+    // (aguardandoResposta=false) e de reabrir (mensagem nova do cliente liga
+    // aguardandoResposta=true sozinha, no pipeline do ZEUS) — não precisa do
+    // AlertaOculto aqui, que só cresceria pra sempre à toa.
+    const id = chave.split(":")[1];
+    if (id) await db.cliente.updateMany({ where: { id }, data: { aguardandoResposta: false } }).catch(() => {});
+    revalidatePath("/alertas"); revalidatePath("/dashboard");
+    return { ok: true };
+  }
+  if (chave.startsWith("zeus:")) {
+    // Resolve o evento de verdade (não só oculta): senão, quando o MESMO
+    // erro acontece de novo, registrarZeusEvent só incrementa a mesma linha
+    // (já resolvida por AlertaOculto) e ela nunca voltaria a aparecer.
+    const id = chave.split(":")[1];
+    if (id) await db.zeusEvent.update({ where: { id }, data: { resolvido: true } }).catch(() => {});
+    revalidatePath("/alertas"); revalidatePath("/zeus");
+    return { ok: true };
+  }
   await db.alertaOculto.upsert({
     where: { chave },
     create: { chave, clienteId: clienteId ?? null },
     update: { clienteId: clienteId ?? null, ocultoEm: new Date() },
   });
-  if (chave.startsWith("aguardando:") || chave.startsWith("atacar:")) {
-    // Resolver um "aguardando resposta" também tira o cliente da fila.
-    const id = chave.split(":")[1];
-    if (id) await db.cliente.updateMany({ where: { id }, data: { aguardandoResposta: false } }).catch(() => {});
-  }
   revalidatePath("/alertas"); revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// "Resolver todos os visíveis" de um grupo inteiro de uma vez (ex.: os 50+
+// "aguardando resposta" atrasados) — em lote, sem 1 round-trip por item.
+export async function ocultarVariosItensCentralAction(
+  itens: { chave: string; clienteId?: string | null }[]
+): Promise<{ ok: boolean; total: number }> {
+  const validos = itens.filter((i) => i.chave && i.chave.length <= 200);
+  if (!validos.length) return { ok: true, total: 0 };
+
+  // "aguardando"/"atacar" resolvem só limpando aguardandoResposta (não
+  // precisam do AlertaOculto — ver comentário em ocultarItemCentralAction).
+  const idsAguardando = validos
+    .filter((i) => i.chave.startsWith("aguardando:") || i.chave.startsWith("atacar:"))
+    .map((i) => i.chave.split(":")[1])
+    .filter((id): id is string => !!id);
+  if (idsAguardando.length) {
+    await db.cliente.updateMany({ where: { id: { in: idsAguardando } }, data: { aguardandoResposta: false } }).catch(() => {});
+  }
+
+  // "zeus:" resolve o evento de verdade (ver comentário em ocultarItemCentralAction).
+  const idsZeus = validos
+    .filter((i) => i.chave.startsWith("zeus:"))
+    .map((i) => i.chave.split(":")[1])
+    .filter((id): id is string => !!id);
+  if (idsZeus.length) {
+    await db.zeusEvent.updateMany({ where: { id: { in: idsZeus } }, data: { resolvido: true } }).catch(() => {});
+  }
+
+  const demais = validos.filter((i) => !i.chave.startsWith("aguardando:") && !i.chave.startsWith("atacar:") && !i.chave.startsWith("zeus:"));
+  if (demais.length) {
+    await db.alertaOculto.createMany({
+      data: demais.map((i) => ({ chave: i.chave, clienteId: i.clienteId ?? null })),
+      skipDuplicates: true,
+    }).catch(() => {});
+    await db.alertaOculto.updateMany({
+      where: { chave: { in: demais.map((i) => i.chave) } },
+      data: { ocultoEm: new Date() },
+    }).catch(() => {});
+  }
+
+  revalidatePath("/alertas"); revalidatePath("/dashboard");
+  return { ok: true, total: validos.length };
 }
 
 export async function alternarDemandaAction(id: string, concluida: boolean): Promise<{ ok: boolean }> {

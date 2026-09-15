@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
-import { resolverAlerta, registrarContatoPosVenda, ocultarItemCentralAction } from "@/lib/actions";
+import { resolverAlerta, resolverVariosAlertasAction, registrarContatoPosVenda, ocultarItemCentralAction, ocultarVariosItensCentralAction } from "@/lib/actions";
 import type { GrupoCentral, ItemCentral, SeveridadeAlerta, GraficosCentral } from "@/lib/central-alertas";
 import { PosVendaModal } from "@/components/PosVendaClient";
 import { cn } from "@/lib/utils";
-import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, BarChart3, Flame, Snowflake, Route } from "lucide-react";
+import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, BarChart3, Snowflake, Route } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid } from "recharts";
 
 const ICONE_GRUPO: Record<string, typeof Bell> = {
-  rascunhos: MessageSquareQuote, aguardando: Clock, atacar: Flame, semcontato: Snowflake, visitar: Route, comerciais: Compass, posvenda: HeartHandshake, visitas: MapPin, demandas: ListTodo, meta: Target, sistema: ShieldCheck,
+  rascunhos: MessageSquareQuote, aguardando: Clock, semcontato: Snowflake, visitar: Route, comerciais: Compass, posvenda: HeartHandshake, visitas: MapPin, demandas: ListTodo, meta: Target, sistema: ShieldCheck,
 };
 const COR_GRUPO: Record<string, string> = {
-  rascunhos: "#ffcb2d", aguardando: "#fb923c", atacar: "#f43f5e", semcontato: "#facc15", visitar: "#22d3ee", comerciais: "#a78bfa", posvenda: "#f472b6", visitas: "#38bdf8", demandas: "#34d399", meta: "#f87171", sistema: "#94a3b8",
+  rascunhos: "#ffcb2d", aguardando: "#fb923c", semcontato: "#facc15", visitar: "#22d3ee", comerciais: "#a78bfa", posvenda: "#f472b6", visitas: "#38bdf8", demandas: "#34d399", meta: "#f87171", sistema: "#94a3b8",
 };
 const COR_SEV_HEX: Record<SeveridadeAlerta, string> = { alta: "#ef4444", media: "#f59e0b", baixa: "#cbd5e1" };
 const COR_SEV: Record<SeveridadeAlerta, string> = { alta: "border-l-red-500", media: "border-l-amber-400", baixa: "border-l-slate-300" };
@@ -41,8 +41,12 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const [modalPosVenda, setModalPosVenda] = useState<ItemCentral["posVenda"] | null>(null);
   const [mostrarGraficos, setMostrarGraficos] = useState(true);
   const [, startTransition] = useTransition();
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { if (grupoInicial) setFiltro(grupoInicial); }, [grupoInicial]);
+  // Cancela o refresh pendente se a tela for trocada no meio (evita refresh
+  // "perdido" depois que o componente já saiu de cena).
+  useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
 
   const visiveis = grupos
     .map((g) => ({ ...g, itens: g.itens.filter((i) => !resolvidos.has(i.id)) }))
@@ -54,19 +58,68 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const criados14 = graficos.tendencia.reduce((s, d) => s + d.criados, 0);
   const resolvidos14 = graficos.tendencia.reduce((s, d) => s + d.resolvidos, 0);
 
+  // Só busca a lista atualizada do servidor um tempinho depois do último
+  // clique — resolver vários itens em sequência (ex.: os 39 "aguardando")
+  // não dispara uma busca pesada a cada clique, só uma no final. A tela já
+  // está certa antes disso (otimista), então não há pressa nenhuma.
+  function agendarRefresh() {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => startTransition(() => router.refresh()), 900);
+  }
+
+  // Tenta a mutação até 3x (a Neon "dorme" e o primeiro request pode falhar
+  // por timeout) antes de desistir — evita o alerta "piscar" de volta.
+  async function comRetentativa(fn: () => Promise<{ ok: boolean } | void>): Promise<boolean> {
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      try {
+        const r = await fn();
+        if (!r || r.ok !== false) return true;
+      } catch {
+        // segue para a próxima tentativa
+      }
+      if (tentativa < 3) await new Promise((res) => setTimeout(res, 700 * tentativa));
+    }
+    return false;
+  }
+
   // "Resolvido" em qualquer item: some da lista NA HORA (otimista) — o
-  // servidor só confirma depois, sem o usuário esperar o round-trip.
+  // servidor confirma (com retentativa) por trás, sem travar a tela.
   async function resolver(item: ItemCentral) {
     setResolvidos((s) => new Set(s).add(item.id));
-    try {
-      if (item.alertaId) await resolverAlerta(item.alertaId);
-      else await ocultarItemCentralAction(item.id, item.clienteId ?? null);
-    } catch {
-      // Falhou no servidor: volta a aparecer, já que não foi resolvido de verdade.
+    const ok = await comRetentativa(() =>
+      item.alertaId ? resolverAlerta(item.alertaId) : ocultarItemCentralAction(item.id, item.clienteId ?? null)
+    );
+    if (!ok) {
+      // Falhou de verdade (não só um soluço passageiro): volta a aparecer.
       setResolvidos((s) => { const n = new Set(s); n.delete(item.id); return n; });
       return;
     }
-    startTransition(() => router.refresh());
+    agendarRefresh();
+  }
+
+  // "Resolver todos" de um grupo inteiro (ex.: os 50+ "aguardando resposta"
+  // atrasados) de uma vez, em lote — sem clicar item por item.
+  const [resolvendoGrupo, setResolvendoGrupo] = useState<string | null>(null);
+  async function resolverTodosDoGrupo(grupo: GrupoCentral) {
+    const itens = grupo.itens.filter((i) => !resolvidos.has(i.id));
+    if (!itens.length) return;
+    setResolvendoGrupo(grupo.id);
+    setResolvidos((s) => { const n = new Set(s); itens.forEach((i) => n.add(i.id)); return n; });
+    const comAlerta = itens.filter((i) => i.alertaId).map((i) => i.alertaId!);
+    const semAlerta = itens.filter((i) => !i.alertaId).map((i) => ({ chave: i.id, clienteId: i.clienteId ?? null }));
+    const ok = await comRetentativa(async () => {
+      const [r1, r2] = await Promise.all([
+        comAlerta.length ? resolverVariosAlertasAction(comAlerta) : Promise.resolve({ ok: true }),
+        semAlerta.length ? ocultarVariosItensCentralAction(semAlerta) : Promise.resolve({ ok: true, total: 0 }),
+      ]);
+      return { ok: r1.ok !== false && r2.ok !== false };
+    });
+    setResolvendoGrupo(null);
+    if (!ok) {
+      setResolvidos((s) => { const n = new Set(s); itens.forEach((i) => n.delete(i.id)); return n; });
+      return;
+    }
+    agendarRefresh();
   }
 
   async function marcoFeito(item: ItemCentral) {
@@ -76,7 +129,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
     await registrarContatoPosVenda(p.clienteId, p.marcoPendente.tipo, `Marco de ${p.marcoPendente.label} cumprido.`);
     setOcupado(null);
     setResolvidos((s) => new Set(s).add(item.id));
-    startTransition(() => router.refresh());
+    agendarRefresh();
   }
 
   return (
@@ -157,7 +210,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
       )}
 
       {totalVisivel === 0 ? (
-        <EmptyState icone={<Bell size={28} />} texto="Nenhum alerta pendente" subtexto="Clientes aguardando resposta, top 5 para atacar, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas e demandas aparecem aqui assim que precisarem de você." />
+        <EmptyState icone={<Bell size={28} />} texto="Nenhum alerta pendente" subtexto="Clientes aguardando resposta, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas e demandas aparecem aqui assim que precisarem de você." />
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
@@ -181,10 +234,16 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
               const Icon = ICONE_GRUPO[g.id] ?? Bell;
               return (
                 <section key={g.id}>
-                  <div className="mb-2 flex items-center gap-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Icon size={16} style={{ color: COR_GRUPO[g.id] ?? "#475569" }} />
                     <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{g.titulo}</h2>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{g.itens.length}</span>
+                    {g.itens.length > 1 && (
+                      <button onClick={() => resolverTodosDoGrupo(g)} disabled={resolvendoGrupo === g.id}
+                        className="ml-auto inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-2.5 py-1 text-[11px] font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
+                        {resolvendoGrupo === g.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Resolver todos ({g.itens.length})
+                      </button>
+                    )}
                   </div>
                   <p className="mb-2 text-xs text-slate-500">{g.descricao}</p>
                   <Card className="divide-y divide-slate-100 p-0">

@@ -73,18 +73,21 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * HORA);
 
   const trintaDiasAtras = new Date(Date.now() - 30 * 24 * HORA);
+  const umaHoraAtras = new Date(Date.now() - HORA);
 
-  const [aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, atacar, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
+  const [aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
+    // Só entra na lista depois de 1h sem resposta — antes disso ainda está
+    // dentro do tempo normal de resposta, não precisa virar alerta.
     db.cliente.findMany({
-      where: { aguardandoResposta: true },
+      where: { aguardandoResposta: true, OR: [{ ultimoContato: null }, { ultimoContato: { lte: umaHoraAtras } }] },
       orderBy: { ultimoContato: "asc" },
-      take: 50,
+      take: 500,
       select: { id: true, nome: true, ultimoContato: true },
     }),
     db.alerta.findMany({
       where: { resolvido: false, tipo: { not: "aguardando_resposta" } },
       orderBy: [{ severidade: "asc" }, { criadoEm: "desc" }],
-      take: 80,
+      take: 200,
       include: { cliente: { select: { nome: true } } },
     }),
     listarClientesPosVenda().catch(() => []),
@@ -105,36 +108,25 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       take: 20,
     }),
     calcularRitmoMetas().catch(() => null),
-    // Top 5 para atacar hoje (antes no Dashboard): quem está aguardando
-    // resposta, do maior lead score para o menor.
-    db.cliente.findMany({
-      where: { aguardandoResposta: true, status: { not: "nao_cliente" } },
-      orderBy: { leadScore: "desc" },
-      take: 5,
-      select: {
-        id: true, nome: true, leadScore: true, ultimoContato: true,
-        municipio: { select: { nome: true } },
-        negociacoes: { where: { status: "aberta" }, orderBy: { termometro: "desc" }, take: 1, select: { maquinaModelo: true, valor: true, proximaAcao: true } },
-      },
-    }),
     // Clientes com 30+ dias sem contato (antes no Dashboard).
     db.cliente.findMany({
       where: { ultimoContato: { lt: trintaDiasAtras }, status: { not: "nao_cliente" } },
       orderBy: { ultimoContato: "asc" },
-      take: 60,
+      take: 400,
       select: { id: true, nome: true, ultimoContato: true, telefone: true, municipio: { select: { nome: true } } },
     }),
     // Negócios em aberto sem visita marcada (antes no Dashboard).
     db.negociacao.findMany({
       where: { status: "aberta", dataVisita: null },
       orderBy: { ultimoContato: "asc" },
-      take: 60,
+      take: 300,
       select: { id: true, estagio: true, maquinaModelo: true, valor: true, proximaAcao: true, ultimoContato: true, clienteId: true, cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
     }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
     // Itens que o vendedor marcou como resolvidos. Voltam sozinhos quando o
-    // cliente manda mensagem nova depois de resolvido (conversa nova).
-    db.alertaOculto.findMany({ take: 1000 }).catch(() => [] as { id: string; chave: string; clienteId: string | null; ocultoEm: Date }[]),
+    // cliente manda mensagem nova depois de resolvido (conversa nova). Não
+    // inclui "aguardando"/"atacar" (esses resolvem só por aguardandoResposta).
+    db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000 }).catch(() => [] as { id: string; chave: string; clienteId: string | null; ocultoEm: Date }[]),
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
 
@@ -189,24 +181,6 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           titulo: c.nome,
           detalhe: h == null ? "Sem horário do último contato." : h < 1 ? "Há menos de 1 hora." : h < 24 ? `Há ${h} h sem resposta.` : `Há ${Math.floor(h / 24)} dia(s) sem resposta.`,
           severidade: (h ?? 0) >= 24 ? ("alta" as const) : (h ?? 0) >= 4 ? ("media" as const) : ("baixa" as const),
-          href: conv ? `/atendimento?conversa=${conv}` : `/clientes/${c.id}`,
-          hrefLabel: conv ? "Responder" : "Abrir cliente",
-          quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
-        };
-      }),
-    },
-    {
-      id: "atacar",
-      titulo: "Top 5 para atacar hoje",
-      descricao: "Pelo lead score, entre quem está aguardando a sua resposta. Comece o dia por aqui.",
-      itens: atacar.map((c) => {
-        const neg = c.negociacoes[0];
-        const conv = convPorCliente.get(c.id);
-        return {
-          id: `atacar:${c.id}`,
-          titulo: `${c.leadScore} · ${c.nome}`,
-          detalhe: [neg?.proximaAcao ?? "Aguardando seu retorno no WhatsApp", neg?.maquinaModelo, c.municipio?.nome].filter(Boolean).join(" · "),
-          severidade: (c.leadScore ?? 0) >= 70 ? ("alta" as const) : ("media" as const),
           href: conv ? `/atendimento?conversa=${conv}` : `/clientes/${c.id}`,
           hrefLabel: conv ? "Responder" : "Abrir cliente",
           quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
@@ -345,7 +319,10 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       itens: eventos.map((e) => ({
         id: `zeus:${e.id}`,
         titulo: e.titulo,
-        detalhe: e.tipo === "erro" ? "Erro repetido no servidor." : "Verificação de saúde falhou.",
+        detalhe: [
+          e.tipo === "erro" ? "Erro no servidor." : "Verificação de saúde falhou.",
+          e.ocorrencias > 1 ? `repetiu ${e.ocorrencias}x` : null,
+        ].filter(Boolean).join(" · "),
         severidade: e.severidade === "critica" ? ("alta" as const) : ("media" as const),
         href: "/zeus",
         hrefLabel: "Abrir ZEUS",

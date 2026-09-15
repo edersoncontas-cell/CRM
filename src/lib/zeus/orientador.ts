@@ -21,7 +21,7 @@ import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { METODO_VENDA, ESTILOS_CLIENTE, ETAPAS_ROTEIRO, normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
 
@@ -299,38 +299,31 @@ ${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (ref
 // UM só alerta "orientador" por cliente (nunca um por mensagem/análise): se já
 // existe um não resolvido, atualiza o texto; senão cria. Some sozinho quando a
 // IA deixa de achar que há algo pedindo atenção agora (mensagens vazio).
+// O índice único parcial Alerta(clienteId,tipo) WHERE resolvido=false (ver
+// migrations.ts) é quem garante isso de verdade: duas chamadas concorrentes
+// (webhook + fallback do cron, por exemplo) podem passar pelo SELECT antes de
+// qualquer uma criar a linha — sem o índice, as duas conseguiriam criar,
+// duplicando o alerta do mesmo cliente. Com o índice, a segunda tentativa de
+// criar falha (P2002) e cai no fallback de update abaixo.
 async function atualizarAlertaOrientador(clienteId: string, mensagens: string[]) {
   const mensagem = mensagens.filter((m) => m.trim()).join(" · ");
-  const existente = await db.alerta.findFirst({ where: { clienteId, tipo: "orientador", resolvido: false } });
   if (!mensagem) {
-    if (existente) await db.alerta.update({ where: { id: existente.id }, data: { resolvido: true } });
+    await db.alerta.updateMany({ where: { clienteId, tipo: "orientador", resolvido: false }, data: { resolvido: true } });
     return;
   }
+  const existente = await db.alerta.findFirst({ where: { clienteId, tipo: "orientador", resolvido: false } });
   if (existente) {
     if (existente.mensagem !== mensagem) await db.alerta.update({ where: { id: existente.id }, data: { mensagem } });
-  } else {
+    return;
+  }
+  try {
     await db.alerta.create({ data: { clienteId, tipo: "orientador", mensagem, severidade: "media" } });
-  }
-}
-
-// Limpeza única (chamada pela manutenção): antes do upsert por cliente acima
-// existir, cada análise podia criar um alerta "orientador" novo para o mesmo
-// cliente — bancos antigos ficam com vários não resolvidos. Mantém só o mais
-// recente de cada cliente e resolve o resto (idempotente).
-export async function unificarAlertasOrientadorDuplicados(): Promise<void> {
-  const abertos = await db.alerta.findMany({
-    where: { tipo: "orientador", resolvido: false },
-    orderBy: { criadoEm: "desc" },
-    select: { id: true, clienteId: true },
-  });
-  const vistos = new Set<string>();
-  const paraResolver: string[] = [];
-  for (const a of abertos) {
-    if (vistos.has(a.clienteId)) paraResolver.push(a.id);
-    else vistos.add(a.clienteId);
-  }
-  if (paraResolver.length) {
-    await db.alerta.updateMany({ where: { id: { in: paraResolver } }, data: { resolvido: true } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      await db.alerta.updateMany({ where: { clienteId, tipo: "orientador", resolvido: false }, data: { mensagem } });
+    } else {
+      throw e;
+    }
   }
 }
 
