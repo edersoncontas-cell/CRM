@@ -12,7 +12,8 @@ import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { registrarAudit } from "./audit";
-import { deveDescartarContato, mesAnoAtualBrasilia } from "./utils";
+import { mesAnoAtualBrasilia } from "./utils";
+import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
@@ -33,7 +34,7 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
   });
   if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   const { nome, email } = parsed.data;
-  if (deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
+  if (await deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
 
   const novo = await db.cliente.create({
     data: {
@@ -499,7 +500,7 @@ export async function importarClientesCsv(
 
     if (!nomeRaw) continue;
     if (/^nome$/i.test(nomeRaw)) continue; // pula cabeçalho
-    if (deveDescartarContato(nomeRaw)) { ignorados++; continue; }
+    if (await deveDescartarContato(nomeRaw)) { ignorados++; continue; }
 
     const telefone = telRaw ? normalizarTelefone(telRaw) : null;
 
@@ -553,7 +554,7 @@ export async function importarContatosEstruturados(
 
   for (const c of contatos) {
     const nomeRaw = c.nome?.trim() ?? "";
-    if (!nomeRaw || deveDescartarContato(nomeRaw)) { ignorados++; continue; }
+    if (!nomeRaw || (await deveDescartarContato(nomeRaw))) { ignorados++; continue; }
 
     const telefone = c.telefone ? normalizarTelefone(c.telefone) : null;
 
@@ -649,7 +650,7 @@ export async function criarNegociacaoCard(formData: FormData) {
   let clienteId = String(formData.get("clienteId") ?? "") || null;
   const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
   if (!clienteId && nomeNovo) {
-    if (deveDescartarContato(nomeNovo)) return;
+    if (await deveDescartarContato(nomeNovo)) return;
     const novo = await db.cliente.create({ data: { nome: nomeNovo, origem: "pipeline" } });
     clienteId = novo.id;
   }
@@ -854,7 +855,7 @@ async function acharOuCriarCliente(
 ): Promise<string | null> {
   const tel = telefone ? telefone.replace(/\D/g, "") : null;
   if (!nome && !tel) return null;
-  if (nome && deveDescartarContato(nome)) return null;
+  if (nome && (await deveDescartarContato(nome))) return null;
 
   const existente = await db.cliente.findFirst({
     where: {
@@ -2029,7 +2030,7 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   let clienteId = String(formData.get("clienteId") ?? "") || null;
   const nomeNovo = String(formData.get("nomeNovo") ?? "").trim();
   if (!clienteId && nomeNovo) {
-    if (deveDescartarContato(nomeNovo)) return { ok: false, erro: "Nome inválido" };
+    if (await deveDescartarContato(nomeNovo)) return { ok: false, erro: "Nome inválido" };
     const novo = await db.cliente.create({ data: { nome: nomeNovo, origem: "negociacao" } });
     clienteId = novo.id;
   }

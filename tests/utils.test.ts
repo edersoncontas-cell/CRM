@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { dataIsoBrasilia, inicioDoDiaBrasilia, diaSemanaBrasilia, horaBrasilia, deveDescartarContato, semCodigoPais, iniciais } from "@/lib/utils";
+import { dataIsoBrasilia, inicioDoDiaBrasilia, diaSemanaBrasilia, horaBrasilia, motivoBloqueioComListas, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO, semCodigoPais, iniciais } from "@/lib/utils";
+
+// Regra de fábrica (as listas editáveis do banco começam iguais a esta).
+const deveDescartarContato = (nome: string) => motivoBloqueioComListas(nome, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO) !== null;
 import { calcularFinanciamento, calcularConsorcio, anualParaMensal } from "@/lib/finance";
 import { phoneLookupVariants, isGroupChatId, buildConvMatch, isAllowedInstance } from "@/lib/whatsapp-routing";
 
@@ -28,6 +31,12 @@ describe("helpers de contato", () => {
     for (const nome of ["Construtora Litoral", "Bancorbrás Terraplenagem", "Lucas Serafim", "Fazenda Boa Vista", "Empresa Pedreira", "Zé da Retro"]) {
       expect(deveDescartarContato(nome), nome).toBe(false);
     }
+  });
+  it("listas editáveis: termo/palavra novos com acento e caixa batem, e a lista vazia libera tudo", () => {
+    expect(motivoBloqueioComListas("Despachante Silva", [], ["despachante"])).toBe("despachante");
+    expect(motivoBloqueioComListas("DESPACHANTE SILVA", [], ["Despachante"])).toBe("Despachante");
+    expect(motivoBloqueioComListas("Cartório de Alegre", ["cartor"], [])).toBe("cartor");
+    expect(motivoBloqueioComListas("Banco do Brasil", [], [])).toBeNull();
   });
   it("remove DDI e monta iniciais", () => {
     expect(semCodigoPais("5528999991234")).toBe("28999991234");

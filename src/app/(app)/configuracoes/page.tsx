@@ -5,7 +5,7 @@ import * as transcription from "@/lib/integrations/transcription";
 import { statusGoogle } from "@/lib/integrations/google";
 import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google-contatos";
 import { resumoBloqueio } from "@/lib/contatos-bloqueados";
-import { TERMOS_BLOQUEIO, PALAVRAS_BLOQUEIO } from "@/lib/utils";
+import { listarFiltroContatos } from "@/lib/filtro-contatos";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
 import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
@@ -23,7 +23,7 @@ import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -31,6 +31,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     lerResumoSincronizacaoGoogle(),
     envioParaGoogleAtivo(),
     resumoBloqueio().catch(() => ({ total: 0, recentes: [] })),
+    listarFiltroContatos(),
   ]);
 
   const integracoes = [
@@ -94,8 +95,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
 
       <ContatosBloqueadosCard
-        termos={TERMOS_BLOQUEIO}
-        palavras={PALAVRAS_BLOQUEIO}
+        termos={filtro.termos}
+        palavras={filtro.palavras}
         total={bloqueio.total}
         recentes={bloqueio.recentes.map((r) => ({ ...r, criadoEm: r.criadoEm.toISOString() }))}
       />

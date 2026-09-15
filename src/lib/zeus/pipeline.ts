@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { analisarConversaIA, classificarConversaIA, type ExtracaoConversa } from "@/lib/ai";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 import { papelDaColuna } from "@/lib/pipeline";
-import { deveDescartarContato } from "@/lib/utils";
+import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { registrarAudit } from "@/lib/audit";
 import { enviarPushNotificacao } from "@/lib/push";
@@ -199,7 +199,7 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
   // 1) Vincular cliente existente pelo telefone, ou criar um novo automaticamente.
   if (!clienteId) {
     const nomeContato = conv.contactName?.trim() || `Contato ${conv.externalPhone}`;
-    if (!deveDescartarContato(nomeContato)) {
+    if (!(await deveDescartarContato(nomeContato))) {
       const existente = await acharClientePorTelefone(conv.externalPhone);
       if (existente) {
         clienteId = existente.id;

@@ -9,7 +9,14 @@
 // sempre trocado pelo nome real.
 
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
-import { deveDescartarContato } from "@/lib/utils";
+import { motivoBloqueioComListas, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO } from "@/lib/utils";
+
+// Listas do filtro de contatos indesejados, injetadas por quem chama (que as
+// lê do banco em lib/filtro-contatos.ts). O padrão de fábrica é só para os
+// testes e para nunca deixar passar nada se alguém esquecer de passar.
+export type FiltroContatos = { termos: string[]; palavras: string[] };
+const FILTRO_PADRAO: FiltroContatos = { termos: TERMOS_BLOQUEIO_PADRAO, palavras: PALAVRAS_BLOQUEIO_PADRAO };
+const descartar = (nome: string, f: FiltroContatos) => motivoBloqueioComListas(nome, f.termos, f.palavras) !== null;
 
 export type ContatoGoogle = {
   id: string;            // resourceName ("people/c123")
@@ -74,7 +81,7 @@ export function acharMunicipio(municipios: MunicipioResumo[], enderecos: Contato
 }
 
 // Monta o plano: o que criar e o que atualizar no CRM a partir dos contatos.
-export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], telefonesBloqueados: Set<string> = new Set()): PlanoSincronizacao {
+export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], telefonesBloqueados: Set<string> = new Set(), filtro: FiltroContatos = FILTRO_PADRAO): PlanoSincronizacao {
   const porGoogleId = new Map<string, ClienteResumo>();
   const porTelefone = new Map<string, ClienteResumo>();
   for (const c of clientes) {
@@ -88,7 +95,7 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
 
   for (const g of contatos) {
     const nome = g.nome.trim();
-    if (!nome || deveDescartarContato(nome)) { plano.ignorados++; continue; }
+    if (!nome || descartar(nome, filtro)) { plano.ignorados++; continue; }
     const telefones = g.telefones.map(telefoneNacional).filter((t): t is string => !!t);
     if (!telefones.length) { plano.semTelefone++; continue; }
     // Telefone já bloqueado no CRM (contato apagado por não ser cliente): não volta.
@@ -124,8 +131,8 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
 }
 
 // Clientes do CRM que ainda não existem no Google (para o envio inverso).
-export function clientesParaEnviar(clientes: ClienteResumo[], limite: number): ClienteResumo[] {
+export function clientesParaEnviar(clientes: ClienteResumo[], limite: number, filtro: FiltroContatos = FILTRO_PADRAO): ClienteResumo[] {
   return clientes
-    .filter((c) => !c.googleContatoId && c.telefone && !nomeGenerico(c.nome) && !deveDescartarContato(c.nome) && c.origem !== "prospect_ia" && c.origem !== "google")
+    .filter((c) => !c.googleContatoId && c.telefone && !nomeGenerico(c.nome) && !descartar(c.nome, filtro) && c.origem !== "prospect_ia" && c.origem !== "google")
     .slice(0, limite);
 }

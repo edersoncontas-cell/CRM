@@ -34,7 +34,7 @@ if (!process.env.DATABASE_URL) {
 import { PrismaClient } from "@prisma/client";
 import { phoneLookupVariants } from "../src/lib/whatsapp-routing";
 import { importarMensagens } from "../src/lib/whatsapp-store";
-import { deveDescartarContato } from "../src/lib/utils";
+import { deveDescartarContato } from "../src/lib/filtro-contatos";
 
 const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
 
@@ -134,7 +134,7 @@ async function processarCliente(
       const extPhone = phone ?? `imp:${nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`;
 
       let clienteId: string | null = null;
-      if (!isGroup && phone && !deveDescartarContato(nome)) {
+      if (!isGroup && phone && !(await deveDescartarContato(nome))) {
         const variants = phoneLookupVariants(phone);
         const cli = await prisma.cliente.findFirst({ where: { telefone: { in: variants } } });
         if (cli) {
@@ -164,7 +164,7 @@ async function processarCliente(
       if (!conv.groupName && isGroup) patch.groupName = nome;
       if (lastAt > conv.lastMessageAt) patch.lastMessageAt = lastAt;
 
-      if (!conv.clienteId && !isGroup && phone && !deveDescartarContato(nome)) {
+      if (!conv.clienteId && !isGroup && phone && !(await deveDescartarContato(nome))) {
         const variants = phoneLookupVariants(phone);
         const cli = await prisma.cliente.findFirst({ where: { telefone: { in: variants } } });
         if (cli) patch.clienteId = cli.id;

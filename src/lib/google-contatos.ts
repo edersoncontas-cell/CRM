@@ -15,7 +15,7 @@ import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
 import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle } from "@/lib/integrations/google";
 import { planejarSincronizacao, clientesParaEnviar, nomeGenerico, type ClienteResumo } from "@/lib/google-contatos-util";
-import { deveDescartarContato } from "@/lib/utils";
+import { deveDescartarContato, listarFiltroContatos } from "@/lib/filtro-contatos";
 import { listarTelefonesBloqueados, limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 
 const CHAVE_ULTIMA = "google.contatos.ultima";
@@ -68,13 +68,14 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
   try {
     // Antes de ler o Google, tira do CRM o que não é cliente (contabilidade, banco…).
     await limparContatosIndesejados();
-    const [contatos, clientes, municipios, bloqueados] = await Promise.all([
+    const [contatos, clientes, municipios, bloqueados, filtro] = await Promise.all([
       listarContatosGoogle(),
       db.cliente.findMany({ select: SELECAO_CLIENTE }) as Promise<ClienteResumo[]>,
       db.municipio.findMany({ select: { id: true, nome: true } }),
       listarTelefonesBloqueados(),
+      listarFiltroContatos(),
     ]);
-    const plano = planejarSincronizacao(contatos, clientes, municipios, bloqueados);
+    const plano = planejarSincronizacao(contatos, clientes, municipios, bloqueados, filtro);
 
     // Google → CRM
     for (const c of plano.criar) {
@@ -88,7 +89,7 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
     let enviados = 0, pendentesEnvio = 0;
     if (await envioParaGoogleAtivo()) {
       const ligados = new Set([...plano.atualizar.map((a) => a.id)]);
-      const candidatos = clientesParaEnviar(clientes.filter((c) => !ligados.has(c.id)), Number.MAX_SAFE_INTEGER);
+      const candidatos = clientesParaEnviar(clientes.filter((c) => !ligados.has(c.id)), Number.MAX_SAFE_INTEGER, filtro);
       const lote = candidatos.slice(0, LIMITE_ENVIO_POR_RODADA);
       pendentesEnvio = Math.max(0, candidatos.length - lote.length);
       for (const c of lote) {
@@ -114,7 +115,8 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
 export async function enviarClienteParaGoogle(clienteId: string): Promise<void> {
   if (!(await envioParaGoogleAtivo()) || !(await googleContatosDisponivel())) return;
   const c = await db.cliente.findUnique({ where: { id: clienteId }, select: SELECAO_CLIENTE });
-  if (!c || !c.telefone || nomeGenerico(c.nome) || deveDescartarContato(c.nome) || c.origem === "prospect_ia") return;
+  if (!c || !c.telefone || nomeGenerico(c.nome) || c.origem === "prospect_ia") return;
+  if (await deveDescartarContato(c.nome)) return;
   const dados = { nome: c.nome, telefone: c.telefone, email: c.email };
   if (c.googleContatoId) {
     const existe = await atualizarContatoGoogle(c.googleContatoId, dados);

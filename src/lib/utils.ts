@@ -142,23 +142,23 @@ export function agoraBrasiliaExtenso(date: Date = new Date()): string {
 //   TERMOS: valem dentro de qualquer palavra ("contab" pega contabilidade,
 //           contábil, contábeis).
 //   PALAVRAS: só como palavra inteira ("banco" não pega "Bancorbrás").
-export const TERMOS_BLOQUEIO = ["contab", "contador", "financeir", "escritorio", "bradesco", "sicoob", "sicredi", "banestes", "hotel", "pousada", "restaurante"];
-export const PALAVRAS_BLOQUEIO = ["banco", "cnh", "bcnh", "pme"];
+// Valores de fábrica — o filtro de verdade mora no banco (Configuracao) e é
+// editável em Configurações → WhatsApp/Clientes; ver lib/filtro-contatos.ts.
+// Isto aqui é só a semente usada na primeira vez, antes de existir override.
+export const TERMOS_BLOQUEIO_PADRAO = ["contab", "contador", "financeir", "escritorio", "bradesco", "sicoob", "sicredi", "banestes", "hotel", "pousada", "restaurante"];
+export const PALAVRAS_BLOQUEIO_PADRAO = ["banco", "cnh", "bcnh", "pme"];
 
-const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+export const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-// Termo que bloqueia o nome, ou null se o nome é aceito.
-export function motivoBloqueio(nome: string): string | null {
+// Termo que bloqueia o nome, ou null se o nome é aceito — pura (sem banco),
+// recebe as listas prontas. Quem decide QUAIS listas usar é lib/filtro-contatos.ts.
+export function motivoBloqueioComListas(nome: string, termos: string[], palavras: string[]): string | null {
   const n = semAcento(nome);
-  const termo = TERMOS_BLOQUEIO.find((t) => n.includes(t));
+  const termo = termos.find((t) => n.includes(semAcento(t)));
   if (termo) return termo;
-  const palavras = n.split(/[^a-z0-9]+/).filter(Boolean);
-  const palavra = PALAVRAS_BLOQUEIO.find((p) => palavras.includes(p));
+  const partes = n.split(/[^a-z0-9]+/).filter(Boolean);
+  const palavra = palavras.find((p) => partes.includes(semAcento(p)));
   return palavra ?? null;
-}
-
-export function deveDescartarContato(nome: string): boolean {
-  return motivoBloqueio(nome) !== null;
 }
 
 export function iniciais(nome: string) {

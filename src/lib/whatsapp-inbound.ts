@@ -12,7 +12,7 @@ import {
   acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, curarZapiId,
 } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
-import { motivoBloqueio } from "@/lib/utils";
+import { motivoBloqueio } from "@/lib/filtro-contatos";
 import { telefoneBloqueado, bloquearContato, apagarContatoPorTelefone } from "@/lib/contatos-bloqueados";
 import { processarMensagem } from "@/lib/zeus/pipeline";
 import { zeusReport } from "@/lib/zeus/eventos";
@@ -91,7 +91,7 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
   // a regra → bloqueia o telefone e apaga o que já existia dele.
   if (!ev.isGroup) {
     if (await telefoneBloqueado(ev.phone)) { diag.status = "bloqueado"; await registrarDiag(diag); return { ok: true, status: "bloqueado" }; }
-    const motivo = ev.nomeContato ? motivoBloqueio(ev.nomeContato) : null;
+    const motivo = ev.nomeContato ? await motivoBloqueio(ev.nomeContato) : null;
     if (motivo) {
       await bloquearContato(ev.phone, ev.nomeContato, motivo);
       await apagarContatoPorTelefone(ev.phone).catch((e) => console.error("[whatsapp-inbound] bloqueio:", e));

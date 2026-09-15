@@ -8,7 +8,8 @@
 //   - telefoneBloqueado()/bloquearContato(): usados na chegada de mensagens.
 
 import { db } from "@/lib/db";
-import { deveDescartarContato, motivoBloqueio } from "@/lib/utils";
+import { listarFiltroContatos } from "@/lib/filtro-contatos";
+import { motivoBloqueioComListas } from "@/lib/utils";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 
 export type ResultadoLimpeza = { clientes: number; conversas: number; mensagens: number; bloqueados: number };
@@ -57,26 +58,30 @@ export async function listarTelefonesBloqueados(): Promise<Set<string>> {
 export async function limparContatosIndesejados(): Promise<ResultadoLimpeza> {
   const r: ResultadoLimpeza = { clientes: 0, conversas: 0, mensagens: 0, bloqueados: 0 };
   try {
-    const [clientes, conversas, bloqueadosAntes] = await Promise.all([
+    const [clientes, conversas, bloqueadosAntes, listas] = await Promise.all([
       db.cliente.findMany({ select: { id: true, nome: true, telefone: true } }),
       db.whatsAppConversation.findMany({ where: { isGroup: false }, select: { id: true, contactName: true, externalPhone: true, clienteId: true } }),
       listarTelefonesBloqueados(),
+      listarFiltroContatos(),
     ]);
+    // Listas carregadas UMA vez e aplicadas com a função pura — a varredura
+    // percorre todos os clientes/conversas, não dá para consultar por item.
+    const motivo = (nome: string) => motivoBloqueioComListas(nome, listas.termos, listas.palavras);
 
     const telefonesAlvo = new Set<string>(bloqueadosAntes);
     const marcar = async (telefone: string | null, nome: string | null) => {
       const t = digitos(telefone);
       if (!t || telefonesAlvo.has(t)) return;
       for (const v of phoneLookupVariants(t)) telefonesAlvo.add(v);
-      await bloquearContato(t, nome, nome ? motivoBloqueio(nome) : null);
+      await bloquearContato(t, nome, nome ? motivo(nome) : null);
       r.bloqueados++;
     };
 
     // 1) Clientes com nome bloqueado → telefone vai para a lista.
-    const clientesAlvo = clientes.filter((c) => deveDescartarContato(c.nome));
+    const clientesAlvo = clientes.filter((c) => motivo(c.nome) !== null);
     for (const c of clientesAlvo) await marcar(c.telefone, c.nome);
     // 2) Conversas com nome bloqueado → idem.
-    const conversasNome = conversas.filter((c) => c.contactName && deveDescartarContato(c.contactName));
+    const conversasNome = conversas.filter((c) => c.contactName && motivo(c.contactName) !== null);
     for (const c of conversasNome) await marcar(c.externalPhone, c.contactName);
 
     // 3) Tudo que tem telefone bloqueado também cai (mesmo com nome genérico).
