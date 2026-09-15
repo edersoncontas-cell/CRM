@@ -138,6 +138,10 @@ model OrientadorAnalise {
   melhorResposta          String?
   oportunidadesPerdidas   String[]
   resumoNegociacao        String?
+  // O que já ficou combinado na conversa (visita, envio de proposta…) e o
+  // que ainda está pendente — para a próxima ação nunca repetir o que já foi feito.
+  combinados              String[] @default([])
+  pendencias              String[] @default([])
   atualizadoEm            DateTime @updatedAt
 }
 

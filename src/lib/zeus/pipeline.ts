@@ -297,7 +297,10 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
       const negResult = await alimentarNegociacao(clienteId, extracao);
       await registrarVisitaAgenda(clienteId, extracao.dataVisita);
 
-      const novaLinha = extracao.resumo ? `[${new Date().toLocaleDateString("pt-BR")}] ${extracao.resumo}` : null;
+      // Não repete a mesma linha (a heurística devolve "pagamento: avista; visita
+      // sugerida" a cada mensagem e o resumo ficava com linhas duplicadas).
+      const ultimaLinha = (clienteAtual?.resumoTexto ?? "").split("\n").filter(Boolean).pop()?.replace(/^\[[^\]]*\]\s*/, "").trim();
+      const novaLinha = extracao.resumo && extracao.resumo.trim() !== ultimaLinha ? `[${new Date().toLocaleDateString("pt-BR")}] ${extracao.resumo}` : null;
       const resumoAtualizado = novaLinha
         ? [clienteAtual?.resumoTexto, novaLinha].filter(Boolean).join("\n").split("\n").slice(-12).join("\n")
         : clienteAtual?.resumoTexto ?? null;

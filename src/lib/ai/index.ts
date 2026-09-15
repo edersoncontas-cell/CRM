@@ -5,7 +5,7 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
-import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim } from "./groq";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, GROQ_BASE_URL } from "./groq";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -146,35 +146,39 @@ async function chamarProvedorTexto(
       .join("");
   }
 
-  // groq — modelo escolhido automaticamente (ver ./groq.ts); se o Groq disser
-  // que o modelo não existe mais, marca como ruim e refaz com o próximo.
-  for (let tentativa = 0; tentativa < 2; tentativa++) {
+  // groq — modelo escolhido automaticamente (ver ./groq.ts). Se o Groq disser
+  // que o modelo não existe mais, marca como ruim e refaz com o próximo; se o
+  // JSON estrito falhar, refaz pedindo o JSON só pelo prompt.
+  let semFormato = false;
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
     const modelo = await modeloGroq();
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const sistema = opts?.json && semFormato ? `${system}\n\nResponda SOMENTE com um JSON válido, sem texto antes ou depois, sem markdown.` : system;
+    const res = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: modelo,
-        max_tokens: maxTokens,
-        ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+        ...parametrosGroq(modelo, maxTokens, !!opts?.json, semFormato),
         messages: [
-          { role: "system", content: system },
+          { role: "system", content: sistema },
           { role: "user", content: user },
         ],
       }),
     });
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
-      if (res.status === 404 && tentativa === 0 && erroDeModeloGroq(detalhe)) { marcarModeloGroqRuim(modelo); continue; }
+      if (res.status === 404 && erroDeModeloGroq(detalhe)) { marcarModeloGroqRuim(modelo); continue; }
+      if (res.status === 400 && opts?.json && !semFormato && erroDeJsonGroq(detalhe)) { semFormato = true; continue; }
       throw new Error(`Falha no Groq (${res.status}, ${modelo}): ${detalhe.slice(0, 200)}`);
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    return data.choices?.[0]?.message?.content ?? "";
+    const conteudo = data.choices?.[0]?.message?.content ?? "";
+    // Sem formato estrito o modelo pode cercar o JSON com ```json … ``` — limpa.
+    return opts?.json ? conteudo.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim() : conteudo;
   }
   throw new Error("Groq: nenhum modelo disponível.");
 }

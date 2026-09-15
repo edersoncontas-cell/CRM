@@ -902,8 +902,19 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                       {contexto.orientador.perfilComprador && <span className="text-brand-400">perfil {contexto.orientador.perfilComprador}</span>}
                     </div>
                     {contexto.orientador.resumoNegociacao && <p className="text-xs text-brand-200">{contexto.orientador.resumoNegociacao}</p>}
+                    {contexto.orientador.combinados.length > 0 && (
+                      <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-2.5 text-xs text-emerald-50">
+                        <b className="text-emerald-300">Já combinado:</b>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4">{contexto.orientador.combinados.map((c) => <li key={c}>{c}</li>)}</ul>
+                      </div>
+                    )}
                     {contexto.orientador.proximaAcao && (
                       <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {contexto.orientador.proximaAcao}</div>
+                    )}
+                    {contexto.orientador.pendencias.length > 0 && (
+                      <div className="text-xs text-brand-300"><b className="text-brand-200">Pendências:</b>
+                        <ul className="mt-0.5 list-disc space-y-0.5 pl-4">{contexto.orientador.pendencias.map((c) => <li key={c}>{c}</li>)}</ul>
+                      </div>
                     )}
                     {contexto.orientador.objecoes.length > 0 && (
                       <div className="text-xs text-brand-300"><b className="text-brand-200">Objeções:</b> {contexto.orientador.objecoes.join(", ")}</div>

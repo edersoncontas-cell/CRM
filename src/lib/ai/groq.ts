@@ -20,6 +20,9 @@ export const CANDIDATOS_GROQ = [
   "llama-3.1-8b-instant",
 ];
 
+// Endereço da API (sobrescrevível só para testes locais com um servidor falso).
+export const GROQ_BASE_URL = (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
+
 const CACHE_MS = 60 * 60_000;
 let cache: { em: number; modelos: Set<string> } | null = null;
 const ruins = new Set<string>();
@@ -37,7 +40,7 @@ export function escolherModeloGroq(env: string | undefined, disponiveis: Set<str
 export async function listarModelosGroq(): Promise<Set<string>> {
   if (cache && Date.now() - cache.em < CACHE_MS) return cache.modelos;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/models", {
+    const res = await fetch(`${GROQ_BASE_URL}/models`, {
       headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
@@ -61,6 +64,31 @@ export async function modeloGroq(): Promise<string> {
 export function erroDeModeloGroq(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return /does not exist|model_not_found|decommissioned|has been deprecated|not supported/i.test(msg);
+}
+
+// Modelos com raciocínio (gpt-oss, qwen3, deepseek-r1): o "pensamento" gasta
+// tokens do mesmo limite da resposta — com limite curto o JSON sai cortado e o
+// Groq devolve "Failed to validate JSON". Para eles, limite maior e esforço
+// baixo (rápido e barato). `semFormato` tira o JSON estrito (segunda tentativa).
+export function modeloComRaciocinio(modelo: string): boolean {
+  return /gpt-oss|qwen3|deepseek-r1|reasoning/i.test(modelo);
+}
+
+export function parametrosGroq(modelo: string, maxTokens: number, json: boolean, semFormato = false): Record<string, unknown> {
+  const raciocinio = modeloComRaciocinio(modelo);
+  return {
+    model: modelo,
+    max_tokens: raciocinio ? maxTokens + 4000 : maxTokens,
+    ...(raciocinio && /gpt-oss/i.test(modelo) ? { reasoning_effort: "low" } : {}),
+    ...(raciocinio && !/gpt-oss/i.test(modelo) ? { reasoning_format: "hidden" } : {}),
+    ...(json && !semFormato ? { response_format: { type: "json_object" } } : {}),
+  };
+}
+
+// O erro é "JSON inválido na geração"? Aí vale refazer sem o formato estrito.
+export function erroDeJsonGroq(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /json_validate_failed|Failed to validate JSON/i.test(msg);
 }
 
 export function marcarModeloGroqRuim(modelo: string): void {

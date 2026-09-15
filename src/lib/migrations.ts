@@ -310,6 +310,13 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_telefone_key" ON "ContatoBloqueado"("telefone")`);
+
+    // Orientador (v18): combinados e pendências da conversa.
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "OrientadorAnalise"
+        ADD COLUMN IF NOT EXISTS "combinados" TEXT[] NOT NULL DEFAULT '{}',
+        ADD COLUMN IF NOT EXISTS "pendencias" TEXT[] NOT NULL DEFAULT '{}'
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -9,7 +9,7 @@
 import OpenAI from "openai";
 import type Anthropic from "@anthropic-ai/sdk";
 import { OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
-import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim } from "./groq";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, GROQ_BASE_URL } from "./groq";
 
 type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: boolean };
 
@@ -27,7 +27,7 @@ export function provedoresCompat(): ProvedorCompat[] {
   if (process.env.GROQ_API_KEY) {
     lista.push({
       nome: "groq",
-      client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" }),
+      client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: GROQ_BASE_URL }),
       model: "", // escolhido na hora da chamada (ver ./groq.ts)
       visao: false,
     });
@@ -141,12 +141,13 @@ export async function rodadaAgenteCompat(
       let resp;
       for (let tentativa = 0; ; tentativa++) {
         try {
+          // Groq com modelo de raciocínio: limite maior (o "pensamento" conta no limite).
+          const extras = p.nome === "groq" ? parametrosGroq(modelo, 2048, false) : { model: modelo, max_tokens: 2048 };
           resp = await p.client.chat.completions.create({
-            model: modelo,
+            ...(extras as { model: string; max_tokens: number }),
             messages: msgs,
             tools: ferramentas,
             tool_choice: "auto",
-            max_tokens: 2048,
           });
           break;
         } catch (e) {

@@ -32,11 +32,18 @@ export type AnaliseOrientador = {
   temperatura: Temperatura;
   proximaAcao: string;
   oportunidadesPerdidas: string[];
+  // O que JÁ ficou combinado (com data/hora quando houver) e o que ainda falta.
+  combinados: string[];
+  pendencias: string[];
   alertas: string[];
   // true quando a conversa não deixou pendência (cliente agradeceu, assunto
   // resolvido, sem pergunta em aberto): o cliente sai de "aguardando resposta".
   conversaEncerrada: boolean;
 };
+
+// Quanto do histórico vai para a IA (caracteres). Conversas longas precisam
+// caber inteiras para os combinados de semanas atrás contarem.
+const JANELA_HISTORICO = 24_000;
 
 const ESTAGIOS = [
   "Lead", "Primeiro contato", "Qualificação", "Visita realizada", "Proposta enviada",
@@ -56,6 +63,8 @@ function fallback(motivo: string): AnaliseOrientador {
     temperatura: "morna",
     proximaAcao: motivo,
     oportunidadesPerdidas: [],
+    combinados: [],
+    pendencias: [],
     alertas: [],
     conversaEncerrada: false,
   };
@@ -80,9 +89,18 @@ Método (siga nesta ordem, sempre):
    14h e levar a conta de custo por hora com a 580 na entrada"). Nunca "manter contato" ou "fazer follow-up".
 6. RESPOSTA: curta, humana, no tom do vendedor, que RESPONDE o que o cliente perguntou e AVANÇA um passo
    (visita, dado, proposta, decisão). Uma pergunta fechada no fim. Sem emojis, sem "espero que esteja bem".
+7. ESTADO DOS COMBINADOS (antes de sugerir qualquer coisa): liste o que JÁ FICOU ACERTADO na conversa — visita
+   com dia/hora aceita pelo cliente ou fechada pelo vendedor ("combinado", "fechado", "te espero"), proposta
+   prometida, documento pedido, retorno prometido. Uma visita aceita pelo cliente e confirmada pelo vendedor está
+   CONFIRMADA: não peça para confirmar de novo. O que está confirmado NÃO é pendência nem próxima ação; a
+   próxima ação é o passo SEGUINTE (preparar a proposta prometida, separar a documentação, cumprir o lembrete
+   que o vendedor prometeu na véspera, chegar com a conta de custo por hora). Se o vendedor prometeu algo
+   ("te envio", "vou verificar"), isso é pendência DELE — e a próxima ação é cumprir. Nunca contradiga o
+   histórico: o que foi dito depois vale mais do que o que foi dito antes.
 
 O que você NUNCA faz: inventar preço, prazo, especificação ou promoção; repetir pergunta já respondida; cumprimentar
-de novo numa conversa em andamento; depreciar concorrente; escrever textão.`;
+de novo numa conversa em andamento; depreciar concorrente; escrever textão; tratar como pendente algo que a conversa
+já resolveu.`;
 
 const SYSTEM_BASE = `${PERSONA}
 
@@ -98,12 +116,16 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "temperatura": "muito_quente"|"quente"|"morna"|"fria",
   "proximaAcao": string,                   // uma ação: o quê + como + quando, com máquina/valor/concorrente reais
   "oportunidadesPerdidas": string[],       // perguntas que faltaram, sinais de compra ignorados, objeções não tratadas
+  "combinados": string[],                  // o que JÁ ficou acertado, com dia/hora e quem faz (ex.: "Visita confirmada quinta 18/09 às 14h na obra"; "Vendedor prometeu mensagem na véspera para confirmar"). Vazio se nada foi combinado.
+  "pendencias": string[],                  // o que ainda falta e de quem é (ex.: "Vendedor: enviar proposta formal de financiamento"; "Cliente: informar horas/mês de uso"). NUNCA inclua o que já está em "combinados".
   "alertas": string[],                     // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
   "conversaEncerrada": boolean             // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto.
 - "objecoes" só com itens da lista permitida e que realmente apareceram.
+- "resumoNegociacao", "proximaAcao" e "pendencias" têm de ser COERENTES com "combinados": visita confirmada não
+  aparece como "falta confirmar"; proposta já enviada não aparece como "enviar proposta".
 - Se a conversa for só social/suporte, diga isso no resumo e use probabilidade baixa; não force uma venda.`;
 
 // Gera SÓ a resposta pro cliente — chamada curta e rápida (texto puro, sem
@@ -127,6 +149,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor (imite)\n${args.estilo
 - Leia o HISTÓRICO COMPLETO, mas responda APENAS a última mensagem do cliente, no ponto exato em que a conversa está.
 - Primeiro RESPONDA o que foi perguntado (mesmo que seja "vou confirmar e te retorno até X"); depois AVANCE um passo: visita, dado concreto, proposta ou decisão. Termine com UMA pergunta fechada.
 - Nunca repita pergunta já respondida nem informação já dada. Não cumprimente se já houve saudação na conversa.
+- O que já ficou combinado (visita com dia/hora aceita, proposta prometida) está combinado: não peça para confirmar de novo; avance para o passo seguinte.
 - Se o cliente citou concorrente ou preço, reconheça sem depreciar e leve para valor (custo por hora, revenda, assistência, entrega), sem inventar números.
 - Se o cliente pediu preço e a aplicação ainda não está clara, peça as 2 informações que faltam (aplicação e horas/mês, ou prazo e forma de pagamento) em vez de dar valor genérico.
 - 1-3 frases, como mensagem real de WhatsApp de gente ocupada. Nada de textão.
@@ -171,7 +194,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
     const raw = await llmTexto(
       system,
       `=== HISTÓRICO COMPLETO DA CONVERSA ===\n${args.historico}\n\n=== ÚLTIMAS MENSAGENS (foco aqui) ===\n${args.ultimasMensagens}`,
-      { maxTokens: 900, json: true, raciocinio: true }
+      { maxTokens: 1200, json: true, raciocinio: true }
     );
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
@@ -185,6 +208,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
     const alertas = Array.isArray(parsed.alertas)
       ? parsed.alertas.filter((a: unknown) => typeof a === "string")
       : [];
+    const soTextos = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 8) : []);
     const temperatura: Temperatura = ["muito_quente", "quente", "morna", "fria"].includes(parsed.temperatura)
       ? parsed.temperatura
       : "morna";
@@ -202,6 +226,8 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
       temperatura,
       proximaAcao: typeof parsed.proximaAcao === "string" ? parsed.proximaAcao : "",
       oportunidadesPerdidas,
+      combinados: soTextos(parsed.combinados),
+      pendencias: soTextos(parsed.pendencias),
       alertas,
       conversaEncerrada: parsed.conversaEncerrada === true,
     };
@@ -243,7 +269,7 @@ export async function processarOrientador(args: {
   // 1) Resposta rápida primeiro — é o que o cliente está esperando. Não
   // bloqueia na análise completa (que roda depois, só pro painel).
   const reply = await gerarRespostaRapida({
-    historico: args.historicoCompleto.slice(-6000),
+    historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
     ultimasMensagens: args.ultimasMensagens,
     contextoCliente: args.contextoCliente,
     estilo: args.estilo,
@@ -259,7 +285,7 @@ export async function processarOrientador(args: {
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
-      historico: args.historicoCompleto.slice(-6000),
+      historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
       ultimasMensagens: args.ultimasMensagens,
       contextoCliente: args.contextoCliente,
       contextoAcademia: args.contextoAcademia,
@@ -307,7 +333,7 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
   const p = await lerParametros();
   const [msgs, estilo] = await Promise.all([
-    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "desc" }, take: 80 }),
+    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "desc" }, take: 250 }),
     db.estiloDeFala.findFirst().catch(() => null),
   ]);
   if (msgs.length === 0) return { ok: false, erro: "Conversa sem mensagens." };
@@ -319,9 +345,9 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
     const [analise, resposta] = await Promise.all([
-      gerarAnaliseOrientador({ historico: historico.slice(-6000), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null }),
+      gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null }),
       ultimaDoCliente
-        ? gerarRespostaRapida({ historico: historico.slice(-6000), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null })
+        ? gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null })
         : Promise.resolve(""),
     ]);
     await consumirOrcamentoIA();
