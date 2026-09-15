@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
 
   // Autenticação: a Evolution v2 inclui a própria apikey no corpo de todo
   // webhook; também aceita como header (webhook.headers na config da instância).
-  const chave = str(body.apikey) ?? req.headers.get("apikey") ?? req.headers.get("x-api-key") ?? req.nextUrl.searchParams.get("apikey");
-  if (chave !== cfg.apiKey) {
-    return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
-  }
+  const candidatos = [str(body.apikey), req.headers.get("apikey"), req.headers.get("x-api-key"), req.nextUrl.searchParams.get("apikey")];
+    if (!candidatos.some((c) => c !== null && c === cfg.apiKey)) {
+          return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
+    }
 
   // Isolamento de instância (uma Evolution pode hospedar vários números).
   const instancia = str(body.instance);
