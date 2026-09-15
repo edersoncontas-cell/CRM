@@ -19,6 +19,8 @@ import { sendText } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
+import { METODO_VENDA, ESTILOS_CLIENTE, ETAPAS_ROTEIRO, normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
+import type { Prisma } from "@prisma/client";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
 
@@ -35,6 +37,9 @@ export type AnaliseOrientador = {
   // O que JÁ ficou combinado (com data/hora quando houver) e o que ainda falta.
   combinados: string[];
   pendencias: string[];
+  // Coaching completo: personalidade, condução do vendedor, alerta do momento,
+  // perguntas, roteiro até o fechamento, sinais e objeções com tratamento.
+  coaching: Coaching;
   alertas: string[];
   // true quando a conversa não deixou pendência (cliente agradeceu, assunto
   // resolvido, sem pergunta em aberto): o cliente sai de "aguardando resposta".
@@ -65,6 +70,7 @@ function fallback(motivo: string): AnaliseOrientador {
     oportunidadesPerdidas: [],
     combinados: [],
     pendencias: [],
+    coaching: coachingVazio(),
     alertas: [],
     conversaEncerrada: false,
   };
@@ -104,6 +110,8 @@ já resolveu.`;
 
 const SYSTEM_BASE = `${PERSONA}
 
+${METODO_VENDA}
+
 Analise a NEGOCIAÇÃO COMPLETA abaixo (histórico integral da conversa + cadastro do cliente + negociações abertas +
 visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, sem texto antes ou depois:
 {
@@ -119,6 +127,32 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "combinados": string[],                  // o que JÁ ficou acertado, com dia/hora e quem faz (ex.: "Visita confirmada quinta 18/09 às 14h na obra"; "Vendedor prometeu mensagem na véspera para confirmar"). Vazio se nada foi combinado.
   "pendencias": string[],                  // o que ainda falta e de quem é (ex.: "Vendedor: enviar proposta formal de financiamento"; "Cliente: informar horas/mês de uso"). NUNCA inclua o que já está em "combinados".
   "alertas": string[],                     // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
+  "clienteQuer": string,                   // 1 frase: o que o cliente REALMENTE quer resolver (a dor por trás da máquina)
+  "personalidade": {
+    "estilo": ${JSON.stringify(ESTILOS_CLIENTE)} + "|null",  // pelo jeito de escrever (ver método); null se ainda não dá para saber
+    "descricao": string,                   // 1-2 frases: como esse cliente decide e o que valoriza
+    "comoFalar": string[],                 // 2-4 instruções práticas para o vendedor (tom, ritmo, o que mostrar)
+    "evitar": string[],                    // 1-3 coisas que afastam esse perfil
+    "papel": "decisor"|"influenciador"|"pesquisador"|null
+  },
+  "alertaAgora": {                         // o aviso mais importante para ESTE momento; null se nada urgente
+    "nivel": "vermelho"|"amarelo"|"verde", // vermelho = não faça/pare (ex.: não passe preço ainda, cliente esfriando, concorrente na frente); amarelo = atenção; verde = momento de avançar/fechar
+    "titulo": string,                      // curto e imperativo (ex.: "Não passe o preço ainda")
+    "motivo": string                       // por quê + o que fazer em vez disso, em 1-2 frases
+  } | null,
+  "conducao": {                            // avaliação HONESTA de como o vendedor conduziu até aqui
+    "nota": number,                        // 0-10 pelo método (qualificou? avançou? respondeu? pediu a visita? fechou com pergunta?)
+    "acertos": string[],                   // 1-3, citando o que ele escreveu
+    "correcoes": string[]                  // 1-4 correções concretas: "em vez de X, faça Y" (ex.: "passou preço sem saber as horas/mês; peça antes")
+  },
+  "perguntasAgora": string[],              // 2-4 perguntas prontas, na ordem, que destravam a venda AGORA (curtas, uma por vez)
+  "informacoesFaltando": string[],         // do checklist de qualificação, o que ainda não se sabe (aplicação, horas/mês, usada, prazo, pagamento, decisor)
+  "roteiro": [                             // caminho até o fechamento, etapas ${JSON.stringify(ETAPAS_ROTEIRO)}
+    { "etapa": string, "status": "feito"|"agora"|"depois", "dica": string }  // dica curta e específica desta negociação; exatamente UMA etapa "agora"
+  ],
+  "sinaisCompra": string[],                // sinais positivos concretos que apareceram (citando)
+  "sinaisRisco": string[],                 // sinais de risco concretos (citando)
+  "tratamentoObjecoes": [ { "objecao": string, "comoTratar": string } ],  // para cada objeção real, como responder (sem inventar números)
   "conversaEncerrada": boolean             // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
 }
 REGRAS CRÍTICAS:
@@ -126,7 +160,13 @@ REGRAS CRÍTICAS:
 - "objecoes" só com itens da lista permitida e que realmente apareceram.
 - "resumoNegociacao", "proximaAcao" e "pendencias" têm de ser COERENTES com "combinados": visita confirmada não
   aparece como "falta confirmar"; proposta já enviada não aparece como "enviar proposta".
-- Se a conversa for só social/suporte, diga isso no resumo e use probabilidade baixa; não force uma venda.`;
+- Se a conversa for só social/suporte, diga isso no resumo e use probabilidade baixa; não force uma venda.
+- "conducao" é sobre o VENDEDOR (mensagens dele), não sobre o cliente. Seja direto: nota 9-10 só para condução
+  exemplar; se ele passou preço sem qualificar, respondeu sem avançar, não pediu a visita ou deixou pergunta do
+  cliente sem resposta, diga e mostre como corrigir. Se ainda não há mensagens do vendedor, nota 5 e correcoes vazio.
+- "alertaAgora" vermelho SEMPRE que o cliente pediu preço e o checklist de qualificação não está completo, ou quando
+  o vendedor está prestes a repetir um erro. Verde quando os sinais somam e é hora de pedir a visita/fechar.
+- "perguntasAgora" e "proximaAcao" nunca pedem o que já foi respondido (veja "combinados" e o histórico).`;
 
 // Gera SÓ a resposta pro cliente — chamada curta e rápida (texto puro, sem
 // JSON, ~200 tokens de saída) para não fazer o cliente esperar a análise
@@ -136,6 +176,7 @@ export async function gerarRespostaRapida(args: {
   ultimasMensagens: string;
   contextoCliente: string;
   estilo: string | null;
+  dicas?: string | null; // orientações do coaching (alerta, perfil, perguntas) — quando já analisado
 }): Promise<string> {
   if (!iaHabilitada()) return "";
 
@@ -143,6 +184,7 @@ export async function gerarRespostaRapida(args: {
 
 ## Contexto do cliente
 ${args.contextoCliente}
+${args.dicas ? `\n## Orientações do coaching para ESTA resposta (siga)\n${args.dicas}` : ""}
 ${args.estilo ? `\n## Estilo de comunicação do vendedor (imite)\n${args.estilo}` : ""}
 
 ## Regras absolutas
@@ -194,7 +236,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
     const raw = await llmTexto(
       system,
       `=== HISTÓRICO COMPLETO DA CONVERSA ===\n${args.historico}\n\n=== ÚLTIMAS MENSAGENS (foco aqui) ===\n${args.ultimasMensagens}`,
-      { maxTokens: 1200, json: true, raciocinio: true }
+      { maxTokens: 2400, json: true, raciocinio: true }
     );
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
@@ -228,6 +270,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}
       oportunidadesPerdidas,
       combinados: soTextos(parsed.combinados),
       pendencias: soTextos(parsed.pendencias),
+      coaching: normalizarCoaching(parsed),
       alertas,
       conversaEncerrada: parsed.conversaEncerrada === true,
     };
@@ -266,22 +309,8 @@ export async function processarOrientador(args: {
 }): Promise<{ respondido: boolean }> {
   if (!args.conv.clienteId) return { respondido: false };
 
-  // 1) Resposta rápida primeiro — é o que o cliente está esperando. Não
-  // bloqueia na análise completa (que roda depois, só pro painel).
-  const reply = await gerarRespostaRapida({
-    historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
-    ultimasMensagens: args.ultimasMensagens,
-    contextoCliente: args.contextoCliente,
-    estilo: args.estilo,
-  });
-
-  // Nada é enviado nem vira rascunho sozinho (decisão do vendedor): a melhor
-  // resposta fica guardada no painel do Orientador e aparece dentro da
-  // conversa quando ele chama o Cérebro. "respondido" fica true porque a
-  // mensagem foi tratada (não precisa do fallback de resposta).
-  const respondido = !!reply;
-
-  // 2) Análise completa (painel).
+  // 1) Análise completa (painel + coaching). Nada é enviado sozinho, então a
+  // resposta pode esperar a análise e aproveitar as orientações dela.
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -293,14 +322,27 @@ export async function processarOrientador(args: {
     });
   } catch (e) {
     await zeusReport(e, "gerarAnaliseOrientador (Orientador de Vendas)");
-    return { respondido };
+    return { respondido: false };
   }
 
-  const { alertas, conversaEncerrada, ...campos } = analise;
+  // 2) Melhor resposta, orientada pelo coaching (alerta, perfil, perguntas).
+  const reply = await gerarRespostaRapida({
+    historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
+    ultimasMensagens: args.ultimasMensagens,
+    contextoCliente: args.contextoCliente,
+    estilo: args.estilo,
+    dicas: dicasParaResposta(analise.coaching, analise.proximaAcao),
+  });
+  // A melhor resposta fica no painel e aparece na conversa quando o vendedor
+  // pede; "respondido" = mensagem tratada (não precisa do fallback).
+  const respondido = !!reply;
+
+  const { alertas, conversaEncerrada, coaching, ...campos } = analise;
+  const coachingJson = coaching as unknown as Prisma.InputJsonValue;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
-    create: { clienteId: args.conv.clienteId, ...campos, melhorResposta: reply || null },
-    update: { ...campos, melhorResposta: reply || undefined },
+    create: { clienteId: args.conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: reply || null },
+    update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined },
   });
 
   for (const mensagem of alertas) {
@@ -344,18 +386,17 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   const contextoAcademia = montarContextoAcademia(historico);
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
-    const [analise, resposta] = await Promise.all([
-      gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null }),
-      ultimaDoCliente
-        ? gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null })
-        : Promise.resolve(""),
-    ]);
+    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null });
+    const resposta = ultimaDoCliente
+      ? await gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
+      : "";
     await consumirOrcamentoIA();
-    const { alertas, conversaEncerrada, ...campos } = analise;
+    const { alertas, conversaEncerrada, coaching, ...campos } = analise;
+    const coachingJson = coaching as unknown as Prisma.InputJsonValue;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
-      create: { clienteId: conv.clienteId, ...campos, melhorResposta: resposta || null },
-      update: { ...campos, ...(resposta ? { melhorResposta: resposta } : {}) },
+      create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null },
+      update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}) },
     });
     for (const mensagem of alertas) await criarAlertaOrientadorSeNovo(conv.clienteId, mensagem).catch(() => {});
     await aplicarConversaEncerrada(conv.clienteId, conversaEncerrada);

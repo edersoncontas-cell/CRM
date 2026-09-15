@@ -142,6 +142,9 @@ model OrientadorAnalise {
   // que ainda está pendente — para a próxima ação nunca repetir o que já foi feito.
   combinados              String[] @default([])
   pendencias              String[] @default([])
+  // Coaching completo (personalidade, condução, alerta, roteiro…) — ver
+  // lib/zeus/orientador-coaching.ts.
+  coaching                Json?
   atualizadoEm            DateTime @updatedAt
 }
 

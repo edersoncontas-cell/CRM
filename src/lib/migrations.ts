@@ -317,6 +317,9 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "combinados" TEXT[] NOT NULL DEFAULT '{}',
         ADD COLUMN IF NOT EXISTS "pendencias" TEXT[] NOT NULL DEFAULT '{}'
     `);
+
+    // Orientador (v19): coaching completo em JSON.
+    await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "coaching" JSONB`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -892,46 +892,108 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                   {contexto.cliente.resumoTexto && <p className="mt-2 line-clamp-4 text-xs text-brand-300">{contexto.cliente.resumoTexto.split("\n").slice(-2).join(" ")}</p>}
                 </div>
 
-                {/* Leitura do Orientador */}
-                {contexto.orientador ? (
-                  <div className="space-y-2">
+                {/* Leitura do Orientador — coach de vendas ao lado do vendedor */}
+                {contexto.orientador ? (() => {
+                  const o = contexto.orientador;
+                  const c = o.coaching;
+                  const corAlerta = { vermelho: "border-red-400/40 bg-red-400/10 text-red-50", amarelo: "border-amber-400/40 bg-amber-400/10 text-amber-50", verde: "border-emerald-400/40 bg-emerald-400/10 text-emerald-50" } as const;
+                  const corTitulo = { vermelho: "text-red-300", amarelo: "text-amber-300", verde: "text-emerald-300" } as const;
+                  const corNota = c ? (c.conducao.nota >= 8 ? "text-emerald-300" : c.conducao.nota >= 6 ? "text-amber-300" : "text-red-300") : "text-brand-300";
+                  return (
+                  <div className="space-y-2.5">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      <Temperatura t={contexto.orientador.temperatura} />
-                      <span className="text-brand-200">{contexto.orientador.estagioVenda}</span>
-                      {contexto.orientador.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{contexto.orientador.probabilidadeFechamento}% de fechar</span>}
-                      {contexto.orientador.perfilComprador && <span className="text-brand-400">perfil {contexto.orientador.perfilComprador}</span>}
+                      <Temperatura t={o.temperatura} />
+                      <span className="text-brand-200">{o.estagioVenda}</span>
+                      {o.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{o.probabilidadeFechamento}% de fechar</span>}
+                      {c?.personalidade.estilo && <span className="text-brand-400">cliente {c.personalidade.estilo}{c.personalidade.papel ? ` · ${c.personalidade.papel}` : ""}</span>}
                     </div>
-                    {contexto.orientador.resumoNegociacao && <p className="text-xs text-brand-200">{contexto.orientador.resumoNegociacao}</p>}
-                    {contexto.orientador.combinados.length > 0 && (
-                      <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-2.5 text-xs text-emerald-50">
-                        <b className="text-emerald-300">Já combinado:</b>
-                        <ul className="mt-1 list-disc space-y-0.5 pl-4">{contexto.orientador.combinados.map((c) => <li key={c}>{c}</li>)}</ul>
+                    {c?.alertaAgora && (
+                      <div className={cn("rounded-xl border p-2.5 text-xs", corAlerta[c.alertaAgora.nivel])}>
+                        <div className={cn("flex items-center gap-1.5 font-bold", corTitulo[c.alertaAgora.nivel])}><AlertTriangle size={13} /> {c.alertaAgora.titulo}</div>
+                        {c.alertaAgora.motivo && <p className="mt-1">{c.alertaAgora.motivo}</p>}
                       </div>
                     )}
-                    {contexto.orientador.proximaAcao && (
-                      <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {contexto.orientador.proximaAcao}</div>
+                    {o.resumoNegociacao && <p className="text-xs text-brand-200">{o.resumoNegociacao}</p>}
+                    {c?.clienteQuer && <p className="text-xs text-brand-300"><b className="text-brand-200">O que ele quer de verdade:</b> {c.clienteQuer}</p>}
+                    {o.proximaAcao && (
+                      <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {o.proximaAcao}</div>
                     )}
-                    {contexto.orientador.pendencias.length > 0 && (
-                      <div className="text-xs text-brand-300"><b className="text-brand-200">Pendências:</b>
-                        <ul className="mt-0.5 list-disc space-y-0.5 pl-4">{contexto.orientador.pendencias.map((c) => <li key={c}>{c}</li>)}</ul>
+                    {c && c.perguntasAgora.length > 0 && (
+                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
+                        <b className="text-agro-300">Pergunte agora (nesta ordem):</b>
+                        <ol className="mt-1 list-decimal space-y-0.5 pl-4">{c.perguntasAgora.map((q) => <li key={q}>{q}</li>)}</ol>
                       </div>
                     )}
-                    {contexto.orientador.objecoes.length > 0 && (
-                      <div className="text-xs text-brand-300"><b className="text-brand-200">Objeções:</b> {contexto.orientador.objecoes.join(", ")}</div>
-                    )}
-                    {contexto.orientador.oportunidadesPerdidas.length > 0 && (
-                      <ul className="list-disc space-y-0.5 pl-4 text-xs text-brand-400">
-                        {contexto.orientador.oportunidadesPerdidas.slice(0, 3).map((o) => <li key={o}>{o}</li>)}
-                      </ul>
-                    )}
-                    {contexto.orientador.melhorResposta && (
-                      <button onClick={() => usarResposta(contexto.orientador!.melhorResposta!)} className="w-full rounded-xl bg-white/[0.04] p-2.5 text-left text-xs text-brand-200 hover:bg-white/[0.08]">
+                    {o.melhorResposta && (
+                      <button onClick={() => usarResposta(o.melhorResposta!)} className="w-full rounded-xl bg-white/[0.04] p-2.5 text-left text-xs text-brand-200 hover:bg-white/[0.08]">
                         <div className="mb-1 flex items-center gap-1 font-bold text-agro-300"><Sparkles size={12} /> Melhor resposta · clique para usar</div>
-                        <p className="line-clamp-4">{contexto.orientador.melhorResposta}</p>
+                        <p className="line-clamp-4">{o.melhorResposta}</p>
                       </button>
                     )}
+                    {c && (c.conducao.acertos.length > 0 || c.conducao.correcoes.length > 0) && (
+                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
+                        <div className="flex items-center justify-between"><b className="text-brand-100">Sua condução</b><span className={cn("font-bold", corNota)}>nota {c.conducao.nota}/10</span></div>
+                        {c.conducao.acertos.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.acertos.map((a) => <li key={a} className="flex gap-1.5 text-emerald-200"><span>✓</span><span>{a}</span></li>)}</ul>}
+                        {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.correcoes.map((a) => <li key={a} className="flex gap-1.5 text-amber-100"><span>→</span><span>{a}</span></li>)}</ul>}
+                      </div>
+                    )}
+                    {c?.personalidade.estilo && (
+                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
+                        <b className="text-brand-100">Como conduzir este cliente</b> <span className="text-brand-400">· perfil {c.personalidade.estilo}</span>
+                        {c.personalidade.descricao && <p className="mt-1 text-brand-300">{c.personalidade.descricao}</p>}
+                        {c.personalidade.comoFalar.length > 0 && <ul className="mt-1 list-disc space-y-0.5 pl-4">{c.personalidade.comoFalar.map((x) => <li key={x}>{x}</li>)}</ul>}
+                        {c.personalidade.evitar.length > 0 && <p className="mt-1 text-red-200"><b>Evite:</b> {c.personalidade.evitar.join(" · ")}</p>}
+                      </div>
+                    )}
+                    {c && c.roteiro.length > 0 && (
+                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs">
+                        <b className="text-brand-100">Roteiro até o fechamento</b>
+                        <ol className="mt-1 space-y-1">
+                          {c.roteiro.map((e) => (
+                            <li key={e.etapa} className={cn("flex gap-2", e.status === "feito" ? "text-brand-500" : e.status === "agora" ? "text-agro-200" : "text-brand-300")}>
+                              <span className="w-4 shrink-0 text-center">{e.status === "feito" ? "✓" : e.status === "agora" ? "▶" : "○"}</span>
+                              <span><b className={e.status === "agora" ? "text-agro-300" : ""}>{e.etapa}</b>{e.dica ? ` — ${e.dica}` : ""}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                    {o.combinados.length > 0 && (
+                      <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-2.5 text-xs text-emerald-50">
+                        <b className="text-emerald-300">Já combinado:</b>
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4">{o.combinados.map((x) => <li key={x}>{x}</li>)}</ul>
+                      </div>
+                    )}
+                    {o.pendencias.length > 0 && (
+                      <div className="text-xs text-brand-300"><b className="text-brand-200">Pendências:</b>
+                        <ul className="mt-0.5 list-disc space-y-0.5 pl-4">{o.pendencias.map((x) => <li key={x}>{x}</li>)}</ul>
+                      </div>
+                    )}
+                    {c && c.tratamentoObjecoes.length > 0 ? (
+                      <div className="text-xs text-brand-300"><b className="text-brand-200">Objeções e como tratar:</b>
+                        <ul className="mt-0.5 space-y-0.5">{c.tratamentoObjecoes.map((t) => <li key={t.objecao}><b className="text-brand-200">{t.objecao}:</b> {t.comoTratar}</li>)}</ul>
+                      </div>
+                    ) : o.objecoes.length > 0 ? (
+                      <div className="text-xs text-brand-300"><b className="text-brand-200">Objeções:</b> {o.objecoes.join(", ")}</div>
+                    ) : null}
+                    {c && (c.sinaisCompra.length > 0 || c.sinaisRisco.length > 0) && (
+                      <div className="grid grid-cols-1 gap-1 text-xs">
+                        {c.sinaisCompra.map((x) => <div key={x} className="text-emerald-300">▲ {x}</div>)}
+                        {c.sinaisRisco.map((x) => <div key={x} className="text-red-300">▼ {x}</div>)}
+                      </div>
+                    )}
+                    {c && c.informacoesFaltando.length > 0 && (
+                      <p className="text-xs text-brand-400"><b className="text-brand-300">Ainda falta saber:</b> {c.informacoesFaltando.join(" · ")}</p>
+                    )}
+                    {o.oportunidadesPerdidas.length > 0 && (
+                      <ul className="list-disc space-y-0.5 pl-4 text-xs text-brand-400">
+                        {o.oportunidadesPerdidas.slice(0, 3).map((x) => <li key={x}>{x}</li>)}
+                      </ul>
+                    )}
+                    {o.probabilidadeExplicacao && <p className="text-[11px] text-brand-500">{o.probabilidadeExplicacao}</p>}
                   </div>
-                ) : (
+                  );
+                })() : (
                   <p className="text-xs text-brand-400">O Orientador analisa a conversa quando chega a próxima mensagem do cliente.</p>
                 )}
 

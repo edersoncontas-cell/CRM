@@ -6,6 +6,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { normalizarCoaching, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { rotuloPapel, papelDaColuna } from "@/lib/pipeline";
 import { registrarAudit } from "@/lib/audit";
 
@@ -35,6 +36,7 @@ export type ContextoConversa = {
     resumoNegociacao: string | null;
     combinados: string[];
     pendencias: string[];
+    coaching: Coaching | null;
     atualizadoEm: string;
   } | null;
   negociacoes: { id: string; maquina: string | null; valor: number | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
@@ -77,6 +79,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
           temperatura: orientador.temperatura, proximaAcao: orientador.proximaAcao, melhorResposta: orientador.melhorResposta,
           oportunidadesPerdidas: orientador.oportunidadesPerdidas, resumoNegociacao: orientador.resumoNegociacao,
           combinados: orientador.combinados ?? [], pendencias: orientador.pendencias ?? [],
+          coaching: orientador.coaching ? normalizarCoaching(orientador.coaching) : null,
           atualizadoEm: orientador.atualizadoEm.toISOString(),
         }
       : null,
