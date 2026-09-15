@@ -58,6 +58,14 @@ export function CerebroChat() {
       .finally(() => setCarregandoSessao(false));
   }, []);
 
+  // Conversa carregada: abre já no fim (última mensagem), como um chat normal.
+  useEffect(() => {
+    if (carregandoSessao) return;
+    autoScrollRef.current = true;
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [carregandoSessao]);
+
   async function novaConversa() {
     if (carregando) return;
     setCarregandoSessao(true);
@@ -181,7 +189,7 @@ export function CerebroChat() {
         setMsgs((prev) => {
           const copia = [...prev];
           if (copia[copia.length - 1].content === "") {
-            copia[copia.length - 1] = { role: "assistant", content: "⚠️ Nenhuma resposta recebida. Verifique a configuração da API Anthropic." };
+            copia[copia.length - 1] = { role: "assistant", content: "⚠️ Nenhuma resposta recebida. Verifique as chaves de IA em Configurações." };
           }
           return copia;
         });
@@ -202,8 +210,10 @@ export function CerebroChat() {
 
   return (
     <div
+      // Altura TRAVADA na tela: a página não cresce com a conversa — só a área
+      // de mensagens rola (o cabeçalho e a caixa de digitar ficam fixos).
       className="flex flex-col rounded-2xl overflow-hidden"
-      style={{ background: "#18181b", border: "1px solid #27272a", minHeight: "70dvh" }}
+      style={{ background: "#18181b", border: "1px solid #27272a", height: "min(calc(100dvh - 250px), 860px)", minHeight: 440 }}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); addArquivos(e.dataTransfer.files); }}
@@ -235,7 +245,7 @@ export function CerebroChat() {
           Modo treinamento ativo — mostre exemplos de como você responde aos clientes (pergunta do cliente + sua resposta) que o Cérebro vai aprender e salvar o estilo.
         </div>
       )}
-      <div ref={containerRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={containerRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
         {msgs.length === 0 && !dragOver && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Brain size={40} className="mb-4" style={{ color: "rgba(191,222,77,0.3)" }} />

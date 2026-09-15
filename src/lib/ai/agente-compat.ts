@@ -9,8 +9,7 @@
 import OpenAI from "openai";
 import type Anthropic from "@anthropic-ai/sdk";
 import { OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
-
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim } from "./groq";
 
 type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: boolean };
 
@@ -29,7 +28,7 @@ export function provedoresCompat(): ProvedorCompat[] {
     lista.push({
       nome: "groq",
       client: new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" }),
-      model: GROQ_MODEL,
+      model: "", // escolhido na hora da chamada (ver ./groq.ts)
       visao: false,
     });
   }
@@ -137,13 +136,24 @@ export async function rodadaAgenteCompat(
   let ultimoErro: unknown = null;
   for (const p of provs) {
     try {
-      const resp = await p.client.chat.completions.create({
-        model: p.model,
-        messages: msgs,
-        tools: ferramentas,
-        tool_choice: "auto",
-        max_tokens: 2048,
-      });
+      // Groq: modelo escolhido automaticamente; se ele foi desativado, troca e refaz uma vez.
+      let modelo = p.nome === "groq" ? await modeloGroq() : p.model;
+      let resp;
+      for (let tentativa = 0; ; tentativa++) {
+        try {
+          resp = await p.client.chat.completions.create({
+            model: modelo,
+            messages: msgs,
+            tools: ferramentas,
+            tool_choice: "auto",
+            max_tokens: 2048,
+          });
+          break;
+        } catch (e) {
+          if (p.nome === "groq" && tentativa === 0 && erroDeModeloGroq(e)) { marcarModeloGroqRuim(modelo); modelo = await modeloGroq(); continue; }
+          throw e;
+        }
+      }
       const escolha = resp.choices[0]?.message;
       const toolCalls: RodadaCompat["toolCalls"] = [];
       for (const tc of escolha?.tool_calls ?? []) {

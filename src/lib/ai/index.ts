@@ -5,11 +5,10 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim } from "./groq";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
-// Modelo de texto do Groq (grátis). Reaproveita a GROQ_API_KEY da transcrição.
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 // Provedores de IA disponíveis, em ordem de preferência: Gemini > Groq >
 // DeepSeek > OpenAI > Anthropic. Ordem pensada pra custo mínimo — Gemini e
@@ -147,31 +146,37 @@ async function chamarProvedorTexto(
       .join("");
   }
 
-  // groq
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      max_tokens: maxTokens,
-      ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const detalhe = await res.text().catch(() => "");
-    throw new Error(`Falha no Groq (${res.status}): ${detalhe.slice(0, 200)}`);
+  // groq — modelo escolhido automaticamente (ver ./groq.ts); se o Groq disser
+  // que o modelo não existe mais, marca como ruim e refaz com o próximo.
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const modelo = await modeloGroq();
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: modelo,
+        max_tokens: maxTokens,
+        ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      if (res.status === 404 && tentativa === 0 && erroDeModeloGroq(detalhe)) { marcarModeloGroqRuim(modelo); continue; }
+      throw new Error(`Falha no Groq (${res.status}, ${modelo}): ${detalhe.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    return data.choices?.[0]?.message?.content ?? "";
   }
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  return data.choices?.[0]?.message?.content ?? "";
+  throw new Error("Groq: nenhum modelo disponível.");
 }
 
 // Chamada unificada de LLM com FALLBACK REAL de provedor: tenta cada provedor
