@@ -60,13 +60,12 @@ type Mensagem = {
 type Conexao = { configurado: boolean; conectado: boolean; provedor: "evolution" | "zapi" | null };
 type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo" | "ignoradas";
 
+// Chips visíveis na barra de filtros — só os dois pedidos pelo Edy. Os demais
+// valores de Filtro continuam existindo (setFiltro("nao_lidas") no badge de
+// não lidas, por exemplo), só não ganham botão aqui.
 const FILTROS: { id: Filtro; label: string }[] = [
   { id: "todas", label: "Todas" },
   { id: "nao_lidas", label: "Não lidas" },
-  { id: "aguardando", label: "Aguardando você" },
-  { id: "rascunho", label: "Com rascunho" },
-  { id: "sem_vinculo", label: "Sem cadastro" },
-  { id: "ignoradas", label: "Ignoradas" },
 ];
 
 function iniciais(s: string) {

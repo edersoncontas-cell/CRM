@@ -384,32 +384,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       <NoticiasSetor />
 
-      {/* ── Operacional (Top 5, 30+ dias sem contato e negócios sem visita
-            moraram aqui; agora ficam na Central de alertas) ── */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {futurosNaHora.length > 0 && (
-          <Painel titulo="Chegou a hora — interesse futuro">
-            <Lista>
-              {futurosNaHora.map((f) => (
-                <Linha key={f.id} href={"/clientes/" + f.id} esquerda={<Bell size={16} style={{ color: T.violeta }} />}
-                  titulo={f.nome} sub={f.interesseFuturoNota ?? "Interesse futuro"}
-                  direita={f.interesseFuturoData ? new Date(f.interesseFuturoData).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "Em breve"} />
-              ))}
-            </Lista>
-          </Painel>
-        )}
-
-        <Painel titulo="Pendências do dia" subtitulo="top 5 para atacar, 30+ dias sem contato e negócios sem visita">
-          <p className="text-sm" style={{ color: T.texto2 }}>
-            Essas listas agora vivem na <Link href="/alertas" className="font-bold underline" style={{ color: T.ciano }}>Central de alertas</Link>, junto com tudo o que pede a sua ação.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link href="/alertas?grupo=atacar" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>Top 5 para atacar</Link>
-            <Link href="/alertas?grupo=semcontato" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>30+ dias sem contato</Link>
-            <Link href="/alertas?grupo=visitar" className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: T.sobre2, color: T.texto }}>Negócios sem visita</Link>
-          </div>
+      {/* "Pendências do dia" (top 5, 30+ dias sem contato, negócios sem
+          visita) saiu daqui — mora só na Central de alertas agora. */}
+      {futurosNaHora.length > 0 && (
+        <Painel titulo="Chegou a hora — interesse futuro">
+          <Lista>
+            {futurosNaHora.map((f) => (
+              <Linha key={f.id} href={"/clientes/" + f.id} esquerda={<Bell size={16} style={{ color: T.violeta }} />}
+                titulo={f.nome} sub={f.interesseFuturoNota ?? "Interesse futuro"}
+                direita={f.interesseFuturoData ? new Date(f.interesseFuturoData).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "Em breve"} />
+            ))}
+          </Lista>
         </Painel>
-      </div>
+      )}
     </div>
   );
 }
