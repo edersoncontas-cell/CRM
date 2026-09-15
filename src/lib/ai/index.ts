@@ -430,16 +430,23 @@ export async function resumirConversaIA(thread: string): Promise<string> {
   }
   try {
     return await llmTexto(
-      `Você ajuda um vendedor de máquinas pesadas (${p.marcas}, ${p.regiao}).
-Resuma a conversa de WhatsApp abaixo em português, de forma curta e acionável, com bullets:
-• O que o cliente quer / interesse principal
-• Máquina(s) e valores mencionados (se houver)
-• Concorrente citado (se houver)
-• Visita/data combinada (se houver)
-• Próximo passo sugerido
-Seja objetivo. Não invente dados que não estão na conversa.`,
+      `Você é um gerente comercial revisando, para um relatório, o histórico de WhatsApp de um vendedor de máquinas
+pesadas (${p.marcas}, ${p.regiao}). Escreva um resumo COMPLETO e substancial de tudo que foi conversado e
+negociado nesta conversa — não um teaser de 2 linhas. Em parágrafos corridos (não uma lista solta de bullets),
+cubra o que houver de fato na conversa:
+- Quem é o cliente e o que ele precisa (aplicação, urgência, contexto do negócio dele)
+- Máquina(s)/modelo(s) e valores discutidos, e como evoluíram ao longo da conversa
+- Forma de pagamento (à vista, financiamento, consórcio, banco) e o que já foi tratado sobre isso
+- Concorrente(s) citado(s) e o que foi dito sobre eles
+- Visitas marcadas ou realizadas, propostas enviadas, documentos pedidos
+- Objeções levantadas e como foram tratadas
+- O que já ficou combinado e o que ainda está pendente, e de quem é a pendência
+- Em que ponto a negociação está agora e qual seria o próximo passo
+Seja completo mas direto: não repita a mesma informação duas vezes, não infle o texto à toa, e não invente nada
+que não esteja na conversa. Se pouca coisa aconteceu (ex.: só uma saudação), diga isso em 1-2 frases em vez de
+forçar todos os tópicos.`,
       `Conversa:\n${texto}`,
-      { maxTokens: 512 }
+      { maxTokens: 900 }
     );
   } catch {
     const linhas = texto.split("\n").filter((l) => l.trim()).slice(-6);

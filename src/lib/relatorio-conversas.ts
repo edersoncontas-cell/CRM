@@ -118,7 +118,7 @@ export async function prepararResumos(f: FiltroRelatorio, orcamentoMs = 40_000):
     const msgs = await db.whatsAppMessage.findMany({
       where: { conversationId: c.id, isDraft: false },
       orderBy: { sentAt: "desc" },
-      take: 80,
+      take: 150,
       select: { direction: true, body: true, sentAt: true },
     });
     const thread = msgs

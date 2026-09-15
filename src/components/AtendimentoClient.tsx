@@ -10,16 +10,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, Send, ArrowLeft, Check, CheckCheck, User, MoreVertical, MessageCircle, Users,
-  DownloadCloud, Loader2, Brain, Trash2, Pencil, X, FileText, Handshake, Link2,
-  CheckCircle2, Compass, Flame, ThermometerSun, Snowflake, EyeOff, Eye, Calendar, Repeat,
+  DownloadCloud, Loader2, Brain, Trash2, X, FileText, Handshake, Link2, ListChecks,
+  CheckCircle2, Compass, Flame, ThermometerSun, Snowflake, Calendar, Repeat,
   ChevronUp, PanelRightOpen, Sparkles, AlertTriangle, MapPin, Wallet, Bell,
   Paperclip, Mic, Square, Zap, RefreshCw, FileDown, Plus,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
-import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import {
-  contextoConversaAction, marcarRespondidoAction, ignorarConversaAction, resolverAlertaConversaAction, registrarUsoRespostaAction,
+  contextoConversaAction, marcarRespondidoAction, resolverAlertaConversaAction, registrarUsoRespostaAction,
   listarRespostasProntasAction, salvarRespostaProntaAction, excluirRespostaProntaAction, reanalisarConversaAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
@@ -31,7 +30,7 @@ export type ConvLista = {
   contactName: string | null;
   isGroup: boolean;
   groupName: string | null;
-  ignored: boolean;
+  encerrada: boolean;
   aiActive: boolean;
   category: string | null;
   contactPhotoUrl: string | null;
@@ -58,7 +57,7 @@ type Mensagem = {
 };
 
 type Conexao = { configurado: boolean; conectado: boolean; provedor: "evolution" | "zapi" | null };
-type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo" | "ignoradas";
+type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo";
 
 // Chips visíveis na barra de filtros — só os dois pedidos pelo Edy. Os demais
 // valores de Filtro continuam existindo (setFiltro("nao_lidas") no badge de
@@ -164,12 +163,10 @@ function aplicarPlaceholders(texto: string, nomeContato: string, vendedor: strin
 const botaoIcone = "flex h-9 w-9 items-center justify-center rounded-lg text-brand-300 hover:bg-white/10 hover:text-white transition";
 const chip = (ativo: boolean) => cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition", ativo ? "bg-agro-400 text-black" : "bg-white/5 text-brand-300 hover:bg-white/10");
 
-export function AtendimentoClient({ conversas, conexao, convInicial, maquinasProprias, colunasFunil, vendedorNome = "" }: {
+export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNome = "" }: {
   conversas: ConvLista[];
   conexao: Conexao;
   convInicial?: string | null;
-  maquinasProprias: { marca: string; modelo: string }[];
-  colunasFunil: { id: string; titulo: string; papel?: string | null }[];
   vendedorNome?: string;
 }) {
   const router = useRouter();
@@ -192,12 +189,11 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
-  const [flags, setFlags] = useState<Record<string, Partial<{ aiActive: boolean; ignored: boolean; contactName: string; clienteId: string | null }>>>({});
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [excluindoSelecao, setExcluindoSelecao] = useState(false);
+  const [flags, setFlags] = useState<Record<string, Partial<{ aiActive: boolean; contactName: string; clienteId: string | null }>>>({});
   const [menuAberto, setMenuAberto] = useState(false);
-  const [renomeando, setRenomeando] = useState(false);
-  const [novoNome, setNovoNome] = useState("");
-  const [syncCliente, setSyncCliente] = useState(false);
-  const [novaNegoConv, setNovaNegoConv] = useState<ConvLista | null>(null);
   const [vincularConv, setVincularConv] = useState<ConvLista | null>(null);
   const [painelAberto, setPainelAberto] = useState(false);
   const [contexto, setContexto] = useState<ContextoConversa | null>(null);
@@ -239,9 +235,8 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
 
   const curr = useCallback((c: ConvLista) => ({ ...c, ...(flags[c.id] ?? {}), naoLida: c.naoLida && !lidas.has(c.id) }), [flags, lidas]);
 
-  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; ignored: boolean; contactName: string; clienteId: string | null; syncCliente: boolean }>) {
-    const { syncCliente: _s, ...overlay } = patch;
-    setFlags((f) => ({ ...f, [c.id]: { ...(f[c.id] ?? {}), ...overlay } }));
+  async function patchConv(c: ConvLista, patch: Partial<{ aiActive: boolean; contactName: string; clienteId: string | null }>) {
+    setFlags((f) => ({ ...f, [c.id]: { ...(f[c.id] ?? {}), ...patch } }));
     try {
       await fetch(`/api/conversations/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     } catch {}
@@ -255,6 +250,23 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
     const r = await fetch(`/api/conversations/${c.id}`, { method: "DELETE" }).then((res) => res.json()).catch(() => null);
     if (!r?.ok) { window.alert("Não foi possível excluir a conversa."); return; }
     if (selId === c.id) { setSelId(null); setMensagens([]); }
+    router.refresh();
+  }
+
+  function alternarSelecao(id: string) {
+    setSelecionadas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  async function excluirSelecionadas() {
+    if (!selecionadas.size || excluindoSelecao) return;
+    if (!window.confirm(`Excluir ${selecionadas.size} conversa(s) selecionada(s)? Todas as mensagens serão apagadas do CRM.`)) return;
+    setExcluindoSelecao(true);
+    const ids = Array.from(selecionadas);
+    await Promise.all(ids.map((id) => fetch(`/api/conversations/${id}`, { method: "DELETE" }).catch(() => null)));
+    setExcluindoSelecao(false);
+    if (selId && ids.includes(selId)) { setSelId(null); setMensagens([]); }
+    setSelecionadas(new Set());
+    setModoSelecao(false);
     router.refresh();
   }
 
@@ -462,7 +474,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
 
   useEffect(() => {
     esRef.current?.close();
-    setBuscaMsg(null); setResultadosBusca(null); setMenuAberto(false); setRenomeando(false);
+    setBuscaMsg(null); setResultadosBusca(null); setMenuAberto(false);
     if (!selId) { setMensagens([]); setContexto(null); return; }
     let vivo = true;
     carregarContexto(selId);
@@ -537,10 +549,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
     }
   }
 
-  const naoLidas = conversas.filter((c) => { const x = curr(c); return x.naoLida && !x.ignored; }).length;
+  const naoLidas = conversas.filter((c) => curr(c).naoLida).length;
   const filtradas = conversas
     .map(curr)
-    .filter((c) => (filtro === "ignoradas" ? c.ignored : !c.ignored))
     .filter((c) => {
       if (filtro === "nao_lidas") return c.naoLida;
       if (filtro === "aguardando") return c.aguardando;
@@ -583,10 +594,25 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
             </div>
             <div className="flex items-center gap-1">
               <input ref={fileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidos} className="hidden" />
-              <button onClick={() => !importando && fileRef.current?.click()} disabled={importando} title="Importar conversas exportadas do WhatsApp (.zip/.txt)" className={botaoIcone}>
-                {importando ? <Loader2 size={17} className="animate-spin" /> : <DownloadCloud size={17} />}
-              </button>
-              <Link href="/atendimento/relatorio" title="Relatório em PDF das conversas" className={botaoIcone}><FileText size={17} /></Link>
+              {modoSelecao ? (
+                <>
+                  <span className="px-1 text-[11px] text-brand-300">{selecionadas.size > 0 ? `${selecionadas.size} selecionada(s)` : "toque para selecionar"}</span>
+                  {selecionadas.size > 0 && (
+                    <button onClick={excluirSelecionadas} disabled={excluindoSelecao} title="Excluir selecionadas" className={botaoIcone}>
+                      {excluindoSelecao ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} className="text-red-400" />}
+                    </button>
+                  )}
+                  <button onClick={() => { setModoSelecao(false); setSelecionadas(new Set()); }} title="Cancelar seleção" className={botaoIcone}><X size={17} /></button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => !importando && fileRef.current?.click()} disabled={importando} title="Importar conversas exportadas do WhatsApp (.zip/.txt)" className={botaoIcone}>
+                    {importando ? <Loader2 size={17} className="animate-spin" /> : <DownloadCloud size={17} />}
+                  </button>
+                  <button onClick={() => setModoSelecao(true)} title="Selecionar conversas para excluir" className={botaoIcone}><ListChecks size={17} /></button>
+                  <Link href="/atendimento/relatorio" title="Relatório em PDF das conversas" className={botaoIcone}><FileText size={17} /></Link>
+                </>
+              )}
             </div>
           </div>
           {importMsg && <p className="mt-2 text-[11px] text-agro-300">{importMsg}</p>}
@@ -610,8 +636,13 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
           {filtradas.length === 0 ? (
             <p className="p-6 text-center text-sm text-brand-400">Nenhuma conversa neste filtro.</p>
           ) : filtradas.map((c) => (
-            <button key={c.id} onClick={() => setSelId(c.id)}
-              className={cn("flex w-full items-center gap-3 border-b border-brand-800/70 px-4 py-3 text-left transition", selId === c.id ? "bg-white/[0.06]" : "hover:bg-white/[0.03]")}>
+            <button key={c.id} onClick={() => (modoSelecao ? alternarSelecao(c.id) : setSelId(c.id))}
+              className={cn("flex w-full items-center gap-3 border-b border-brand-800/70 px-4 py-3 text-left transition", selId === c.id && !modoSelecao ? "bg-white/[0.06]" : "hover:bg-white/[0.03]")}>
+              {modoSelecao && (
+                <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded border-2", selecionadas.has(c.id) ? "border-agro-400 bg-agro-400 text-black" : "border-brand-600")}>
+                  {selecionadas.has(c.id) && <Check size={13} strokeWidth={3} />}
+                </span>
+              )}
               <Avatar nome={nomeConv(c, c.contactName)} isGroup={c.isGroup} photo={c.contactPhotoUrl} size={44} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
@@ -648,33 +679,17 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
               <button onClick={() => setSelId(null)} className={cn(botaoIcone, "lg:hidden")} aria-label="Voltar"><ArrowLeft size={20} /></button>
               <Avatar nome={nomeConv(sel, selAtual.contactName)} isGroup={sel.isGroup} photo={sel.contactPhotoUrl} size={38} />
               <div className="min-w-0 flex-1">
-                {renomeando ? (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1">
-                      <input autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { patchConv(sel, { contactName: novoNome.trim(), syncCliente }); setRenomeando(false); } if (e.key === "Escape") setRenomeando(false); }}
-                        className="min-w-0 flex-1 rounded-lg bg-brand-800 px-2 py-1 text-sm font-bold text-white outline-none" style={{ maxWidth: 240 }} />
-                      <button onClick={() => { patchConv(sel, { contactName: novoNome.trim(), syncCliente }); setRenomeando(false); }} className={botaoIcone}><Check size={16} /></button>
-                      <button onClick={() => setRenomeando(false)} className={botaoIcone}><X size={16} /></button>
-                    </div>
-                    {selAtual.clienteId && (
-                      <label className="flex items-center gap-1.5 text-[11px] text-brand-300"><input type="checkbox" checked={syncCliente} onChange={(e) => setSyncCliente(e.target.checked)} className="accent-agro-400" /> Atualizar também o cadastro</label>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div className="truncate text-sm font-bold text-white">{nomeConv(sel, selAtual.contactName)}</div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-brand-300">
-                      <span className="truncate">{sel.isGroup ? "Grupo" : telefoneBonito(sel.externalPhone)}</span>
-                      {selAtual.clienteId ? (
-                        <Link href={`/clientes/${selAtual.clienteId}`} className="inline-flex items-center gap-1 text-agro-300 hover:underline"><User size={11} /> cadastro</Link>
-                      ) : !sel.isGroup ? (
-                        <button onClick={() => setVincularConv(sel)} className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 text-amber-300 hover:bg-amber-400/25"><Link2 size={11} /> vincular ao CRM</button>
-                      ) : null}
-                      {contexto?.cliente?.aguardandoResposta && <span className="rounded bg-orange-400/15 px-1.5 text-orange-300">aguardando você</span>}
-                    </div>
-                  </>
-                )}
+                <div className="truncate text-sm font-bold text-white">{nomeConv(sel, selAtual.contactName)}</div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-brand-300">
+                  <span className="truncate">{sel.isGroup ? "Grupo" : telefoneBonito(sel.externalPhone)}</span>
+                  {selAtual.clienteId ? (
+                    <Link href={`/clientes/${selAtual.clienteId}`} className="inline-flex items-center gap-1 text-agro-300 hover:underline"><User size={11} /> cadastro</Link>
+                  ) : !sel.isGroup ? (
+                    <button onClick={() => setVincularConv(sel)} className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 text-amber-300 hover:bg-amber-400/25"><Link2 size={11} /> vincular ao CRM</button>
+                  ) : null}
+                  {contexto?.cliente?.aguardandoResposta && <span className="rounded bg-orange-400/15 px-1.5 text-orange-300">aguardando você</span>}
+                  {selAtual.encerrada && <span className="rounded bg-white/10 px-1.5 text-brand-300">respondido · sem pendência</span>}
+                </div>
               </div>
               <button onClick={() => setBuscaMsg((v) => (v == null ? "" : null))} title="Buscar nas mensagens" className={cn(botaoIcone, buscaMsg != null && "bg-white/10 text-white")}><Search size={17} /></button>
               <button onClick={() => setPainelAberto((v) => !v)} title="Painel do Orientador" className={cn(botaoIcone, "xl:hidden", painelAberto && "bg-white/10 text-white")}><PanelRightOpen size={18} /></button>
@@ -685,11 +700,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                     <div className="fixed inset-0 z-10" onClick={() => setMenuAberto(false)} />
                     <div className="absolute right-0 top-11 z-20 w-64 rounded-2xl border border-brand-700 bg-brand-900 p-1.5 text-sm shadow-2xl">
                       {[
-                        { icone: <Link2 size={15} className="text-sky-300" />, rotulo: selAtual.clienteId ? "Trocar cliente vinculado" : "Vincular a um cliente", acao: () => { setVincularConv(sel); setMenuAberto(false); } },
-                        { icone: <Pencil size={15} className="text-brand-300" />, rotulo: "Editar nome do contato", acao: () => { setNovoNome(nomeConv(sel, selAtual.contactName)); setSyncCliente(false); setRenomeando(true); setMenuAberto(false); } },
-                        { icone: <Handshake size={15} className="text-agro-300" />, rotulo: "Criar negociação no funil", acao: () => { setMenuAberto(false); if (!selAtual.clienteId) { setVincularConv(sel); return; } setNovaNegoConv(sel); } },
                         { icone: <CheckCircle2 size={15} className="text-emerald-300" />, rotulo: "Marcar como respondido", acao: () => { setMenuAberto(false); startTransition(async () => { await marcarRespondidoAction(sel.id); carregarContexto(sel.id); router.refresh(); }); } },
-                        { icone: selAtual.ignored ? <Eye size={15} className="text-brand-300" /> : <EyeOff size={15} className="text-brand-300" />, rotulo: selAtual.ignored ? "Restaurar conversa" : "Ignorar conversa", acao: () => { setMenuAberto(false); setFlags((f) => ({ ...f, [sel.id]: { ...(f[sel.id] ?? {}), ignored: !selAtual.ignored } })); startTransition(async () => { await ignorarConversaAction(sel.id, !selAtual.ignored); router.refresh(); }); } },
                         { icone: <FileText size={15} className="text-amber-300" />, rotulo: "Relatório em PDF desta conversa", href: `/atendimento/relatorio?conversa=${sel.id}` },
                         { icone: <Trash2 size={15} className="text-red-400" />, rotulo: "Excluir conversa", acao: () => excluirConversa(sel), perigo: true },
                       ].map((item) => item.href ? (
@@ -891,7 +902,12 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                   {contexto.cliente.resumoTexto && <p className="mt-2 line-clamp-4 text-xs text-brand-300">{contexto.cliente.resumoTexto.split("\n").slice(-2).join(" ")}</p>}
                 </div>
 
-                {/* Leitura do Orientador — coach de vendas ao lado do vendedor */}
+                {/* Leitura do Orientador — coach de vendas ao lado do vendedor.
+                    Ordem: primeiro o que FAZER agora (alerta, ação, perguntas,
+                    resposta pronta, avaliação da sua condução); depois o
+                    porquê e o contexto (resumo, personalidade, roteiro,
+                    combinados, objeções, sinais). Cada seção mostra algo que
+                    nenhuma outra mostra — sem repetir a mesma frase duas vezes. */}
                 {contexto.orientador ? (() => {
                   const o = contexto.orientador;
                   const c = o.coaching;
@@ -900,6 +916,16 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                   const corNota = c ? (c.conducao.nota >= 8 ? "text-emerald-300" : c.conducao.nota >= 6 ? "text-amber-300" : "text-red-300") : "text-brand-300";
                   return (
                   <div className="space-y-2.5">
+                    {/* ── O que fazer agora ─────────────────────────────── */}
+                    {negociacaoAberta && (negociacaoAberta.maquina || negociacaoAberta.valor || negociacaoAberta.condicaoPagamento) && (
+                      <div className="rounded-xl bg-white/[0.06] p-2.5 text-xs">
+                        <div className="font-bold text-white">Interesse em: {negociacaoAberta.maquina ?? "máquina ainda não definida"}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          <span className="font-semibold text-emerald-300">{negociacaoAberta.valor ? formatCurrency(negociacaoAberta.valor) : "valor ainda não definido"}</span>
+                          <span className="text-brand-300">{negociacaoAberta.condicaoPagamento ?? "condição de pagamento ainda não definida"}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <Temperatura t={o.temperatura} />
                       <span className="text-brand-200">{o.estagioVenda}</span>
@@ -912,20 +938,25 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                         {c.alertaAgora.motivo && <p className="mt-1">{c.alertaAgora.motivo}</p>}
                       </div>
                     )}
-                    {o.resumoNegociacao && <p className="text-xs text-brand-200">{o.resumoNegociacao}</p>}
-                    {c?.clienteQuer && <p className="text-xs text-brand-300"><b className="text-brand-200">O que ele quer de verdade:</b> {c.clienteQuer}</p>}
                     {o.proximaAcao && (
                       <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {o.proximaAcao}</div>
                     )}
-                    {c && c.perguntasAgora.length > 0 && (
+                    {c && (c.perguntasAgora.length > 0 || c.informacoesFaltando.length > 0) && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
-                        <b className="text-agro-300">Pergunte agora (nesta ordem):</b>
-                        <ol className="mt-1 list-decimal space-y-0.5 pl-4">{c.perguntasAgora.map((q) => <li key={q}>{q}</li>)}</ol>
+                        {c.perguntasAgora.length > 0 && (
+                          <>
+                            <b className="text-agro-300">Pergunte agora (nesta ordem):</b>
+                            <ol className="mt-1 list-decimal space-y-0.5 pl-4">{c.perguntasAgora.map((q) => <li key={q}>{q}</li>)}</ol>
+                          </>
+                        )}
+                        {c.informacoesFaltando.length > 0 && (
+                          <p className={cn("text-[11px] text-brand-400", c.perguntasAgora.length > 0 && "mt-1.5")}><b className="text-brand-300">Falta saber:</b> {c.informacoesFaltando.join(" · ")}</p>
+                        )}
                       </div>
                     )}
                     {o.melhorResposta && (
                       <button onClick={() => usarResposta(o.melhorResposta!)} className="w-full rounded-xl bg-white/[0.04] p-2.5 text-left text-xs text-brand-200 hover:bg-white/[0.08]">
-                        <div className="mb-1 flex items-center gap-1 font-bold text-agro-300"><Sparkles size={12} /> Melhor resposta · clique para usar</div>
+                        <div className="mb-1 flex items-center gap-1 font-bold text-agro-300"><Sparkles size={12} /> Melhor resposta · clique para usar <span className="font-normal text-brand-500">· {contexto.estiloAprendido ? "no seu jeito de falar" : "tom padrão (ainda aprendendo o seu jeito)"}</span></div>
                         <p className="line-clamp-4">{o.melhorResposta}</p>
                       </button>
                     )}
@@ -936,6 +967,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                         {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.correcoes.map((a) => <li key={a} className="flex gap-1.5 text-amber-100"><span>→</span><span>{a}</span></li>)}</ul>}
                       </div>
                     )}
+
+                    {/* ── Contexto e porquê ─────────────────────────────── */}
+                    {o.resumoNegociacao && <p className="text-xs text-brand-200">{o.resumoNegociacao}</p>}
                     {c?.personalidade.estilo && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
                         <b className="text-brand-100">Como conduzir este cliente</b> <span className="text-brand-400">· perfil {c.personalidade.estilo}</span>
@@ -981,9 +1015,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
                         {c.sinaisRisco.map((x) => <div key={x} className="text-red-300">▼ {x}</div>)}
                       </div>
                     )}
-                    {c && c.informacoesFaltando.length > 0 && (
-                      <p className="text-xs text-brand-400"><b className="text-brand-300">Ainda falta saber:</b> {c.informacoesFaltando.join(" · ")}</p>
-                    )}
                     {o.oportunidadesPerdidas.length > 0 && (
                       <ul className="list-disc space-y-0.5 pl-4 text-xs text-brand-400">
                         {o.oportunidadesPerdidas.slice(0, 3).map((x) => <li key={x}>{x}</li>)}
@@ -998,11 +1029,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
 
                 {/* Negociação */}
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-brand-400"><span>Negociação</span>
-                    <button onClick={() => setNovaNegoConv(sel)} className="text-agro-300 hover:underline">+ nova</button>
-                  </div>
+                  <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">Negociação</div>
                   {contexto.negociacoes.length === 0 ? (
-                    <p className="text-xs text-brand-400">Nenhuma negociação aberta. Quando houver sinal de compra o ZEUS abre uma; ou crie agora.</p>
+                    <p className="text-xs text-brand-400">Nenhuma negociação aberta. Quando houver sinal de compra o ZEUS abre uma automaticamente.</p>
                   ) : contexto.negociacoes.map((n) => (
                     <div key={n.id} className="mb-2 rounded-xl bg-white/[0.04] p-3 text-xs">
                       <div className="flex items-center justify-between gap-2">
@@ -1073,17 +1102,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, maquinasPro
           onFechar={() => setRespostasAbertas(false)}
           onUsar={aplicarRespostaPronta}
           onAtualizar={async () => setRespostas(await listarRespostasProntasAction().catch(() => []))}
-        />
-      )}
-      {novaNegoConv && (
-        <FormNovaNegociacao
-          titulo="Nova Negociação"
-          clienteIdFixo={novaNegoConv.clienteId ?? contexto?.cliente?.id ?? ""}
-          clienteNomeFixo={contexto?.cliente?.nome ?? novaNegoConv.contactName ?? novaNegoConv.externalPhone}
-          colunas={colunasFunil}
-          maquinasProprias={maquinasProprias}
-          onFechar={() => setNovaNegoConv(null)}
-          onSucesso={() => { router.refresh(); if (selId) carregarContexto(selId); }}
         />
       )}
       {vincularConv && (

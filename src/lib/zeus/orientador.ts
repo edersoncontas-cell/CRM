@@ -20,6 +20,7 @@ import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { METODO_VENDA, ESTILOS_CLIENTE, ETAPAS_ROTEIRO, normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
+import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import type { Prisma } from "@prisma/client";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
@@ -81,15 +82,15 @@ const PERSONA = `Você é o ORIENTADOR DE VENDAS: gerente comercial sênior de m
 compactadores) que acompanha, mensagem a mensagem, as conversas de WhatsApp de um vendedor de campo no Espírito
 Santo. Você raciocina como um gerente que já fechou centenas de máquinas: lê a conversa inteira, entende quem é o
 cliente (construtora, empreiteiro, pedreira, cafeicultor, prefeitura, locadora), o que ele realmente precisa (a
-aplicação, o prazo, a forma de pagamento, a usada que tem), onde a negociação está e o que falta para fechar.
+aplicação, o prazo, a forma de pagamento), onde a negociação está e o que falta para fechar.
 
 Método (siga nesta ordem, sempre):
 1. LEIA TUDO. Nunca analise só a última mensagem. Identifique o que já foi perguntado e respondido.
-2. DIAGNÓSTICO: aplicação e máquina (modelo ou categoria), urgência, dinheiro (à vista, financiamento, consórcio,
-   usada na troca), decisor (quem decide? sócio, família, engenheiro), concorrente (marca e preço citados).
+2. DIAGNÓSTICO: aplicação e máquina (modelo ou categoria), urgência, dinheiro (à vista, financiamento, consórcio),
+   decisor (quem decide? sócio, família, engenheiro), concorrente (marca e preço citados).
 3. ESTÁGIO REAL: classifique pelo que ACONTECEU, não pelo que o vendedor gostaria.
-4. PROBABILIDADE: some sinais concretos (pediu preço com aplicação definida, marcou visita, citou prazo, tem
-   usada avaliada, financiamento em análise, respondeu rápido) e subtraia sinais de risco (só curiosidade, sem
+4. PROBABILIDADE: some sinais concretos (pediu preço com aplicação definida, marcou visita, citou prazo,
+   financiamento em análise, respondeu rápido) e subtraia sinais de risco (só curiosidade, sem
    prazo, preço do concorrente muito abaixo, parou de responder, "vou pensar"). Seja honesto: 20% é 20%.
 5. PRÓXIMA AÇÃO: uma só, específica, com o que fazer, como e quando (ex.: "Ligar hoje até 17h, confirmar quinta
    14h e levar a conta de custo por hora com a 580 na entrada"). Nunca "manter contato" ou "fazer follow-up".
@@ -125,9 +126,8 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "proximaAcao": string,                   // uma ação: o quê + como + quando, com máquina/valor/concorrente reais
   "oportunidadesPerdidas": string[],       // perguntas que faltaram, sinais de compra ignorados, objeções não tratadas
   "combinados": string[],                  // o que JÁ ficou acertado, com dia/hora e quem faz (ex.: "Visita confirmada quinta 18/09 às 14h na obra"; "Vendedor prometeu mensagem na véspera para confirmar"). Vazio se nada foi combinado.
-  "pendencias": string[],                  // o que ainda falta e de quem é (ex.: "Vendedor: enviar proposta formal de financiamento"; "Cliente: informar horas/mês de uso"). NUNCA inclua o que já está em "combinados".
+  "pendencias": string[],                  // o que ainda falta e de quem é (ex.: "Vendedor: enviar proposta formal de financiamento"; "Cliente: informar prazo para começar a usar"). NUNCA inclua o que já está em "combinados".
   "alertas": string[],                     // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
-  "clienteQuer": string,                   // 1 frase: o que o cliente REALMENTE quer resolver (a dor por trás da máquina)
   "personalidade": {
     "estilo": ${JSON.stringify(ESTILOS_CLIENTE)} + "|null",  // pelo jeito de escrever (ver método); null se ainda não dá para saber
     "descricao": string,                   // 1-2 frases: como esse cliente decide e o que valoriza
@@ -143,12 +143,12 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "conducao": {                            // avaliação HONESTA de como o vendedor conduziu até aqui
     "nota": number,                        // 0-10 pelo método (qualificou? avançou? respondeu? pediu a visita? fechou com pergunta?)
     "acertos": string[],                   // 1-3, citando o que ele escreveu
-    "correcoes": string[]                  // 1-4 correções concretas: "em vez de X, faça Y" (ex.: "passou preço sem saber as horas/mês; peça antes")
+    "correcoes": string[]                  // 1-4 correções concretas: "em vez de X, faça Y" (ex.: "passou preço sem saber a aplicação; peça antes")
   },
-  "perguntasAgora": string[],              // 2-4 perguntas prontas, na ordem, que destravam a venda AGORA (curtas, uma por vez)
-  "informacoesFaltando": string[],         // do checklist de qualificação, o que ainda não se sabe (aplicação, horas/mês, usada, prazo, pagamento, decisor)
+  "perguntasAgora": string[],              // 2-4 perguntas PRONTAS, na ordem, que destravam a venda AGORA (curtas, uma por vez)
+  "informacoesFaltando": string[],         // só PALAVRAS-CHAVE (2-4 palavras cada) do que falta no checklist — nunca repita o texto das perguntas
   "roteiro": [                             // caminho até o fechamento, etapas ${JSON.stringify(ETAPAS_ROTEIRO)}
-    { "etapa": string, "status": "feito"|"agora"|"depois", "dica": string }  // dica curta e específica desta negociação; exatamente UMA etapa "agora"
+    { "etapa": string, "status": "feito"|"agora"|"depois", "dica": string }  // etapa "agora": dica de NO MÁXIMO 6 PALAVRAS, um lembrete rápido — NUNCA repita a frase de "proximaAcao". Demais etapas: dica vazia ("") a menos que haja algo específico e curto a dizer.
   ],
   "sinaisCompra": string[],                // sinais positivos concretos que apareceram (citando)
   "sinaisRisco": string[],                 // sinais de risco concretos (citando)
@@ -166,7 +166,15 @@ REGRAS CRÍTICAS:
   cliente sem resposta, diga e mostre como corrigir. Se ainda não há mensagens do vendedor, nota 5 e correcoes vazio.
 - "alertaAgora" vermelho SEMPRE que o cliente pediu preço e o checklist de qualificação não está completo, ou quando
   o vendedor está prestes a repetir um erro. Verde quando os sinais somam e é hora de pedir a visita/fechar.
-- "perguntasAgora" e "proximaAcao" nunca pedem o que já foi respondido (veja "combinados" e o histórico).`;
+- "perguntasAgora" e "proximaAcao" nunca pedem o que já foi respondido (veja "combinados" e o histórico).
+- NÃO REPITA A MESMA FRASE EM CAMPOS DIFERENTES. Cada campo diz uma coisa que os outros não dizem:
+  "resumoNegociacao" é o panorama (quem/o quê/onde/falta); "alertaAgora" é o risco do INSTANTE; "proximaAcao" é
+  a ÚNICA instrução do que fazer a seguir; "roteiro[status=agora].dica" é só um lembrete de 6 palavras, não uma
+  segunda versão de "proximaAcao"; "informacoesFaltando" são palavras-chave curtas, "perguntasAgora" são as
+  perguntas escritas por extenso — não duplique o mesmo conteúdo nos dois; "conducao.correcoes" fala do jeito
+  de VENDER (qualificou? avançou?), "personalidade.evitar" fala do jeito de FALAR com este cliente especificamente.
+- "personalidade.comoFalar" tem de ser compatível com o jeito real do vendedor (a seção "Estilo de comunicação do
+  vendedor" abaixo, quando houver) — sugira ajustes dentro do estilo dele, nunca um tom que ele não usa.`;
 
 // Gera SÓ a resposta pro cliente — chamada curta e rápida (texto puro, sem
 // JSON, ~200 tokens de saída) para não fazer o cliente esperar a análise
@@ -185,7 +193,7 @@ export async function gerarRespostaRapida(args: {
 ## Contexto do cliente
 ${args.contextoCliente}
 ${args.dicas ? `\n## Orientações do coaching para ESTA resposta (siga)\n${args.dicas}` : ""}
-${args.estilo ? `\n## Estilo de comunicação do vendedor (imite)\n${args.estilo}` : ""}
+${args.estilo ? `\n## Estilo de comunicação do vendedor — COPIE FIELMENTE (gírias, formalidade, tamanho das frases, jeito de cumprimentar e fechar). Aprendido automaticamente das mensagens reais dele; NUNCA soe genérico.\n${args.estilo}` : "\n## Estilo do vendedor ainda não aprendido — use um tom cordial, direto e regional (sul do ES); ele será aprendido sozinho assim que houver mensagens suficientes."}
 
 ## Regras absolutas
 - Leia o HISTÓRICO COMPLETO, mas responda APENAS a última mensagem do cliente, no ponto exato em que a conversa está.
@@ -193,7 +201,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor (imite)\n${args.estilo
 - Nunca repita pergunta já respondida nem informação já dada. Não cumprimente se já houve saudação na conversa.
 - O que já ficou combinado (visita com dia/hora aceita, proposta prometida) está combinado: não peça para confirmar de novo; avance para o passo seguinte.
 - Se o cliente citou concorrente ou preço, reconheça sem depreciar e leve para valor (custo por hora, revenda, assistência, entrega), sem inventar números.
-- Se o cliente pediu preço e a aplicação ainda não está clara, peça as 2 informações que faltam (aplicação e horas/mês, ou prazo e forma de pagamento) em vez de dar valor genérico.
+- Se o cliente pediu preço e a aplicação ainda não está clara, peça as informações que faltam (aplicação, prazo ou forma de pagamento) em vez de dar valor genérico.
 - 1-3 frases, como mensagem real de WhatsApp de gente ocupada. Nada de textão.
 - NUNCA invente preços, prazos ou especificações. Se faltar info, diga que vai verificar e quando retorna.
 - NUNCA use emojis. Responda APENAS com o texto da mensagem, sem aspas nem comentários.`;
@@ -219,6 +227,7 @@ export async function gerarAnaliseOrientador(args: {
   contextoCliente: string;
   contextoAcademia: string;
   estilo: string | null;
+  licoes?: string[] | null; // lições do histórico real do vendedor (ver orientador-aprendizado.ts) — contexto leve, não regra
 }): Promise<AnaliseOrientador> {
   if (!iaHabilitada()) {
     return fallback("IA não configurada (defina OPENAI_API_KEY, ANTHROPIC_API_KEY ou GROQ_API_KEY).");
@@ -230,7 +239,8 @@ export async function gerarAnaliseOrientador(args: {
 ${args.contextoCliente}
 
 ${args.contextoAcademia}
-${args.estilo ? `\n## Estilo de comunicação do vendedor\n${args.estilo}` : ""}`;
+${args.estilo ? `\n## Estilo de comunicação do vendedor (real, aprendido das mensagens dele — use para calibrar "personalidade.comoFalar" e nunca contradizer)\n${args.estilo}` : ""}
+${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (referência leve para calibrar tom do alerta e da condução — não cite números ao cliente, não trate como regra fixa)\n${args.licoes.map((l) => `- ${l}`).join("\n")}` : ""}`;
 
   try {
     const raw = await llmTexto(
@@ -311,6 +321,7 @@ export async function processarOrientador(args: {
 
   // 1) Análise completa (painel + coaching). Nada é enviado sozinho, então a
   // resposta pode esperar a análise e aproveitar as orientações dela.
+  const aprendizado = await lerAprendizadoOrientador().catch(() => null);
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -319,6 +330,7 @@ export async function processarOrientador(args: {
       contextoCliente: args.contextoCliente,
       contextoAcademia: args.contextoAcademia,
       estilo: args.estilo,
+      licoes: aprendizado?.licoes,
     });
   } catch (e) {
     await zeusReport(e, "gerarAnaliseOrientador (Orientador de Vendas)");
@@ -384,9 +396,10 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   const ultimas = msgs.slice(-5).map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
   const contextoCliente = await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: conv.clienteId, externalPhone: conv.externalPhone });
   const contextoAcademia = montarContextoAcademia(historico);
+  const aprendizado = await lerAprendizadoOrientador().catch(() => null);
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
-    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null });
+    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes });
     const resposta = ultimaDoCliente
       ? await gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
       : "";

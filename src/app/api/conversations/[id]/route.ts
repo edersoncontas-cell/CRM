@@ -6,13 +6,13 @@ export const dynamic = "force-dynamic";
 
 const CATEGORIAS = ["CLIENTE", "LEAD", "GRUPO", "OUTRO"];
 
-// Atualiza ajustes da conversa: IA ligada, ignorar, categoria, status, nome do contato.
+// Atualiza ajustes da conversa: IA ligada, marcado como respondido, categoria, status, nome do contato.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
 
   if (typeof body.aiActive === "boolean") data.aiActive = body.aiActive;
-  if (typeof body.ignored === "boolean") data.ignored = body.ignored;
+  if (typeof body.encerrada === "boolean") data.encerrada = body.encerrada;
   if (typeof body.category === "string" && CATEGORIAS.includes(body.category)) {
     data.category = body.category;
     data.categoryConfirmed = true;

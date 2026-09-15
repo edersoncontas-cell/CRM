@@ -1,5 +1,4 @@
 import { db } from "@/lib/db";
-import { papelDaColuna } from "@/lib/pipeline";
 import { AtendimentoClient, type ConvLista } from "@/components/AtendimentoClient";
 import * as zapi from "@/lib/zapi";
 import { lerParametros } from "@/lib/parametros";
@@ -11,14 +10,12 @@ export default async function AtendimentoPage({
 }: {
   searchParams: { conversa?: string };
 }) {
-  const [conversas, maquinasProprias, colunasFunil, rascunhos, aguardando, status, parametros] = await Promise.all([
+  const [conversas, rascunhos, aguardando, status, parametros] = await Promise.all([
     db.whatsAppConversation.findMany({
       orderBy: { lastMessageAt: "desc" },
       take: 400,
       include: { messages: { where: { isDraft: false }, orderBy: { sentAt: "desc" }, take: 1, select: { body: true, direction: true, sentAt: true, mediaType: true } } },
     }),
-    db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
-    db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }).then((cs) => cs.filter((c) => papelDaColuna(c) !== "perdida")),
     db.whatsAppMessage.findMany({ where: { isDraft: true, draftStatus: "PENDING" }, select: { conversationId: true }, distinct: ["conversationId"] }),
     db.cliente.findMany({ where: { aguardandoResposta: true }, select: { id: true } }),
     zapi.statusConexao().catch(() => null),
@@ -36,7 +33,7 @@ export default async function AtendimentoPage({
       contactName: c.contactName,
       isGroup: c.isGroup,
       groupName: c.groupName,
-      ignored: c.ignored,
+      encerrada: c.encerrada,
       aiActive: c.aiActive,
       category: c.category,
       contactPhotoUrl: c.contactPhotoUrl,
@@ -54,8 +51,6 @@ export default async function AtendimentoPage({
       conversas={lista}
       conexao={{ configurado: !!status?.configurado, conectado: !!status?.conectado, provedor: status?.provedor ?? null }}
       convInicial={searchParams.conversa ?? null}
-      maquinasProprias={maquinasProprias}
-      colunasFunil={colunasFunil}
       vendedorNome={parametros.nomeVendedor}
     />
   );

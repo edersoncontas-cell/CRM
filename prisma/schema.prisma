@@ -419,7 +419,11 @@ model WhatsAppConversation {
   category         String?
   categoryConfirmed Boolean  @default(false)
   aiActive         Boolean   @default(false)
-  ignored          Boolean   @default(false)
+  // "Marcar como respondido": assunto concluído, sem pendência — some das
+  // listas/relatórios de pendência do CRM até chegar mensagem nova (enviada
+  // ou recebida), quando volta a contar sozinho. Coluna no banco continua
+  // "ignored" (era a antiga função de ignorar conversa) para não migrar.
+  encerrada        Boolean   @default(false) @map("ignored")
   lastMessageAt    DateTime  @default(now())
   lastAccessedAt   DateTime?
   contactPhotoUrl  String?

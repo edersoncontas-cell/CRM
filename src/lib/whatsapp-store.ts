@@ -214,7 +214,12 @@ export async function inserirMensagem(conversationId: string, m: NovaMensagem) {
       draftStatus: m.draftStatus ?? null,
     },
   });
-  await db.whatsAppConversation.update({ where: { id: conversationId }, data: { lastMessageAt: msg.sentAt } });
+  // Mensagem nova (enviada ou recebida) reabre a conversa: "marcar como
+  // respondido" pausa relatórios/pendências só até a próxima mensagem.
+  await db.whatsAppConversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: msg.sentAt, ...(m.isDraft ? {} : { encerrada: false }) },
+  });
   return msg;
 }
 

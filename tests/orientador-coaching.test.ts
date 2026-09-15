@@ -4,7 +4,6 @@ import { coachingVazio, dicasParaResposta, normalizarCoaching } from "../src/lib
 describe("normalizarCoaching", () => {
   it("aceita o JSON completo da IA e limita tamanhos", () => {
     const c = normalizarCoaching({
-      clienteQuer: "Trocar a retro velha sem parar a obra",
       personalidade: { estilo: "Analítico", descricao: "Compara tudo", comoFalar: ["Traga números", "Custo por hora"], evitar: ["Pressa"], papel: "decisor" },
       alertaAgora: { nivel: "vermelho", titulo: "Não passe o preço ainda", motivo: "Faltam horas/mês e pagamento." },
       conducao: { nota: 11, acertos: ["Pediu a visita"], correcoes: ["Passou preço cedo"] },

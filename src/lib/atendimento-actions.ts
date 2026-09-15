@@ -39,7 +39,10 @@ export type ContextoConversa = {
     coaching: Coaching | null;
     atualizadoEm: string;
   } | null;
-  negociacoes: { id: string; maquina: string | null; valor: number | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
+  // Se já existe um guia de estilo de fala aprendido do vendedor — a "melhor
+  // resposta" imita esse jeito real; sem ele, usa um tom padrão até aprender.
+  estiloAprendido: boolean;
+  negociacoes: { id: string; maquina: string | null; valor: number | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
   visitas: { id: string; data: string; observacao: string | null }[];
   cadencia: { id: string; toqueAtual: number; proximoToqueEm: string } | null;
   alertas: { id: string; tipo: string; mensagem: string }[];
@@ -47,21 +50,22 @@ export type ContextoConversa = {
 
 export async function contextoConversaAction(conversationId: string): Promise<ContextoConversa> {
   const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
-  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [] };
+  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [], estiloAprendido: false };
   if (!conv?.clienteId) return vazio;
   const clienteId = conv.clienteId;
 
-  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas] = await Promise.all([
+  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas, estilo] = await Promise.all([
     db.cliente.findUnique({
       where: { id: clienteId },
       select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
     }),
     db.orientadorAnalise.findUnique({ where: { clienteId } }),
-    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, maquinaModelo: true, valor: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
+    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, maquinaModelo: true, valor: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
     db.visita.findMany({ where: { clienteId, data: { gte: new Date(Date.now() - 24 * 3600 * 1000) } }, orderBy: { data: "asc" }, take: 3, select: { id: true, data: true, observacao: true } }),
     db.cadencia.findFirst({ where: { clienteId, ativa: true }, select: { id: true, toqueAtual: true, proximoToqueEm: true } }),
     db.alerta.findMany({ where: { clienteId, resolvido: false }, orderBy: { criadoEm: "desc" }, take: 4, select: { id: true, tipo: true, mensagem: true } }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true } }),
+    db.estiloDeFala.findFirst({ select: { id: true } }),
   ]);
   if (!cliente) return vazio;
   const papelPorTitulo = new Map(colunas.map((c) => [c.titulo, rotuloPapel(papelDaColuna(c))]));
@@ -84,31 +88,28 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
         }
       : null,
     negociacoes: negociacoes.map((n) => ({
-      id: n.id, maquina: n.maquinaModelo, valor: n.valor, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
+      id: n.id, maquina: n.maquinaModelo, valor: n.valor, condicaoPagamento: n.condicaoPagamento, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
       termometro: n.termometro, proximaAcao: n.proximaAcao, concorrente: n.concorrenteMencionado,
     })),
     visitas: visitas.map((v) => ({ id: v.id, data: v.data.toISOString(), observacao: v.observacao })),
     cadencia: cadencia ? { id: cadencia.id, toqueAtual: cadencia.toqueAtual, proximoToqueEm: cadencia.proximoToqueEm.toISOString() } : null,
     alertas,
+    estiloAprendido: !!estilo,
   };
 }
 
-// "Marcar como respondido": o cliente deixa de contar como aguardando.
+// "Marcar como respondido": assunto concluído, sem pendência — o cliente
+// deixa de contar como aguardando e a conversa some das listas/relatórios de
+// pendência. Ao chegar mensagem nova (enviada ou recebida), volta sozinho
+// (ver inserirMensagem em whatsapp-store.ts).
 export async function marcarRespondidoAction(conversationId: string): Promise<{ ok: boolean }> {
-  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  const conv = await db.whatsAppConversation.update({ where: { id: conversationId }, data: { encerrada: true }, select: { clienteId: true } }).catch(() => null);
   if (conv?.clienteId) {
     await db.cliente.update({ where: { id: conv.clienteId }, data: { aguardandoResposta: false } }).catch(() => {});
     await db.alerta.updateMany({ where: { clienteId: conv.clienteId, tipo: "aguardando_resposta", resolvido: false }, data: { resolvido: true } }).catch(() => {});
   }
   revalidatePath("/atendimento");
   revalidatePath("/alertas");
-  return { ok: true };
-}
-
-// Ignorar / restaurar conversa (fornecedores, spam, grupos sem interesse).
-export async function ignorarConversaAction(conversationId: string, ignorar: boolean): Promise<{ ok: boolean }> {
-  await db.whatsAppConversation.update({ where: { id: conversationId }, data: { ignored: ignorar } });
-  revalidatePath("/atendimento");
   return { ok: true };
 }
 
@@ -134,7 +135,7 @@ export async function registrarUsoRespostaAction(conversationId: string): Promis
 export type RespostaPronta = { id: string; titulo: string; texto: string; ordem: number };
 
 const RESPOSTAS_PADRAO: { titulo: string; texto: string }[] = [
-  { titulo: "Pedido de preço", texto: "{nome}, pra te passar o valor certo preciso de 2 coisas: qual a aplicação (obra, lavoura, pedreira) e quantas horas por mês a máquina vai rodar. Com isso te mando a condição hoje ainda. Pode me dizer?" },
+  { titulo: "Pedido de preço", texto: "{nome}, pra te passar o valor certo preciso de 2 coisas: qual a aplicação (obra, lavoura, pedreira) e qual o prazo pra começar a usar. Com isso te mando a condição hoje ainda. Pode me dizer?" },
   { titulo: "Marcar visita", texto: "{nome}, posso passar aí pra ver a aplicação e te levar a proposta pronta. Quinta de manhã ou sexta à tarde, qual fica melhor?" },
   { titulo: "Financiamento", texto: "{nome}, dá pra fazer pelo Finame ou pelo banco da fábrica, com carência e parcela que cabe no que a máquina produz. Se me passar a sua usada e o valor de entrada, simulo agora." },
   { titulo: "Concorrente mais barato", texto: "{nome}, entendo. Preço de nota é uma parte da conta; a outra é custo por hora, revenda e assistência. Me deixa montar a comparação com os seus números e você decide com tudo na mesa. Posso te mandar hoje?" },

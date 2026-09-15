@@ -1,5 +1,4 @@
 import { Card, PageHeader, Badge } from "@/components/ui";
-import { db } from "@/lib/db";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as zapi from "@/lib/zapi";
 import * as transcription from "@/lib/integrations/transcription";
@@ -8,6 +7,7 @@ import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google
 import { resumoBloqueio } from "@/lib/contatos-bloqueados";
 import { TERMOS_BLOQUEIO, PALAVRAS_BLOQUEIO } from "@/lib/utils";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
+import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
@@ -18,12 +18,13 @@ import Link from "next/link";
 import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 import { ExportarDadosCard } from "@/components/ExportarDadosCard";
+import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [estilo, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio] = await Promise.all([
-    db.estiloDeFala.findFirst(),
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio] = await Promise.all([
+    lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
@@ -125,14 +126,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         ))}
       </div>
 
-      <Card className="mt-6">
-        <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
-          <Bot size={18} className="text-brand-600" /> Estilo de fala aprendido
-        </div>
-        <p className="text-sm text-slate-600">
-          {estilo?.guia ?? "Ainda não aprendido. Quando você conectar suas conversas, a IA aprende o seu jeito de falar."}
-        </p>
-      </Card>
+      <AprendizadoOrientadorCard inicial={aprendizado} />
 
       <Card className="mt-6">
         <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">

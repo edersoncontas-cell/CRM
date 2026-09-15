@@ -10,7 +10,6 @@ export type NivelAlerta = "vermelho" | "amarelo" | "verde";
 export type StatusEtapa = "feito" | "agora" | "depois";
 
 export type Coaching = {
-  clienteQuer: string;
   personalidade: {
     estilo: EstiloCliente | null;
     descricao: string;
@@ -33,13 +32,12 @@ export const ETAPAS_ROTEIRO = ["Abertura e rapport", "Qualificação", "Visita",
 
 // Método de venda de máquina pesada que o Orientador cobra do vendedor.
 export const METODO_VENDA = `## Método de venda de máquina pesada (o que você cobra do vendedor)
-QUALIFICAR ANTES DE PRECIFICAR. Preço só depois de saber: (1) aplicação/serviço e material, (2) horas por mês,
-(3) máquina atual (marca, ano, horas — vai na troca?), (4) prazo da necessidade (obra começa quando?),
-(5) forma de pagamento (à vista, financiamento, consórcio, CRD/PME, banco) e (6) quem decide (sócio, família,
-engenheiro). Se o cliente pede preço de cara, o vendedor NÃO passa: reconhece o pedido, explica que a
-configuração certa (e o preço certo) depende de 2 ou 3 informações e pergunta. Preço solto vira comparação
-de tabela com concorrente e mata a venda.
-VISITA É O PIVÔ. O objetivo de toda conversa inicial é a visita (ver a obra/propriedade, a usada, o terreno) —
+QUALIFICAR ANTES DE PRECIFICAR. Preço só depois de saber: (1) aplicação/serviço e material, (2) prazo da
+necessidade (obra começa quando?), (3) forma de pagamento (à vista, financiamento, consórcio, CRD/PME, banco) e
+(4) quem decide (sócio, família, engenheiro). Se o cliente pede preço de cara, o vendedor NÃO passa: reconhece o
+pedido, explica que a configuração certa (e o preço certo) depende de 2 ou 3 informações e pergunta. Preço solto
+vira comparação de tabela com concorrente e mata a venda.
+VISITA É O PIVÔ. O objetivo de toda conversa inicial é a visita (ver a obra/propriedade, o terreno) —
 ali se vende valor: custo por hora, disponibilidade, assistência, revenda, consumo (calculadora de combustível).
 PROPOSTA FORMAL COM FINANCIAMENTO PRONTO: depois da visita, proposta por escrito com condição de pagamento
 desenhada (entrada, prazo, banco, CRD) — nunca "vou ver e te falo" sem data.
@@ -60,7 +58,6 @@ const lista = (v: unknown, max = 6, tam = 240): string[] =>
 
 export function coachingVazio(): Coaching {
   return {
-    clienteQuer: "",
     personalidade: { estilo: null, descricao: "", comoFalar: [], evitar: [], papel: null },
     alertaAgora: null,
     conducao: { nota: 5, acertos: [], correcoes: [] },
@@ -101,7 +98,6 @@ export function normalizarCoaching(raw: unknown): Coaching {
     : [];
 
   return {
-    clienteQuer: texto(p.clienteQuer, 300),
     personalidade: { estilo, descricao: texto(pers.descricao, 300), comoFalar: lista(pers.comoFalar, 4), evitar: lista(pers.evitar, 4), papel },
     alertaAgora: nivel && texto(al!.titulo) ? { nivel, titulo: texto(al!.titulo, 120), motivo: texto(al!.motivo, 300) } : null,
     conducao: { nota, acertos: lista(cond.acertos, 4), correcoes: lista(cond.correcoes, 4) },
