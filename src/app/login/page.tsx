@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, authAtivo, senhaCorreta, tokenEsperado, cookieOpts } from "@/lib/auth";
 import { ipDaRequisicao, minutosBloqueado, registrarFalhaLogin, limparFalhasLogin } from "@/lib/login-guard";
-import { ExcavatorIcon, LogoEscavadeira, RollerIcon } from "@/components/icons";
+import { EscavadeiraAmarela, LogoEscavadeira, RollerIcon } from "@/components/icons";
 import { EntradaAutomatica } from "@/components/EntradaAutomatica";
 
 // Rota de API usada como fonte primária (imune ao middleware de auth).
@@ -70,7 +70,7 @@ export default function LoginPage({
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-10 text-center">
-            <ExcavatorIcon size={64} className="text-agro-400 drop-shadow-lg" />
+            <EscavadeiraAmarela size={96} className="drop-shadow-lg" />
             <div>
               <div className="text-2xl font-black tracking-tight text-white">NEW HOLLAND</div>
               <div className="text-xs font-semibold tracking-[0.4em] text-agro-400">CONSTRUCTION</div>
