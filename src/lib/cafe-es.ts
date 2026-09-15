@@ -24,10 +24,12 @@ const TIMEOUT_MS = 12_000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const API_PAINEL = "https://api.coffee-panel.mitrix.online/api/home/information";
 
-// Leitura vale por 15 min (o preço é diário, mas o vendedor quer ver
-// atualizado sempre que abre); depois de uma falha, espera 10 min para
-// tentar de novo (não gasta IA à toa).
-const VALIDADE_MS = 15 * 60_000;
+// Leitura da API do Painel do Café é barata: vale por 1 min (o letreiro
+// consulta a cada minuto). Leituras das reservas (páginas HTML, às vezes com
+// IA) valem por 15 min; depois de uma falha, espera 10 min para tentar de
+// novo (não gasta IA à toa).
+const VALIDADE_PAINEL_MS = 60_000;
+const VALIDADE_RESERVA_MS = 15 * 60_000;
 const ESPERA_APOS_FALHA_MS = 10 * 60_000;
 
 export type CotacaoCafeES = {
@@ -149,9 +151,20 @@ export async function lerHistoricoCafeES(): Promise<PontoHistoricoCafe[]> {
 export async function cafeESPrecisaAtualizar(): Promise<boolean> {
   const [ultimo, tentativa] = await Promise.all([lerCafeES(), getConfig(CHAVE_TENTATIVA).catch(() => null)]);
   const agora = Date.now();
-  if (ultimo && agora - new Date(ultimo.atualizadoEm).getTime() < VALIDADE_MS) return false;
+  const validade = (ultimo?.fonte ?? "").startsWith("Painel do Café") ? VALIDADE_PAINEL_MS : VALIDADE_RESERVA_MS;
+  if (ultimo && agora - new Date(ultimo.atualizadoEm).getTime() < validade) return false;
   if (tentativa && agora - new Date(tentativa).getTime() < ESPERA_APOS_FALHA_MS) return false;
   return true;
+}
+
+// Variação (%) contra o último dia DIFERENTE do histórico — assim ela não
+// zera quando a mesma cotação é relida a cada minuto.
+function variacaoContraDiaAnterior(hist: PontoHistoricoCafe[], chaveHoje: string, campo: "conilon" | "arabica", valorHoje: number | null): number | null {
+  if (valorHoje == null) return null;
+  const anterior = [...hist].reverse().find((h) => h.data !== chaveHoje && h[campo] != null);
+  if (!anterior || !anterior[campo]) return null;
+  const v = ((valorHoje - anterior[campo]!) / anterior[campo]!) * 100;
+  return Math.abs(v) < 25 ? Math.round(v * 100) / 100 : null;
 }
 
 // Tenta as fontes em ordem; grava e devolve o resultado.
@@ -166,25 +179,24 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
   }
   if (!achado?.conilon) return { ok: false, fonte: null, conilon: anterior?.conilon ?? null };
 
-  const variacaoCalc = anterior?.conilon && achado.conilon ? ((achado.conilon - anterior.conilon) / anterior.conilon) * 100 : null;
+  // Histórico: um ponto por data de referência (ou por dia de leitura).
+  const hist = await lerHistoricoCafeES();
+  const chave = achado.dataReferencia ?? new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const arabica = achado.arabica ?? anterior?.arabica ?? null;
   const novo: CotacaoCafeES = {
     conilon: achado.conilon,
-    arabica: achado.arabica ?? anterior?.arabica ?? null,
+    arabica,
     dataReferencia: achado.dataReferencia ?? null,
     fonte: achado.fonte,
     praca: achado.praca ?? null,
     atualizadoEm: new Date().toISOString(),
-    variacaoConilonPct: achado.variacaoConilonPct ?? (variacaoCalc != null && Math.abs(variacaoCalc) < 25 ? variacaoCalc : anterior?.variacaoConilonPct ?? null),
-    variacaoArabicaPct: achado.variacaoArabicaPct ?? null,
+    variacaoConilonPct: achado.variacaoConilonPct ?? variacaoContraDiaAnterior(hist, chave, "conilon", achado.conilon),
+    variacaoArabicaPct: achado.variacaoArabicaPct ?? variacaoContraDiaAnterior(hist, chave, "arabica", arabica),
     dolar: achado.dolar ?? null,
     londres: achado.londres ?? null,
     novaYork: achado.novaYork ?? null,
   };
   await setConfig(CHAVE_ULTIMO, JSON.stringify(novo));
-
-  // Histórico: um ponto por data de referência (ou por dia de leitura).
-  const hist = await lerHistoricoCafeES();
-  const chave = novo.dataReferencia ?? new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const semDup = hist.filter((h) => h.data !== chave);
   semDup.push({ data: chave, conilon: novo.conilon, arabica: novo.arabica, fonte: novo.fonte });
   await setConfig(CHAVE_HISTORICO, JSON.stringify(semDup.slice(-400)));

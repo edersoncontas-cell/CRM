@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { obterCotacoes, atualizarCotacoesMercado, limparCacheCotacoes } from "@/lib/mercado";
 import { obterNoticias, atualizarNoticias } from "@/lib/noticias";
 import { atualizarCafeES, cafeESPrecisaAtualizar } from "@/lib/cafe-es";
@@ -10,20 +10,22 @@ export const maxDuration = 60;
 // esta rota ao abrir a tela, ao voltar o foco e a cada 60 s. Se alguma
 // leitura estiver velha, ela é REFEITA AQUI, na hora — o preço do café, a
 // bolsa e as notícias se atualizam toda vez que o CRM é aberto/atualizado,
-// sem depender do cron externo. Protegida pelo middleware (cookie de login).
+// sem depender do cron externo. Com ?forcar=1 (botão "Atualizar"), refaz
+// tudo agora. Protegida pelo middleware (cookie de login).
 const VALIDADE_BOLSA_MS = 20 * 60_000;
 const VALIDADE_NOTICIAS_MS = 30 * 60_000;
 let atualizando = false;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const forcar = req.nextUrl.searchParams.get("forcar") === "1";
   let [cotacoes, noticias] = await Promise.all([obterCotacoes(), obterNoticias()]);
   let atualizou: string[] = [];
 
   if (!atualizando) {
     const agora = Date.now();
-    const cafeVelho = await cafeESPrecisaAtualizar().catch(() => false);
-    const bolsaVelha = !cotacoes.cafeAtualizadoEm || agora - new Date(cotacoes.cafeAtualizadoEm).getTime() > VALIDADE_BOLSA_MS;
-    const noticiasVelhas = !noticias.atualizadoEm || agora - new Date(noticias.atualizadoEm).getTime() > VALIDADE_NOTICIAS_MS;
+    const cafeVelho = forcar || await cafeESPrecisaAtualizar().catch(() => false);
+    const bolsaVelha = forcar || !cotacoes.cafeAtualizadoEm || agora - new Date(cotacoes.cafeAtualizadoEm).getTime() > VALIDADE_BOLSA_MS;
+    const noticiasVelhas = forcar || !noticias.atualizadoEm || agora - new Date(noticias.atualizadoEm).getTime() > VALIDADE_NOTICIAS_MS;
     if (cafeVelho || bolsaVelha || noticiasVelhas) {
       atualizando = true;
       try {

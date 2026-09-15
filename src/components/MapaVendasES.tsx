@@ -9,6 +9,7 @@ import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { CENTRO_ES, LIMITES_ES } from "@/lib/municipios-es";
 import { T } from "@/lib/dash-tema";
+import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import type { PontoVenda } from "@/lib/vendas-dashboard";
 
 // Contorno do estado (IBGE, gratuito, sem chave). Se a busca falhar, o mapa
@@ -63,9 +64,18 @@ export default function MapaVendasES({
     };
     const id = setInterval(buscar, 60_000);
     const aoFocar = () => { if (document.visibilityState === "visible") buscar(); };
+    const aoPedirAtualizacao = (e: Event) => {
+      const p = buscar();
+      (e as CustomEvent<{ registrar?: (p: Promise<unknown>) => void }>).detail?.registrar?.(p);
+    };
     window.addEventListener("focus", aoFocar);
     document.addEventListener("visibilitychange", aoFocar);
-    return () => { ativo = false; clearInterval(id); window.removeEventListener("focus", aoFocar); document.removeEventListener("visibilitychange", aoFocar); };
+    window.addEventListener(EVENTO_ATUALIZAR, aoPedirAtualizacao);
+    return () => {
+      ativo = false; clearInterval(id);
+      window.removeEventListener("focus", aoFocar); document.removeEventListener("visibilitychange", aoFocar);
+      window.removeEventListener(EVENTO_ATUALIZAR, aoPedirAtualizacao);
+    };
   }, [ano]);
 
   const pontos = modo === "ano" ? pontosAno : pontosTudo;

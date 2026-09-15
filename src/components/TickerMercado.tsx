@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
 import { T } from "@/lib/dash-tema";
+import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import { Coffee, DollarSign, Newspaper, RefreshCw } from "lucide-react";
 
 export type DadosTicker = { cotacoes: CotacoesMercado; noticias: Noticia[] };
@@ -20,55 +21,73 @@ function Variacao({ pct }: { pct: number | null | undefined }) {
 
 const COR_TEMA: Record<string, string> = { Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde };
 
-function quando(iso: string | null | undefined): string {
+function quando(iso: string | null | undefined, agora: number): string {
   if (!iso) return "";
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = agora - new Date(iso).getTime();
   const min = Math.floor(ms / 60_000);
-  if (min < 2) return "agora";
+  if (min < 1) return "agora";
   if (min < 60) return `há ${min} min`;
   const h = Math.floor(min / 60);
   if (h < 24) return `há ${h}h`;
   return `há ${Math.floor(h / 24)}d`;
 }
 
-// Painel de mercado: cotações em cartões fixos (conilon do ES, arábica,
-// dólar) e um LETREIRO estilo bolsa de valores, correndo para a esquerda com
-// as notícias do setor. Os dados são atualizados pela rota /api/mercado/ticker
-// toda vez que a tela abre, volta ao foco ou a cada 60 s.
+// Painel de mercado: cotações em cartões fixos (arábica e conilon do Painel do
+// Café, dólar) e um LETREIRO estilo bolsa de valores, correndo para a esquerda
+// com as notícias do setor. Os dados são atualizados pela rota
+// /api/mercado/ticker toda vez que a tela abre, volta ao foco, a cada 60 s e
+// quando o botão "Atualizar" é clicado.
 export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const [dados, setDados] = useState<DadosTicker>(inicial);
   const [atualizando, setAtualizando] = useState(false);
   const [pausado, setPausado] = useState(false);
+  // Relógio para o "lido há X min" andar mesmo sem dado novo.
+  const [agora, setAgora] = useState(() => Date.now());
 
   useEffect(() => { setDados(inicial); }, [inicial]);
 
   useEffect(() => {
     let ativo = true;
-    const buscar = async () => {
+    const buscar = async (forcar = false) => {
       setAtualizando(true);
       try {
-        const r = await fetch("/api/mercado/ticker", { cache: "no-store" });
+        const r = await fetch(`/api/mercado/ticker${forcar ? "?forcar=1" : ""}`, { cache: "no-store" });
         const j = await r.json();
-        if (ativo && j?.ok) setDados({ cotacoes: j.cotacoes, noticias: j.noticias ?? [] });
+        if (ativo && j?.ok) { setDados({ cotacoes: j.cotacoes, noticias: j.noticias ?? [] }); setAgora(Date.now()); }
       } catch { /* mantém o que tem */ } finally { if (ativo) setAtualizando(false); }
     };
     buscar(); // ao abrir/atualizar a tela
-    const id = setInterval(buscar, 60_000);
+    const id = setInterval(() => buscar(), 60_000);
+    const relogio = setInterval(() => setAgora(Date.now()), 20_000);
     const aoFocar = () => { if (document.visibilityState === "visible") buscar(); };
+    const aoPedirAtualizacao = (e: Event) => {
+      const p = buscar(true);
+      (e as CustomEvent<{ registrar?: (p: Promise<unknown>) => void }>).detail?.registrar?.(p);
+    };
     window.addEventListener("focus", aoFocar);
     document.addEventListener("visibilitychange", aoFocar);
-    return () => { ativo = false; clearInterval(id); window.removeEventListener("focus", aoFocar); document.removeEventListener("visibilitychange", aoFocar); };
+    window.addEventListener(EVENTO_ATUALIZAR, aoPedirAtualizacao);
+    return () => {
+      ativo = false; clearInterval(id); clearInterval(relogio);
+      window.removeEventListener("focus", aoFocar); document.removeEventListener("visibilitychange", aoFocar);
+      window.removeEventListener(EVENTO_ATUALIZAR, aoPedirAtualizacao);
+    };
   }, []);
 
   const c = dados.cotacoes;
   const es = c.cafeES ?? null;
-  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; sub?: string; destaque?: boolean }[] = [];
+  const fonte = es?.fonte?.replace(" (IA)", "") ?? "físico";
   const doPainel = (es?.fonte ?? "").startsWith("Painel do Café");
-  if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, sub: `sc 60 kg · ${es.fonte ?? "físico"}${es.dataReferencia ? ` · ${es.dataReferencia}` : ""} · lido ${quando(es.atualizadoEm)}`, destaque: true });
+  const lido = es ? `lido ${quando(es.atualizadoEm, agora)}` : "";
+  const ref = es?.dataReferencia ? ` · ${es.dataReferencia}` : "";
+  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; sub?: string; destaque?: boolean }[] = [];
+  // Arábica primeiro: é o café da região do vendedor.
+  if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio · ES" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, sub: `sc 60 kg · ${fonte}${ref} · ${lido}`, destaque: true });
+  else if (c.cafeArabica != null) cartoes.push({ icone: Coffee, label: "Arábica · NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct, sub: "sc 60 kg · bolsa", destaque: true });
+  if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, sub: `sc 60 kg · ${fonte}${ref} · ${lido}` });
   else if (c.cafeConilon != null) cartoes.push({ icone: Coffee, label: "Conilon · Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct, sub: atualizando ? "sc 60 kg · bolsa · buscando o preço do ES…" : "sc 60 kg · bolsa · preço do ES indisponível agora" });
-  if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, sub: `sc 60 kg · ${es.fonte?.replace(" (IA)", "") ?? "físico"}` });
-  else if (c.cafeArabica != null) cartoes.push({ icone: Coffee, label: "Arábica · NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct, sub: "sc 60 kg · bolsa" });
-  if (c.dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(c.dolar), pct: c.detalhe?.dolar?.variacaoPct, sub: quando(c.cafeAtualizadoEm) ? `atualizado ${quando(c.cafeAtualizadoEm)}` : undefined });
+  const dolar = es?.dolar ?? c.dolar;
+  if (dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct, sub: es?.dolar != null ? `${fonte}${ref}` : quando(c.cafeAtualizadoEm, agora) ? `atualizado ${quando(c.cafeAtualizadoEm, agora)}` : undefined });
 
   const manchetes = useMemo(() => dados.noticias.slice(0, 20), [dados.noticias]);
   // Duração proporcional ao tamanho do texto (~ 55 px/s), para a leitura ser
@@ -81,7 +100,7 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
     <a key={`${chave}-${i}`} href={n.link} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 pr-10 text-sm font-semibold hover:underline" style={{ color: T.texto }} title={n.titulo}>
       <span className="rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${COR_TEMA[n.tema] ?? T.violeta}22`, color: COR_TEMA[n.tema] ?? T.violeta }}>{n.tema}</span>
       {n.titulo}
-      {n.fonte && <span className="text-[11px] font-normal" style={{ color: T.mudo }}>— {n.fonte}{n.publicadoEm ? ` · ${quando(n.publicadoEm)}` : ""}</span>}
+      {n.fonte && <span className="text-[11px] font-normal" style={{ color: T.mudo }}>— {n.fonte}{n.publicadoEm ? ` · ${quando(n.publicadoEm, agora)}` : ""}</span>}
       <span style={{ color: T.rosa }}>◆</span>
     </a>
   ));
@@ -94,7 +113,7 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
             <k.icone size={18} style={{ color: k.destaque ? T.amarelo : T.texto2 }} />
             <div className="leading-tight">
               <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>{k.label}</div>
-              <div className="flex items-baseline gap-1.5"><span className="text-base font-black" style={{ color: T.texto }}>{k.valor}</span><Variacao pct={k.pct} /></div>
+              <div className="flex items-baseline gap-1.5"><span className="text-base font-black" style={{ color: T.texto }}>{k.valor}</span><Variacao pct={k.pct} />{atualizando && k.destaque && <RefreshCw size={10} className="animate-spin" style={{ color: T.mudo }} />}</div>
               {k.sub && <div className="text-[10px]" style={{ color: T.mudo }}>{k.sub}</div>}
             </div>
           </div>
