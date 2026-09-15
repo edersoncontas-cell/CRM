@@ -123,7 +123,7 @@ export const TEMAS = {
 
 export type NomeTema = keyof typeof TEMAS;
 
-const ATIVO: NomeTema = "roxo";
+const ATIVO: NomeTema = "grafite";
 
 export const T: TemaDash = TEMAS[ATIVO];
 
