@@ -64,6 +64,13 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
   const c = ev.conteudo;
   const diag = { dir: ev.fromMe ? "out" as const : "in" as const, phone: ev.phone, nome: ev.nomeContato, texto: "", status: "?" };
 
+  // Mensagens de grupo não entram no CRM — só conversas 1:1 com cliente.
+  if (ev.isGroup) {
+    diag.status = "grupo";
+    await registrarDiag(diag);
+    return { ok: true, status: "grupo" };
+  }
+  
   if (c.mediaType === "audio" && !c.transcript && (c.mediaUrl || ev.audioBase64?.data)) {
     const texto = await transcreverAudio(ev);
     if (texto) {
