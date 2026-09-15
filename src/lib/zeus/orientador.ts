@@ -127,7 +127,7 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "oportunidadesPerdidas": string[],       // perguntas que faltaram, sinais de compra ignorados, objeções não tratadas
   "combinados": string[],                  // o que JÁ ficou acertado, com dia/hora e quem faz (ex.: "Visita confirmada quinta 18/09 às 14h na obra"; "Vendedor prometeu mensagem na véspera para confirmar"). Vazio se nada foi combinado.
   "pendencias": string[],                  // o que ainda falta e de quem é (ex.: "Vendedor: enviar proposta formal de financiamento"; "Cliente: informar prazo para começar a usar"). NUNCA inclua o que já está em "combinados".
-  "alertas": string[],                     // só o que exige atenção agora (outro decisor, concorrente na frente, esfriou, momento de fechar)
+  "alertas": string[],                     // VAZIO na maioria das vezes. Só preencha se há uma NEGOCIAÇÃO REAL em andamento e algo concreto exige ação agora (outro decisor apareceu, concorrente na frente, esfriou depois de sinal de compra, momento de fechar). Nunca crie alerta só porque o cliente mandou mensagem — ver regra abaixo.
   "personalidade": {
     "estilo": ${JSON.stringify(ESTILOS_CLIENTE)} + "|null",  // pelo jeito de escrever (ver método); null se ainda não dá para saber
     "descricao": string,                   // 1-2 frases: como esse cliente decide e o que valoriza
@@ -166,6 +166,12 @@ REGRAS CRÍTICAS:
   cliente sem resposta, diga e mostre como corrigir. Se ainda não há mensagens do vendedor, nota 5 e correcoes vazio.
 - "alertaAgora" vermelho SEMPRE que o cliente pediu preço e o checklist de qualificação não está completo, ou quando
   o vendedor está prestes a repetir um erro. Verde quando os sinais somam e é hora de pedir a visita/fechar.
+- "alertas" (diferente de "alertaAgora"): isso vira uma notificação permanente na Central de Alertas do vendedor, então
+  o padrão é VAZIO. Só preencha quando a conversa for de fato uma negociação de máquina em andamento E houver algo
+  novo e concreto que precise da atenção do vendedor. NUNCA preencha só porque o cliente mandou mensagem: conversa
+  social, cliente comentando post/rede social, elogio, dúvida de máquina já comprada, problema técnico/assistência,
+  cliente que já disse que não quer comprar, ou papo sem relação com uma venda em curso — nada disso é "alertas"
+  (pode aparecer em "resumoNegociacao" ou "oportunidadesPerdidas" se fizer sentido, mas não gera alerta).
 - "perguntasAgora" e "proximaAcao" nunca pedem o que já foi respondido (veja "combinados" e o histórico).
 - NÃO REPITA A MESMA FRASE EM CAMPOS DIFERENTES. Cada campo diz uma coisa que os outros não dizem:
   "resumoNegociacao" é o panorama (quem/o quê/onde/falta); "alertaAgora" é o risco do INSTANTE; "proximaAcao" é
@@ -290,17 +296,42 @@ ${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (ref
   }
 }
 
-// Cria um Alerta para o cliente só se não existir um igual (mesma mensagem)
-// ainda não resolvido — sem isso, cada mensagem nova recriaria o mesmo
-// alerta ("Cliente esfriou" a cada troca de WhatsApp, por exemplo).
-async function criarAlertaOrientadorSeNovo(clienteId: string, mensagem: string) {
-  const existente = await db.alerta.findFirst({
-    where: { clienteId, tipo: "orientador", mensagem, resolvido: false },
+// UM só alerta "orientador" por cliente (nunca um por mensagem/análise): se já
+// existe um não resolvido, atualiza o texto; senão cria. Some sozinho quando a
+// IA deixa de achar que há algo pedindo atenção agora (mensagens vazio).
+async function atualizarAlertaOrientador(clienteId: string, mensagens: string[]) {
+  const mensagem = mensagens.filter((m) => m.trim()).join(" · ");
+  const existente = await db.alerta.findFirst({ where: { clienteId, tipo: "orientador", resolvido: false } });
+  if (!mensagem) {
+    if (existente) await db.alerta.update({ where: { id: existente.id }, data: { resolvido: true } });
+    return;
+  }
+  if (existente) {
+    if (existente.mensagem !== mensagem) await db.alerta.update({ where: { id: existente.id }, data: { mensagem } });
+  } else {
+    await db.alerta.create({ data: { clienteId, tipo: "orientador", mensagem, severidade: "media" } });
+  }
+}
+
+// Limpeza única (chamada pela manutenção): antes do upsert por cliente acima
+// existir, cada análise podia criar um alerta "orientador" novo para o mesmo
+// cliente — bancos antigos ficam com vários não resolvidos. Mantém só o mais
+// recente de cada cliente e resolve o resto (idempotente).
+export async function unificarAlertasOrientadorDuplicados(): Promise<void> {
+  const abertos = await db.alerta.findMany({
+    where: { tipo: "orientador", resolvido: false },
+    orderBy: { criadoEm: "desc" },
+    select: { id: true, clienteId: true },
   });
-  if (existente) return;
-  await db.alerta.create({
-    data: { clienteId, tipo: "orientador", mensagem, severidade: "media" },
-  });
+  const vistos = new Set<string>();
+  const paraResolver: string[] = [];
+  for (const a of abertos) {
+    if (vistos.has(a.clienteId)) paraResolver.push(a.id);
+    else vistos.add(a.clienteId);
+  }
+  if (paraResolver.length) {
+    await db.alerta.updateMany({ where: { id: { in: paraResolver } }, data: { resolvido: true } });
+  }
 }
 
 // Ponto único que liga a análise do Orientador à persistência (painel) e ao
@@ -357,9 +388,7 @@ export async function processarOrientador(args: {
     update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined },
   });
 
-  for (const mensagem of alertas) {
-    await criarAlertaOrientadorSeNovo(args.conv.clienteId, mensagem).catch(() => {});
-  }
+  await atualizarAlertaOrientador(args.conv.clienteId, alertas).catch(() => {});
   await aplicarConversaEncerrada(args.conv.clienteId, conversaEncerrada);
 
   return { respondido };
@@ -411,7 +440,7 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
       create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null },
       update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}) },
     });
-    for (const mensagem of alertas) await criarAlertaOrientadorSeNovo(conv.clienteId, mensagem).catch(() => {});
+    await atualizarAlertaOrientador(conv.clienteId, alertas).catch(() => {});
     await aplicarConversaEncerrada(conv.clienteId, conversaEncerrada);
     return { ok: true };
   } catch (e) {

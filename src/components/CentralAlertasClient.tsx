@@ -54,14 +54,18 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const criados14 = graficos.tendencia.reduce((s, d) => s + d.criados, 0);
   const resolvidos14 = graficos.tendencia.reduce((s, d) => s + d.resolvidos, 0);
 
-  // "Resolvido" em qualquer item: alerta do ZEUS é resolvido na tabela; os
-  // demais ficam ocultos até o cliente mandar mensagem nova.
+  // "Resolvido" em qualquer item: some da lista NA HORA (otimista) — o
+  // servidor só confirma depois, sem o usuário esperar o round-trip.
   async function resolver(item: ItemCentral) {
-    setOcupado(item.id);
-    if (item.alertaId) await resolverAlerta(item.alertaId);
-    else await ocultarItemCentralAction(item.id, item.clienteId ?? null);
-    setOcupado(null);
     setResolvidos((s) => new Set(s).add(item.id));
+    try {
+      if (item.alertaId) await resolverAlerta(item.alertaId);
+      else await ocultarItemCentralAction(item.id, item.clienteId ?? null);
+    } catch {
+      // Falhou no servidor: volta a aparecer, já que não foi resolvido de verdade.
+      setResolvidos((s) => { const n = new Set(s); n.delete(item.id); return n; });
+      return;
+    }
     startTransition(() => router.refresh());
   }
 

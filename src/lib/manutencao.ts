@@ -14,6 +14,7 @@ import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { garantirColunasFunil } from "@/lib/actions";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
+import { unificarAlertasOrientadorDuplicados } from "@/lib/zeus/orientador";
 
 // v3: adiciona as tabelas do Orientador de Vendas (OrientadorAnalise), do
 // Setor de Pós-venda (PosVendaContato) e a coluna Maquina.aplicacoes -- sem
@@ -37,7 +38,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
 // v14: itens resolvidos da Central de alertas (AlertaOculto).
 // v15: confirmação de visitas (status, realizadaEm, reagendadaDeId).
-export const CHAVE_MANUTENCAO = "manutencao.v19";
+// v20: unifica alertas "orientador" duplicados (vários por cliente viravam
+// um só desde que o Orientador passou a fazer upsert por cliente).
+export const CHAVE_MANUTENCAO = "manutencao.v20";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -52,6 +55,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
+    ["Alertas do Orientador duplicados por cliente", unificarAlertasOrientadorDuplicados],
   ];
 
   const relatorio: EtapaManutencao[] = [];
