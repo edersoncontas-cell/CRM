@@ -1,14 +1,13 @@
 // Sonda do robô do café: baixa as fontes de cotação e mostra o que o servidor
-// enxerga (texto em volta de "conilon"/"arábica", endpoints JSON, bundles).
-// Roda no GitHub Actions (workflow "Sonda café") para diagnosticar a leitura
-// sem depender de ambiente com rede restrita. Só imprime; não grava nada.
+// enxerga (texto, endpoints). Roda no GitHub Actions (workflow "Sonda café")
+// para diagnosticar a leitura sem depender de ambiente com rede restrita.
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-async function baixar(url, accept = "text/html,*/*") {
+async function baixar(url, accept = "text/html,*/*", extra = {}) {
   const t0 = Date.now();
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "pt-BR,pt;q=0.9" }, redirect: "follow", signal: AbortSignal.timeout(20000) });
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "pt-BR,pt;q=0.9", ...extra }, redirect: "follow", signal: AbortSignal.timeout(30000) });
     const corpo = await res.text();
     console.log(`\n=== GET ${url} → ${res.status} ${res.headers.get("content-type")} · ${corpo.length} bytes · ${Date.now() - t0} ms`);
     return { ok: res.ok, corpo, tipo: res.headers.get("content-type") ?? "" };
@@ -29,46 +28,55 @@ function janelas(t, rx, tam = 300, max = 8) {
   if (!n) console.log(`--- (nenhuma ocorrência de ${rx})`);
 }
 
-const painel = await baixar("https://www.paineldocafe.com.br/");
-if (painel.corpo) {
-  const t = texto(painel.corpo);
-  console.log("\n### TEXTO (primeiros 2500):\n" + t.slice(0, 2500));
-  console.log("\n### JANELAS conilon/arábica/dólar:");
-  janelas(t, /conilon|ar[áa]bica|d[óo]lar|londres|york/gi);
-  console.log("\n### URLs no HTML (api/json/cotac/painel/js):");
+// 1) Painel do Café: app Flutter. O código compilado (main.dart.js) traz as
+//    URLs das APIs que o app consulta.
+const base = "https://www.paineldocafe.com.br";
+for (const arq of ["/flutter_bootstrap.js", "/main.dart.js", "/manifest.json", "/version.json", "/assets/AssetManifest.json"]) {
+  const r = await baixar(base + arq, "*/*");
+  if (!r.corpo || !r.ok) continue;
+  if (arq.endsWith(".json")) { console.log(r.corpo.slice(0, 1500)); continue; }
   const urls = new Set();
-  for (const m of painel.corpo.matchAll(/(?:https?:)?\/\/[^"'\s<>)]+|(?:src|href|action)=["']([^"']+)["']/gi)) {
-    const u = m[1] ?? m[0];
-    if (/api|json|cotac|painel|\.js(\?|$)|fetch|graphql|wp-json|data/i.test(u)) urls.add(u);
+  for (const m of r.corpo.matchAll(/https?:\/\/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]{8,200}/g)) {
+    const u = m[0];
+    if (/google|gstatic|flutter|dart|pub\.dev|w3\.org|apple|facebook|onesignal|gtm|schema\.org|mozilla|unicode|whatwg|github|fonts/i.test(u)) continue;
+    urls.add(u);
   }
-  for (const u of Array.from(urls).slice(0, 40)) console.log("  ", u);
-  console.log("\n### TRECHOS DE SCRIPT INLINE com conilon/cotac/fetch (até 6):");
-  let n = 0;
-  for (const m of painel.corpo.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)) {
-    const s = m[1];
-    if (/conilon|cotac|fetch\(|axios|\.json\(/i.test(s)) { console.log("---\n" + s.slice(0, 1500)); if (++n >= 6) break; }
-  }
-  // Bundles JS externos: procura endpoints e a palavra conilon.
-  const scripts = Array.from(painel.corpo.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)).map((m) => m[1]).slice(0, 6);
-  for (let src of scripts) {
-    if (src.startsWith("//")) src = "https:" + src; else if (src.startsWith("/")) src = "https://www.paineldocafe.com.br" + src; else if (!/^https?:/.test(src)) src = "https://www.paineldocafe.com.br/" + src;
-    const js = await baixar(src, "*/*");
-    if (!js.corpo) continue;
-    const hits = Array.from(js.corpo.matchAll(/["'`](\/?[^"'`\s]{3,120}?(?:api|json|cotac|conilon|painel)[^"'`\s]{0,120})["'`]/gi)).map((m) => m[1]);
-    console.log("   endpoints/palavras:", Array.from(new Set(hits)).slice(0, 30));
-    janelas(js.corpo, /conilon/gi, 200, 3);
-  }
-  // Tentativas diretas de endpoints comuns.
-  for (const u of ["https://www.paineldocafe.com.br/api/cotacoes", "https://www.paineldocafe.com.br/api/cotacao", "https://www.paineldocafe.com.br/cotacao", "https://www.paineldocafe.com.br/cotacoes", "https://www.paineldocafe.com.br/api/indicadores", "https://www.paineldocafe.com.br/wp-json/wp/v2/posts?per_page=1"]) {
-    const r = await baixar(u, "application/json,text/html,*/*");
-    if (r.corpo) console.log(r.corpo.slice(0, 800));
+  console.log(`   URLs (${urls.size}):`); for (const u of Array.from(urls).slice(0, 120)) console.log("    ", u);
+  const pal = new Set();
+  for (const m of r.corpo.matchAll(/["'`]([^"'`\n]{0,80}(?:conilon|cotac|indicador|firestore|firebase|supabase|graphql|\/api\/|\.json)[^"'`\n]{0,80})["'`]/gi)) pal.add(m[1]);
+  console.log(`   Strings-chave (${pal.size}):`); for (const p of Array.from(pal).slice(0, 80)) console.log("    ", p);
+  janelas(r.corpo, /conilon/gi, 250, 4);
+  // main.dart.js costuma estar em outro nome dentro do bootstrap
+  for (const m of r.corpo.matchAll(/["']([^"']*main\.dart[^"']*\.js)["']/g)) console.log("   main.dart candidato:", m[1]);
+}
+
+// 2) CCCV: tabela completa do mês.
+{
+  const r = await baixar("https://www.cccv.org.br/cotacao/");
+  if (r.corpo) {
+    const t = texto(r.corpo);
+    const i = t.indexOf("Cotação do café referente");
+    console.log("### CCCV texto a partir do título (3500):\n" + t.slice(Math.max(0, i), i + 3500));
+    console.log("### CCCV HTML da tabela (primeiros 4000 após <table):");
+    const j = r.corpo.indexOf("<table");
+    console.log(r.corpo.slice(j, j + 4000));
   }
 }
 
-for (const u of ["https://www.cepea.esalq.usp.br/br/indicador/cafe.aspx", "https://www.cccv.org.br/cotacao/", "https://www.noticiasagricolas.com.br/cotacoes/cafe/cafe-conilon-cepea-esalq"]) {
-  const r = await baixar(u);
-  if (!r.corpo) continue;
-  const t = texto(r.corpo);
-  console.log("### JANELAS:");
-  janelas(t, /robusta|conilon|ar[áa]bica/gi, 250, 4);
+// 3) Notícias Agrícolas: achar a página do conilon.
+{
+  const r = await baixar("https://www.noticiasagricolas.com.br/cotacoes/cafe");
+  if (r.corpo) {
+    const links = new Set();
+    for (const m of r.corpo.matchAll(/href=["']([^"']*cafe[^"']*)["']/gi)) if (/conilon|robusta|cepea|esalq|fisico|espirito/i.test(m[1])) links.add(m[1]);
+    console.log("   links café:", Array.from(links).slice(0, 30));
+    const t = texto(r.corpo);
+    janelas(t, /conilon/gi, 300, 5);
+  }
+}
+
+// 4) CEPEA com cabeçalhos de navegador completos (a 1ª tentativa deu 403).
+{
+  const r = await baixar("https://www.cepea.esalq.usp.br/br/indicador/cafe.aspx", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", { Referer: "https://www.cepea.esalq.usp.br/br/", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document", "Upgrade-Insecure-Requests": "1" });
+  if (r.corpo) janelas(texto(r.corpo), /robusta|conilon|ar[áa]bica/gi, 300, 4);
 }
