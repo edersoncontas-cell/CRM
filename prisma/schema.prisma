@@ -304,6 +304,17 @@ model TarefaKanban {
 // Itens da Central de alertas que o vendedor marcou como resolvidos. A chave
 // é o id do item (ex.: "aguardando:<clienteId>"). Quando o cliente manda
 // mensagem nova depois de ocultoEm, a linha é apagada e o item volta.
+// Telefones de contatos que não são clientes (contabilidade, banco, hotel…):
+// mensagens deles são descartadas na chegada e a sincronização com o Google
+// os ignora. Preenchido pela limpeza automática (lib/contatos-bloqueados.ts).
+model ContatoBloqueado {
+  id       String   @id @default(cuid())
+  telefone String   @unique
+  nome     String?
+  motivo   String?
+  criadoEm DateTime @default(now())
+}
+
 model AlertaOculto {
   id        String   @id @default(cuid())
   chave     String   @unique

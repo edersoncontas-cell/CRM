@@ -16,6 +16,7 @@ import { getConfig, setConfig } from "@/lib/config";
 import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle } from "@/lib/integrations/google";
 import { planejarSincronizacao, clientesParaEnviar, nomeGenerico, type ClienteResumo } from "@/lib/google-contatos-util";
 import { deveDescartarContato } from "@/lib/utils";
+import { listarTelefonesBloqueados, limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 
 const CHAVE_ULTIMA = "google.contatos.ultima";
 const CHAVE_ENVIAR = "google.contatos.enviar";
@@ -65,12 +66,15 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
   if (!(await googleContatosDisponivel())) return gravar({ ...base, erro: "Conta Google não conectada." });
 
   try {
-    const [contatos, clientes, municipios] = await Promise.all([
+    // Antes de ler o Google, tira do CRM o que não é cliente (contabilidade, banco…).
+    await limparContatosIndesejados();
+    const [contatos, clientes, municipios, bloqueados] = await Promise.all([
       listarContatosGoogle(),
       db.cliente.findMany({ select: SELECAO_CLIENTE }) as Promise<ClienteResumo[]>,
       db.municipio.findMany({ select: { id: true, nome: true } }),
+      listarTelefonesBloqueados(),
     ]);
-    const plano = planejarSincronizacao(contatos, clientes, municipios);
+    const plano = planejarSincronizacao(contatos, clientes, municipios, bloqueados);
 
     // Google → CRM
     for (const c of plano.criar) {

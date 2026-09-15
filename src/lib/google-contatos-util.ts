@@ -74,7 +74,7 @@ export function acharMunicipio(municipios: MunicipioResumo[], enderecos: Contato
 }
 
 // Monta o plano: o que criar e o que atualizar no CRM a partir dos contatos.
-export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[]): PlanoSincronizacao {
+export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], telefonesBloqueados: Set<string> = new Set()): PlanoSincronizacao {
   const porGoogleId = new Map<string, ClienteResumo>();
   const porTelefone = new Map<string, ClienteResumo>();
   for (const c of clientes) {
@@ -91,6 +91,8 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
     if (!nome || deveDescartarContato(nome)) { plano.ignorados++; continue; }
     const telefones = g.telefones.map(telefoneNacional).filter((t): t is string => !!t);
     if (!telefones.length) { plano.semTelefone++; continue; }
+    // Telefone já bloqueado no CRM (contato apagado por não ser cliente): não volta.
+    if (telefones.some((t) => phoneLookupVariants(t).some((v) => telefonesBloqueados.has(v)))) { plano.ignorados++; continue; }
 
     let cliente = porGoogleId.get(g.id) ?? null;
     if (!cliente) for (const t of telefones) { for (const v of phoneLookupVariants(t)) { const c = porTelefone.get(v); if (c) { cliente = c; break; } } if (cliente) break; }

@@ -297,6 +297,19 @@ export async function aplicarMigracoes(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "googleSincronizadoEm" TIMESTAMP WITH TIME ZONE
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cliente_googleContatoId_idx" ON "Cliente"("googleContatoId")`);
+
+    // Contatos bloqueados (v17): telefones que nunca entram no CRM.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ContatoBloqueado" (
+        "id"       TEXT NOT NULL,
+        "telefone" TEXT NOT NULL,
+        "nome"     TEXT,
+        "motivo"   TEXT,
+        "criadoEm" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT "ContatoBloqueado_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_telefone_key" ON "ContatoBloqueado"("telefone")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -63,6 +63,13 @@ describe("planejarSincronizacao", () => {
     expect(plano.criar.map((x) => x.nome)).toEqual(["Ana"]);
   });
 
+  it("não traz de volta telefone bloqueado", () => {
+    const bloqueados = new Set(["28999990009", "5528999990009"]);
+    const plano = planejarSincronizacao([g({ id: "people/9", nome: "Fulano", telefones: ["5528999990009"] })], [], municipios, bloqueados);
+    expect(plano.criar).toEqual([]);
+    expect(plano.ignorados).toBe(1);
+  });
+
   it("nada a fazer quando já está tudo igual", () => {
     const clientes = [c({ id: "c1", nome: "Ana", telefone: "28999990001", googleContatoId: "people/3", email: "a@x.com" })];
     const plano = planejarSincronizacao([g({ id: "people/3", nome: "Ana", telefones: ["5528999990001"], emails: ["a@x.com"] })], clientes, municipios);

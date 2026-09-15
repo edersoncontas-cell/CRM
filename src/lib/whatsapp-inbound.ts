@@ -12,6 +12,8 @@ import {
   acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, curarZapiId,
 } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
+import { motivoBloqueio } from "@/lib/utils";
+import { telefoneBloqueado, bloquearContato, apagarContatoPorTelefone } from "@/lib/contatos-bloqueados";
 import { processarMensagem } from "@/lib/zeus/pipeline";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer, isEnabled as transcricaoHabilitada } from "@/lib/integrations/transcription";
@@ -75,6 +77,19 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
     diag.status = "sem-texto";
     await registrarDiag(diag);
     return { ok: true, status: diag.status };
+  }
+
+  // Contatos que não são clientes (contabilidade, banco, hotel…): nada deles
+  // fica no CRM. Telefone já bloqueado → descarta na hora; nome que bate com
+  // a regra → bloqueia o telefone e apaga o que já existia dele.
+  if (!ev.isGroup) {
+    if (await telefoneBloqueado(ev.phone)) { diag.status = "bloqueado"; await registrarDiag(diag); return { ok: true, status: "bloqueado" }; }
+    const motivo = ev.nomeContato ? motivoBloqueio(ev.nomeContato) : null;
+    if (motivo) {
+      await bloquearContato(ev.phone, ev.nomeContato, motivo);
+      await apagarContatoPorTelefone(ev.phone).catch((e) => console.error("[whatsapp-inbound] bloqueio:", e));
+      diag.status = "bloqueado"; await registrarDiag(diag); return { ok: true, status: "bloqueado" };
+    }
   }
 
   try {

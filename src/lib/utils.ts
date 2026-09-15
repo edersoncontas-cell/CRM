@@ -134,14 +134,31 @@ export function agoraBrasiliaExtenso(date: Date = new Date()): string {
   }).format(date);
 }
 
-// Palavras que identificam contatos irrelevantes para a venda de máquinas pesadas.
-// Contatos cujo nome contém qualquer um desses termos são silenciosamente descartados.
-// O CRM é exclusivo para CLIENTES (compradores de máquinas).
-const NOMES_DESCARTADOS = ["POUSADA", "HOTEL", "PME"];
+// Contatos que NÃO são clientes (contabilidade, bancos, financeiras, hotéis…)
+// nunca entram no CRM: nem pelo WhatsApp, nem por importação, nem pelo Google
+// Contatos — e os que já existirem são apagados com todo o histórico (ver
+// lib/contatos-bloqueados.ts). O CRM é exclusivo para COMPRADORES de máquina.
+// Comparação sem acento e sem caixa: "Contábil", "CONTABEIS" e "contabil" batem.
+//   TERMOS: valem dentro de qualquer palavra ("contab" pega contabilidade,
+//           contábil, contábeis).
+//   PALAVRAS: só como palavra inteira ("banco" não pega "Bancorbrás").
+export const TERMOS_BLOQUEIO = ["contab", "contador", "financeir", "escritorio", "bradesco", "sicoob", "sicredi", "banestes", "hotel", "pousada", "restaurante"];
+export const PALAVRAS_BLOQUEIO = ["banco", "cnh", "bcnh", "pme"];
+
+const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// Termo que bloqueia o nome, ou null se o nome é aceito.
+export function motivoBloqueio(nome: string): string | null {
+  const n = semAcento(nome);
+  const termo = TERMOS_BLOQUEIO.find((t) => n.includes(t));
+  if (termo) return termo;
+  const palavras = n.split(/[^a-z0-9]+/).filter(Boolean);
+  const palavra = PALAVRAS_BLOQUEIO.find((p) => palavras.includes(p));
+  return palavra ?? null;
+}
 
 export function deveDescartarContato(nome: string): boolean {
-  const upper = nome.toUpperCase();
-  return NOMES_DESCARTADOS.some((termo) => upper.includes(termo));
+  return motivoBloqueio(nome) !== null;
 }
 
 export function iniciais(nome: string) {

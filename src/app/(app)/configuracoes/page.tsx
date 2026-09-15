@@ -5,6 +5,9 @@ import * as zapi from "@/lib/zapi";
 import * as transcription from "@/lib/integrations/transcription";
 import { statusGoogle } from "@/lib/integrations/google";
 import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google-contatos";
+import { resumoBloqueio } from "@/lib/contatos-bloqueados";
+import { TERMOS_BLOQUEIO, PALAVRAS_BLOQUEIO } from "@/lib/utils";
+import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
@@ -19,13 +22,14 @@ import { ExportarDadosCard } from "@/components/ExportarDadosCard";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [estilo, cotacoes, google, parametros, resumoContatos, enviarContatos] = await Promise.all([
+  const [estilo, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio] = await Promise.all([
     db.estiloDeFala.findFirst(),
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
     lerResumoSincronizacaoGoogle(),
     envioParaGoogleAtivo(),
+    resumoBloqueio().catch(() => ({ total: 0, recentes: [] })),
   ]);
 
   const integracoes = [
@@ -87,6 +91,13 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       </Link>
 
       <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
+
+      <ContatosBloqueadosCard
+        termos={TERMOS_BLOQUEIO}
+        palavras={PALAVRAS_BLOQUEIO}
+        total={bloqueio.total}
+        recentes={bloqueio.recentes.map((r) => ({ ...r, criadoEm: r.criadoEm.toISOString() }))}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {integracoes.map((i) => (

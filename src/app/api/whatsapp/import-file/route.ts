@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { acharOuCriarConversaPorNome, importarMensagens, acharConversa } from "@/lib/whatsapp-store";
+import { deveDescartarContato } from "@/lib/utils";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,8 @@ export async function POST(req: NextRequest) {
   for (const chat of chats) {
     const nome = chat.name?.trim();
     if (!nome || !chat.messages?.length) continue;
+    // Contatos que não são clientes (contabilidade, banco, hotel…) não entram nem por importação.
+    if (!chat.isGroup && deveDescartarContato(nome)) continue;
 
     let conv;
     

@@ -19,9 +19,15 @@ describe("fuso de Brasília (servidor em UTC)", () => {
 });
 
 describe("helpers de contato", () => {
-  it("descarta nomes de fachada", () => {
-    expect(deveDescartarContato("Pousada do Sol")).toBe(true);
-    expect(deveDescartarContato("Construtora Litoral")).toBe(false);
+  it("bloqueia contabilidade, bancos, financeiras, hotéis e afins (sem acento, qualquer caixa)", () => {
+    for (const nome of ["Pousada do Sol", "Hotel Fazenda", "Restaurante da Serra", "CONTABILIDADE SILVA", "Contábil Alegre", "Serviços Contábeis JM", "João Contador", "Ana Contadora", "Financeiro Loja", "Escritório Central", "Banco do Brasil", "CNH Industrial", "bCNH Capital", "Bradesco Ag 123", "Sicoob Sul", "Sicredi", "Banestes Cachoeiro", "PME Vitória", "Reunião PME"]) {
+      expect(deveDescartarContato(nome), nome).toBe(true);
+    }
+  });
+  it("aceita clientes de verdade (palavras curtas só valem inteiras)", () => {
+    for (const nome of ["Construtora Litoral", "Bancorbrás Terraplenagem", "Lucas Serafim", "Fazenda Boa Vista", "Empresa Pedreira", "Zé da Retro"]) {
+      expect(deveDescartarContato(nome), nome).toBe(false);
+    }
   });
   it("remove DDI e monta iniciais", () => {
     expect(semCodigoPais("5528999991234")).toBe("28999991234");

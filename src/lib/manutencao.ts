@@ -9,7 +9,8 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { aplicarMigracoes } from "@/lib/migrations";
-import { garantirRegioes, limparContatosDescartados } from "@/lib/regioes";
+import { garantirRegioes } from "@/lib/regioes";
+import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { garantirColunasFunil } from "@/lib/actions";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
@@ -36,7 +37,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
 // v14: itens resolvidos da Central de alertas (AlertaOculto).
 // v15: confirmação de visitas (status, realizadaEm, reagendadaDeId).
-export const CHAVE_MANUTENCAO = "manutencao.v16";
+export const CHAVE_MANUTENCAO = "manutencao.v17";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -47,7 +48,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
   const etapas: [string, () => Promise<void>][] = [
     ["Migrações de schema", aplicarMigracoes],
     ["Regiões e municípios", garantirRegioes],
-    ["Limpeza de contatos descartados", limparContatosDescartados],
+    ["Limpeza de contatos bloqueados (contabilidade, bancos, hotéis…)", async () => { await limparContatosIndesejados(); }],
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
