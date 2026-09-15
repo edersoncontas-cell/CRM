@@ -387,7 +387,7 @@ export async function configurarWebhookEvolution(urlWebhook: string): Promise<{ 
   if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
   try {
     await evoFetch("POST", `/webhook/set/${evoInstancia()}`, {
-      webhook: { enabled: true, url: urlWebhook, byEvents: false, base64: true, events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE"] },
+              webhook: { enabled: true, url: urlWebhook, headers: evolutionConfig()?.apiKey ? { apikey: evolutionConfig()!.apiKey } : undefined, byEvents: false, base64: true, events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE"] },
     });
     return { ok: true };
   } catch (e) {
@@ -399,7 +399,7 @@ export async function configurarWebhookEvolution(urlWebhook: string): Promise<{ 
 // ou a URL do deploy como reserva). null quando não dá para descobrir.
 export function urlWebhookCrm(): string | null {
   const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).trim().replace(/\/+$/, "");
-  return base ? `${base}/api/webhooks/evolution` : null;
+      return base ? `${base}/api/webhooks/evolution?apikey=${encodeURIComponent(evolutionConfig()?.apiKey ?? "")}` : null;
 }
 
 // Cria a instância com o nome de EVOLUTION_INSTANCE (canal Baileys, QR Code)
