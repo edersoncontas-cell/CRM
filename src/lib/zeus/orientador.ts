@@ -14,6 +14,7 @@
 // resposta, que era a causa raiz da lentidão reportada.
 
 import { llmTexto, iaHabilitada } from "@/lib/ai";
+import { mensagemErroIA } from "@/lib/ai/erros";
 import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
@@ -173,6 +174,16 @@ REGRAS CRÍTICAS:
   cliente que já disse que não quer comprar, ou papo sem relação com uma venda em curso — nada disso é "alertas"
   (pode aparecer em "resumoNegociacao" ou "oportunidadesPerdidas" se fizer sentido, mas não gera alerta).
 - "perguntasAgora" e "proximaAcao" nunca pedem o que já foi respondido (veja "combinados" e o histórico).
+- VISITA COM ROTA: quando a próxima ação for marcar/propor visita, use a seção "Agenda de visitas já marcadas" do
+  contexto — proponha o dia indicado em "MELHOR DIA PARA VISITAR ESTE CLIENTE" (o vendedor já estará perto), citando
+  o dia da semana e a data na "proximaAcao" (ex.: "Propor visita terça 22/09, que você já estará em Alegre"). Se
+  a seção disser que não dá para calcular, proponha o dia normalmente, sem inventar rota.
+- VISITA ≠ RETORNO. Só chame de visita (em "combinados", "roteiro", "estagioVenda") um encontro PRESENCIAL com dia
+  acertado pelos DOIS lados (vendedor na obra/propriedade, ou cliente na loja). "Amanhã te dou uma posição", "vou
+  falar com meu sócio amanhã", "te ligo", "semana que vem a gente vê", "vou pensar" são RETORNO PROMETIDO pelo
+  cliente — vão em "pendencias" (ex.: "Cliente: dar posição amanhã cedo") e a próxima ação é aguardar/cobrar esse
+  retorno no horário, nunca "confirmar a visita". Uma visita que só um lado propôs e o outro não respondeu também
+  não está combinada.
 - NÃO REPITA A MESMA FRASE EM CAMPOS DIFERENTES. Cada campo diz uma coisa que os outros não dizem:
   "resumoNegociacao" é o panorama (quem/o quê/onde/falta); "alertaAgora" é o risco do INSTANTE; "proximaAcao" é
   a ÚNICA instrução do que fazer a seguir; "roteiro[status=agora].dica" é só um lembrete de 6 palavras, não uma
@@ -206,6 +217,7 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor — COPIE FIELMENTE (g
 - Primeiro RESPONDA o que foi perguntado (mesmo que seja "vou confirmar e te retorno até X"); depois AVANCE um passo: visita, dado concreto, proposta ou decisão. Termine com UMA pergunta fechada.
 - Nunca repita pergunta já respondida nem informação já dada. Não cumprimente se já houve saudação na conversa.
 - O que já ficou combinado (visita com dia/hora aceita, proposta prometida) está combinado: não peça para confirmar de novo; avance para o passo seguinte.
+- Ao propor visita, ofereça o dia de "MELHOR DIA PARA VISITAR ESTE CLIENTE" do contexto (você já estará perto) — com dia da semana e data — e feche com pergunta ("terça 22/09 de manhã fica bom?"). Sem essa informação no contexto, proponha um dia sem inventar rota.
 - Se o cliente citou concorrente ou preço, reconheça sem depreciar e leve para valor (custo por hora, revenda, assistência, entrega), sem inventar números.
 - Se o cliente pediu preço e a aplicação ainda não está clara, peça as informações que faltam (aplicação, prazo ou forma de pagamento) em vez de dar valor genérico.
 - 1-3 frases, como mensagem real de WhatsApp de gente ocupada. Nada de textão.
@@ -437,6 +449,6 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
     await aplicarConversaEncerrada(conv.clienteId, conversaEncerrada);
     return { ok: true };
   } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+    return { ok: false, erro: mensagemErroIA(e) };
   }
 }

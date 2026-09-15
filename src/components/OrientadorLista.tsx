@@ -3,17 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors, useDraggable, useDroppable, pointerWithin,
-  type DragEndEvent, type DragStartEvent,
-} from "@dnd-kit/core";
 import { Card, Badge, EmptyState } from "@/components/ui";
-import { buscarOrientadorAnalise, criarNegociacaoDoOrientador, descartarCardOrientador, zerarOrientadorAction, analisarLoteOrientadorAction } from "@/lib/actions";
+import { buscarOrientadorAnalise, zerarOrientadorAction, analisarLoteOrientadorAction } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
-import { formatDateTime, cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import {
-  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Check, Loader2, MessageCircle, Sparkles, GripVertical, Handshake, RefreshCw, Eraser,
-  CalendarPlus,
+  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Loader2, MessageCircle, Sparkles, RefreshCw, Eraser,
+  CalendarPlus, Handshake,
 } from "lucide-react";
 
 type Item = {
@@ -30,8 +26,6 @@ type Item = {
   proximaAcao: string | null;
   atualizadoEm: string | null;
 };
-
-type Coluna = { id: string; titulo: string; padrao: boolean };
 
 type Detalhe = {
   clienteNome: string;
@@ -72,46 +66,20 @@ function tempoRelativo(iso: string): string {
   return `há ${d} dia${d > 1 ? "s" : ""}`;
 }
 
-// ── Alvos do arrastar: colunas abertas do funil ─────────────────────────────
-function ZonaColuna({ coluna, arrastando }: { coluna: Coluna; arrastando: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `col:${coluna.titulo}` });
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "flex min-h-[52px] flex-1 items-center justify-center rounded-xl border-2 border-dashed px-3 py-2 text-center text-xs font-black uppercase tracking-wide transition",
-        coluna.padrao ? "border-green-400 bg-green-50 text-green-700" : "border-slate-300 bg-white text-slate-500",
-        arrastando && "border-solid",
-        isOver && "scale-[1.03] border-brand-600 bg-brand-50 text-brand-800 shadow-md"
-      )}
-    >
-      <span className="flex items-center gap-1.5"><Handshake size={14} /> {coluna.titulo}{coluna.padrao ? " ★" : ""}</span>
-    </div>
-  );
-}
-
-// ── Card arrastável (pelo punho, para não brigar com o toque que abre o detalhe) ──
-function CardOrientador({ a, emAndamento, analisando, onAbrir, onConfirmar, onDescartar, onAnalisar }: {
-  a: Item; emAndamento: boolean; analisando: boolean; onAbrir: () => void; onConfirmar: () => void; onDescartar: () => void; onAnalisar: () => void;
+// ── Card de leitura (só leitura: a negociação entra no funil sozinha) ──────
+function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
+  a: Item; analisando: boolean; onAbrir: () => void; onAnalisar: () => void;
 }) {
-  // O card INTEIRO é arrastável (os sensores só ativam depois de mover alguns
-  // pixels, então clique e toque continuam abrindo o detalhe). Os botões
-  // interrompem o arrasto.
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: a.clienteId, data: { item: a } });
-  const pararArrasto = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() };
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners} className={cn("h-full touch-none", isDragging && "opacity-40")}>
-      <Card className="flex h-full cursor-grab flex-col transition hover:border-brand-300 hover:shadow-md active:cursor-grabbing">
+    <div className="h-full">
+      <Card className="flex h-full flex-col transition hover:border-brand-300 hover:shadow-md">
         <div className="mb-2 flex items-start gap-2">
-          <span title="Arraste o card até a coluna do funil" className="mt-0.5 shrink-0 rounded-md p-1 text-slate-300">
-            <GripVertical size={16} />
-          </span>
           <button onClick={onAbrir} className="min-w-0 flex-1 text-left">
             <div className="truncate font-semibold text-slate-800">{a.clienteNome}</div>
             {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
           </button>
           {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : (
-            <button {...pararArrasto} onClick={(e) => { e.stopPropagation(); onAnalisar(); }} disabled={analisando} title="Pedir a leitura da IA agora" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-agro-400/20 px-2 py-0.5 text-[11px] font-bold text-agro-700 hover:bg-agro-400/40 disabled:opacity-60">
+            <button onClick={(e) => { e.stopPropagation(); onAnalisar(); }} disabled={analisando} title="Pedir a leitura da IA agora" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-agro-400/20 px-2 py-0.5 text-[11px] font-bold text-agro-700 hover:bg-agro-400/40 disabled:opacity-60">
               {analisando ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {analisando ? "analisando" : "analisar"}
             </button>
           )}
@@ -142,7 +110,7 @@ function CardOrientador({ a, emAndamento, analisando, onAbrir, onConfirmar, onDe
           )}
         </button>
 
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3" {...pararArrasto}>
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
           <Link
             href={`/visitas?cliente=${a.clienteId}&novo=1`}
             title="Agendar visita para este cliente (abre o calendário de visitas)"
@@ -150,39 +118,28 @@ function CardOrientador({ a, emAndamento, analisando, onAbrir, onConfirmar, onDe
           >
             <CalendarPlus size={15} strokeWidth={2.5} /> Agendar visita
           </Link>
-          <button
-            onClick={onConfirmar}
-            disabled={emAndamento}
-            title="Registrar negociação na coluna EM NEGOCIAÇÃO"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-60"
+          <Link
+            href="/negociacoes"
+            title="Ver a negociação deste cliente no funil (entra sozinha quando a conversa levanta máquina + pagamento ou visita)"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
           >
-            {emAndamento ? <Loader2 size={14} className="animate-spin" /> : <Check size={15} strokeWidth={3} />} Negociação?
-          </button>
-          <button
-            onClick={onDescartar}
-            disabled={emAndamento}
-            title="Remover este card (volta se chegar mensagem nova)"
-            className="flex h-9 w-11 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
-          >
-            <X size={16} strokeWidth={3} />
-          </button>
+            <Handshake size={15} strokeWidth={2.5} /> Funil
+          </Link>
         </div>
       </Card>
     </div>
   );
 }
 
-export function OrientadorLista({ itens, contagem, periodo, colunas }: {
-  itens: Item[]; contagem: Record<PeriodoOrientador, number>; periodo: PeriodoOrientador; colunas: Coluna[];
+export function OrientadorLista({ itens, contagem, periodo }: {
+  itens: Item[]; contagem: Record<PeriodoOrientador, number>; periodo: PeriodoOrientador;
 }) {
   const router = useRouter();
   const [aberto, setAberto] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [removidos, setRemovidos] = useState<Set<string>>(new Set());
-  const [ocupado, setOcupado] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string; link?: string } | null>(null);
-  const [arrastando, setArrastando] = useState<Item | null>(null);
   const [analisando, setAnalisando] = useState<Set<string>>(new Set());
   const [lote, setLote] = useState<{ total: number; feitas: number } | null>(null);
   const [, startTransition] = useTransition();
@@ -224,57 +181,12 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
     startTransition(() => router.refresh());
   }
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } })
-  );
-
   async function abrir(clienteId: string) {
     setAberto(clienteId);
     setCarregando(true);
     const d = await buscarOrientadorAnalise(clienteId);
     setDetalhe(d);
     setCarregando(false);
-  }
-
-  function esconder(clienteId: string) {
-    setRemovidos((s) => new Set(s).add(clienteId));
-  }
-
-  async function confirmarNegociacao(item: Item, colunaTitulo?: string) {
-    setOcupado(item.clienteId);
-    setAviso(null);
-    const r = await criarNegociacaoDoOrientador(item.clienteId, colunaTitulo);
-    setOcupado(null);
-    if (!r.ok) { setAviso({ tipo: "erro", texto: r.erro ?? "Não foi possível registrar a negociação." }); return; }
-    esconder(item.clienteId);
-    setAviso({
-      tipo: "ok",
-      texto: `${r.criada ? "Negociação registrada" : "Negociação existente movida"} em "${r.coluna}" para ${item.clienteNome}${r.maquina ? ` · máquina identificada: ${r.maquina}` : " · máquina não identificada, complete no funil"}.`,
-      link: "/negociacoes",
-    });
-    startTransition(() => router.refresh());
-  }
-
-  async function descartar(item: Item) {
-    setOcupado(item.clienteId);
-    await descartarCardOrientador(item.clienteId);
-    setOcupado(null);
-    esconder(item.clienteId);
-    startTransition(() => router.refresh());
-  }
-
-  function onDragStart(e: DragStartEvent) {
-    const item = (e.active.data.current as { item?: Item } | undefined)?.item ?? null;
-    setArrastando(item);
-  }
-
-  function onDragEnd(e: DragEndEvent) {
-    const item = (e.active.data.current as { item?: Item } | undefined)?.item ?? null;
-    setArrastando(null);
-    const over = e.over?.id ? String(e.over.id) : null;
-    if (!item || !over || !over.startsWith("col:")) return;
-    void confirmarNegociacao(item, over.slice(4));
   }
 
   const visiveis = itens.filter((i) => !removidos.has(i.clienteId));
@@ -303,7 +215,7 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
         <button onClick={zerar} disabled={!!lote} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
           <Eraser size={14} /> Zerar e recomeçar
         </button>
-        <span className="text-xs text-slate-500">A IA lê a conversa inteira, o cadastro e as negociações antes de opinar. Arraste o card inteiro até a coluna do funil.</span>
+        <span className="text-xs text-slate-500">A IA lê a conversa inteira, o cadastro e as negociações antes de opinar. A negociação entra no funil sozinha quando a conversa levanta máquina + pagamento ou visita.</span>
       </div>
 
       {aviso && (
@@ -313,21 +225,7 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
         </div>
       )}
 
-      {/* pointerWithin: a coluna alvo é a que está sob o dedo/ponteiro — com a
-          colisão por retângulo, o card (grande) "encostava" em várias colunas
-          e o soltar caía na vizinha. */}
-      <DndContext id="dnd-orientador" sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setArrastando(null)}>
-        {colunas.length > 0 && visiveis.length > 0 && (
-          <div className={cn("sticky top-14 z-20 mb-4 rounded-2xl border bg-slate-50 p-3 shadow-sm transition md:top-2", arrastando ? "border-brand-400 ring-2 ring-brand-200" : "border-slate-200")}>
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              <GripVertical size={13} /> {arrastando ? `Solte “${arrastando.clienteNome}” na coluna do funil` : "Arraste um card até a coluna do funil (★ = Em negociação, o padrão do botão ✓)"}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {colunas.map((c) => <ZonaColuna key={c.id} coluna={c} arrastando={!!arrastando} />)}
-            </div>
-          </div>
-        )}
-
+      <div>
         {visiveis.length === 0 ? (
           <EmptyState
             icone={<Compass size={28} />}
@@ -340,26 +238,14 @@ export function OrientadorLista({ itens, contagem, periodo, colunas }: {
               <CardOrientador
                 key={a.clienteId}
                 a={a}
-                emAndamento={ocupado === a.clienteId}
                 analisando={analisando.has(a.clienteId)}
                 onAnalisar={() => analisarUm(a)}
                 onAbrir={() => abrir(a.clienteId)}
-                onConfirmar={() => confirmarNegociacao(a)}
-                onDescartar={() => descartar(a)}
               />
             ))}
           </div>
         )}
-
-        <DragOverlay>
-          {arrastando && (
-            <div className="rounded-xl border border-brand-400 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-xl">
-              {arrastando.clienteNome}
-              {arrastando.municipio && <span className="ml-1 text-xs font-normal text-slate-400">· {arrastando.municipio}</span>}
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
+      </div>
 
       {aberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAberto(null)}>

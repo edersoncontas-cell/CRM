@@ -10,6 +10,7 @@ import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { lerParametros } from "@/lib/parametros";
+import { montarContextoAgenda } from "@/lib/zeus/agenda-contexto";
 
 // Monta contexto rico do cliente para o Cérebro entender tudo antes de responder.
 export async function montarContextoCliente(conv: {
@@ -130,6 +131,11 @@ export async function montarContextoCliente(conv: {
         }
       }
     }
+
+    // Agenda dos próximos dias com cidade + melhor dia para visitar ESTE
+    // cliente (por proximidade) — para a IA propor um dia que encaixe na rota.
+    const agenda = await montarContextoAgenda(cliente.id);
+    if (agenda.texto) linhas.push(agenda.texto);
 
     return linhas.join("\n");
   } catch {

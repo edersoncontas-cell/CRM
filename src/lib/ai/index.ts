@@ -5,7 +5,7 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
-import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, GROQ_BASE_URL } from "./groq";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, GROQ_BASE_URL } from "./groq";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -150,7 +150,7 @@ async function chamarProvedorTexto(
   // que o modelo não existe mais, marca como ruim e refaz com o próximo; se o
   // JSON estrito falhar, refaz pedindo o JSON só pelo prompt.
   let semFormato = false;
-  for (let tentativa = 0; tentativa < 3; tentativa++) {
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
     const modelo = await modeloGroq();
     const sistema = opts?.json && semFormato ? `${system}\n\nResponda SOMENTE com um JSON válido, sem texto antes ou depois, sem markdown.` : system;
     const res = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
@@ -170,6 +170,9 @@ async function chamarProvedorTexto(
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
       if (res.status === 404 && erroDeModeloGroq(detalhe)) { marcarModeloGroqRuim(modelo); continue; }
+      // Cota do Groq é por modelo: este esgotou (tokens/dia ou /min), o próximo
+      // candidato ainda tem a dele — troca e refaz em vez de falhar.
+      if (res.status === 429 && erroDeCotaGroq(detalhe)) { marcarModeloGroqEsgotado(modelo); continue; }
       if (res.status === 400 && opts?.json && !semFormato && erroDeJsonGroq(detalhe)) { semFormato = true; continue; }
       throw new Error(`Falha no Groq (${res.status}, ${modelo}): ${detalhe.slice(0, 200)}`);
     }
@@ -327,11 +330,12 @@ Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto a
   "valor": number|null,                   // valor em reais (número puro)
   "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"outro"|null,
   "concorrente": string|null,             // concorrente citado (Caterpillar, Komatsu, Volvo, JCB, Case, XCMG, Sany...)
-  "dataVisita": string|null,              // ISO 8601 se houver agendamento de visita
+  "dataVisita": string|null,              // ISO 8601 do dia/hora de uma VISITA PRESENCIAL (vendedor vai ao cliente/obra, ou cliente vem à loja). NÃO é visita: "amanhã te dou uma posição", "amanhã falo com meu sócio", "te ligo amanhã", "semana que vem a gente vê" — nesses casos null
+  "visitaConfirmada": boolean,            // true SÓ se os DOIS lados combinaram a visita presencial num dia ("fechado, quinta 14h na obra" / "te espero terça"). Proposta de um lado ainda sem resposta, "vou ver", "se der" = false
   "sentimento": "positivo"|"neutro"|"negativo",
   "ehProspectReal": boolean,              // realmente negociou/pediu info de máquina?
   "intencao": "comprar"|"cotar"|"curiosidade"|"suporte"|"outro", // comprar = quer fechar/financiar; cotar = pediu preço/proposta; curiosidade = só perguntou; suporte = peça/garantia/assistência
-  "categoriaMaquina": string|null,        // retroescavadeira | escavadeira | pá carregadeira | motoniveladora | rolo compactador | mini carregadeira — pelo nome comum ("retro", "pá", "rolo"), mesmo sem modelo
+  "categoriaMaquina": string|null,        // retroescavadeira | escavadeira | pá carregadeira | mini escavadeira | mini carregadeira | motoniveladora | rolo compactador — pelo nome comum, mesmo sem modelo: "retro" = retroescavadeira; "pá" = pá carregadeira; "patrol"/"motoniveladora" = motoniveladora; "mini" = mini escavadeira ou mini carregadeira conforme o contexto; "rolo" = rolo compactador
   "valorConcorrente": number|null,        // preço que o cliente disse ter recebido de um CONCORRENTE (nunca vai em "valor")
   "rascunhoResposta": string              // resposta sugerida no tom do vendedor
 }
@@ -386,6 +390,7 @@ export async function analisarConversaIA(
       condicaoPagamento: parsed.condicaoPagamento ?? null,
       concorrente: parsed.concorrente ?? null,
       dataVisita: parsed.dataVisita ? new Date(parsed.dataVisita) : null,
+      visitaConfirmada: parsed.visitaConfirmada === true,
       sentimento: parsed.sentimento ?? "neutro",
       ehProspectReal: !!parsed.ehProspectReal,
       rascunhoResposta: parsed.rascunhoResposta ?? "",

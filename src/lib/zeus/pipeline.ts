@@ -10,6 +10,7 @@ import { analisarConversaIA, classificarConversaIA, type ExtracaoConversa } from
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 import { papelDaColuna } from "@/lib/pipeline";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
+import { deveAbrirNegociacao } from "@/lib/zeus/regra-negociacao";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { registrarAudit } from "@/lib/audit";
 import { enviarPushNotificacao } from "@/lib/push";
@@ -56,20 +57,10 @@ function ajusteTermometro(sentimento: string | null): number {
   return 0;
 }
 
-// Alimenta a negociação aberta do cliente (ou cria uma nova se for prospect
-// real), incluindo o ajuste do termômetro conforme o sentimento detectado.
-// Regra de abertura automática de negociação (v2). Antes, qualquer mensagem
-// com "máquina" ou "preço" abria uma negociação — o funil enchia de cards
-// vazios e o valor do concorrente virava o "nosso" valor. Agora só abre com
-// SINAL DE COMPRA: intenção de comprar/cotar E algo concreto (modelo, categoria
-// da máquina, valor nosso ou visita marcada). Curiosidade e suporte não abrem;
-// o Orientador de Vendas mostra o card e o vendedor decide (arrastar/✓).
-export function deveAbrirNegociacao(ex: ExtracaoConversa): boolean {
-  if (ex.intencao === "suporte" || ex.intencao === "outro") return false;
-  if (ex.intencao === "curiosidade" && !ex.dataVisita) return false;
-  const concreto = !!ex.maquina || !!ex.categoriaMaquina || ex.valor != null || !!ex.dataVisita;
-  return ex.ehProspectReal && concreto;
-}
+// Alimenta a negociação aberta do cliente (ou cria uma nova quando a conversa
+// já levantou máquina + pagamento/visita — ver regra-negociacao.ts), incluindo
+// o ajuste do termômetro conforme o sentimento detectado.
+export { deveAbrirNegociacao };
 
 // Marca pelo catálogo próprio (modelo citado) — evita card "sem marca".
 async function marcaDoModelo(modelo: string | null): Promise<string | null> {
@@ -168,7 +159,7 @@ export async function registrarVisitaAgenda(clienteId: string, dataVisita: Date 
   });
   if (jaExiste) return;
   const visita = await db.visita.create({
-    data: { clienteId, data: dataVisita, observacao: "Detectada automaticamente pela IA" },
+    data: { clienteId, data: dataVisita, observacao: "Combinada na conversa do WhatsApp (IA)" },
   });
   await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
 }
@@ -292,6 +283,10 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
         `Cliente (ÚLTIMA MENSAGEM, analise esta): ${corpoAnalise}`,
       ].join("\n");
       const extracao = await analisarConversaIA(contextoConversa, { estiloDeFala: estilo?.guia, modelosDestaque });
+      // "Amanhã te dou uma posição" / "amanhã falo com meu sócio" NÃO é visita.
+      // Só conta (agenda, coluna de visita, regra de abrir negociação) quando a
+      // IA viu os dois lados combinando um dia de visita presencial.
+      if (!extracao.visitaConfirmada) extracao.dataVisita = null;
 
       await vincularMunicipio(clienteId, extracao.municipio);
       const negResult = await alimentarNegociacao(clienteId, extracao);

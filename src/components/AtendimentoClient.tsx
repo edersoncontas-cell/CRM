@@ -1055,6 +1055,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 <div className="grid grid-cols-1 gap-2 text-xs">
                   <div className="rounded-xl bg-white/[0.04] p-3">
                     <div className="mb-1 flex items-center gap-1 font-bold text-brand-200"><Calendar size={12} className="text-sky-300" /> Visitas</div>
+                    {contexto.sugestaoVisita && (
+                      <div className="mb-1.5 rounded-lg bg-sky-400/10 px-2 py-1 text-[11px] text-sky-100"><b className="text-sky-300">Melhor dia para visitar:</b> {contexto.sugestaoVisita}</div>
+                    )}
                     {contexto.visitas.length === 0 && !contexto.cliente.proximaVisita ? (
                       <Link href={`/clientes/${contexto.cliente.id}`} className="text-brand-400 hover:text-agro-300">Nenhuma marcada · agendar no cadastro</Link>
                     ) : (

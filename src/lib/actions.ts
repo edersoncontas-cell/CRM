@@ -6,7 +6,7 @@ import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnic
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas, papelDaColuna, PAPEIS_COLUNA, type PapelColuna } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, type PapelColuna } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
@@ -2398,101 +2398,8 @@ export async function analisarLoteOrientadorAction(conversaIds: string[]): Promi
   return { feitas, erros };
 }
 
-// X vermelho: some do Orientador até chegar mensagem nova.
-export async function descartarCardOrientador(clienteId: string): Promise<{ ok: boolean }> {
-  await db.cliente.update({ where: { id: clienteId }, data: { orientadorOcultoEm: new Date() } });
-  revalidatePath("/orientador");
-  revalidatePath("/dashboard");
-  return { ok: true };
-}
-
-const TERMOMETRO_POR_TEMPERATURA: Record<string, number> = { muito_quente: 85, quente: 70, morna: 50, fria: 30 };
-
-// ✓ NEGOCIAÇÃO?: registra uma negociação na coluna "em negociação" do funil
-// (tenta descobrir a máquina pela conversa/análise; se não achar, fica em
-// branco para o vendedor preencher depois). Se o cliente já tem negociação
-// aberta, ela é reaproveitada (movida pra coluna) em vez de duplicar.
-// `colunaTitulo` (opcional): coluna do funil escolhida ao ARRASTAR o card do
-// Orientador; sem ela (botão ✓), vai para a coluna "Em negociação".
-export async function criarNegociacaoDoOrientador(clienteId: string, colunaTitulo?: string): Promise<{
-  ok: boolean; negociacaoId?: string; criada?: boolean; coluna?: string; maquina?: string | null; erro?: string;
-}> {
-  const cliente = await db.cliente.findUnique({
-    where: { id: clienteId },
-    select: { id: true, nome: true, resumoMaquinas: true, orientador: true },
-  });
-  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
-
-  await garantirColunasFunil();
-  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true }, orderBy: { ordem: "asc" } });
-  const categorizar = criarCategorizadorColunas(colunas);
-  const abertas = colunas.filter((c) => categorizar(c.titulo) === "em_negociacao");
-  const escolhida = colunaTitulo
-    ? colunas.find((c) => c.titulo === colunaTitulo && ["em_negociacao", "banco"].includes(categorizar(c.titulo)))
-    : undefined;
-  if (colunaTitulo && !escolhida) return { ok: false, erro: `A coluna "${colunaTitulo}" não aceita negociações em aberto.` };
-  const alvo = escolhida ?? abertas.find((c) => /negocia/i.test(c.titulo)) ?? abertas[0];
-  if (!alvo) return { ok: false, erro: "Nenhuma coluna de negociação encontrada no funil." };
-
-  // Tenta identificar a máquina: modelos próprios citados na análise da IA,
-  // no resumo do cliente ou nas últimas mensagens da conversa.
-  const [maquinas, conv] = await Promise.all([
-    db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true } }),
-    db.whatsAppConversation.findFirst({
-      where: { clienteId, isGroup: false },
-      orderBy: { lastMessageAt: "desc" },
-      select: { messages: { where: { isDraft: false }, orderBy: { sentAt: "desc" }, take: 40, select: { body: true } } },
-    }),
-  ]);
-  const texto = [
-    cliente.orientador?.resumoNegociacao, cliente.orientador?.proximaAcao, cliente.resumoMaquinas,
-    ...(conv?.messages.map((m) => m.body) ?? []),
-  ].filter(Boolean).join("\n");
-  const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const achada = maquinas
-    .filter((m) => m.modelo.length >= 3)
-    .sort((a, b) => b.modelo.length - a.modelo.length)
-    .find((m) => new RegExp(`(^|[^A-Za-z0-9])${escapar(m.modelo)}([^A-Za-z0-9]|$)`, "i").test(texto)) ?? null;
-
-  const termometro = TERMOMETRO_POR_TEMPERATURA[cliente.orientador?.temperatura ?? ""] ?? 50;
-  const proximaAcao = cliente.orientador?.proximaAcao ?? "Qualificar interesse e agendar visita";
-
-  const aberta = await db.negociacao.findFirst({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" } });
-  let negociacaoId: string;
-  let criada = false;
-  if (aberta) {
-    await db.negociacao.update({
-      where: { id: aberta.id },
-      data: {
-        // Coluna escolhida ao arrastar vale sempre; pelo botão ✓, só move o que
-        // ainda não está numa coluna de negociação.
-        ...(escolhida || categorizar(aberta.estagio) !== "em_negociacao" ? { estagio: alvo.titulo } : {}),
-        ...(!aberta.maquinaModelo && achada ? { maquinaModelo: achada.modelo, marca: achada.marca } : {}),
-        ultimoContato: new Date(),
-      },
-    });
-    negociacaoId = aberta.id;
-  } else {
-    const nova = await db.negociacao.create({
-      data: {
-        clienteId, estagio: alvo.titulo, status: "aberta", termometro, proximaAcao,
-        marca: achada?.marca ?? null, maquinaModelo: achada?.modelo ?? null, ultimoContato: new Date(),
-      },
-    });
-    negociacaoId = nova.id;
-    criada = true;
-  }
-
-  await db.cliente.update({ where: { id: clienteId }, data: { orientadorOcultoEm: new Date() } });
-  await registrarAudit({
-    acao: criada ? "negociacao_criada" : "negociacao_atualizada",
-    origem: "usuario",
-    descricao: `${criada ? "Negociação criada" : "Negociação movida"} pelo Orientador de Vendas para "${alvo.titulo}" (${cliente.nome}).`,
-    entidade: "Negociacao", entidadeId: negociacaoId, clienteId,
-  }).catch(() => {});
-  for (const p of ["/orientador", "/negociacoes", "/pipeline", "/dashboard"]) revalidatePath(p);
-  return { ok: true, negociacaoId, criada, coluna: alvo.titulo, maquina: achada ? `${achada.marca} ${achada.modelo}` : null };
-}
+// (✓/✗ do Orientador foram removidos: a negociação entra no funil sozinha —
+// ver lib/zeus/regra-negociacao.ts — e sai/edita pelo próprio funil.)
 
 // Análise completa de um cliente (drill-down do painel + badge compacto em
 // Atendimento/Cadastro do cliente).

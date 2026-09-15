@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { normalizarCoaching, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { rotuloPapel, papelDaColuna } from "@/lib/pipeline";
 import { registrarAudit } from "@/lib/audit";
+import { montarContextoAgenda } from "@/lib/zeus/agenda-contexto";
 
 export type ContextoConversa = {
   cliente: {
@@ -42,6 +43,9 @@ export type ContextoConversa = {
   // Se já existe um guia de estilo de fala aprendido do vendedor — a "melhor
   // resposta" imita esse jeito real; sem ele, usa um tom padrão até aprender.
   estiloAprendido: boolean;
+  // Dia em que o vendedor já estará mais perto da cidade deste cliente (pela
+  // agenda de visitas marcadas) — ex.: "terça 22/09 — você já estará em Alegre (≈28 km)".
+  sugestaoVisita: string | null;
   negociacoes: { id: string; maquina: string | null; valor: number | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
   visitas: { id: string; data: string; observacao: string | null }[];
   cadencia: { id: string; toqueAtual: number; proximoToqueEm: string } | null;
@@ -50,11 +54,11 @@ export type ContextoConversa = {
 
 export async function contextoConversaAction(conversationId: string): Promise<ContextoConversa> {
   const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
-  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [], estiloAprendido: false };
+  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [], estiloAprendido: false, sugestaoVisita: null };
   if (!conv?.clienteId) return vazio;
   const clienteId = conv.clienteId;
 
-  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas, estilo] = await Promise.all([
+  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas, estilo, agenda] = await Promise.all([
     db.cliente.findUnique({
       where: { id: clienteId },
       select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
@@ -66,6 +70,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
     db.alerta.findMany({ where: { clienteId, resolvido: false }, orderBy: { criadoEm: "desc" }, take: 4, select: { id: true, tipo: true, mensagem: true } }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true } }),
     db.estiloDeFala.findFirst({ select: { id: true } }),
+    montarContextoAgenda(clienteId).catch(() => null),
   ]);
   if (!cliente) return vazio;
   const papelPorTitulo = new Map(colunas.map((c) => [c.titulo, rotuloPapel(papelDaColuna(c))]));
@@ -95,6 +100,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
     cadencia: cadencia ? { id: cadencia.id, toqueAtual: cadencia.toqueAtual, proximoToqueEm: cadencia.proximoToqueEm.toISOString() } : null,
     alertas,
     estiloAprendido: !!estilo,
+    sugestaoVisita: agenda?.sugestao?.texto ?? null,
   };
 }
 

@@ -13,6 +13,9 @@ export interface ExtracaoConversa {
   condicaoPagamento: string | null;
   concorrente: string | null;
   dataVisita: Date | null;
+  // true só quando os DOIS lados combinaram uma visita presencial num dia.
+  // A heurística nunca confirma — só a IA, lendo a conversa inteira.
+  visitaConfirmada: boolean;
   sentimento: "positivo" | "neutro" | "negativo";
   ehProspectReal: boolean;
   rascunhoResposta: string;
@@ -21,7 +24,7 @@ export interface ExtracaoConversa {
   // valor da NOSSA negociação, lê a intenção e a categoria da máquina.
   valorConcorrente: number | null;
   intencao: "comprar" | "cotar" | "curiosidade" | "suporte" | "outro";
-  categoriaMaquina: string | null; // retroescavadeira | escavadeira | pá carregadeira | motoniveladora | rolo compactador | mini carregadeira
+  categoriaMaquina: string | null; // retroescavadeira | escavadeira | pá carregadeira | mini escavadeira | mini carregadeira | motoniveladora | rolo compactador
 }
 
 export type IntencaoConversa = ExtracaoConversa["intencao"];
@@ -265,7 +268,8 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
   if (valor) partes.push(`valor ~ R$ ${valor.toLocaleString("pt-BR")}`);
   if (condicao) partes.push(`pagamento: ${condicao}`);
   if (concorrente) partes.push(`citou concorrente: ${concorrente}`);
-  if (dataVisita) partes.push(`visita sugerida`);
+  // (data mencionada não vira "visita" no resumo: a heurística não sabe se os
+  // dois lados combinaram um encontro — só a IA confirma isso.)
   const resumo = partes.length
     ? partes.join("; ") + "."
     : "Conversa registrada (sem dados estruturados detectados).";
@@ -291,6 +295,7 @@ export function extrairHeuristica(texto: string, base = new Date()): ExtracaoCon
     condicaoPagamento: condicao,
     concorrente,
     dataVisita,
+    visitaConfirmada: false,
     sentimento,
     ehProspectReal,
     rascunhoResposta: rascunho,

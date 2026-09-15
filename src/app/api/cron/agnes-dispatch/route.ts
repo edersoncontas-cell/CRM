@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
+import { deveReanalisar } from "@/lib/zeus/orientador-gatilho";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
 import { lerParametros } from "@/lib/parametros";
 
@@ -36,6 +37,15 @@ export async function GET(req: NextRequest) {
       orderBy: { sentAt: "asc" },
       take: 120,
     });
+
+    // Mesmo filtro do despacho rápido: só trivial desde a última análise → não
+    // gasta IA; só limpa o agendamento.
+    const analiseAnterior = await db.orientadorAnalise.findUnique({ where: { clienteId: conv.clienteId! }, select: { atualizadoEm: true } });
+    const novas = msgs.filter((m) => m.direction === "IN" && (!analiseAnterior || m.sentAt > analiseAnterior.atualizadoEm));
+    if (!deveReanalisar({ ultimaAnaliseEm: analiseAnterior?.atualizadoEm ?? null, novas: novas.map((m) => ({ texto: m.body, mediaType: m.mediaType })) }).reanalisar) {
+      await db.whatsAppConversation.update({ where: { id: conv.id }, data: { agnesScheduledAt: null } });
+      continue;
+    }
 
     const historicoCompleto = msgs
       .map((m) => {

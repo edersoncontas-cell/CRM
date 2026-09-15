@@ -30,7 +30,7 @@ const ruins = new Set<string>();
 // Regra pura (testável): modelo do ambiente se existir, senão o primeiro
 // candidato disponível, senão o do ambiente ou o primeiro da lista.
 export function escolherModeloGroq(env: string | undefined, disponiveis: Set<string>, ruinsAgora: Set<string> = ruins): string {
-  const ok = (m: string) => !ruinsAgora.has(m) && (disponiveis.size === 0 || disponiveis.has(m));
+  const ok = (m: string) => !ruinsAgora.has(m) && !modeloGroqEsgotado(m) && (disponiveis.size === 0 || disponiveis.has(m));
   if (env && ok(env)) return env;
   const candidato = CANDIDATOS_GROQ.find(ok);
   if (candidato) return candidato;
@@ -94,4 +94,28 @@ export function erroDeJsonGroq(e: unknown): boolean {
 export function marcarModeloGroqRuim(modelo: string): void {
   ruins.add(modelo);
   cache = null;
+}
+
+// Cota (429): o limite do Groq é POR MODELO (tokens por dia/minuto). Quando um
+// estoura, o próximo candidato da lista ainda tem cota própria — então o
+// modelo fica "esgotado" por um tempo (não para sempre, como o 404) e a
+// chamada é refeita com o seguinte. Só depois de todos esgotarem é que a
+// cascata passa para o próximo provedor.
+const ESGOTADO_MS = 60 * 60_000;
+const esgotados = new Map<string, number>();
+
+export function erroDeCotaGroq(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /\b429\b|rate.?limit|tokens per (day|minute)|\bTPD\b|\bTPM\b/i.test(msg);
+}
+
+export function marcarModeloGroqEsgotado(modelo: string, agora = Date.now()): void {
+  esgotados.set(modelo, agora + ESGOTADO_MS);
+}
+
+export function modeloGroqEsgotado(modelo: string, agora = Date.now()): boolean {
+  const ate = esgotados.get(modelo);
+  if (ate == null) return false;
+  if (ate <= agora) { esgotados.delete(modelo); return false; }
+  return true;
 }

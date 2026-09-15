@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
+import { deveReanalisar } from "@/lib/zeus/orientador-gatilho";
 import { iaHabilitada } from "@/lib/ai";
 import { lerParametros } from "@/lib/parametros";
 
@@ -52,6 +53,13 @@ export async function POST(req: NextRequest) {
   ]);
 
   const estilo = estiloRecord?.guia ?? null;
+
+  // "Sim", "ok", figurinha, rajada de linhas curtas: não gasta uma análise
+  // inteira (~10 mil tokens) — a leitura anterior continua valendo.
+  const analiseAnterior = await db.orientadorAnalise.findUnique({ where: { clienteId: conv.clienteId }, select: { atualizadoEm: true } });
+  const novas = msgs.filter((m) => m.direction === "IN" && (!analiseAnterior || m.sentAt > analiseAnterior.atualizadoEm));
+  const decisao = deveReanalisar({ ultimaAnaliseEm: analiseAnterior?.atualizadoEm ?? null, novas: novas.map((m) => ({ texto: m.body, mediaType: m.mediaType })) });
+  if (!decisao.reanalisar) return NextResponse.json({ ok: true, ignorado: decisao.motivo });
 
   // Monta histórico completo (não invertido — ordem cronológica para a IA ler)
   const historicoCompleto = msgs
