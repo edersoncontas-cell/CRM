@@ -63,9 +63,10 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const c = dados.cotacoes;
   const es = c.cafeES ?? null;
   const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; sub?: string; destaque?: boolean }[] = [];
-  if (es?.conilon) cartoes.push({ icone: Coffee, label: `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 0), pct: es.variacaoConilonPct, sub: `sc 60 kg · ${es.fonte ?? "físico"}${es.dataReferencia ? ` · ${es.dataReferencia}` : ""} · lido ${quando(es.atualizadoEm)}`, destaque: true });
+  const doPainel = (es?.fonte ?? "").startsWith("Painel do Café");
+  if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, sub: `sc 60 kg · ${es.fonte ?? "físico"}${es.dataReferencia ? ` · ${es.dataReferencia}` : ""} · lido ${quando(es.atualizadoEm)}`, destaque: true });
   else if (c.cafeConilon != null) cartoes.push({ icone: Coffee, label: "Conilon · Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct, sub: atualizando ? "sc 60 kg · bolsa · buscando o preço do ES…" : "sc 60 kg · bolsa · preço do ES indisponível agora" });
-  if (es?.arabica) cartoes.push({ icone: Coffee, label: "Arábica", valor: fmtBRL(es.arabica, 0), sub: `sc 60 kg · ${es.fonte?.replace(" (IA)", "") ?? "físico"}` });
+  if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, sub: `sc 60 kg · ${es.fonte?.replace(" (IA)", "") ?? "físico"}` });
   else if (c.cafeArabica != null) cartoes.push({ icone: Coffee, label: "Arábica · NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct, sub: "sc 60 kg · bolsa" });
   if (c.dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(c.dolar), pct: c.detalhe?.dolar?.variacaoPct, sub: quando(c.cafeAtualizadoEm) ? `atualizado ${quando(c.cafeAtualizadoEm)}` : undefined });
 

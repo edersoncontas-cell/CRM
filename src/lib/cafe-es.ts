@@ -1,13 +1,13 @@
-// Robô da cotação do café no Espírito Santo. Busca o preço físico da saca de
-// conilon (e do arábica) em fontes públicas, na ordem:
-//   1. Painel do Café (paineldocafe.com.br) — a fonte pedida pelo vendedor
-//   2. CEPEA/ESALQ — indicador Robusta/Conilon ES (R$/saca 60 kg)
-//   3. Notícias Agrícolas — tabela "Café conilon CEPEA/ESALQ"
-//   4. CCCV — Centro do Comércio de Café de Vitória
-// Em cada fonte tenta primeiro uma leitura direta (regex) e, se não achar,
-// entrega o TEXTO da página para a IA extrair o preço (robusto a mudanças de
-// layout). Grava um histórico diário em Configuracao (cafe.es.historico) e o
-// último valor bom (cafe.es.ultimo).
+// Robô da cotação do café no Espírito Santo. Busca o preço da saca de conilon
+// (e do arábica) em fontes públicas, na ordem:
+//   1. Painel do Café — a API do aplicativo (paineldocafe.com.br), a fonte
+//      pedida pelo vendedor: Conilon 7/8, Arábica Rio, dólar, Londres, NY
+//   2. CCCV — Centro do Comércio de Café de Vitória (tabela do mês)
+//   3. Notícias Agrícolas — indicador CEPEA/ESALQ do conilon ES
+//   4. CEPEA/ESALQ direto (costuma bloquear robô; fica por último)
+// Cada fonte tem leitura direta (parser em lib/cafe-parsers.ts) e, se não
+// achar, a IA extrai o preço do texto da página. Grava histórico diário em
+// Configuracao (cafe.es.historico) e o último valor bom (cafe.es.ultimo).
 //
 // Quem chama: o cron /api/cron/mercado E a rota /api/mercado/ticker, que o
 // Dashboard consulta toda vez que é aberto/atualizado — se a leitura estiver
@@ -15,12 +15,14 @@
 
 import { getConfig, setConfig } from "@/lib/config";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
+import { htmlParaTexto, trechosRelevantes, lerDireto, lerTabelaCCCV, lerNoticiasAgricolasConilon, lerJsonPainelDoCafe, valido, type Leitura } from "@/lib/cafe-parsers";
 
 const CHAVE_HISTORICO = "cafe.es.historico";
 const CHAVE_ULTIMO = "cafe.es.ultimo";
 const CHAVE_TENTATIVA = "cafe.es.tentativaEm";
 const TIMEOUT_MS = 12_000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+const API_PAINEL = "https://api.coffee-panel.mitrix.online/api/home/information";
 
 // Leitura vale por 15 min (o preço é diário, mas o vendedor quer ver
 // atualizado sempre que abre); depois de uma falha, espera 10 min para
@@ -35,22 +37,19 @@ export type CotacaoCafeES = {
   fonte: string | null;
   praca?: string | null;       // praça/região do preço (ex.: "Vitória - ES")
   atualizadoEm: string;        // ISO da leitura
-  variacaoConilonPct: number | null; // vs. leitura anterior gravada
+  variacaoConilonPct: number | null; // da fonte ou vs. leitura anterior gravada
+  variacaoArabicaPct?: number | null;
+  // Extras do Painel do Café
+  dolar?: number | null;
+  londres?: number | null;
+  novaYork?: number | null;
 };
 
 export type PontoHistoricoCafe = { data: string; conilon: number | null; arabica: number | null; fonte: string | null };
 
-type Leitura = { conilon: number | null; arabica: number | null; dataReferencia: string | null; fonte: string; praca?: string | null };
-
-const numBR = (s: string): number | null => {
-  const n = parseFloat(s.replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) && n > 100 && n < 20000 ? n : null;
-};
-const valido = (n: unknown): number | null => (typeof n === "number" && Number.isFinite(n) && n > 100 && n < 20000 ? Math.round(n * 100) / 100 : null);
-
-async function baixar(url: string): Promise<string | null> {
+async function baixar(url: string, accept = "text/html,*/*"): Promise<string | null> {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html,*/*", "Accept-Language": "pt-BR,pt;q=0.9" }, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "pt-BR,pt;q=0.9" }, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!res.ok) return null;
     return await res.text();
   } catch {
@@ -58,61 +57,20 @@ async function baixar(url: string): Promise<string | null> {
   }
 }
 
-// HTML → texto corrido, sem scripts/estilos/tags.
-function htmlParaTexto(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|td|th)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, "\"").replace(/&#39;/g, "'")
-    .replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
-}
-
-// Só os trechos em volta das palavras que interessam (cabe no prompt da IA).
-function trechosRelevantes(texto: string, max = 9000): string {
-  const rx = /conilon|con[ií]lon|robusta|ar[áa]bica|esp[íi]rito santo|vit[óo]ria|colatina|s[ãa]o gabriel|linhares|nova ven[ée]cia|saca/gi;
-  const partes: string[] = [];
-  const vistos: [number, number][] = [];
-  for (const m of texto.matchAll(rx)) {
-    const ini = Math.max(0, m.index! - 350), fim = Math.min(texto.length, m.index! + 450);
-    if (vistos.some(([a, b]) => ini >= a && fim <= b)) continue;
-    vistos.push([ini, fim]);
-    partes.push(texto.slice(ini, fim));
-    if (partes.join("\n…\n").length > max) break;
-  }
-  const junto = partes.join("\n…\n");
-  return (junto || texto).slice(0, max);
-}
-
-// Leitura direta: "Conilon … R$ 1.234,56" ou "dd/mm/aaaa … 1.234,56".
-function lerDireto(texto: string, rotulo: RegExp): { valor: number; data: string | null } | null {
-  const i = texto.search(rotulo);
-  if (i < 0) return null;
-  const janela = texto.slice(i, i + 600);
-  const comRS = janela.match(/R\$\s*([\d.]{1,7},\d{2})/);
-  const data = janela.match(/(\d{2}\/\d{2}\/\d{4})/)?.[1] ?? texto.slice(Math.max(0, i - 300), i + 600).match(/(\d{2}\/\d{2}\/\d{4})/)?.[1] ?? null;
-  if (comRS) { const v = numBR(comRS[1]); if (v) return { valor: v, data }; }
-  const soNumero = janela.match(/(?:^|\s)([\d.]{1,7},\d{2})(?=\s|$)/);
-  if (soNumero) { const v = numBR(soNumero[1]); if (v) return { valor: v, data }; }
-  return null;
-}
-
-// A IA lê o texto da página e devolve o preço. É o que garante a leitura do
-// Painel do Café mesmo que o layout do site mude.
+// A IA lê o texto da página e devolve o preço (reserva para quando a leitura
+// direta não encontra a tabela).
 async function extrairPorIA(texto: string, fonte: string): Promise<Leitura | null> {
   if (!iaHabilitada() || texto.length < 40) return null;
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const system = `Você lê o texto bruto de um site de cotações de café (${fonte}) e extrai preços da SACA DE 60 KG em reais.
 Hoje é ${hoje}. Devolva SOMENTE um JSON válido:
 {
-  "conilon": number|null,        // preço do café CONILON (robusta) no Espírito Santo, R$/saca 60 kg. Prefira a praça de Vitória/Colatina/ES ou o indicador CEPEA/ESALQ do conilon ES. Ex.: 1234.5
-  "arabica": number|null,        // preço do café ARÁBICA (bebida dura, tipo 6/7, ou indicador CEPEA), R$/saca 60 kg
+  "conilon": number|null,        // preço do café CONILON (robusta) no Espírito Santo, R$/saca 60 kg. Prefira a praça de Vitória/ES ou o indicador CEPEA/ESALQ do conilon ES. Ex.: 980.78
+  "arabica": number|null,        // preço do café ARÁBICA (bebida rio/dura ou indicador CEPEA), R$/saca 60 kg
   "dataReferencia": "dd/mm/aaaa"|null, // data a que o preço se refere
   "praca": string|null           // praça/região do preço do conilon, como no texto (ex.: "Vitória - ES")
 }
-Regras: use só o que está no texto; não invente; se houver vários valores de conilon, prefira o mais recente e do ES; se o preço estiver em outra unidade (ex.: por arroba ou por kg), NÃO converta — devolva null. Números como número (ponto decimal), sem "R$".`;
+Regras: use só o que está no texto; não invente; se houver vários valores de conilon, prefira o mais recente e do ES; se o preço estiver em outra unidade (arroba, kg), NÃO converta — devolva null. Números como número (ponto decimal), sem "R$".`;
   try {
     const raw = await llmTexto(system, texto, { maxTokens: 300, json: true });
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
@@ -130,20 +88,43 @@ Regras: use só o que está no texto; não invente; se houver vários valores de
   }
 }
 
-async function lerFonte(url: string, fonte: string, rotuloConilon: RegExp, rotuloArabica: RegExp | null): Promise<Leitura | null> {
-  const html = await baixar(url);
-  if (!html) return null;
-  const texto = htmlParaTexto(html);
-  const c = lerDireto(texto, rotuloConilon);
-  const a = rotuloArabica ? lerDireto(texto, rotuloArabica) : null;
-  if (c) return { conilon: c.valor, arabica: a?.valor ?? null, dataReferencia: c.data ?? a?.data ?? null, fonte };
-  return extrairPorIA(trechosRelevantes(texto), fonte);
+// 1) Painel do Café: JSON da API do app.
+async function fontePainelDoCafe(): Promise<Leitura | null> {
+  const corpo = await baixar(API_PAINEL, "application/json");
+  if (!corpo) return null;
+  try {
+    return lerJsonPainelDoCafe(JSON.parse(corpo));
+  } catch {
+    return null;
+  }
 }
 
-const fontePainelDoCafe = () => lerFonte("https://www.paineldocafe.com.br/", "Painel do Café", /conilon[^\n]{0,80}(vit[óo]ria|es\b|esp[íi]rito)|conilon/i, /ar[áa]bica/i);
-const fonteCepea = () => lerFonte("https://www.cepea.esalq.usp.br/br/indicador/cafe.aspx", "CEPEA/ESALQ", /robusta|conilon/i, /ar[áa]bica/i);
-const fonteNoticiasAgricolas = () => lerFonte("https://www.noticiasagricolas.com.br/cotacoes/cafe/cafe-conilon-cepea-esalq", "Notícias Agrícolas (CEPEA)", /conilon/i, null);
-const fonteCCCV = () => lerFonte("https://www.cccv.org.br/cotacao/", "CCCV", /conilon/i, /ar[áa]bica/i);
+// 2) CCCV: tabela do mês.
+async function fonteCCCV(): Promise<Leitura | null> {
+  const html = await baixar("https://www.cccv.org.br/cotacao/");
+  if (!html) return null;
+  const texto = htmlParaTexto(html);
+  return lerTabelaCCCV(texto) ?? extrairPorIA(trechosRelevantes(texto), "CCCV");
+}
+
+// 3) Notícias Agrícolas: indicador CEPEA/ESALQ do conilon.
+async function fonteNoticiasAgricolas(): Promise<Leitura | null> {
+  const html = await baixar("https://www.noticiasagricolas.com.br/cotacoes/cafe/indicador-cepea-esalq-cafe-conillon");
+  if (!html) return null;
+  const texto = htmlParaTexto(html);
+  return lerNoticiasAgricolasConilon(texto) ?? extrairPorIA(trechosRelevantes(texto), "Notícias Agrícolas");
+}
+
+// 4) CEPEA direto (leitura genérica; o site costuma responder 403 a robôs).
+async function fonteCepea(): Promise<Leitura | null> {
+  const html = await baixar("https://www.cepea.esalq.usp.br/br/indicador/cafe.aspx");
+  if (!html) return null;
+  const texto = htmlParaTexto(html);
+  const c = lerDireto(texto, /robusta|conilon/i);
+  const a = lerDireto(texto, /ar[áa]bica/i);
+  if (c) return { conilon: c.valor, arabica: a?.valor ?? null, dataReferencia: c.data ?? a?.data ?? null, fonte: "CEPEA/ESALQ" };
+  return extrairPorIA(trechosRelevantes(texto), "CEPEA/ESALQ");
+}
 
 export async function lerCafeES(): Promise<CotacaoCafeES | null> {
   try {
@@ -177,7 +158,7 @@ export async function cafeESPrecisaAtualizar(): Promise<boolean> {
 export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | null; conilon: number | null }> {
   await setConfig(CHAVE_TENTATIVA, new Date().toISOString()).catch(() => {});
   const anterior = await lerCafeES();
-  const fontes = [fontePainelDoCafe, fonteCepea, fonteNoticiasAgricolas, fonteCCCV];
+  const fontes = [fontePainelDoCafe, fonteCCCV, fonteNoticiasAgricolas, fonteCepea];
   let achado: Leitura | null = null;
   for (const f of fontes) {
     achado = await f().catch(() => null);
@@ -185,7 +166,7 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
   }
   if (!achado?.conilon) return { ok: false, fonte: null, conilon: anterior?.conilon ?? null };
 
-  const variacao = anterior?.conilon && achado.conilon ? ((achado.conilon - anterior.conilon) / anterior.conilon) * 100 : null;
+  const variacaoCalc = anterior?.conilon && achado.conilon ? ((achado.conilon - anterior.conilon) / anterior.conilon) * 100 : null;
   const novo: CotacaoCafeES = {
     conilon: achado.conilon,
     arabica: achado.arabica ?? anterior?.arabica ?? null,
@@ -193,7 +174,11 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
     fonte: achado.fonte,
     praca: achado.praca ?? null,
     atualizadoEm: new Date().toISOString(),
-    variacaoConilonPct: variacao != null && Math.abs(variacao) < 25 ? variacao : anterior?.variacaoConilonPct ?? null,
+    variacaoConilonPct: achado.variacaoConilonPct ?? (variacaoCalc != null && Math.abs(variacaoCalc) < 25 ? variacaoCalc : anterior?.variacaoConilonPct ?? null),
+    variacaoArabicaPct: achado.variacaoArabicaPct ?? null,
+    dolar: achado.dolar ?? null,
+    londres: achado.londres ?? null,
+    novaYork: achado.novaYork ?? null,
   };
   await setConfig(CHAVE_ULTIMO, JSON.stringify(novo));
 

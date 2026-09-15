@@ -1,17 +1,17 @@
 name: Sonda café
 
-# Diagnóstico manual do robô do café: mostra o que as fontes de cotação
-# devolvem para um servidor (texto, endpoints). Não altera nada.
+# Teste ao vivo do robô do café: chama as fontes reais com os mesmos leitores
+# do CRM e mostra o que sai. Não altera nada.
 on:
   workflow_dispatch:
 
 jobs:
   sonda:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/sonda-cafe.mjs
+      - run: npx --yes tsx scripts/testar-cafe.ts
