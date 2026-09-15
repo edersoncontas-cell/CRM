@@ -59,13 +59,23 @@ custo. Leva uns 10 minutos, uma vez só.
 
 1. No CRM: **Configurações** → card **Google Agenda e Contatos** → **Conectar
    com o Google**.
-2. Escolha a sua conta, aceite as permissões (agenda e leitura de contatos).
+2. Escolha a sua conta, aceite as permissões (agenda e contatos — leitura e
+   gravação, para os clientes do CRM poderem ir para a sua agenda).
    Se aparecer "app não verificado", clique em **Avançado** → **Acessar CRM do
    Edy** (é o seu próprio app, em modo teste).
 3. De volta ao CRM, o card mostra o e-mail conectado. Pronto:
    - toda visita nova (formulário, voz, IA ou WhatsApp) entra na agenda;
    - remover a visita no CRM apaga o evento;
-   - o botão **Importar nomes dos contatos** preenche os clientes sem nome.
+   - a **lista de clientes fica ligada ao Google Contatos**: todo contato
+     com telefone vira cliente (ou completa o cadastro de quem já existe com
+     o mesmo número — nome real no lugar de "Contato 5528…", e-mail, endereço
+     e município). Roda a cada hora e no botão **Sincronizar agora** da tela
+     de Clientes;
+   - opcional: marque **Enviar clientes do CRM para o Google Contatos** para
+     os clientes que você cadastra aqui aparecerem no celular.
+
+Se a conta foi conectada numa versão anterior (só leitura de contatos),
+desconecte e conecte de novo para liberar o envio.
 
 ## Problemas comuns
 

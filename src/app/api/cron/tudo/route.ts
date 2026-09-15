@@ -39,6 +39,7 @@ const JOBS: Job[] = [
   { path: "/api/cron/whatsapp-retry", minutos: 5 },
   { path: "/api/cron/zeus-tick", minutos: 5 },
   { path: "/api/cron/mercado", minutos: 30 },
+  { path: "/api/cron/google-contatos", minutos: 60 },
   { path: "/api/cron/zeus-diario", minutos: 20 * 60, horaBrasilia: 9 },
   { path: "/api/cron/academia-atualizar", minutos: 6 * 24 * 60, horaBrasilia: 8, diaSemana: 1 },
 ];

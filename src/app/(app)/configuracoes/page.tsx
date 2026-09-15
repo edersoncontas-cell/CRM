@@ -4,6 +4,7 @@ import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as zapi from "@/lib/zapi";
 import * as transcription from "@/lib/integrations/transcription";
 import { statusGoogle } from "@/lib/integrations/google";
+import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google-contatos";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
@@ -18,11 +19,13 @@ import { ExportarDadosCard } from "@/components/ExportarDadosCard";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [estilo, cotacoes, google, parametros] = await Promise.all([
+  const [estilo, cotacoes, google, parametros, resumoContatos, enviarContatos] = await Promise.all([
     db.estiloDeFala.findFirst(),
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
+    lerResumoSincronizacaoGoogle(),
+    envioParaGoogleAtivo(),
   ]);
 
   const integracoes = [
@@ -83,7 +86,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         <ArrowRight size={18} className="text-emerald-600" />
       </Link>
 
-      <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} />
+      <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {integracoes.map((i) => (

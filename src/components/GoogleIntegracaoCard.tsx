@@ -2,28 +2,30 @@
 
 import { useState, useTransition } from "react";
 import { Card, Badge } from "@/components/ui";
-import { desconectarGoogleAction, importarContatosGoogleAction } from "@/lib/google-actions";
+import { desconectarGoogleAction, sincronizarContatosGoogleAction, definirEnvioContatosGoogleAction } from "@/lib/google-actions";
+import type { ResumoSincronizacao } from "@/lib/google-contatos";
 import { Calendar, CheckCircle2, Circle, Loader2, Contact, LogOut, ExternalLink } from "lucide-react";
 
 type Status = { configurado: boolean; conectado: boolean; email: string | null; conectadoEm: string | null; redirectUri: string };
 
-export function GoogleIntegracaoCard({ status, feedback, msg }: { status: Status; feedback?: string; msg?: string }) {
-  const [resultado, setResultado] = useState<string | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [importando, startImportar] = useTransition();
+export function GoogleIntegracaoCard({ status, feedback, msg, resumo, enviarAtivo }: { status: Status; feedback?: string; msg?: string; resumo: ResumoSincronizacao | null; enviarAtivo: boolean }) {
+  const [ultimo, setUltimo] = useState<ResumoSincronizacao | null>(resumo);
+  const [enviar, setEnviar] = useState(enviarAtivo);
+  const [sincronizando, startSincronizar] = useTransition();
   const [desconectando, startDesconectar] = useTransition();
+  const [salvandoEnvio, startEnvio] = useTransition();
 
-  function importar() {
-    setErro(null); setResultado(null);
-    startImportar(async () => {
-      const r = await importarContatosGoogleAction();
-      if (!r.ok) { setErro(r.erro ?? "Falha ao importar."); return; }
-      setResultado(`${r.total} contato(s) lido(s) do Google · ${r.clientes} cliente(s) e ${r.conversas} conversa(s) receberam nome.`);
-    });
+  function sincronizar() {
+    startSincronizar(async () => { setUltimo(await sincronizarContatosGoogleAction()); });
+  }
+
+  function alternarEnvio(v: boolean) {
+    setEnviar(v);
+    startEnvio(async () => { await definirEnvioContatosGoogleAction(v); });
   }
 
   function desconectar() {
-    if (!confirm("Desconectar a conta Google? As visitas já lançadas continuam na agenda; as novas param de ser enviadas.")) return;
+    if (!confirm("Desconectar a conta Google? As visitas já lançadas continuam na agenda; as novas param de ser enviadas e os contatos param de sincronizar.")) return;
     startDesconectar(async () => { await desconectarGoogleAction(); window.location.href = "/configuracoes"; });
   }
 
@@ -43,8 +45,9 @@ export function GoogleIntegracaoCard({ status, feedback, msg }: { status: Status
             )}
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Toda visita criada no CRM (formulário, voz, IA ou WhatsApp) entra na sua Google Agenda com lembrete; remover a visita apaga o evento.
-            Os nomes dos seus contatos do Google preenchem clientes e conversas que ficaram como “Contato 5528…”.
+            Toda visita criada no CRM entra na sua Google Agenda com lembrete; remover a visita apaga o evento.
+            A lista de clientes fica igual ao seu Google Contatos: todo contato com telefone vira cliente (ou completa o cadastro
+            de quem já existe com o mesmo número), a cada hora e no botão abaixo.
           </p>
 
           {feedback === "ok" && <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">Conta Google conectada com sucesso.</p>}
@@ -66,21 +69,37 @@ export function GoogleIntegracaoCard({ status, feedback, msg }: { status: Status
               <a href="/api/google/auth" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800">
                 <ExternalLink size={14} /> Conectar com o Google
               </a>
-              <span className="text-xs text-slate-400">Você escolhe a conta e aceita as permissões de agenda e leitura de contatos.</span>
+              <span className="text-xs text-slate-400">Você escolhe a conta e aceita as permissões de agenda e contatos.</span>
             </div>
           ) : (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button onClick={importar} disabled={importando} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
-                {importando ? <Loader2 size={14} className="animate-spin" /> : <Contact size={14} />} Importar nomes dos contatos
-              </button>
-              <button onClick={desconectar} disabled={desconectando} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60">
-                {desconectando ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Desconectar
-              </button>
-              {status.conectadoEm && <span className="text-xs text-slate-400">conectado em {new Date(status.conectadoEm).toLocaleDateString("pt-BR")}</span>}
-            </div>
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button onClick={sincronizar} disabled={sincronizando} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
+                  {sincronizando ? <Loader2 size={14} className="animate-spin" /> : <Contact size={14} />} Sincronizar contatos agora
+                </button>
+                <button onClick={desconectar} disabled={desconectando} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+                  {desconectando ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Desconectar
+                </button>
+                {status.conectadoEm && <span className="text-xs text-slate-400">conectado em {new Date(status.conectadoEm).toLocaleDateString("pt-BR")}</span>}
+              </div>
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={enviar} disabled={salvandoEnvio} onChange={(e) => alternarEnvio(e.target.checked)} className="mt-0.5" />
+                <span>
+                  <b>Enviar clientes do CRM para o Google Contatos</b> — quem você cadastra ou edita aqui (com nome e telefone) aparece na agenda do celular.
+                  Contatos genéricos do WhatsApp (“Contato 5528…”) e prospects da IA não vão.
+                  {" "}<span className="text-xs text-slate-400">Se a conta foi conectada antes desta versão, desconecte e conecte de novo para liberar a gravação.</span>
+                </span>
+              </label>
+            </>
           )}
-          {resultado && <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{resultado}</p>}
-          {erro && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+          {ultimo?.ok && (
+            <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+              Última sincronização {new Date(ultimo.em).toLocaleString("pt-BR")}: {ultimo.lidos} contato(s) lido(s) · {ultimo.criados} cliente(s) novo(s) · {ultimo.atualizados} atualizado(s) · {ultimo.enviados} enviado(s) ao Google
+              {ultimo.semTelefone > 0 && <> · {ultimo.semTelefone} sem telefone (ignorados)</>}
+              {ultimo.pendentesEnvio > 0 && <> · {ultimo.pendentesEnvio} ainda por enviar (segue na próxima rodada)</>}
+            </p>
+          )}
+          {ultimo && !ultimo.ok && ultimo.erro && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{ultimo.erro}</p>}
         </div>
       </div>
     </Card>

@@ -36,7 +36,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v13: demandas em lista única (prioridade, origem, chave) e cidade da visita.
 // v14: itens resolvidos da Central de alertas (AlertaOculto).
 // v15: confirmação de visitas (status, realizadaEm, reagendadaDeId).
-export const CHAVE_MANUTENCAO = "manutencao.v15";
+export const CHAVE_MANUTENCAO = "manutencao.v16";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

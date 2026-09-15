@@ -8,6 +8,7 @@ import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from ".
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, criarCategorizadorColunas, papelDaColuna, PAPEIS_COLUNA, type PapelColuna } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
+import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { registrarAudit } from "./audit";
@@ -34,7 +35,7 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
   const { nome, email } = parsed.data;
   if (deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
 
-  await db.cliente.create({
+  const novo = await db.cliente.create({
     data: {
       nome,
       telefone: String(formData.get("telefone") ?? "") || null,
@@ -49,6 +50,8 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
       interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
     },
   });
+  // Google Contatos (quando o envio está ligado): o cliente novo vai para a agenda do celular.
+  await enviarClienteParaGoogle(novo.id).catch((e) => console.error("[google] contato:", e));
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { ok: true };
@@ -84,6 +87,7 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
       interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
     },
   });
+  await enviarClienteParaGoogle(id).catch((e) => console.error("[google] contato:", e));
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
   revalidatePath("/dashboard");

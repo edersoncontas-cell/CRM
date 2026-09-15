@@ -58,6 +58,10 @@ model Cliente {
   // Orientador de Vendas: card ocultado (X vermelho ou ✓ negociação criada)
   // nesta data — volta a aparecer quando chega mensagem nova depois dela.
   orientadorOcultoEm DateTime?
+  // Google Contatos: resourceName ("people/c123") do contato ligado a este
+  // cliente e quando foi sincronizado pela última vez.
+  googleContatoId String?
+  googleSincronizadoEm DateTime?
   indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId   String?
   indicados       Cliente[] @relation("Indicacoes")
@@ -72,6 +76,7 @@ model Cliente {
   posVendaContatos PosVendaContato[]
   cadencias      Cadencia[]
   @@index([leadScore])
+  @@index([googleContatoId])
 }
 
 // Setor de Pós-venda: histórico de contatos/ações com um cliente que já

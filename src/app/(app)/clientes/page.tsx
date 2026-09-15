@@ -9,6 +9,8 @@ import { BuscaClientesInstantanea } from "@/components/BuscaClientesInstantanea"
 import { BarrasHorizontais } from "@/components/charts";
 import { PopupContatoSemNome } from "@/components/PopupContatoSemNome";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
+import { GoogleContatosSync } from "@/components/GoogleContatosSync";
+import { googleContatosDisponivel, lerResumoSincronizacaoGoogle } from "@/lib/google-contatos";
 import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
@@ -36,7 +38,7 @@ export default async function ClientesPage({
   // clientes de cara, uma lista enorme sem filtro nenhum.
   const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
@@ -82,6 +84,10 @@ export default async function ClientesPage({
       orderBy: { criadoEm: "desc" },
       take: 15,
     }),
+    // Google Contatos: a lista de clientes espelha a agenda do vendedor.
+    googleContatosDisponivel().catch(() => false),
+    lerResumoSincronizacaoGoogle(),
+    db.cliente.count({ where: { googleContatoId: { not: null } } }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -156,6 +162,8 @@ export default async function ClientesPage({
           )}
         </Link>
       </div>
+
+      <GoogleContatosSync conectado={googleConectado} resumo={resumoGoogle} totalGoogle={totalGoogle} />
 
       {/* Busca — filtra automaticamente enquanto digita */}
       <BuscaClientesInstantanea valorInicial={busca} />
@@ -279,6 +287,7 @@ export default async function ClientesPage({
                             {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {c.googleContatoId && <span title="Ligado ao Google Contatos"><Badge tom="slate">Google</Badge></span>}
                             {neg?.maquinaModelo && <Badge tom="blue">{neg.maquinaModelo}</Badge>}
                             {dias != null && dias >= 7 && (
                               <Badge tom="red">{dias}d sem contato</Badge>

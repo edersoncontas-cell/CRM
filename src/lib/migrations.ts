@@ -289,6 +289,14 @@ export async function aplicarMigracoes(): Promise<void> {
     if (!statusJaExistia) {
       await db.$executeRawUnsafe(`UPDATE "Visita" SET "status" = 'realizada', "realizadaEm" = "data" WHERE "status" = 'agendada' AND "data" < NOW() - interval '1 day'`);
     }
+
+    // Google Contatos ↔ clientes (v16): vínculo com o contato do Google.
+    await db.$executeRawUnsafe(`
+      ALTER TABLE "Cliente"
+        ADD COLUMN IF NOT EXISTS "googleContatoId"      TEXT,
+        ADD COLUMN IF NOT EXISTS "googleSincronizadoEm" TIMESTAMP WITH TIME ZONE
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cliente_googleContatoId_idx" ON "Cliente"("googleContatoId")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

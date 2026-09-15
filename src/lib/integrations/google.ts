@@ -6,18 +6,24 @@
 // sozinho com o refresh token. A partir daí:
 //   - toda Visita criada no CRM vira um evento na agenda principal
 //     (sincronizarVisitaComAgenda) e é apagada junto (removerEventoDaVisita);
-//   - os nomes dos contatos do Google podem preencher clientes/conversas que
-//     ficaram como "Contato 55289..." (listarContatosGoogle).
+//   - a lista de clientes é sincronizada com o Google Contatos
+//     (lib/google-contatos.ts): todo contato com telefone vira/atualiza um
+//     cliente, e os clientes novos do CRM podem ir para o Google.
 // Configuração necessária: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e (opcional)
 // GOOGLE_REDIRECT_URI — passo a passo em docs/GOOGLE.md.
 
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
+import type { ContatoGoogle } from "@/lib/google-contatos-util";
+export type { ContatoGoogle };
 
 const CHAVE_TOKENS = "google.oauth";
+// Endereços da API (sobrescrevíveis só para testes locais com um servidor falso).
+const URL_TOKEN = process.env.GOOGLE_TOKEN_URL || "https://oauth2.googleapis.com/token";
+const URL_PEOPLE = (process.env.GOOGLE_PEOPLE_API_URL || "https://people.googleapis.com").replace(/\/+$/, "");
 const ESCOPOS = [
   "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/contacts.readonly",
+  "https://www.googleapis.com/auth/contacts", // ler e gravar contatos
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
@@ -99,7 +105,7 @@ async function postForm(url: string, params: Record<string, string>): Promise<Re
 
 // Troca o código do consentimento por tokens e guarda no banco.
 export async function trocarCodigoGoogle(code: string): Promise<{ email: string | null }> {
-  const r = await postForm("https://oauth2.googleapis.com/token", {
+  const r = await postForm(URL_TOKEN, {
     code,
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
@@ -142,7 +148,7 @@ async function accessTokenGoogle(): Promise<string | null> {
   const t = await lerTokensGoogle();
   if (!t) return null;
   if (t.accessToken && t.expiraEm - Date.now() > 60_000) return t.accessToken;
-  const r = await postForm("https://oauth2.googleapis.com/token", {
+  const r = await postForm(URL_TOKEN, {
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     refresh_token: t.refreshToken,
@@ -198,28 +204,80 @@ export async function excluirEventoAgenda(eventId: string): Promise<void> {
 }
 
 // ── Contatos ────────────────────────────────────────────────────────────────
-export type ContatoGoogle = { nome: string; telefones: string[] };
 
+type PessoaGoogle = {
+  resourceName?: string;
+  etag?: string;
+  names?: { displayName?: string }[];
+  phoneNumbers?: { value?: string; canonicalForm?: string }[];
+  emailAddresses?: { value?: string }[];
+  addresses?: { city?: string; formattedValue?: string }[];
+  organizations?: { name?: string }[];
+};
+
+const CAMPOS_PESSOA = "names,phoneNumbers,emailAddresses,addresses,organizations";
+
+function pessoaParaContato(p: PessoaGoogle): ContatoGoogle | null {
+  const nome = p.names?.[0]?.displayName?.trim();
+  if (!nome || !p.resourceName) return null;
+  return {
+    id: p.resourceName,
+    nome,
+    telefones: (p.phoneNumbers ?? []).map((t) => (t.canonicalForm ?? t.value ?? "").replace(/\D/g, "")).filter((t) => t.length >= 8),
+    emails: (p.emailAddresses ?? []).map((e) => (e.value ?? "").trim()).filter(Boolean),
+    enderecos: (p.addresses ?? []).map((a) => ({ cidade: a.city?.trim() || null, texto: a.formattedValue?.replace(/\s+/g, " ").trim() || null })),
+    empresa: p.organizations?.[0]?.name?.trim() || null,
+  };
+}
+
+// Todos os contatos da conta (com ou sem telefone; quem decide o que fazer é a sincronização).
 export async function listarContatosGoogle(): Promise<ContatoGoogle[]> {
   const contatos: ContatoGoogle[] = [];
   let pageToken: string | undefined;
   do {
-    const params = new URLSearchParams({ personFields: "names,phoneNumbers", pageSize: "1000" });
+    const params = new URLSearchParams({ personFields: CAMPOS_PESSOA, pageSize: "1000" });
     if (pageToken) params.set("pageToken", pageToken);
-    const res = await googleFetch(`https://people.googleapis.com/v1/people/me/connections?${params.toString()}`);
+    const res = await googleFetch(`${URL_PEOPLE}/v1/people/me/connections?${params.toString()}`);
     if (!res.ok) throw new Error(`Google Contatos respondeu ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const j = (await res.json()) as {
-      connections?: { names?: { displayName?: string }[]; phoneNumbers?: { value?: string; canonicalForm?: string }[] }[];
-      nextPageToken?: string;
-    };
-    for (const p of j.connections ?? []) {
-      const nome = p.names?.[0]?.displayName?.trim();
-      const telefones = (p.phoneNumbers ?? []).map((t) => (t.canonicalForm ?? t.value ?? "").replace(/\D/g, "")).filter((t) => t.length >= 8);
-      if (nome && telefones.length) contatos.push({ nome, telefones });
-    }
+    const j = (await res.json()) as { connections?: PessoaGoogle[]; nextPageToken?: string };
+    for (const p of j.connections ?? []) { const c = pessoaParaContato(p); if (c) contatos.push(c); }
     pageToken = j.nextPageToken;
   } while (pageToken);
   return contatos;
+}
+
+export type DadosContato = { nome: string; telefone: string | null; email: string | null };
+
+function corpoContato(d: DadosContato) {
+  return {
+    names: [{ givenName: d.nome }],
+    phoneNumbers: d.telefone ? [{ value: d.telefone.length >= 10 && d.telefone.length <= 11 ? `+55${d.telefone}` : d.telefone, type: "mobile" }] : [],
+    emailAddresses: d.email ? [{ value: d.email }] : [],
+  };
+}
+
+// Cria o contato no Google e devolve o resourceName ("people/c…").
+export async function criarContatoGoogle(d: DadosContato): Promise<string> {
+  const res = await googleFetch(`${URL_PEOPLE}/v1/people:createContact?personFields=names`, { method: "POST", body: JSON.stringify(corpoContato(d)) });
+  if (res.status === 403) throw new Error("A conta Google conectada só tem permissão de LEITURA dos contatos. Desconecte e conecte de novo para liberar a gravação.");
+  if (!res.ok) throw new Error(`Google Contatos respondeu ${res.status} ao criar: ${(await res.text()).slice(0, 200)}`);
+  const j = (await res.json()) as { resourceName?: string };
+  if (!j.resourceName) throw new Error("O Google não devolveu o id do contato criado.");
+  return j.resourceName;
+}
+
+// Atualiza nome/telefone/e-mail de um contato existente (precisa do etag atual).
+export async function atualizarContatoGoogle(resourceName: string, d: DadosContato): Promise<boolean> {
+  const atual = await googleFetch(`${URL_PEOPLE}/v1/${resourceName}?personFields=${CAMPOS_PESSOA}`);
+  if (atual.status === 404) return false; // apagado no Google
+  if (!atual.ok) throw new Error(`Google Contatos respondeu ${atual.status} ao ler o contato.`);
+  const p = (await atual.json()) as PessoaGoogle;
+  const res = await googleFetch(`${URL_PEOPLE}/v1/${resourceName}:updateContact?updatePersonFields=names,phoneNumbers,emailAddresses`, {
+    method: "PATCH", body: JSON.stringify({ etag: p.etag, ...corpoContato(d) }),
+  });
+  if (res.status === 403) throw new Error("A conta Google conectada só tem permissão de LEITURA dos contatos. Desconecte e conecte de novo para liberar a gravação.");
+  if (!res.ok) throw new Error(`Google Contatos respondeu ${res.status} ao atualizar: ${(await res.text()).slice(0, 200)}`);
+  return true;
 }
 
 // ── Sincronização das visitas do CRM ────────────────────────────────────────
