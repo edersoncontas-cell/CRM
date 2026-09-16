@@ -9,6 +9,35 @@ const nextConfig = {
     // antes mesmo do código rodar. Vercel ainda limita ~4.5MB por request
     // (ver checagem no client em FichasTecnicasClient.tsx).
     serverActions: { bodySizeLimit: "10mb" },
+
+    // Cada rota vira uma função na Vercel e leva junto tudo o que o Next
+    // "rastreia" como dependência — hoje são ~80 funções, e o que sobra em
+    // disco é o que conta na cota de Armazenamento de Funções. Nada aqui é
+    // usado em produção (CLI do Prisma, compiladores, tipos, testes, PDFs de
+    // teste que o pdf-parse traz), mas sem a exclusão explícita o rastreador
+    // empacota parte disso em TODA função.
+    outputFileTracingExcludes: {
+      "**/*": [
+        "node_modules/@prisma/engines/**",
+        "node_modules/prisma/**",
+        "node_modules/.prisma/client/*.d.ts",
+        "node_modules/typescript/**",
+        "node_modules/@swc/**",
+        "node_modules/esbuild/**",
+        "node_modules/@esbuild/**",
+        "node_modules/vitest/**",
+        "node_modules/@vitest/**",
+        "node_modules/eslint/**",
+        "node_modules/eslint-config-next/**",
+        "node_modules/@types/**",
+        "node_modules/pdf-parse/test/**",
+        "node_modules/canvas/**",
+        "tests/**",
+        "docs/**",
+        "evolution/**",
+        "scripts/**",
+      ],
+    },
   },
   // Cabeçalhos de segurança básicos. Sem CSP restritiva de propósito: o app
   // usa scripts inline do Next, tiles de mapa externos e áudio/imagem do

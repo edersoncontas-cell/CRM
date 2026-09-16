@@ -1,5 +1,10 @@
 {
   "crons": [
     { "path": "/api/cron/tudo", "schedule": "0 12 * * *" }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "claude/projeto-zeus-merge-deploy-jc6p7x": false
+    }
+  }
 }

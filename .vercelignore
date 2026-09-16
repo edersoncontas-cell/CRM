@@ -1,0 +1,8 @@
+# Nada aqui é usado para rodar o CRM em produção — fora do envio do build,
+# fora da cota de Armazenamento de Funções da Vercel.
+tests
+docs
+evolution
+.github
+.claude
+README.md
