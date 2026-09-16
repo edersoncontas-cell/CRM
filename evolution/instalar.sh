@@ -136,10 +136,38 @@ verde "4/6 Firewall (porta 8080)"
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
   ufw allow 8080/tcp >/dev/null || true
 fi
-if command -v iptables >/dev/null && ! iptables -C INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null; then
+if command -v iptables >/dev/null; then
   # Oracle Cloud vem com iptables bloqueando tudo além do SSH.
-  iptables -I INPUT 5 -m state --state NEW -p tcp --dport 8080 -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport 8080 -j ACCEPT || true
-  command -v netfilter-persistent >/dev/null && netfilter-persistent save >/dev/null 2>&1 || true
+  if ! iptables -C INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null; then
+    iptables -I INPUT 5 -m state --state NEW -p tcp --dport 8080 -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport 8080 -j ACCEPT || true
+  fi
+  # A regra acima vive só na memória: sem salvar, o primeiro reboot da VM
+  # (manutenção da Oracle, por exemplo) fecha a porta de novo — a Evolution
+  # continua rodando, mas ninguém a alcança e o CRM fica sem QR. Já aconteceu.
+  if ! command -v netfilter-persistent >/dev/null; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq iptables-persistent >/dev/null 2>&1 || true
+  fi
+  if command -v netfilter-persistent >/dev/null; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  else
+    # Sem o pacote de persistência: reaplica a regra a cada boot.
+    mkdir -p /etc/systemd/system
+    cat > /etc/systemd/system/evolution-porta-8080.service <<'UNIT'
+[Unit]
+Description=Libera a porta 8080 da Evolution API no boot
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/sbin/iptables -C INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null || /sbin/iptables -I INPUT 5 -m state --state NEW -p tcp --dport 8080 -j ACCEPT'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable --now evolution-porta-8080.service >/dev/null 2>&1 || true
+  fi
 fi
 
 verde "5/6 Subindo a Evolution API (pode levar 1–2 min na primeira vez)"

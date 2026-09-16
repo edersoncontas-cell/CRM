@@ -222,10 +222,49 @@ não é cobrado; escolha sempre recursos marcados *Always Free*).
   desconectado" e você reconecta em /conexao. Na Oracle, `restart: always` no
   compose sobe tudo de novo sozinho após reboot.
 
+## O servidor sumiu: nada responde em `http://IP:8080`
+
+Sem esse servidor no ar não existe QR Code — quem gera o código é ele. Em
+`/conexao`, o botão **Diagnosticar conexão** já diz em que elo quebrou; o
+passo a passo abaixo resolve os três casos.
+
+**Primeiro teste, que separa tudo:** tente o SSH (`ssh -i sua-chave.key
+ubuntu@IP`).
+
+- **SSH conecta** → a VM está viva, o problema é a **porta 8080 fechada**.
+  Na Oracle o iptables bloqueia tudo menos o SSH e a regra se perde a cada
+  reboot se não tiver sido salva. Rode:
+  ```bash
+  sudo iptables -I INPUT 5 -m state --state NEW -p tcp --dport 8080 -j ACCEPT
+  sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save
+  docker ps            # a evolution_api deve estar "Up"; se não, docker compose up -d
+  ```
+  (Reinstalar pelo comando único também já deixa isso permanente.)
+
+- **SSH também dá timeout** → a VM está **parada ou com outro IP**. Entre em
+  https://cloud.oracle.com → **Compute → Instances**:
+  - Estado *Stopped* → **Start**.
+  - Estado *Running* → compare o **Public IP** mostrado ali com o que está em
+    `EVOLUTION_API_URL` na Vercel. Na Oracle o IP público é *efêmero* por
+    padrão e **muda a cada parada/partida** — essa é a causa mais comum de
+    "sumiu do nada".
+  - A instância não existe mais → a Oracle recupera VMs *Always Free* ociosas.
+    Crie outra e rode o comando único do "Caminho rápido".
+
+  Trocou o IP? Atualize `EVOLUTION_API_URL` na Vercel (Settings → Environment
+  Variables) e faça **Redeploy**.
+
+**Para não passar por isso de novo:** na Oracle, reserve o IP
+(*Networking → IP Management → Reserved Public IPs*, grátis dentro do Always
+Free) e associe à VM — aí ele para de mudar. Manter a VM em uso (o CRM já a
+consulta de 5 em 5 minutos pelo vigia da conexão) também evita a recuperação
+por ociosidade.
+
 ## Problemas comuns
 
 | Sintoma | Causa provável | Solução |
 |---|---|---|
+| Nada responde em `http://IP:8080` | VM parada, IP trocado ou porta 8080 fechada | veja a seção "O servidor sumiu" acima |
 | /conexao diz "Instância não existe" | nome diferente de `EVOLUTION_INSTANCE` | crie a instância com o nome exato ou ajuste a variável |
 | QR não aparece | Evolution não alcançável pela Vercel | teste `http://IP:8080` no navegador; confira porta 8080 liberada nos dois firewalls (Oracle + iptables) |
 | Mensagens não chegam no CRM | webhook não configurado | refaça "Criar a instância e o webhook"; confira em /conexao → Diagnóstico |
