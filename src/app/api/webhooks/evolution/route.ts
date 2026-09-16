@@ -85,6 +85,8 @@ export async function POST(req: NextRequest) {
     const audioBase64 = conteudo.mediaType === "audio" && conteudo.base64
       ? { data: conteudo.base64, mimeType: conteudo.mimeType ?? "audio/ogg" }
       : null;
+    const tsRaw = Number(data.messageTimestamp ?? 0) || 0;
+    const sentAt = tsRaw ? new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) : null;
 
     console.log("[webhook evolution]", JSON.stringify({ fromMe: chaveMsg.fromMe, phone: chaveMsg.phone, isGroup: chaveMsg.isGroup, tipo: conteudo.mediaType ?? "texto" }));
 
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
       },
       messageId: chaveMsg.id,
       audioBase64,
+      sentAt,
     });
     if (!r.ok) algumErro = true;
   }

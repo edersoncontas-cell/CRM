@@ -323,6 +323,14 @@ model ContatoBloqueado {
   criadoEm DateTime @default(now())
 }
 
+// Conversa de WhatsApp apagada pelo vendedor: só mensagem posterior a
+// excluidaEm pode recriá-la. Sem isso a importação de histórico (ou o
+// WhatsApp reenviando mensagens antigas) trazia tudo de volta.
+model ConversaExcluida {
+  telefone   String   @id
+  excluidaEm DateTime @default(now())
+}
+
 model AlertaOculto {
   id        String   @id @default(cuid())
   chave     String   @unique

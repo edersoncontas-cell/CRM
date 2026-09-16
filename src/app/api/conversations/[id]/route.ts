@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { zapiPost, resolveZApiConfig } from "@/lib/zapi";
+import { registrarExclusaoConversa, limparRastroDeClientes } from "@/lib/whatsapp-corte";
 
 export const dynamic = "force-dynamic";
 
@@ -65,19 +66,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ ok: false, erro: "conversa nao encontrada" }, { status: 404 });
     }
 
-    // 2. Exclui do banco (cascade apaga as mensagens tambem)
+    // 2. Exclui do banco (cascade apaga as mensagens tambem) e registra a
+    // exclusão: só mensagem posterior a agora pode recriar esta conversa —
+    // importação de histórico e reenvio do WhatsApp não trazem de volta.
     await db.whatsAppConversation.delete({ where: { id: params.id } });
+    await registrarExclusaoConversa(conv).catch((e) => console.error("[conversa] registrar exclusão:", e));
 
     // 2b. Sem a conversa não faz sentido continuar alertando sobre ela: se o
     // cliente não tem mais NENHUMA outra conversa de WhatsApp vinculada,
     // resolve os alertas dele e tira do "aguardando resposta".
-    if (conv.clienteId) {
-      const outraConversa = await db.whatsAppConversation.findFirst({ where: { clienteId: conv.clienteId }, select: { id: true } });
-      if (!outraConversa) {
-        await db.alerta.updateMany({ where: { clienteId: conv.clienteId, resolvido: false }, data: { resolvido: true } }).catch(() => {});
-        await db.cliente.update({ where: { id: conv.clienteId }, data: { aguardandoResposta: false } }).catch(() => {});
-      }
-    }
+    if (conv.clienteId) await limparRastroDeClientes([conv.clienteId]);
 
     // 3. Tenta deletar o chat no Z-API (best-effort, nao falha se der erro)
     // O phone para o Z-API pode ser o externalPhone ou o lid

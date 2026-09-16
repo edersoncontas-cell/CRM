@@ -73,10 +73,12 @@ export async function POST(req: NextRequest) {
   const tampa = extractLid(body);
   const telefone = isGroup ? phoneRaw : (phoneRaw.includes("@") ? phoneRaw.split("@")[0] : phoneRaw).replace(/\D/g, "") || phoneRaw;
   const zapiMessageId = body?.messageId ? String(body.messageId) : null;
+  const tsRaw = Number(body?.momment ?? body?.moment ?? 0) || 0;
+  const sentAt = tsRaw ? new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) : null;
 
   const r = await processarEventoMensagem({
     fromMe, phone: telefone, lid: tampa, isGroup,
-    nomeContato: nomeRecebido, nomeGrupo, foto, conteudo, messageId: zapiMessageId,
+    nomeContato: nomeRecebido, nomeGrupo, foto, conteudo, messageId: zapiMessageId, sentAt,
   });
   return NextResponse.json({ ok: r.ok }, { status: r.ok ? 200 : 500 });
 }

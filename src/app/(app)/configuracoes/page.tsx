@@ -7,6 +7,8 @@ import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google
 import { resumoBloqueio } from "@/lib/contatos-bloqueados";
 import { listarFiltroContatos } from "@/lib/filtro-contatos";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
+import { ConversasAntigasCard } from "@/components/ConversasAntigasCard";
+import { lerEstadoCorteAction } from "@/lib/whatsapp-corte-actions";
 import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
@@ -23,7 +25,7 @@ import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -32,6 +34,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     envioParaGoogleAtivo(),
     resumoBloqueio().catch(() => ({ total: 0, recentes: [] })),
     listarFiltroContatos(),
+    lerEstadoCorteAction().catch(() => ({ dia: null, conversasAnteriores: 0 })),
   ]);
 
   const integracoes = [
@@ -93,6 +96,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       </Link>
 
       <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
+
+      <ConversasAntigasCard inicial={corte} />
 
       <ContatosBloqueadosCard
         termos={filtro.termos}

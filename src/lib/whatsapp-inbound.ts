@@ -14,6 +14,7 @@ import {
 import { registrarDiag } from "@/lib/zapi-diag";
 import { motivoBloqueio } from "@/lib/filtro-contatos";
 import { telefoneBloqueado, bloquearContato, apagarContatoPorTelefone } from "@/lib/contatos-bloqueados";
+import { limiteMensagensContato, mensagemAntiga } from "@/lib/whatsapp-corte";
 import { processarMensagem } from "@/lib/zeus/pipeline";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer, isEnabled as transcricaoHabilitada } from "@/lib/integrations/transcription";
@@ -29,6 +30,7 @@ export type EventoMensagem = {
   conteudo: Conteudo;
   messageId: string | null;      // id da mensagem no provedor (anti-eco / status)
   audioBase64?: { data: string; mimeType: string } | null; // Evolution: áudio embutido no webhook
+  sentAt?: Date | null;          // timestamp do provedor (null = agora)
 };
 
 // Transcreve áudio (Groq Whisper grátis / OpenAI) a partir de URL pública
@@ -99,6 +101,14 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
     }
   }
 
+  // Mensagem anterior à data de corte, ou anterior ao momento em que o
+  // vendedor apagou esta conversa (o WhatsApp reenvia histórico ao
+  // reconectar): não entra, e não recria a conversa.
+  const sentAt = ev.sentAt ?? new Date();
+  if (mensagemAntiga(sentAt, await limiteMensagensContato(ev.phone, ev.lid))) {
+    diag.status = "antiga"; await registrarDiag(diag); return { ok: true, status: "antiga" };
+  }
+
   try {
     if (ev.fromMe) {
       // ── Ramo fromMe (anti-eco em 2 camadas) ──
@@ -116,7 +126,7 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
         diag.status = "eco"; await registrarDiag(diag); return { ok: true, status: "eco" };
       }
       await inserirMensagem(conv.id, {
-        direction: "OUT", body: c.text, origin: "EXTERNAL", operatorDisplayName: "Enviada fora do CRM",
+        direction: "OUT", body: c.text, origin: "EXTERNAL", operatorDisplayName: "Enviada fora do CRM", sentAt,
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
         zapiMessageId: ev.messageId, sendStatus: "SENT",
       });
@@ -134,7 +144,7 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
         photoUrl: ev.foto,
       });
       const msgRecebida = await inserirMensagem(conv.id, {
-        direction: "IN", body: c.text, senderName: ev.isGroup ? ev.nomeContato : null,
+        direction: "IN", body: c.text, senderName: ev.isGroup ? ev.nomeContato : null, sentAt,
         mediaUrl: c.mediaUrl, mediaType: c.mediaType, mediaName: c.mediaName, transcript: c.transcript,
         zapiMessageId: ev.messageId,
       });

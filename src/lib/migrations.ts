@@ -383,6 +383,18 @@ export async function aplicarMigracoes(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "ZeusEvent_tipo_titulo_aberto_key"
         ON "ZeusEvent" ("tipo", "titulo") WHERE "resolvido" = false
     `);
+
+    // ConversaExcluida (v24): registro de conversa de WhatsApp apagada pelo
+    // vendedor — só mensagem posterior à exclusão pode recriá-la (ver
+    // lib/whatsapp-corte.ts). A data de corte inicial e a limpeza das
+    // conversas antigas rodam em manutencao.ts (precisam do Prisma Client).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ConversaExcluida" (
+        "telefone" TEXT NOT NULL,
+        "excluidaEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ConversaExcluida_pkey" PRIMARY KEY ("telefone")
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

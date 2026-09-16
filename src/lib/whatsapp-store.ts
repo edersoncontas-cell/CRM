@@ -108,6 +108,10 @@ export async function acharOuCriarConversa(args: {
 // Para importação de arquivo (export do WhatsApp): casa pelo NOME, pois o
 // arquivo não traz telefone. Se não existir, cria uma conversa "só histórico"
 // com um telefone sintético (envio fica desabilitado até casar com o número real).
+export function telefoneSinteticoImportacao(name: string): string {
+  return "imp:" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+}
+
 export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean) {
   const existente = await db.whatsAppConversation.findFirst({
     where: isGroup
@@ -117,7 +121,7 @@ export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean
   });
   if (existente) return existente;
 
-  const sintetico = "imp:" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+  const sintetico = telefoneSinteticoImportacao(name);
   const clienteId = !isGroup ? await acharClienteId(name) : null;
   return db.whatsAppConversation.create({
     data: {

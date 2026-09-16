@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { aplicarMigracoes } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
+import { aplicarCorteInicialWhatsApp } from "@/lib/whatsapp-corte";
 import { garantirColunasFunil } from "@/lib/actions";
 import { garantirMaquinasNovas } from "@/lib/maquinas-garantidas";
 import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
@@ -43,7 +44,10 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // "aguardando"/"atacar" não usam mais.
 // v23: unifica eventos do ZEUS repetidos (mesmo erro várias vezes) num só,
 // com contador de ocorrências, e trava índice único pra não duplicar de novo.
-export const CHAVE_MANUTENCAO = "manutencao.v23";
+// v24: tabela ConversaExcluida + data de corte do WhatsApp (16/09/2026):
+// apaga as conversas anteriores e impede que importação/histórico as traga
+// de volta.
+export const CHAVE_MANUTENCAO = "manutencao.v24";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -55,6 +59,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Migrações de schema", aplicarMigracoes],
     ["Regiões e municípios", garantirRegioes],
     ["Limpeza de contatos bloqueados (contabilidade, bancos, hotéis…)", async () => { await limparContatosIndesejados(); }],
+    ["Data de corte do WhatsApp (conversas antigas)", async () => { await aplicarCorteInicialWhatsApp(); }],
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],

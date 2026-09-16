@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { listarChats, mensagensDoChat, fotoPerfil } from "@/lib/zapi";
 import { acharOuCriarConversa, definirFotoSeVazia } from "@/lib/whatsapp-store";
 import { isGroupChatId } from "@/lib/whatsapp-routing";
+import { limiteMensagensContato, mensagemAntiga } from "@/lib/whatsapp-corte";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -31,16 +32,28 @@ export async function POST(req: NextRequest) {
   const { page = 1, pageSize = 5, messagesPerChat = 200 } = await req.json().catch(() => ({}));
   const chats = await listarChats(page, pageSize);
 
-  let chatsProcessed = 0, messagesImported = 0, conversationsCreated = 0;
+  let chatsProcessed = 0, messagesImported = 0, conversationsCreated = 0, chatsIgnoradosAntigos = 0;
 
   for (const chat of chats) {
     chatsProcessed++;
     const isGroup = chat.isGroup === true || isGroupChatId(chat.phone);
     const phone = isGroup ? chat.phone : chat.phone.replace(/\D/g, "");
     if (!phone) continue;
+    // Grupos não entram no CRM (mesma regra do webhook).
+    if (isGroup) continue;
+
+    // Data de corte + conversa já apagada pelo vendedor: só o que é mais
+    // recente que isso entra. Sem nada recente, a conversa nem é criada —
+    // era assim que "importar" trazia de volta o que já tinha sido excluído.
+    const limite = await limiteMensagensContato(phone);
+    const raw = await mensagensDoChat(chat.phone, messagesPerChat);
+    const parsed = raw.map(parseHist)
+      .filter((m) => m.body && !mensagemAntiga(m.sentAt, limite))
+      .sort((a, b) => +a.sentAt - +b.sentAt);
+    if (!parsed.length) { chatsIgnoradosAntigos++; continue; }
 
     const { conv, criada } = await acharOuCriarConversa({
-      phone, lid: null, isGroup, contactName: chat.name ?? null, groupName: isGroup ? chat.name ?? null : null,
+      phone, lid: null, isGroup, contactName: chat.name ?? null, groupName: null,
       photoUrl: chat.photo ?? null,
     });
     if (criada) conversationsCreated++;
@@ -50,10 +63,6 @@ export async function POST(req: NextRequest) {
       const f = await fotoPerfil(chat.phone).catch(() => null);
       if (f) await definirFotoSeVazia(conv.id, f);
     }
-
-    const raw = await mensagensDoChat(chat.phone, messagesPerChat);
-    const parsed = raw.map(parseHist).filter((m) => m.body).sort((a, b) => +a.sentAt - +b.sentAt);
-    if (!parsed.length) continue;
 
     const existentes = await db.whatsAppMessage.findMany({ where: { conversationId: conv.id }, select: { sentAt: true, body: true } });
     const chaves = new Set(existentes.map((e) => `${e.sentAt.getTime()}|${e.body.slice(0, 60)}`));
@@ -81,6 +90,7 @@ export async function POST(req: NextRequest) {
     chatsProcessed,
     messagesImported,
     conversationsCreated,
+    chatsIgnoradosAntigos,
     hasMore: chats.length >= pageSize,
     nextPage: page + 1,
   });
