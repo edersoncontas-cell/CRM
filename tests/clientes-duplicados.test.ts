@@ -37,7 +37,7 @@ describe("agruparDuplicados", () => {
     expect(grupos).toHaveLength(1);
     expect(grupos[0].fica.id).toBe("b");
     expect(grupos[0].somem.map((s) => s.id)).toEqual(["a", "c"]);
-    expect(grupos[0].motivo).toBe("telefone+nome");
+    expect(grupos[0].motivo).toBe("telefone");
   });
 
   it("sem Google no grupo fica o mais antigo; com dois do Google fica o sincronizado por último", () => {
@@ -49,6 +49,38 @@ describe("agruparDuplicados", () => {
       cli({ id: "g1", nome: "X", googleContatoId: "people/1", googleSincronizadoEm: d("2026-09-01"), criadoEm: d("2025-01-01") }),
       cli({ id: "g2", nome: "X", googleContatoId: "people/2", googleSincronizadoEm: d("2026-09-10"), criadoEm: d("2026-01-01") }),
     ]).id).toBe("g2");
+  });
+
+  it("mesmo nome com números diferentes são pessoas diferentes: ficam os dois", () => {
+    const grupos = agruparDuplicados([
+      cli({ id: "w1", nome: "Welinton", telefone: "28999596070", googleContatoId: "people/1" }),
+      cli({ id: "w2", nome: "welinton", telefone: "27998356747", googleContatoId: "people/2" }),
+    ]);
+    expect(grupos).toHaveLength(0);
+  });
+
+  it("mesmo nome, um sem telefone: junta e fica o que tem número (mesmo que não seja do Google)", () => {
+    const grupos = agruparDuplicados([
+      cli({ id: "sem", nome: "AGRO terraplanagem", googleContatoId: "people/9", criadoEm: d("2025-01-01") }),
+      cli({ id: "com", nome: "AGRO Terraplanagem", telefone: "28999757080", criadoEm: d("2026-01-01") }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].fica.id).toBe("com");
+    expect(grupos[0].somem.map((s) => s.id)).toEqual(["sem"]);
+    expect(grupos[0].motivo).toBe("nome");
+  });
+
+  it("sem telefone e dois xarás com números diferentes: só junta ao que tem o nome exatamente igual; na dúvida não mexe", () => {
+    const grupos = agruparDuplicados([
+      cli({ id: "g1", nome: "·.¸¸♫♪♪ Welinton ♫♪♪·. 🌻", telefone: "28999596070", googleContatoId: "people/1" }),
+      cli({ id: "c1", nome: "·.¸¸♫♪♪ Welinton ♫♪♪·. 🌻" }),
+      cli({ id: "c2", nome: "welinton" }),
+      cli({ id: "g2", nome: "welinton", telefone: "27998356747", googleContatoId: "people/2" }),
+      cli({ id: "c3", nome: "WELINTON" }),
+    ]);
+    expect(grupos).toHaveLength(2);
+    const porFica = Object.fromEntries(grupos.map((g) => [g.fica.id, g.somem.map((s) => s.id)]));
+    expect(porFica).toEqual({ g1: ["c1"], g2: ["c2", "c3"] });
   });
 
   it("nome genérico não agrupa; cadastro sem par fica em paz", () => {
@@ -102,5 +134,16 @@ describe("sincronização do Google não duplica mais por nome", () => {
     );
     expect(plano.criar).toHaveLength(0);
     expect(plano.atualizar).toEqual([{ id: "c1", dados: { googleContatoId: "people/9", telefone: "28999757080" } }]);
+  });
+
+  it("mesmo nome com outro telefone no CRM é outra pessoa: cria o contato do Google separado", () => {
+    const plano = planejarSincronizacao(
+      [{ id: "people/2", nome: "Welinton", telefones: ["5527998356747"], emails: [], enderecos: [], empresa: null }],
+      [{ id: "w1", nome: "Welinton", telefone: "28999596070", email: null, endereco: null, municipioId: null, origem: null, googleContatoId: "people/1" }],
+      [],
+    );
+    expect(plano.atualizar).toHaveLength(0);
+    expect(plano.criar).toHaveLength(1);
+    expect(plano.criar[0].telefone).toBe("27998356747");
   });
 });

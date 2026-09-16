@@ -96,7 +96,9 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
   for (const c of clientes) {
     if (c.googleContatoId && !porGoogleId.has(c.googleContatoId)) porGoogleId.set(c.googleContatoId, c);
     if (c.telefone) for (const v of phoneLookupVariants(c.telefone)) if (!porTelefone.has(v)) porTelefone.set(v, c);
-    const n = chaveNome(c.nome);
+    // Só cadastro SEM telefone casa por nome: mesmo nome com outro número é
+    // outra pessoa.
+    const n = c.telefone ? null : chaveNome(c.nome);
     if (n && !porNome.has(n)) porNome.set(n, c);
   }
 
@@ -114,8 +116,8 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
 
     let cliente = porGoogleId.get(g.id) ?? null;
     if (!cliente) for (const t of telefones) { for (const v of phoneLookupVariants(t)) { const c = porTelefone.get(v); if (c) { cliente = c; break; } } if (cliente) break; }
-    // Mesmo nome já cadastrado (sem telefone ou com outro número): é o mesmo
-    // cliente — liga em vez de criar um segundo cadastro.
+    // Mesmo nome já cadastrado sem telefone: é o mesmo cliente — liga (e
+    // completa o número) em vez de criar um segundo cadastro.
     if (!cliente) { const n = chaveNome(nome); if (n) cliente = porNome.get(n) ?? null; }
 
     const email = g.emails[0] ?? null;

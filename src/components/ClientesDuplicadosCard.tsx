@@ -73,9 +73,10 @@ export function ClientesDuplicadosCard({ inicial }: { inicial: EstadoDuplicados 
         <Users size={18} className="text-brand-600" /> Cadastros duplicados
       </div>
       <p className="text-sm text-slate-600">
-        Dois cadastros com o mesmo telefone ou o mesmo nome são o mesmo cliente. Fica o que veio do Google (sem Google no grupo, fica o
-        mais antigo); negociações, frota, visitas, conversas, alertas, tarefas e histórico do outro passam para ele, e os campos vazios são
-        preenchidos. Nada se perde, e cada rodada pode ser desfeita.
+        Junta cadastros com o mesmo telefone, e cadastros com o mesmo nome quando um deles não tem telefone. Mesmo nome com números
+        diferentes são pessoas diferentes e ficam os dois. Fica quem tem telefone (de preferência o que veio do Google); negociações, frota,
+        visitas, conversas, alertas, tarefas e histórico do outro passam para ele, e os campos vazios são preenchidos. Nada se perde, e cada
+        rodada pode ser desfeita.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

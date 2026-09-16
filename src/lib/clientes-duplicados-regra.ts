@@ -1,14 +1,14 @@
 // Regras puras da unificação de cadastros duplicados (sem banco, testável).
 //
 // Dois cadastros são o mesmo cliente quando têm o mesmo telefone (em qualquer
-// formato: com/sem 55, com/sem 9º dígito) OU o mesmo nome (sem acento,
-// caixa ou pontuação). Grupos são fechados por transitividade: A~B por
-// telefone e B~C por nome → A, B e C viram um só.
+// formato: com/sem 55, com/sem 9º dígito), ou quando têm o mesmo nome e um
+// deles NÃO tem telefone. Mesmo nome com números diferentes são pessoas
+// diferentes — ficam os dois.
 //
-// Quem fica: o cadastro que veio do Google (a agenda do vendedor é a fonte
-// da verdade dos contatos). Sem Google no grupo, fica o mais antigo. Todo o
-// resto (negociações, frota, visitas…) é migrado para quem fica, e os campos
-// vazios de quem fica são preenchidos com os do(s) outro(s).
+// Quem fica: quem tem telefone; entre esses, o que veio do Google (a agenda
+// do vendedor é a fonte da verdade dos contatos); depois, o mais antigo. Todo
+// o resto (negociações, frota, visitas…) é migrado para quem fica, e os
+// campos vazios de quem fica são preenchidos com os do(s) outro(s).
 
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { chaveNome } from "@/lib/google-contatos-util";
@@ -36,9 +36,13 @@ export function chaveTelefone(telefone: string | null): string | null {
   return nacionais.sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
 }
 
+// Quem fica: quem tem telefone > quem veio do Google (sincronizado por
+// último) > o mais antigo.
 export function escolherQuemFica<T extends ClienteParaDedup>(grupo: T[]): T {
-  const google = grupo.filter((c) => !!c.googleContatoId);
-  const candidatos = google.length ? google : grupo;
+  const comTelefone = grupo.filter((c) => !!chaveTelefone(c.telefone));
+  const base = comTelefone.length ? comTelefone : grupo;
+  const google = base.filter((c) => !!c.googleContatoId);
+  const candidatos = google.length ? google : base;
   return [...candidatos].sort((a, b) => {
     if (google.length) {
       const sa = a.googleSincronizadoEm?.getTime() ?? 0, sb = b.googleSincronizadoEm?.getTime() ?? 0;
@@ -60,8 +64,6 @@ export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): Gr
   const unir = (a: string, b: string) => { const ra = achar(a), rb = achar(b); if (ra !== rb) pai.set(ra, rb); };
   for (const c of clientes) pai.set(c.id, c.id);
 
-  const porTelefone = new Map<string, string>();
-  const porNome = new Map<string, string>();
   const motivoPorPar = new Map<string, Set<"telefone" | "nome">>();
   const marcar = (a: string, b: string, m: "telefone" | "nome") => {
     unir(a, b);
@@ -69,11 +71,41 @@ export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): Gr
     if (!motivoPorPar.has(k)) motivoPorPar.set(k, new Set());
     motivoPorPar.get(k)!.add(m);
   };
+
+  // 1) Mesmo telefone = mesma pessoa, sempre.
+  const porTelefone = new Map<string, string>();
+  const porNome = new Map<string, T[]>();
   for (const c of clientes) {
     const t = chaveTelefone(c.telefone);
     if (t) { const outro = porTelefone.get(t); if (outro) marcar(outro, c.id, "telefone"); else porTelefone.set(t, c.id); }
     const n = chaveNome(c.nome);
-    if (n) { const outro = porNome.get(n); if (outro) marcar(outro, c.id, "nome"); else porNome.set(n, c.id); }
+    if (n) { if (!porNome.has(n)) porNome.set(n, []); porNome.get(n)!.push(c); }
+  }
+
+  // 2) Mesmo nome: números DIFERENTES são pessoas diferentes (ficam os dois).
+  //    Quem não tem telefone junta com o xará que tem — se houver um só
+  //    número entre os xarás; com mais de um, só junta se o nome bater
+  //    exatamente com um deles (senão fica em paz, na dúvida não mexe).
+  for (const xaras of porNome.values()) {
+    if (xaras.length < 2) continue;
+    const comTelefone = xaras.filter((c) => chaveTelefone(c.telefone));
+    const semTelefone = xaras.filter((c) => !chaveTelefone(c.telefone));
+    const numeros = new Map<string, T>();
+    for (const c of comTelefone) { const t = chaveTelefone(c.telefone)!; if (!numeros.has(t)) numeros.set(t, c); }
+
+    if (numeros.size === 0) {
+      for (let i = 1; i < semTelefone.length; i++) marcar(semTelefone[0].id, semTelefone[i].id, "nome");
+      continue;
+    }
+    for (const s of semTelefone) {
+      let alvo: T | null = null;
+      if (numeros.size === 1) alvo = numeros.values().next().value ?? null;
+      else {
+        const exatos = [...numeros.values()].filter((c) => c.nome.trim().toLowerCase() === s.nome.trim().toLowerCase());
+        if (exatos.length === 1) alvo = exatos[0];
+      }
+      if (alvo) marcar(alvo.id, s.id, "nome");
+    }
   }
 
   const grupos = new Map<string, T[]>();
