@@ -40,8 +40,6 @@ function clienteIdDoItem(i: ItemCentral): string | null {
 export type ItemPosVenda = Awaited<ReturnType<typeof listarClientesPosVenda>>[number];
 
 export type GraficosCentral = {
-  porGrupo: { grupo: string; id: string; total: number; alta: number }[];
-  porSeveridade: { severidade: SeveridadeAlerta; total: number }[];
   tendencia: { dia: string; criados: number; resolvidos: number }[];
 };
 
@@ -339,7 +337,8 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   }));
   const todos = grupos.flatMap((g) => g.itens);
 
-  // Gráficos: por grupo, por severidade e tendência de 14 dias dos alertas do ZEUS.
+  // Contagem de criados/resolvidos por dia nos últimos 14 dias (vira os dois
+  // números do topo da Central — os gráficos foram removidos a pedido).
   const porDia = new Map<string, { criados: number; resolvidos: number }>();
   for (let i = 13; i >= 0; i--) porDia.set(new Date(Date.now() - i * 24 * HORA).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }), { criados: 0, resolvidos: 0 });
   for (const a of alertasRecentes) {
@@ -350,8 +349,6 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     if (a.resolvido) p.resolvidos++;
   }
   const graficos: GraficosCentral = {
-    porGrupo: grupos.filter((g) => g.itens.length).map((g) => ({ grupo: g.titulo, id: g.id, total: g.itens.length, alta: g.itens.filter((i) => i.severidade === "alta").length })),
-    porSeveridade: (["alta", "media", "baixa"] as SeveridadeAlerta[]).map((sev) => ({ severidade: sev, total: todos.filter((i) => i.severidade === sev).length })),
     tendencia: Array.from(porDia.entries()).map(([dia, v]) => ({ dia, ...v })),
   };
   return { grupos, total: todos.length, alta: todos.filter((i) => i.severidade === "alta").length, graficos };

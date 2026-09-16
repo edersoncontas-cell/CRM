@@ -16,9 +16,9 @@ export function PageHeader({
   return (
     <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{titulo}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{titulo}</h1>
         {subtitulo && (
-          <p className="mt-1 text-sm text-slate-500">{subtitulo}</p>
+          <p className="mt-1 text-sm text-slate-400">{subtitulo}</p>
         )}
       </div>
       {acao && <div className="flex shrink-0 items-center gap-2">{acao}</div>}
@@ -37,7 +37,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", className)}>
+    <div className={cn("rounded-2xl border border-slate-200 bg-white p-5 text-slate-800 shadow-sm", className)}>
       {children}
     </div>
   );

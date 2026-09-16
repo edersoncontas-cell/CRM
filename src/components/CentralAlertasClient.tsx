@@ -8,8 +8,7 @@ import { resolverAlerta, resolverVariosAlertasAction, registrarContatoPosVenda, 
 import type { GrupoCentral, ItemCentral, SeveridadeAlerta, GraficosCentral } from "@/lib/central-alertas";
 import { PosVendaModal } from "@/components/PosVendaClient";
 import { cn } from "@/lib/utils";
-import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, BarChart3, Snowflake, Route } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid } from "recharts";
+import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, Snowflake, Route } from "lucide-react";
 
 const ICONE_GRUPO: Record<string, typeof Bell> = {
   rascunhos: MessageSquareQuote, aguardando: Clock, semcontato: Snowflake, visitar: Route, comerciais: Compass, posvenda: HeartHandshake, visitas: MapPin, demandas: ListTodo, meta: Target, sistema: ShieldCheck,
@@ -17,7 +16,6 @@ const ICONE_GRUPO: Record<string, typeof Bell> = {
 const COR_GRUPO: Record<string, string> = {
   rascunhos: "#ffcb2d", aguardando: "#fb923c", semcontato: "#facc15", visitar: "#22d3ee", comerciais: "#a78bfa", posvenda: "#f472b6", visitas: "#38bdf8", demandas: "#34d399", meta: "#f87171", sistema: "#94a3b8",
 };
-const COR_SEV_HEX: Record<SeveridadeAlerta, string> = { alta: "#ef4444", media: "#f59e0b", baixa: "#cbd5e1" };
 const COR_SEV: Record<SeveridadeAlerta, string> = { alta: "border-l-red-500", media: "border-l-amber-400", baixa: "border-l-slate-300" };
 const ROTULO_SEV: Record<SeveridadeAlerta, { texto: string; classe: string }> = {
   alta: { texto: "urgente", classe: "bg-red-100 text-red-700" },
@@ -39,7 +37,6 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const [resolvidos, setResolvidos] = useState<Set<string>>(new Set());
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [modalPosVenda, setModalPosVenda] = useState<ItemCentral["posVenda"] | null>(null);
-  const [mostrarGraficos, setMostrarGraficos] = useState(true);
   const [, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,7 +51,6 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   const totalVisivel = grupos.reduce((s, g) => s + g.itens.filter((i) => !resolvidos.has(i.id)).length, 0);
   const urgentes = grupos.reduce((s, g) => s + g.itens.filter((i) => !resolvidos.has(i.id) && i.severidade === "alta").length, 0);
 
-  const dadosGrupo = useMemo(() => graficos.porGrupo.map((g) => ({ ...g, nome: g.grupo.replace(/ .*/, "") })), [graficos]);
   const criados14 = graficos.tendencia.reduce((s, d) => s + d.criados, 0);
   const resolvidos14 = graficos.tendencia.reduce((s, d) => s + d.resolvidos, 0);
 
@@ -148,66 +144,6 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
           </div>
         ))}
       </div>
-
-      {totalVisivel > 0 && (
-        <div className="mb-4">
-          <button onClick={() => setMostrarGraficos((v) => !v)} className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800"><BarChart3 size={13} /> {mostrarGraficos ? "Ocultar gráficos" : "Mostrar gráficos"}</button>
-          {mostrarGraficos && (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              <Card>
-                <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-500">Por tipo</div>
-                <div style={{ height: 170 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dadosGrupo} layout="vertical" margin={{ left: 4, right: 12, top: 4, bottom: 4 }}>
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="nome" width={86} tick={{ fontSize: 11, fill: "#475569" }} />
-                      <Tooltip formatter={(v: number, n: string) => [v, n === "total" ? "itens" : "urgentes"]} />
-                      <Bar dataKey="total" radius={[0, 6, 6, 0]} onClick={(d) => setFiltro((d as { id: string }).id)} cursor="pointer">
-                        {dadosGrupo.map((g) => <Cell key={g.id} fill={COR_GRUPO[g.id] ?? "#94a3b8"} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-              <Card>
-                <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-500">Por urgência</div>
-                <div className="flex items-center gap-3" style={{ height: 170 }}>
-                  <div className="h-full w-1/2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={graficos.porSeveridade} dataKey="total" nameKey="severidade" innerRadius={42} outerRadius={70} paddingAngle={2}>
-                          {graficos.porSeveridade.map((s) => <Cell key={s.severidade} fill={COR_SEV_HEX[s.severidade]} />)}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <ul className="space-y-1 text-xs">
-                    {graficos.porSeveridade.map((s) => (
-                      <li key={s.severidade} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: COR_SEV_HEX[s.severidade] }} /><span className="w-24 text-slate-600">{ROTULO_SEV[s.severidade].texto}</span><b className="text-slate-800">{s.total}</b></li>
-                    ))}
-                  </ul>
-                </div>
-              </Card>
-              <Card>
-                <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-500">Alertas do ZEUS · 14 dias</div>
-                <div style={{ height: 170 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={graficos.tendencia} margin={{ left: -18, right: 6, top: 6, bottom: 0 }}>
-                      <CartesianGrid stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "#94a3b8" }} interval={3} />
-                      <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} allowDecimals={false} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="criados" name="criados" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} />
-                      <Area type="monotone" dataKey="resolvidos" name="resolvidos" stroke="#10b981" fill="#10b981" fillOpacity={0.15} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-            </div>
-          )}
-        </div>
-      )}
 
       {totalVisivel === 0 ? (
         <EmptyState icone={<Bell size={28} />} texto="Nenhum alerta pendente" subtexto="Clientes aguardando resposta, 30+ dias sem contato, negócios sem visita, alertas do ZEUS, pós-venda, visitas e demandas aparecem aqui assim que precisarem de você." />

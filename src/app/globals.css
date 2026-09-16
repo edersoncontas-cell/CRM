@@ -26,7 +26,12 @@ html {
 }
 
 body {
-    @apply bg-slate-50 text-slate-800 antialiased;
+    /* Fundo escuro do CRM, igual ao da tela de abertura. O texto claro vale
+       para o que fica SOBRE o fundo; dentro dos cards brancos o texto escuro
+       é fixado no próprio Card (ver components/ui.tsx). */
+    @apply text-slate-200 antialiased;
+    background: linear-gradient(160deg, #161b23 0%, #0f1319 55%, #0a0d12 100%);
+    background-attachment: fixed;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     /* Evita render extra ao rolar */
     overscroll-behavior-y: none;
@@ -194,7 +199,8 @@ img, video, iframe {
 /* Impressão de propostas */
 @media print {
     body {
-        @apply bg-white;
+        @apply bg-white text-slate-800;
+        background-image: none;
     }
     .print\:hidden {
         display: none !important;
