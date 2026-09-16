@@ -13,7 +13,8 @@ import { CadenciaCliente } from "@/components/CadenciaCliente";
 import { cadenciaDoCliente, TIPOS_CADENCIA, TOQUES } from "@/lib/cadencias";
 import { linhaDoTempoCliente } from "@/lib/linha-tempo";
 import { LinhaTempoCliente } from "@/components/LinhaTempoCliente";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { clienteRedirecionado } from "@/lib/clientes-duplicados";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake } from "lucide-react";
 
@@ -37,7 +38,13 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
     db.maquina.findMany({ select: { id: true, marca: true, modelo: true, categoria: true, proprio: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
     db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }).then((cs) => cs.filter((c) => papelDaColuna(c) !== "perdida")),
   ]);
-  if (!cliente) notFound();
+  if (!cliente) {
+    // Cadastro que sumiu numa unificação de duplicados: o link antigo abre
+    // o cadastro que ficou.
+    const destino = await clienteRedirecionado(params.id);
+    if (destino) redirect(`/clientes/${destino}`);
+    notFound();
+  }
 
   // Busca frota e conversa WA via raw query (tabelas novas)
   type FrotaRow = { id: string; marca: string; modelo: string };

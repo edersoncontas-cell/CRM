@@ -395,6 +395,30 @@ export async function aplicarMigracoes(): Promise<void> {
         CONSTRAINT "ConversaExcluida_pkey" PRIMARY KEY ("telefone")
       )
     `);
+
+    // Unificação de cadastros duplicados (v25): histórico de cada rodada
+    // (para desfazer) e redirecionamento dos links dos cadastros que sumiram.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "UnificacaoClientes" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "origem" TEXT NOT NULL DEFAULT 'usuario',
+        "resumo" TEXT NOT NULL,
+        "dados" TEXT NOT NULL,
+        "desfeitaEm" TIMESTAMP(3),
+        CONSTRAINT "UnificacaoClientes_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ClienteRedirecionamento" (
+        "deId" TEXT NOT NULL,
+        "paraId" TEXT NOT NULL,
+        "unificacaoId" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ClienteRedirecionamento_pkey" PRIMARY KEY ("deId")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ClienteRedirecionamento_unificacaoId_idx" ON "ClienteRedirecionamento" ("unificacaoId")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

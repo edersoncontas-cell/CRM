@@ -41,7 +41,7 @@ export type ClienteResumo = {
 export type MunicipioResumo = { id: string; nome: string };
 
 export type PlanoCriar = { nome: string; telefone: string; email: string | null; endereco: string | null; municipioId: string | null; googleContatoId: string };
-export type PlanoAtualizar = { id: string; dados: Partial<{ nome: string; email: string; endereco: string; municipioId: string; googleContatoId: string }> };
+export type PlanoAtualizar = { id: string; dados: Partial<{ nome: string; telefone: string; email: string; endereco: string; municipioId: string; googleContatoId: string }> };
 export type PlanoSincronizacao = { criar: PlanoCriar[]; atualizar: PlanoAtualizar[]; ignorados: number; semTelefone: number };
 
 // Nome genérico dado pelo pipeline quando o WhatsApp não manda o nome do contato.
@@ -49,6 +49,14 @@ const NOME_GENERICO = /^(contato\s+\d+|\+?\d[\d\s()-]{7,})$/i;
 export const nomeGenerico = (nome: string) => NOME_GENERICO.test(nome.trim());
 
 export const normalizarTexto = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+// Chave para casar dois cadastros pelo nome (sem acento/caixa/pontuação).
+// null = nome genérico ou curto demais para valer como identidade.
+export function chaveNome(nome: string): string | null {
+  const n = normalizarTexto(nome);
+  if (n.length < 3 || nomeGenerico(nome) || /^[\d ]+$/.test(n)) return null;
+  return n;
+}
 
 // Telefone como o CRM guarda: só dígitos, sem o 55 do Brasil (28999798168).
 export function telefoneNacional(raw: string): string | null {
@@ -84,9 +92,12 @@ export function acharMunicipio(municipios: MunicipioResumo[], enderecos: Contato
 export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], telefonesBloqueados: Set<string> = new Set(), filtro: FiltroContatos = FILTRO_PADRAO): PlanoSincronizacao {
   const porGoogleId = new Map<string, ClienteResumo>();
   const porTelefone = new Map<string, ClienteResumo>();
+  const porNome = new Map<string, ClienteResumo>();
   for (const c of clientes) {
     if (c.googleContatoId && !porGoogleId.has(c.googleContatoId)) porGoogleId.set(c.googleContatoId, c);
     if (c.telefone) for (const v of phoneLookupVariants(c.telefone)) if (!porTelefone.has(v)) porTelefone.set(v, c);
+    const n = chaveNome(c.nome);
+    if (n && !porNome.has(n)) porNome.set(n, c);
   }
 
   const plano: PlanoSincronizacao = { criar: [], atualizar: [], ignorados: 0, semTelefone: 0 };
@@ -103,6 +114,9 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
 
     let cliente = porGoogleId.get(g.id) ?? null;
     if (!cliente) for (const t of telefones) { for (const v of phoneLookupVariants(t)) { const c = porTelefone.get(v); if (c) { cliente = c; break; } } if (cliente) break; }
+    // Mesmo nome já cadastrado (sem telefone ou com outro número): é o mesmo
+    // cliente — liga em vez de criar um segundo cadastro.
+    if (!cliente) { const n = chaveNome(nome); if (n) cliente = porNome.get(n) ?? null; }
 
     const email = g.emails[0] ?? null;
     const endereco = g.enderecos.find((e) => e.texto)?.texto ?? null;
@@ -115,6 +129,7 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
       if (cliente.googleContatoId !== g.id) dados.googleContatoId = g.id;
       // Nome: troca o genérico do WhatsApp; e quem nasceu do Google segue o Google.
       if (nomeGenerico(cliente.nome) || (cliente.origem === "google" && cliente.nome.trim() !== nome)) dados.nome = nome;
+      if (!cliente.telefone && telefones[0]) dados.telefone = telefones[0];
       if (!cliente.email && email) dados.email = email;
       if (!cliente.endereco && endereco) dados.endereco = endereco;
       if (!cliente.municipioId && municipioId) dados.municipioId = municipioId;

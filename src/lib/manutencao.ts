@@ -47,7 +47,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v24: tabela ConversaExcluida + data de corte do WhatsApp (16/09/2026):
 // apaga as conversas anteriores e impede que importação/histórico as traga
 // de volta.
-export const CHAVE_MANUTENCAO = "manutencao.v24";
+// v25: tabelas da unificação de cadastros duplicados (histórico para
+// desfazer + redirecionamento dos links antigos).
+export const CHAVE_MANUTENCAO = "manutencao.v25";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

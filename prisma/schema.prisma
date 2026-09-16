@@ -331,6 +331,26 @@ model ConversaExcluida {
   excluidaEm DateTime @default(now())
 }
 
+// Unificação de cadastros duplicados: cada rodada guarda, em JSON, tudo o que
+// foi movido/apagado/preenchido para poder ser desfeita exatamente.
+model UnificacaoClientes {
+  id         String    @id @default(cuid())
+  criadoEm   DateTime  @default(now())
+  origem     String    @default("usuario")
+  resumo     String
+  dados      String
+  desfeitaEm DateTime?
+}
+
+// Link antigo (/clientes/<id que sumiu>) abre o cadastro que ficou.
+model ClienteRedirecionamento {
+  deId          String   @id
+  paraId        String
+  unificacaoId  String
+  criadoEm      DateTime @default(now())
+  @@index([unificacaoId])
+}
+
 model AlertaOculto {
   id        String   @id @default(cuid())
   chave     String   @unique
