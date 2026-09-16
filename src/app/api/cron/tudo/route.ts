@@ -37,6 +37,8 @@ const JOBS: Job[] = [
   { path: "/api/cron/agnes-dispatch", minutos: 1 },
   { path: "/api/cron/zeus-pipeline", minutos: 1 },
   { path: "/api/cron/whatsapp-retry", minutos: 5 },
+  // Vigia da conexão: religa o WhatsApp sozinho antes de incomodar com o QR.
+  { path: "/api/cron/whatsapp-vigia", minutos: 5 },
   { path: "/api/cron/zeus-tick", minutos: 5 },
   { path: "/api/cron/mercado", minutos: 30 },
   { path: "/api/cron/google-contatos", minutos: 60 },

@@ -11,6 +11,8 @@ import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integration
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
+import { vigiarConexao, lerMemoriaVigia, type ResultadoVigia } from "@/lib/whatsapp-vigia";
+import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
 import { registrarAudit } from "./audit";
 import { mesAnoAtualBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
@@ -1213,10 +1215,38 @@ export async function criarInstanciaEvolutionAction(): Promise<{ ok: boolean; er
   return r;
 }
 
-export async function desconectarZapi(): Promise<{ ok: boolean }> {
+// Desconectar é a ÚNICA coisa no CRM que derruba o pareamento do WhatsApp, e
+// só acontece com confirmação explícita do vendedor (a tela pede o texto
+// "DESCONECTAR"). Fica registrado em auditoria para nunca haver dúvida sobre
+// quem derrubou a conexão — nada automático chega aqui.
+export async function desconectarZapi(confirmacao?: string): Promise<{ ok: boolean; erro?: string }> {
+  if (confirmacao !== "DESCONECTAR") {
+    return { ok: false, erro: "Desconexão não confirmada — nada foi alterado." };
+  }
   const ok = await zapi.desconectar();
+  await registrarAudit({
+    acao: "perfil_atualizado", origem: "usuario",
+    descricao: ok ? "WhatsApp desconectado manualmente na tela de Conexão." : "Tentativa de desconectar o WhatsApp falhou.",
+  }).catch(() => {});
   revalidatePath("/conexao");
   return { ok };
+}
+
+// "Verificar e religar agora": o mesmo vigia que roda de 5 em 5 minutos.
+export async function vigiarConexaoAction(): Promise<ResultadoVigia> {
+  const r = await vigiarConexao();
+  revalidatePath("/conexao");
+  return r;
+}
+
+export async function lerConexaoVigiadaAction(): Promise<{ descricao: string; reconexoes: number; ultimaQueda: string | null; conectadaDesde: string | null }> {
+  const m = await lerMemoriaVigia();
+  return {
+    descricao: descreverConexao(m, new Date()),
+    reconexoes: m.reconexoesAutomaticas,
+    ultimaQueda: m.ultimaQueda,
+    conectadaDesde: m.conectadaDesde,
+  };
 }
 
 // ---------- Kanban de tarefas ----------

@@ -532,6 +532,23 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
   }
 }
 
+// Reabre o socket sem pedir QR: quando a instância ainda tem a credencial do
+// pareamento, /instance/connect só reconecta (o QR só volta se o pareamento
+// caiu de verdade). É o primeiro remédio do vigia da conexão.
+export async function reconectar(): Promise<{ ok: boolean; conectado: boolean; erro?: string }> {
+  if (provedorWhatsApp() !== "evolution") {
+    const ok = await reiniciar();
+    return { ok, conectado: false };
+  }
+  try {
+    const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+    const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
+    return { ok: true, conectado: state === "open" };
+  } catch (e) {
+    return { ok: false, conectado: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function reiniciar(): Promise<boolean> {
   if (provedorWhatsApp() === "evolution") {
     // Versões da Evolution divergem no verbo (PUT nas 2.x, POST em outras).

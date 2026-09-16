@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction } from "@/lib/actions";
+import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
-  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal,
+  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck,
 } from "lucide-react";
 
 type Status = {
@@ -51,7 +51,11 @@ export function ConexaoWhatsApp() {
   const [pending, startTransition] = useTransition();
   const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
   const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
+  const [vigia, setVigia] = useState<{ descricao: string; reconexoes: number } | null>(null);
+  const [vigiaMsg, setVigiaMsg] = useState<string | null>(null);
   const webhookCorrigido = useRef(false);
+
+  useEffect(() => { lerConexaoVigiadaAction().then(setVigia).catch(() => {}); }, [status?.conectado]);
 
   // Webhook fora do lugar (ou desligado): o CRM aponta para si mesmo sozinho,
   // uma vez por visita à página. Sem isso as mensagens não chegam.
@@ -195,8 +199,38 @@ export function ConexaoWhatsApp() {
             </div>
           </div>
         )}
+        <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm text-slate-600">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-700"><ShieldCheck size={15} className="text-green-600" /> Vigia da conexão</div>
+          <p className="mt-1 text-xs text-slate-500">
+            O CRM confere a conexão de 5 em 5 minutos. Se o WhatsApp cair, ele religa sozinho (e reaponta o webhook) — só pede o QR Code
+            quando o pareamento cai de verdade. Nada no sistema desconecta o número: só o botão abaixo.
+          </p>
+          {vigia && <p className="mt-1.5 text-xs font-semibold text-slate-600">{vigia.descricao}</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => startTransition(async () => {
+                const r = await vigiarConexaoAction();
+                setVigiaMsg(r.religou ? "Religado agora." : r.webhookCorrigido ? "Webhook reapontado." : r.conectado ? "Tudo certo — conexão de pé." : "Ainda fora do ar; continuo tentando.");
+                await buscarStatus();
+                await lerConexaoVigiadaAction().then(setVigia).catch(() => {});
+              })}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+            >
+              {pending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Verificar e religar agora
+            </button>
+            {vigiaMsg && <span className="text-xs text-slate-500">{vigiaMsg}</span>}
+          </div>
+        </div>
         <button
-          onClick={() => startTransition(async () => { await desconectarZapi(); await buscarStatus(); })}
+          onClick={() => startTransition(async () => {
+            const texto = window.prompt('Isso derruba o WhatsApp do CRM e você terá que escanear o QR de novo.\n\nSe é isso mesmo, digite DESCONECTAR:');
+            if (texto === null) return;
+            const r = await desconectarZapi(texto.trim().toUpperCase());
+            if (!r.ok) { setVigiaMsg(r.erro ?? "Nada foi alterado."); return; }
+            setVigiaMsg("WhatsApp desconectado por você.");
+            await buscarStatus();
+          })}
           disabled={pending}
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-red-600 ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-60"
         >
@@ -280,6 +314,17 @@ export function ConexaoWhatsApp() {
           {carregandoQr ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />} Gerar novo QR
         </button>
         <button
+          onClick={() => startTransition(async () => {
+            const r = await vigiarConexaoAction();
+            setVigiaMsg(r.religou ? "Religou sem precisar do QR." : "Não deu para religar sozinho — escaneie o QR.");
+            await buscarStatus();
+          })}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60"
+        >
+          {pending ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />} Tentar religar sem QR
+        </button>
+        <button
           onClick={() => startTransition(async () => { await reiniciarZapi(); await buscarQr(); })}
           disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
@@ -287,6 +332,7 @@ export function ConexaoWhatsApp() {
           {pending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Reiniciar instância
         </button>
       </div>
+      {(vigiaMsg || vigia) && <p className="mt-2 text-xs text-slate-500">{vigiaMsg ?? vigia?.descricao}</p>}
     </div>
     </div>
   );
