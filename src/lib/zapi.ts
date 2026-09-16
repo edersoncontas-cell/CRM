@@ -97,20 +97,38 @@ async function zapiGet(endpoint: string): Promise<unknown> {
 
 // ---------- Evolution API (transporte) ----------
 
+// Consultas de tela (status, QR) usam tempo curto: se o servidor da Evolution
+// está fora do ar, é melhor dizer isso em segundos do que deixar a tela
+// pendurada 30s e a função da Vercel morrer no limite. Envio de mensagem
+// continua com folga.
+const TEMPO_TELA_MS = 10_000;
+const TEMPO_PADRAO_MS = 30_000;
+
 async function evoFetch(
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  timeoutMs = TEMPO_PADRAO_MS
 ): Promise<Record<string, unknown>> {
   const cfg = evolutionConfig();
   if (!cfg) throw new Error("Evolution API não configurada.");
-  const res = await fetch(`${cfg.url}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.url}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    // Erro de rede/tempo esgotado: sem isto a tela mostrava o texto cru
+    // "The operation was aborted due to timeout", que não diz o que fazer.
+    const causa = e instanceof Error && e.name === "TimeoutError"
+      ? `não respondeu em ${Math.round(timeoutMs / 1000)}s`
+      : "está inalcançável (servidor desligado, porta fechada ou endereço errado)";
+    throw new Error(`Não consegui falar com o servidor da Evolution API: ${cfg.url} ${causa}. Confira se ele está ligado e acessível pela internet.`);
+  }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const detalhe = (data?.response as Record<string, unknown> | undefined)?.message ?? data?.message ?? data?.error ?? JSON.stringify(data);
@@ -450,6 +468,73 @@ export async function lerWebhookEvolution(): Promise<{ url: string | null; enabl
   }
 }
 
+// ---------- Diagnóstico da conexão ----------
+
+// Testa a corrente inteira, um elo por vez, para a tela dizer exatamente ONDE
+// quebrou: variáveis na Vercel → servidor no ar → chave aceita → instância
+// existe → pareada → webhook apontado. Sem isto, qualquer falha virava um
+// "timeout" genérico que não indica o que consertar.
+export type EtapaDiagnostico = { etapa: string; ok: boolean; detalhe: string };
+export type Diagnostico = { provedor: ProvedorWhatsApp | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string };
+
+export async function diagnosticarConexao(): Promise<Diagnostico> {
+  const cfg = evolutionConfig();
+  const etapas: EtapaDiagnostico[] = [];
+  const fim = (conclusao: string): Diagnostico => ({
+    provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: cfg?.instance ?? null, etapas, conclusao,
+  });
+
+  if (!cfg) {
+    const faltando = ["EVOLUTION_API_URL", "EVOLUTION_API_KEY", "EVOLUTION_INSTANCE"].filter((v) => !(process.env[v] ?? "").trim());
+    etapas.push({ etapa: "Variáveis na Vercel", ok: false, detalhe: `Faltando: ${faltando.join(", ")}` });
+    return fim("O CRM não sabe onde fica sua Evolution API. Preencha as variáveis na Vercel (Settings → Environment Variables) e faça Redeploy.");
+  }
+  etapas.push({ etapa: "Variáveis na Vercel", ok: true, detalhe: `${cfg.url} · instância "${cfg.instance}"` });
+
+  // 1. O servidor responde?
+  const inicio = Date.now();
+  try {
+    const res = await fetch(`${cfg.url}/`, { cache: "no-store", signal: AbortSignal.timeout(TEMPO_TELA_MS) });
+    etapas.push({ etapa: "Servidor no ar", ok: true, detalhe: `respondeu HTTP ${res.status} em ${Date.now() - inicio}ms` });
+  } catch (e) {
+    const tempo = e instanceof Error && e.name === "TimeoutError";
+    etapas.push({
+      etapa: "Servidor no ar", ok: false,
+      detalhe: tempo ? `não respondeu em ${TEMPO_TELA_MS / 1000}s` : "endereço inalcançável (DNS, porta fechada ou servidor desligado)",
+    });
+    return fim(`O servidor da Evolution em ${cfg.url} não respondeu. É quase sempre o container parado ou a máquina desligada: entre no servidor e rode "docker compose up -d" (ou reinicie a VPS). Enquanto ele não responder, nenhum QR pode ser gerado.`);
+  }
+
+  // 2. A chave é aceita e a instância existe?
+  try {
+    const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
+    etapas.push({ etapa: "Chave (apikey) aceita", ok: true, detalhe: "a Evolution respondeu à consulta autenticada" });
+    const state = estadoDaResposta(data) || "desconhecido";
+    etapas.push({ etapa: `Instância "${cfg.instance}"`, ok: true, detalhe: `existe · estado "${state}"` });
+    if (state === "open") {
+      const w = await lerWebhookEvolution();
+      const esperado = urlWebhookCrm();
+      const ok = !!(w && w.enabled && esperado && (w.url ?? "").replace(/\/+$/, "") === esperado.replace(/\/+$/, ""));
+      etapas.push({ etapa: "Webhook apontado para o CRM", ok, detalhe: ok ? "certo" : `está em "${w?.url ?? "vazio"}" — deveria ser "${esperado ?? "(defina NEXTAUTH_URL)"}"` });
+      return fim(ok ? "Tudo certo: número pareado e mensagens chegando." : "Número pareado, mas o webhook está fora do lugar — o CRM corrige sozinho na próxima verificação (ou clique em \"Configurar webhook agora\").");
+    }
+    return fim(`A instância existe e está "${state}" (não pareada). Clique em "Gerar novo QR" e escaneie com o celular.`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/\(401\)|\(403\)|unauthorized/i.test(msg)) {
+      etapas.push({ etapa: "Chave (apikey) aceita", ok: false, detalhe: "a Evolution recusou a chave" });
+      return fim("O servidor respondeu, mas recusou a chave: EVOLUTION_API_KEY na Vercel está diferente da AUTHENTICATION_API_KEY do servidor. Acerte as duas e faça Redeploy.");
+    }
+    if (/\(404\)/.test(msg) || /does not exist|não existe/i.test(msg)) {
+      etapas.push({ etapa: "Chave (apikey) aceita", ok: true, detalhe: "a Evolution respondeu à consulta autenticada" });
+      etapas.push({ etapa: `Instância "${cfg.instance}"`, ok: false, detalhe: "não existe neste servidor" });
+      return fim(`O servidor está no ar, mas não tem nenhuma instância chamada "${cfg.instance}". Clique em "Gerar novo QR" — o CRM cria a instância e já mostra o código.`);
+    }
+    etapas.push({ etapa: "Consulta à instância", ok: false, detalhe: msg.slice(0, 200) });
+    return fim("O servidor respondeu, mas a consulta falhou. O detalhe acima vem da própria Evolution.");
+  }
+}
+
 // ---------- Conexão (QR / status) ----------
 
 export type StatusConexao = {
@@ -477,7 +562,7 @@ export async function statusConexao(urlWebhookEsperada?: string | null): Promise
   if (provedor === "evolution") {
     const instancia = evolutionConfig()?.instance ?? null;
     try {
-      const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`);
+      const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
       const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
       const conectado = state === "open";
       let webhookOk: boolean | null = null;
@@ -515,7 +600,7 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
     // instância — cada restart invalida o código que ele está escaneando.
     await pausarVigia(3).catch(() => {});
     try {
-      const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+      const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
       const imagem = extrairBase64Qr(data);
       if (imagem) return { imagem };
       if (estadoDaResposta(data) === "open") return { imagem: null, erro: "Já conectado." };
@@ -529,7 +614,7 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
       await marcarForcaNovoQr();
       await reiniciar().catch(() => false);
       await new Promise((r) => setTimeout(r, 2500));
-      const data2 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+      const data2 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
       const imagem2 = extrairBase64Qr(data2);
       if (imagem2) return { imagem: imagem2 };
       if (estadoDaResposta(data2) === "open") return { imagem: null, erro: "Já conectado." };
@@ -542,7 +627,7 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
         if (r.ok && r.qr) return { imagem: r.qr };
         if (r.ok) {
           await new Promise((res) => setTimeout(res, 2000));
-          const data3 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`).catch(() => ({}) as Record<string, unknown>);
+          const data3 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`, undefined, TEMPO_TELA_MS).catch(() => ({}) as Record<string, unknown>);
           const imagem3 = extrairBase64Qr(data3);
           if (imagem3) return { imagem: imagem3 };
         }
@@ -571,7 +656,7 @@ export async function reconectar(): Promise<{ ok: boolean; conectado: boolean; e
     return { ok, conectado: false };
   }
   try {
-    const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+    const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
     const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
     return { ok: true, conectado: state === "open" };
   } catch (e) {

@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
-  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck,
+  Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
 } from "lucide-react";
+
+type EtapaDiagnostico = { etapa: string; ok: boolean; detalhe: string };
+type Diagnostico = { provedor: string | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string };
 
 type Status = {
   configurado: boolean;
@@ -49,12 +52,15 @@ export function ConexaoWhatsApp() {
   const [qr, setQr] = useState<string | null>(null);
   const [carregandoQr, setCarregandoQr] = useState(false);
   const [qrErro, setQrErro] = useState<string | null>(null);
+  const [diagnostico, setDiagnostico] = useState<Diagnostico | null>(null);
+  const [diagnosticando, setDiagnosticando] = useState(false);
   const [pending, startTransition] = useTransition();
   const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
   const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
   const [vigia, setVigia] = useState<{ descricao: string; reconexoes: number } | null>(null);
   const [vigiaMsg, setVigiaMsg] = useState<string | null>(null);
   const webhookCorrigido = useRef(false);
+  const diagnosticoAuto = useRef(false);
 
   useEffect(() => { lerConexaoVigiadaAction().then(setVigia).catch(() => {}); }, [status?.conectado]);
 
@@ -73,8 +79,24 @@ export function ConexaoWhatsApp() {
       setStatus(data);
       return data;
     } catch {
-      setStatus({ configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true, erro: "Falha ao consultar status." });
+      setStatus((s) => ({
+        configurado: true, conectado: false, precisaQrCode: true, clientTokenConfigurado: true,
+        provedor: s?.provedor ?? null, instancia: s?.instancia ?? null,
+        erro: "O CRM não conseguiu consultar a conexão. Use \"Diagnosticar\" abaixo.",
+      }));
       return null;
+    }
+  }, []);
+
+  const diagnosticar = useCallback(async () => {
+    setDiagnosticando(true);
+    try {
+      const res = await fetch("/api/zapi/diagnostico", { cache: "no-store" });
+      setDiagnostico((await res.json()) as Diagnostico);
+    } catch {
+      setDiagnostico({ provedor: null, url: null, instancia: null, etapas: [], conclusao: "Não consegui rodar o diagnóstico — o próprio CRM não respondeu." });
+    } finally {
+      setDiagnosticando(false);
     }
   }, []);
 
@@ -117,6 +139,14 @@ export function ConexaoWhatsApp() {
       clearInterval(id);
     };
   }, [buscarStatus, buscarQr]);
+
+  // Servidor fora do ar: roda o diagnóstico sozinho na primeira falha, para a
+  // tela já dizer o que consertar em vez de só girar.
+  useEffect(() => {
+    if (!status?.erro || diagnostico || diagnosticando || diagnosticoAuto.current) return;
+    diagnosticoAuto.current = true;
+    diagnosticar();
+  }, [status?.erro, diagnostico, diagnosticando, diagnosticar]);
 
   if (!status) {
     return (
@@ -305,9 +335,37 @@ export function ConexaoWhatsApp() {
       </div>
 
       {qrErro && qr === null && <p className="mt-3 text-xs text-amber-600">{qrErro}</p>}
-      {status.erro && (
-        <p className="mt-1 text-xs text-amber-600">{status.provedor === "evolution" ? "Evolution API" : "Z-API"}: {status.erro}</p>
-      )}
+      {status.erro && <p className="mt-1 text-xs text-amber-600">{status.erro}</p>}
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={diagnosticar}
+            disabled={diagnosticando}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 disabled:opacity-60"
+          >
+            {diagnosticando ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />} Diagnosticar conexão
+          </button>
+          <span className="text-xs text-slate-500">Descobre em que ponto a conexão quebrou.</span>
+        </div>
+        {diagnostico && (
+          <div className="mt-2">
+            <ul className="space-y-1">
+              {diagnostico.etapas.map((e) => (
+                <li key={e.etapa} className="flex items-start gap-1.5 text-xs">
+                  {e.ok
+                    ? <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green-600" />
+                    : <AlertTriangle size={13} className="mt-0.5 shrink-0 text-red-500" />}
+                  <span className={e.ok ? "text-slate-600" : "font-semibold text-red-700"}>
+                    {e.etapa}: <span className="font-normal break-all">{e.detalhe}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 rounded-md bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">{diagnostico.conclusao}</p>
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 flex gap-2">
         <button
