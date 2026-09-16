@@ -502,7 +502,12 @@ export async function diagnosticarConexao(): Promise<Diagnostico> {
       etapa: "Servidor no ar", ok: false,
       detalhe: tempo ? `não respondeu em ${TEMPO_TELA_MS / 1000}s` : "endereço inalcançável (DNS, porta fechada ou servidor desligado)",
     });
-    return fim(`O servidor da Evolution em ${cfg.url} não respondeu. É quase sempre o container parado ou a máquina desligada: entre no servidor e rode "docker compose up -d" (ou reinicie a VPS). Enquanto ele não responder, nenhum QR pode ser gerado.`);
+    return fim(
+      `Nada responde em ${cfg.url}, então nenhum QR pode ser gerado — o código quem cria é esse servidor. ` +
+      "São três causas possíveis, nesta ordem: (1) a VPS está desligada ou o container caiu — entre por SSH e rode \"docker compose up -d\"; " +
+      "(2) a porta está fechada no firewall — libere com \"ufw allow 8080\" e confira também o firewall do painel da hospedagem; " +
+      "(3) o IP da VPS mudou — pegue o endereço atual e atualize EVOLUTION_API_URL na Vercel, com Redeploy depois."
+    );
   }
 
   // 2. A chave é aceita e a instância existe?
@@ -572,7 +577,8 @@ export async function statusConexao(urlWebhookEsperada?: string | null): Promise
       }
       return { configurado: true, conectado, precisaQrCode: !conectado, clientTokenConfigurado: true, provedor, erro: null, webhookOk, instancia };
     } catch (e) {
-      const msg = String(e);
+      // `String(e)` deixava o texto "Error: ..." aparecer cru na tela.
+      const msg = e instanceof Error ? e.message : String(e);
       const naoExiste = /\(404\)/.test(msg) || /does not exist|não existe/i.test(msg);
       const erro = naoExiste
         ? `A instância "${instancia}" ainda não existe na Evolution API. Clique em "Criar instância" abaixo.`

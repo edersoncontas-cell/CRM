@@ -334,8 +334,10 @@ export function ConexaoWhatsApp() {
         </ol>
       </div>
 
-      {qrErro && qr === null && <p className="mt-3 text-xs text-amber-600">{qrErro}</p>}
-      {status.erro && <p className="mt-1 text-xs text-amber-600">{status.erro}</p>}
+      {/* Status e QR costumam falhar pelo mesmo motivo — mostrar as duas
+          mensagens iguais só polui a tela. */}
+      {(qrErro ?? status.erro) && <p className="mt-3 text-xs text-amber-600">{qrErro ?? status.erro}</p>}
+      {qrErro && status.erro && status.erro !== qrErro && <p className="mt-1 text-xs text-amber-600">{status.erro}</p>}
 
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center gap-2">
