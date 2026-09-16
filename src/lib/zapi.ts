@@ -8,7 +8,8 @@
 // muda por baixo.
 
 import { db } from "@/lib/db";
-import { mensagemEvolutionParaZapi } from "@/lib/evolution";
+import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta } from "@/lib/evolution";
+import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
 
 export type ZApiConfig = { instanceId: string; token: string; clientToken: string; apiUrl: string };
 export type EvolutionConfig = { url: string; apiKey: string; instance: string };
@@ -510,15 +511,44 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
   if (!provedor) return { imagem: null, erro: "WhatsApp não configurado (Evolution API ou Z-API)." };
 
   if (provedor === "evolution") {
+    // Enquanto o vendedor está na tela do QR, o vigia não pode reiniciar a
+    // instância — cada restart invalida o código que ele está escaneando.
+    await pausarVigia(3).catch(() => {});
     try {
       const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
-      const base64 = data?.base64 as string | undefined;
-      if (base64) return { imagem: base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}` };
-      const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? "");
-      if (state === "open") return { imagem: null, erro: "Já conectado." };
-      return { imagem: null, erro: "QR indisponível — tente de novo em alguns segundos." };
+      const imagem = extrairBase64Qr(data);
+      if (imagem) return { imagem };
+      if (estadoDaResposta(data) === "open") return { imagem: null, erro: "Já conectado." };
+
+      // Sem imagem e fora do ar: a instância ficou presa em "connecting" com um
+      // QR velho que a Evolution não devolve mais. Reinicia para forçar um
+      // pareamento novo — é isso que faz o QR voltar a aparecer.
+      if (!(await podeForcarNovoQr())) {
+        return { imagem: null, erro: "Gerando um QR novo — aguarde alguns segundos e clique em \"Gerar novo QR\"." };
+      }
+      await marcarForcaNovoQr();
+      await reiniciar().catch(() => false);
+      await new Promise((r) => setTimeout(r, 2500));
+      const data2 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`);
+      const imagem2 = extrairBase64Qr(data2);
+      if (imagem2) return { imagem: imagem2 };
+      if (estadoDaResposta(data2) === "open") return { imagem: null, erro: "Já conectado." };
+      return { imagem: null, erro: "A Evolution respondeu sem o QR. Clique em \"Gerar novo QR\" mais uma vez — se insistir, reinicie a instância." };
     } catch (e) {
-      return { imagem: null, erro: String(e) };
+      const msg = e instanceof Error ? e.message : String(e);
+      // Instância inexistente: cria agora (o create já devolve o QR).
+      if (/\(404\)/.test(msg) || /does not exist|não existe/i.test(msg)) {
+        const r = await criarInstanciaEvolution(urlWebhookCrm()).catch(() => ({ ok: false, qr: null as string | null }));
+        if (r.ok && r.qr) return { imagem: r.qr };
+        if (r.ok) {
+          await new Promise((res) => setTimeout(res, 2000));
+          const data3 = await evoFetch("GET", `/instance/connect/${evoInstancia()}`).catch(() => ({}) as Record<string, unknown>);
+          const imagem3 = extrairBase64Qr(data3);
+          if (imagem3) return { imagem: imagem3 };
+        }
+        return { imagem: null, erro: `A instância "${evolutionConfig()?.instance}" não existe na Evolution. Criei agora — clique em "Gerar novo QR".` };
+      }
+      return { imagem: null, erro: msg };
     }
   }
 

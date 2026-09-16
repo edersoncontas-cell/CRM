@@ -100,6 +100,30 @@ export function extrairConteudoEvolution(messageRaw: unknown): ConteudoEvolution
   return out;
 }
 
+// O QR vem em lugares diferentes conforme a versão da Evolution (na raiz,
+// dentro de `qrcode`, ou dentro de `instance.qrcode`) e às vezes só como
+// string crua, sem o prefixo data:. Sem cobrir todas as formas, a tela de
+// conexão fica sem QR mesmo com a Evolution respondendo certo.
+export function extrairBase64Qr(data: Record<string, unknown>): string | null {
+  const obj2 = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : undefined);
+  const candidatos: unknown[] = [
+    data.base64,
+    obj2(data.qrcode)?.base64,
+    obj2(obj2(data.instance)?.qrcode)?.base64,
+    obj2(data.qr)?.base64,
+    obj2(data.data)?.base64,
+  ];
+  for (const c of candidatos) {
+    if (typeof c === "string" && c.length > 100) return c.startsWith("data:") ? c : `data:image/png;base64,${c}`;
+  }
+  return null;
+}
+
+export function estadoDaResposta(data: Record<string, unknown>): string {
+  const inst = data.instance && typeof data.instance === "object" ? (data.instance as Record<string, unknown>) : undefined;
+  return String(inst?.state ?? data.state ?? "");
+}
+
 export type ChaveEvolution = {
   remoteJid: string;
   fromMe: boolean;

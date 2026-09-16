@@ -1234,7 +1234,7 @@ export async function desconectarZapi(confirmacao?: string): Promise<{ ok: boole
 
 // "Verificar e religar agora": o mesmo vigia que roda de 5 em 5 minutos.
 export async function vigiarConexaoAction(): Promise<ResultadoVigia> {
-  const r = await vigiarConexao();
+  const r = await vigiarConexao({ forcar: true });
   revalidatePath("/conexao");
   return r;
 }

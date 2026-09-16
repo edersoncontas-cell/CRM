@@ -15,6 +15,7 @@ import {
   decidirAcao, memoriaAposLeitura, memoriaAposTentativa, precisaMesmoDeQr, descreverConexao,
   MEMORIA_VAZIA, type MemoriaVigia, type EstadoConexao, type AcaoVigia,
 } from "@/lib/whatsapp-vigia-regra";
+import { vigiaPausado } from "@/lib/whatsapp-vigia-pausa";
 
 export const CHAVE_VIGIA = "whatsapp.vigia";
 const TITULO_ALERTA_QR = "WhatsApp desconectado — escaneie o QR em /conexao";
@@ -41,7 +42,9 @@ export type ResultadoVigia = {
   erro?: string | null;
 };
 
-export async function vigiarConexao(agora = new Date()): Promise<ResultadoVigia> {
+// `forcar` = pedido manual do vendedor ("Verificar e religar agora"): ignora a
+// pausa da tela do QR, porque aí é ele mesmo mandando mexer na instância.
+export async function vigiarConexao({ agora = new Date(), forcar = false }: { agora?: Date; forcar?: boolean } = {}): Promise<ResultadoVigia> {
   const urlWebhook = zapi.urlWebhookCrm();
   const status = await zapi.statusConexao(urlWebhook).catch(() => null);
 
@@ -63,7 +66,10 @@ export async function vigiarConexao(agora = new Date()): Promise<ResultadoVigia>
     }
   }
 
-  const acao = decidirAcao(estado, memoria, agora);
+  // Tela do QR aberta: não mexe na instância (cada restart invalida o código
+  // que o vendedor está escaneando naquele instante).
+  const pausado = !forcar && (await vigiaPausado(agora).catch(() => false));
+  const acao = pausado ? "esperar" : decidirAcao(estado, memoria, agora);
   let religou = false;
   let erro: string | null = null;
 

@@ -48,6 +48,7 @@ export function ConexaoWhatsApp() {
   const [status, setStatus] = useState<Status | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [carregandoQr, setCarregandoQr] = useState(false);
+  const [qrErro, setQrErro] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
   const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
@@ -81,10 +82,12 @@ export function ConexaoWhatsApp() {
     setCarregandoQr(true);
     try {
       const res = await fetch("/api/zapi/qr", { cache: "no-store" });
-      const data = (await res.json()) as { imagem: string | null };
+      const data = (await res.json()) as { imagem: string | null; erro?: string };
       setQr(data.imagem);
+      setQrErro(data.imagem ? null : data.erro ?? null);
     } catch {
       setQr(null);
+      setQrErro("Não consegui falar com o CRM para pegar o QR.");
     } finally {
       setCarregandoQr(false);
     }
@@ -288,7 +291,7 @@ export function ConexaoWhatsApp() {
             <img src={qr} alt="QR Code do WhatsApp" className="h-52 w-52 rounded-lg" />
           ) : (
             <div className="px-4 text-center text-sm text-slate-400">
-              QR indisponível. Clique em &quot;Gerar novo QR&quot;.
+              {qrErro ?? "Clique em \"Gerar novo QR\"."}
             </div>
           )}
         </div>
@@ -301,8 +304,9 @@ export function ConexaoWhatsApp() {
         </ol>
       </div>
 
+      {qrErro && qr === null && <p className="mt-3 text-xs text-amber-600">{qrErro}</p>}
       {status.erro && (
-        <p className="mt-3 text-xs text-amber-600">{status.provedor === "evolution" ? "Evolution API" : "Z-API"}: {status.erro}</p>
+        <p className="mt-1 text-xs text-amber-600">{status.provedor === "evolution" ? "Evolution API" : "Z-API"}: {status.erro}</p>
       )}
 
       <div className="mt-4 flex gap-2">
