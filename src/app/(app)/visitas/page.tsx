@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui";
 import { formatDate, diaSemanaBrasilia, inicioDoDiaBrasilia, dataIsoBrasilia } from "@/lib/utils";
 import { NovaVisitaForm } from "@/components/NovaVisitaForm";
+import { AgendaSemanaVisitas } from "@/components/AgendaSemanaVisitas";
 import { BotaoRemoverVisita } from "@/components/BotaoRemoverVisita";
 import { ConfirmacaoVisita } from "@/components/ConfirmacaoVisita";
 import { CalendarioMensalVisitas, type DiaCalendario, type ItemCalendario } from "@/components/CalendarioMensalVisitas";
@@ -125,56 +126,27 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       />
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Agenda da semana · ✓ realizada · ✗ não realizada</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {dias.map((dia, i) => (
-            <div
-              key={dia.iso}
-              className={`flex flex-col rounded-2xl border p-3 ${dia.ehHoje ? "border-brand-300 bg-brand-50/50" : "border-slate-200 bg-white"}`}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-bold text-slate-800">{dia.nome}</div>
-                  <div className="text-xs text-slate-400">{dia.label}{dia.ehHoje && " · hoje"}</div>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">{dia.visitas.length}</span>
-              </div>
-              <div className="flex-1 space-y-2">
-                {i === 0 && (
-                  <div className="rounded-xl bg-agro-400/20 p-2 ring-1 ring-agro-400/60">
-                    <div className="flex items-center gap-1 text-xs font-black uppercase tracking-wide text-slate-900"><Users size={12} /> {REUNIAO_SEGUNDA.nome}</div>
-                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-600"><Clock size={10} /> {REUNIAO_SEGUNDA.hora} · <MapPin size={10} className="inline" /> {REUNIAO_SEGUNDA.cidade}</div>
-                  </div>
-                )}
-                {dia.visitas.length === 0 && i !== 0 ? (
-                  <p className="py-3 text-center text-xs text-slate-400">Nada agendado</p>
-                ) : (
-                  dia.visitas.map((v) => (
-                    <div key={v.id} className={`group rounded-xl border p-2 ${v.status === "realizada" ? "border-emerald-100 bg-emerald-50" : v.status === "nao_realizada" ? "border-red-100 bg-red-50" : "border-slate-100 bg-slate-50"}`}>
-                      <div className="flex items-start justify-between gap-1">
-                        <Link href={`/clientes/${v.clienteId}`} className="min-w-0 text-xs font-semibold text-slate-800 hover:text-brand-600 truncate">
-                          {v.cliente.nome}
-                        </Link>
-                        <BotaoRemoverVisita id={v.id} clienteId={v.clienteId} />
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
-                        <Clock size={10} /> {horaLocal(v.data)}
-                        {(v.cidade ?? v.cliente.municipio?.nome) && <> · <MapPin size={10} className="inline" /> {v.cidade ?? v.cliente.municipio?.nome}</>}
-                      </div>
-                      {v.observacao && <p className="mt-1 text-[11px] text-slate-500 line-clamp-2">{v.observacao}</p>}
-                      <div className="mt-1.5">
-                        <ConfirmacaoVisita id={v.id} status={v.status} dataIso={dataIsoBrasilia(v.data)} hora={horaLocal(v.data)} clienteNome={v.cliente.nome} tamanho="compacto" />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="mt-2">
-                <NovaVisitaForm clientes={clientes} cidades={cidades} dataFixa={dia.iso} rotuloDataFixa={`${dia.nome}, ${dia.label}`} compacto />
-              </div>
-            </div>
-          ))}
-        </div>
+        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Agenda da semana · arraste para outro dia · ✓ realizada · ✗ não realizada</h2>
+        <AgendaSemanaVisitas
+          clientes={clientes}
+          cidades={cidades}
+          dias={dias.map((dia) => ({
+            iso: dia.iso,
+            nome: dia.nome,
+            label: dia.label,
+            ehHoje: dia.ehHoje,
+            visitas: dia.visitas.map((v) => ({
+              id: v.id,
+              clienteId: v.clienteId,
+              clienteNome: v.cliente.nome,
+              hora: horaLocal(v.data),
+              dataIso: dataIsoBrasilia(v.data),
+              cidade: v.cidade ?? v.cliente.municipio?.nome ?? null,
+              observacao: v.observacao,
+              status: v.status,
+            })),
+          }))}
+        />
       </section>
 
       <section className="mb-6">
@@ -184,7 +156,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Calendário do mês</h2>
-        <CalendarioMensalVisitas titulo={tituloMes} primeiroDiaSemana={diaSemanaIso(`${mesParam}-01`)} dias={diasCalendario} hojeIso={hojeIso} hrefAnterior={`/visitas?mes=${mesAnterior}`} hrefProximo={`/visitas?mes=${mesProximo}`} />
+        <CalendarioMensalVisitas titulo={tituloMes} primeiroDiaSemana={diaSemanaIso(`${mesParam}-01`)} dias={diasCalendario} hojeIso={hojeIso} hrefAnterior={`/visitas?mes=${mesAnterior}`} hrefProximo={`/visitas?mes=${mesProximo}`} clientes={clientes} cidades={cidades} />
       </section>
 
       {fimDeSemana.length > 0 && (

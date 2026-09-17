@@ -8,12 +8,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Check, X, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NovaVisitaForm } from "@/components/NovaVisitaForm";
 
 export type ItemCalendario = { id: string; clienteId: string | null; nome: string; hora: string; cidade: string | null; status: string; fixo?: boolean };
 export type DiaCalendario = { iso: string; dia: number; itens: ItemCalendario[] };
 
-export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeIso, hrefAnterior, hrefProximo }: {
+export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeIso, hrefAnterior, hrefProximo, clientes = [], cidades = [] }: {
   titulo: string; primeiroDiaSemana: number; dias: DiaCalendario[]; hojeIso: string; hrefAnterior: string; hrefProximo: string;
+  clientes?: { id: string; nome: string }[]; cidades?: string[];
 }) {
   const [sel, setSel] = useState<string>(dias.find((d) => d.iso === hojeIso)?.iso ?? dias.find((d) => d.itens.length > 0)?.iso ?? dias[0]?.iso ?? "");
   const celulas: (DiaCalendario | null)[] = [...Array(primeiroDiaSemana).fill(null), ...dias];
@@ -85,7 +87,26 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
             ))}
           </ol>
         )}
+        {/* Agendar no dia que está aberto: o vendedor clica no dia e marca ali
+            mesmo, sem voltar para a agenda da semana. */}
+        {diaSel && clientes.length > 0 && (
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <NovaVisitaForm
+              clientes={clientes}
+              cidades={cidades}
+              dataFixa={diaSel.iso}
+              rotuloDataFixa={rotuloDia(diaSel.iso)}
+              compacto
+            />
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function rotuloDia(iso: string): string {
+  return new Date(`${iso}T12:00:00-03:00`).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "2-digit",
+  });
 }

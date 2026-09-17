@@ -318,6 +318,27 @@ export async function reagendarVisitaAction(id: string, dataISO: string, horario
   return { ok: true, novaId: nova.id };
 }
 
+// Arrastar a visita para outro dia da semana: troca só a data, mantendo o
+// horário, a cidade e a observação. Vale apenas para visita ainda agendada —
+// realizada/não realizada é histórico e não se move (quando o vendedor quer
+// remarcar uma que não aconteceu, o caminho é o ✗ → reagendar, que preserva
+// o registro antigo).
+export async function moverVisitaParaDiaAction(id: string, diaISO: string): Promise<{ ok: boolean; erro?: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(diaISO)) return { ok: false, erro: "Data inválida." };
+  const visita = await db.visita.findUnique({ where: { id } });
+  if (!visita) return { ok: false, erro: "Visita não encontrada." };
+  if (visita.status !== "agendada") return { ok: false, erro: "Só dá para mover visita que ainda está agendada." };
+
+  const hora = visita.data.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+  const nova = new Date(`${diaISO}T${hora}:00-03:00`);
+  if (nova.getTime() === visita.data.getTime()) return { ok: true };
+
+  await db.visita.update({ where: { id }, data: { data: nova } });
+  await sincronizarVisitaComAgenda(id).catch((e) => console.error("[google] mover visita:", e));
+  revalidatePath("/visitas"); revalidatePath("/dashboard"); revalidatePath("/alertas"); revalidatePath(`/clientes/${visita.clienteId}`);
+  return { ok: true };
+}
+
 export async function removerVisita(id: string, clienteId: string) {
   await removerEventoDaVisita(id);
   await db.visita.delete({ where: { id } });
