@@ -8,9 +8,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Check, X, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NovaVisitaForm } from "@/components/NovaVisitaForm";
+import { NovoCompromissoCalendario } from "@/components/NovoCompromissoCalendario";
+import { BotaoRemoverEvento } from "@/components/BotaoRemoverEvento";
 
-export type ItemCalendario = { id: string; clienteId: string | null; nome: string; hora: string; cidade: string | null; status: string; fixo?: boolean };
+export type ItemCalendario = { id: string; clienteId: string | null; nome: string; hora: string; cidade: string | null; status: string; fixo?: boolean; evento?: boolean; trecho?: string | null };
 export type DiaCalendario = { iso: string; dia: number; itens: ItemCalendario[] };
 
 export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeIso, hrefAnterior, hrefProximo, clientes = [], cidades = [] }: {
@@ -53,6 +54,7 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
                   {temFixo && <span title="Reunião PME Vitória" className="h-1.5 w-1.5 rounded-full bg-agro-400 ring-1 ring-slate-400" />}
                   {realizadas > 0 && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
                   {naoRealizadas > 0 && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
+                  {d.itens.some((i) => i.evento) && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
                 </span>
               </button>
             );
@@ -62,6 +64,7 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-agro-400 ring-1 ring-slate-400" /> reunião PME (segundas)</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> realizada</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> não realizada</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" /> evento</span>
         </div>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -73,10 +76,14 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
         ) : (
           <ol className="space-y-1.5">
             {diaSel.itens.map((it) => (
-              <li key={it.id} className={cn("rounded-xl p-2 text-xs", it.fixo ? "bg-agro-400/20 ring-1 ring-agro-400/60" : it.status === "realizada" ? "bg-emerald-50" : it.status === "nao_realizada" ? "bg-red-50" : "bg-slate-50")}>
-                {it.fixo || !it.clienteId
-                  ? <div className="font-black uppercase tracking-wide text-slate-900">{it.nome}</div>
-                  : <Link href={`/clientes/${it.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{it.nome}</Link>}
+              <li key={it.id} className={cn("rounded-xl p-2 text-xs", it.evento ? "bg-sky-50 ring-1 ring-sky-200" : it.fixo ? "bg-agro-400/20 ring-1 ring-agro-400/60" : it.status === "realizada" ? "bg-emerald-50" : it.status === "nao_realizada" ? "bg-red-50" : "bg-slate-50")}>
+                <div className="flex items-start justify-between gap-2">
+                  {it.fixo || !it.clienteId
+                    ? <div className={cn("font-black uppercase tracking-wide", it.evento ? "text-sky-900" : "text-slate-900")}>{it.nome}</div>
+                    : <Link href={`/clientes/${it.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{it.nome}</Link>}
+                  {it.evento && <BotaoRemoverEvento id={it.id} titulo={it.nome} />}
+                </div>
+                {it.trecho && <div className="mt-0.5 text-[11px] font-semibold text-sky-700">{it.trecho}</div>}
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-slate-500">
                   <span className="inline-flex items-center gap-1"><Clock size={10} /> {it.hora}</span>
                   {it.cidade && <span className="inline-flex items-center gap-1"><MapPin size={10} /> {it.cidade}</span>}
@@ -91,13 +98,7 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
             mesmo, sem voltar para a agenda da semana. */}
         {diaSel && clientes.length > 0 && (
           <div className="mt-3 border-t border-slate-100 pt-3">
-            <NovaVisitaForm
-              clientes={clientes}
-              cidades={cidades}
-              dataFixa={diaSel.iso}
-              rotuloDataFixa={rotuloDia(diaSel.iso)}
-              compacto
-            />
+            <NovoCompromissoCalendario dia={diaSel.iso} clientes={clientes} cidadesEs={cidades} />
           </div>
         )}
       </div>

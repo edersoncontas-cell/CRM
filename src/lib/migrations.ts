@@ -419,6 +419,24 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ClienteRedirecionamento_unificacaoId_idx" ON "ClienteRedirecionamento" ("unificacaoId")`);
+
+    // Evento (v26): compromisso de vários dias que não é visita a cliente
+    // (feira, convenção, viagem), com UF própria — pode ser fora do ES.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Evento" (
+        "id" TEXT NOT NULL,
+        "titulo" TEXT NOT NULL,
+        "inicio" TIMESTAMP(3) NOT NULL,
+        "fim" TIMESTAMP(3) NOT NULL,
+        "diaInteiro" BOOLEAN NOT NULL DEFAULT true,
+        "uf" TEXT,
+        "cidade" TEXT,
+        "observacao" TEXT,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Evento_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Evento_inicio_fim_idx" ON "Evento" ("inicio", "fim")`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

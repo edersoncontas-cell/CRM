@@ -323,6 +323,21 @@ model ContatoBloqueado {
   criadoEm DateTime @default(now())
 }
 
+// Compromisso que não é visita a cliente: feira, convenção, treinamento,
+// viagem. Pode durar vários dias e acontecer fora do ES (daí guardar a UF).
+model Evento {
+  id         String   @id @default(cuid())
+  titulo     String
+  inicio     DateTime
+  fim        DateTime
+  diaInteiro Boolean  @default(true)
+  uf         String?
+  cidade     String?
+  observacao String?
+  criadoEm   DateTime @default(now())
+  @@index([inicio, fim])
+}
+
 // Conversa de WhatsApp apagada pelo vendedor: só mensagem posterior a
 // excluidaEm pode recriá-la. Sem isso a importação de histórico (ou o
 // WhatsApp reenviando mensagens antigas) trazia tudo de volta.

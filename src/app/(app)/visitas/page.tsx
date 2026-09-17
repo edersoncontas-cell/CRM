@@ -8,6 +8,7 @@ import { ConfirmacaoVisita } from "@/components/ConfirmacaoVisita";
 import { CalendarioMensalVisitas, type DiaCalendario, type ItemCalendario } from "@/components/CalendarioMensalVisitas";
 import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users } from "lucide-react";
 import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
+import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
 import type { VisitaMapa } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
 import Link from "next/link";
@@ -23,6 +24,11 @@ const DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
 
 // Compromisso fixo de toda segunda-feira: fica sempre antes das visitas do dia.
 const REUNIAO_SEGUNDA = { nome: "REUNIÃO PME VITÓRIA", hora: "08:00", cidade: "Vitória", observacao: "Reunião semanal da PME (toda segunda)" };
+
+function formatarDiaCurto(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
 
 function horaLocal(d: Date): string {
   return d.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
@@ -104,8 +110,19 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
   const diasMapa = dias.map((d) => ({ iso: d.iso, nome: d.nome, label: d.label, ehHoje: d.ehHoje }));
   const diaInicial = dias.find((d) => d.ehHoje)?.iso ?? dias[0].iso;
 
-  // Calendário mensal: todas as visitas do mês + reunião em toda segunda.
+  // Calendário mensal: visitas do mês + reunião de toda segunda + eventos
+  // (feira, convenção, viagem), que podem ocupar vários dias seguidos.
   const doMes = visitas.filter((v) => v.data >= inicioMes && v.data < fimMes);
+  const primeiroDiaMes = `${mesParam}-01`;
+  const ultimoDiaMes = `${mesParam}-${String(new Date(Date.UTC(anoCal, mesCal, 0)).getUTCDate()).padStart(2, "0")}`;
+  const eventos: EventoAgenda[] = await listarEventos(primeiroDiaMes, ultimoDiaMes).catch(() => []);
+  const eventosPorDia = new Map<string, EventoAgenda[]>();
+  for (const ev of eventos) {
+    for (const d of diasDoEvento(ev.inicioIso, ev.fimIso)) {
+      if (!eventosPorDia.has(d)) eventosPorDia.set(d, []);
+      eventosPorDia.get(d)!.push(ev);
+    }
+  }
   const diasNoMes = new Date(Date.UTC(anoCal, mesCal, 0)).getUTCDate();
   const diasCalendario: DiaCalendario[] = Array.from({ length: diasNoMes }, (_, i) => {
     const iso = `${mesParam}-${String(i + 1).padStart(2, "0")}`;
@@ -113,6 +130,19 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       id: v.id, clienteId: v.clienteId, nome: v.cliente.nome, hora: horaLocal(v.data), cidade: v.cidade ?? v.cliente.municipio?.nome ?? null, status: v.status,
     })).sort((a, b) => a.hora.localeCompare(b.hora));
     if (diaSemanaIso(iso) === 1) itens.unshift({ id: `reuniao:${iso}`, clienteId: null, nome: REUNIAO_SEGUNDA.nome, hora: REUNIAO_SEGUNDA.hora, cidade: REUNIAO_SEGUNDA.cidade, status: "agendada", fixo: true });
+    for (const ev of eventosPorDia.get(iso) ?? []) {
+      const varios = ev.inicioIso !== ev.fimIso;
+      itens.unshift({
+        id: ev.id,
+        clienteId: null,
+        nome: ev.titulo,
+        hora: ev.diaInteiro ? "dia inteiro" : `${ev.horaInicio}–${ev.horaFim}`,
+        cidade: ev.cidade ? `${ev.cidade}${ev.uf ? `/${ev.uf}` : ""}` : null,
+        status: "agendada",
+        evento: true,
+        trecho: varios ? `${ev.inicioIso === iso ? "começa" : ev.fimIso === iso ? "termina" : "em andamento"} · ${formatarDiaCurto(ev.inicioIso)} a ${formatarDiaCurto(ev.fimIso)}` : null,
+      });
+    }
     return { iso, dia: i + 1, itens };
   });
   const tituloMes = new Date(`${mesParam}-01T12:00:00-03:00`).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", month: "long", year: "numeric" });
