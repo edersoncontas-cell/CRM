@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { agruparDuplicados, chaveTelefone, chaveNome, escolherQuemFica, mesclarCampos, type ClienteParaDedup, type CamposMesclaveis } from "../src/lib/clientes-duplicados-regra";
+import { agruparDuplicados, chaveTelefone, chaveNome, chaveNomeSemCidade, telefoneDoNome, escolherQuemFica, mesclarCampos, type ClienteParaDedup, type CamposMesclaveis } from "../src/lib/clientes-duplicados-regra";
 import { planejarSincronizacao } from "../src/lib/google-contatos-util";
 
 const d = (s: string) => new Date(s);
@@ -81,6 +81,35 @@ describe("agruparDuplicados", () => {
     expect(grupos).toHaveLength(2);
     const porFica = Object.fromEntries(grupos.map((g) => [g.fica.id, g.somem.map((s) => s.id)]));
     expect(porFica).toEqual({ g1: ["c1"], g2: ["c2", "c3"] });
+  });
+
+  it("nome com a cidade colada no fim é o mesmo nome (o Google guarda o município no nome)", () => {
+    expect(chaveNomeSemCidade("(ITA) Adailton Christophori Dores do Rio Preto")).toBe("ita adailton christophori");
+    expect(chaveNomeSemCidade("(ITA) Adailton Christophori")).toBe("ita adailton christophori");
+    expect(chaveNomeSemCidade("Zeca Marataízes")).toBe("zeca");
+    expect(chaveNomeSemCidade("Zé Marataízes")).toBe("ze marataizes"); // sobraria "ze" (2 letras): não tira
+    expect(chaveNomeSemCidade("Alegre")).toBe("alegre");     // só a cidade: não tira, senão vira vazio
+    const grupos = agruparDuplicados([
+      cli({ id: "g", nome: "(ITA) Adailton Christophori", telefone: "28999482182", googleContatoId: "people/1" }),
+      cli({ id: "c", nome: "(ITA) Adailton Christophori Dores do Rio Preto" }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].fica.id).toBe("g");
+    expect(grupos[0].somem.map((x) => x.id)).toEqual(["c"]);
+  });
+
+  it("cadastro cujo nome é só o número, sem telefone: o número vale como telefone", () => {
+    expect(telefoneDoNome("27995219314")).toBe("27995219314");
+    expect(telefoneDoNome("+55 (27) 99521-9314")).toBe("5527995219314");
+    expect(telefoneDoNome("84091265376284")).toBeNull(); // 14 dígitos: id do WhatsApp, não telefone
+    expect(telefoneDoNome("João 27995219314")).toBeNull();
+    const grupos = agruparDuplicados([
+      cli({ id: "n", nome: "27995219314", criadoEm: d("2025-01-01") }),
+      cli({ id: "r", nome: "Roberto Pedreira", telefone: "27995219314", criadoEm: d("2026-01-01") }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].fica.id).toBe("r");
+    expect(grupos[0].motivo).toBe("telefone");
   });
 
   it("nome genérico não agrupa; cadastro sem par fica em paz", () => {

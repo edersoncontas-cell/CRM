@@ -7,7 +7,8 @@
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { agruparDuplicados, mesclarCampos, type ClienteParaDedup, type GrupoDuplicados } from "@/lib/clientes-duplicados-regra";
+import { agruparDuplicados, mesclarCampos, telefoneDoNome, type ClienteParaDedup, type GrupoDuplicados } from "@/lib/clientes-duplicados-regra";
+import { nomeGenerico } from "@/lib/google-contatos-util";
 
 type Tx = Prisma.TransactionClient;
 type ClienteRow = Prisma.ClienteGetPayload<Record<string, never>>;
@@ -109,8 +110,11 @@ async function mesclarGrupo(tx: Tx, grupo: GrupoDuplicados<ClienteParaDedup>): P
       }
     }
 
-    const patch = mesclarCampos(estadoFica, some);
+    // Número no lugar do nome ("27995219314") conta como telefone; e quem fica
+    // com nome genérico herda o nome de verdade do outro.
+    const patch: Partial<typeof some> = mesclarCampos(estadoFica, { ...some, telefone: some.telefone ?? telefoneDoNome(some.nome) });
     if (patch.indicadoPorId === some.id) delete patch.indicadoPorId;
+    if ((nomeGenerico(estadoFica.nome) || telefoneDoNome(estadoFica.nome)) && !nomeGenerico(some.nome) && !telefoneDoNome(some.nome)) patch.nome = some.nome;
     if (Object.keys(patch).length) estadoFica = await tx.cliente.update({ where: { id: fica.id }, data: patch });
 
     await tx.cliente.delete({ where: { id: some.id } });

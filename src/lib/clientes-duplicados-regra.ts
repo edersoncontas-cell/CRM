@@ -11,9 +11,39 @@
 // campos vazios de quem fica são preenchidos com os do(s) outro(s).
 
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
-import { chaveNome } from "@/lib/google-contatos-util";
+import { chaveNome, normalizarTexto } from "@/lib/google-contatos-util";
+import { NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
 
 export { chaveNome };
+
+// Cadastro cujo NOME é só um número de telefone ("27995219314") e sem
+// telefone no campo: o número é o telefone. Vem assim de importação/Google
+// quando o contato foi salvo sem nome.
+export function telefoneDoNome(nome: string): string | null {
+  const d = nome.replace(/\D/g, "");
+  if (!/^\+?[\d\s()-]+$/.test(nome.trim()) || d.length < 10 || d.length > 13) return null;
+  return d;
+}
+export function telefoneEfetivo(c: { nome: string; telefone: string | null }): string | null {
+  return c.telefone?.trim() || telefoneDoNome(c.nome);
+}
+
+// Nome sem a cidade colada no fim: "(ITA) Adailton Christophori Dores do
+// Rio Preto" e "(ITA) Adailton Christophori" são a mesma pessoa — o Google
+// guarda o município no nome, o CRM guarda no cadastro. Só tira quando sobra
+// nome de verdade (3+ letras) e a cidade é um município do ES.
+const CIDADES_NORMALIZADAS = [...NOMES_MUNICIPIOS_ES].map(normalizarTexto).sort((a, b) => b.length - a.length);
+export function chaveNomeSemCidade(nome: string): string | null {
+  const n = chaveNome(nome);
+  if (!n) return null;
+  for (const cidade of CIDADES_NORMALIZADAS) {
+    if (n.endsWith(" " + cidade)) {
+      const resto = n.slice(0, -cidade.length).trim();
+      if (resto.length >= 3 && !/^[\d ]+$/.test(resto)) return resto;
+    }
+  }
+  return n;
+}
 
 export type ClienteParaDedup = {
   id: string;
@@ -39,7 +69,9 @@ export function chaveTelefone(telefone: string | null): string | null {
 // Quem fica: quem tem telefone > quem veio do Google (sincronizado por
 // último) > o mais antigo.
 export function escolherQuemFica<T extends ClienteParaDedup>(grupo: T[]): T {
-  const comTelefone = grupo.filter((c) => !!chaveTelefone(c.telefone));
+  // Telefone no campo certo vale mais que número no lugar do nome.
+  const comTelefoneReal = grupo.filter((c) => !!chaveTelefone(c.telefone));
+  const comTelefone = comTelefoneReal.length ? comTelefoneReal : grupo.filter((c) => !!chaveTelefone(telefoneEfetivo(c)));
   const base = comTelefone.length ? comTelefone : grupo;
   const google = base.filter((c) => !!c.googleContatoId);
   const candidatos = google.length ? google : base;
@@ -76,9 +108,9 @@ export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): Gr
   const porTelefone = new Map<string, string>();
   const porNome = new Map<string, T[]>();
   for (const c of clientes) {
-    const t = chaveTelefone(c.telefone);
+    const t = chaveTelefone(telefoneEfetivo(c));
     if (t) { const outro = porTelefone.get(t); if (outro) marcar(outro, c.id, "telefone"); else porTelefone.set(t, c.id); }
-    const n = chaveNome(c.nome);
+    const n = chaveNomeSemCidade(c.nome);
     if (n) { if (!porNome.has(n)) porNome.set(n, []); porNome.get(n)!.push(c); }
   }
 
@@ -88,10 +120,10 @@ export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): Gr
   //    exatamente com um deles (senão fica em paz, na dúvida não mexe).
   for (const xaras of porNome.values()) {
     if (xaras.length < 2) continue;
-    const comTelefone = xaras.filter((c) => chaveTelefone(c.telefone));
-    const semTelefone = xaras.filter((c) => !chaveTelefone(c.telefone));
+    const comTelefone = xaras.filter((c) => chaveTelefone(telefoneEfetivo(c)));
+    const semTelefone = xaras.filter((c) => !chaveTelefone(telefoneEfetivo(c)));
     const numeros = new Map<string, T>();
-    for (const c of comTelefone) { const t = chaveTelefone(c.telefone)!; if (!numeros.has(t)) numeros.set(t, c); }
+    for (const c of comTelefone) { const t = chaveTelefone(telefoneEfetivo(c))!; if (!numeros.has(t)) numeros.set(t, c); }
 
     if (numeros.size === 0) {
       for (let i = 1; i < semTelefone.length; i++) marcar(semTelefone[0].id, semTelefone[i].id, "nome");
