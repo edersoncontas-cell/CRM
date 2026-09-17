@@ -51,7 +51,7 @@ export function AgendaSemanaVisitas({
   }
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } })
   );
 
@@ -145,8 +145,16 @@ function CardVisita({ v }: { v: VisitaAgenda }) {
   const podeMover = v.status === "agendada";
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: v.id, disabled: !podeMover });
   return (
+    // O card INTEIRO arrasta (a alcinha sozinha era pequena demais para
+    // acertar). Os cliques continuam passando: o dnd-kit só assume quando o
+    // ponteiro anda 8px, então tocar no nome, no ✓/✗ ou na lixeira funciona
+    // como antes.
     <div
-      className={`group rounded-xl border p-2 ${isDragging ? "opacity-30" : ""} ${
+      ref={podeMover ? setNodeRef : undefined}
+      {...(podeMover ? attributes : {})}
+      {...(podeMover ? listeners : {})}
+      title={podeMover ? "Arraste para outro dia" : undefined}
+      className={`group rounded-xl border p-2 ${podeMover ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${isDragging ? "opacity-30" : ""} ${
         v.status === "realizada" ? "border-emerald-100 bg-emerald-50"
         : v.status === "nao_realizada" ? "border-red-100 bg-red-50"
         : "border-slate-100 bg-slate-50"
@@ -154,33 +162,37 @@ function CardVisita({ v }: { v: VisitaAgenda }) {
     >
       <div className="flex items-start justify-between gap-1">
         <div className="flex min-w-0 items-start gap-1">
-          {podeMover && (
-            // Só a alcinha arrasta: o resto do card continua clicável (abrir o
-            // cliente, confirmar, excluir).
-            <button
-              ref={setNodeRef}
-              {...attributes}
-              {...listeners}
-              title="Arraste para outro dia"
-              className="mt-0.5 shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
-            >
-              <GripVertical size={13} />
-            </button>
-          )}
-          <Link href={`/clientes/${v.clienteId}`} className="min-w-0 truncate text-xs font-semibold text-slate-800 hover:text-brand-600">
-            {v.clienteNome}
-          </Link>
+          {podeMover && <GripVertical size={13} className="mt-0.5 shrink-0 text-slate-400" />}
+          <SemArrastar className="min-w-0">
+            <Link href={`/clientes/${v.clienteId}`} className="block min-w-0 truncate text-xs font-semibold text-slate-800 hover:text-brand-600">
+              {v.clienteNome}
+            </Link>
+          </SemArrastar>
         </div>
-        <BotaoRemoverVisita id={v.id} clienteId={v.clienteId} />
+        <SemArrastar>
+          <BotaoRemoverVisita id={v.id} clienteId={v.clienteId} />
+        </SemArrastar>
       </div>
       <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
         <Clock size={10} /> {v.hora}
         {v.cidade && <> · <MapPin size={10} className="inline" /> {v.cidade}</>}
       </div>
       {v.observacao && <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{v.observacao}</p>}
-      <div className="mt-1.5">
+      <SemArrastar className="mt-1.5 block">
         <ConfirmacaoVisita id={v.id} status={v.status} dataIso={v.dataIso} hora={v.hora} clienteNome={v.clienteNome} tamanho="compacto" />
-      </div>
+      </SemArrastar>
     </div>
+  );
+}
+
+// O card inteiro é a área de arrasto, então o sensor do dnd-kit precisa ficar
+// cego para o que é clicável dentro dele: sem isto, o arrasto engolia o
+// clique e o nome do cliente parava de abrir o cadastro.
+function SemArrastar({ children, className }: { children: React.ReactNode; className?: string }) {
+  const parar = (e: React.MouseEvent | React.TouchEvent) => e.stopPropagation();
+  return (
+    <span className={className} onMouseDown={parar} onTouchStart={parar}>
+      {children}
+    </span>
   );
 }
