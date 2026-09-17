@@ -13,6 +13,8 @@ import { lerImportadasAction } from "@/lib/whatsapp-importadas-actions";
 import { lerEstadoCorteAction } from "@/lib/whatsapp-corte-actions";
 import { ClientesDuplicadosCard } from "@/components/ClientesDuplicadosCard";
 import { lerEstadoDuplicadosAction } from "@/lib/clientes-duplicados-actions";
+import { ClientesLixoCard } from "@/components/ClientesLixoCard";
+import { lerEstadoLimpezaAction } from "@/lib/clientes-lixo-actions";
 import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
@@ -29,7 +31,7 @@ import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas, limpeza] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -41,6 +43,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     lerEstadoCorteAction().catch(() => ({ dia: null, conversasAnteriores: 0 })),
     lerEstadoDuplicadosAction().catch(() => ({ previa: { totalGrupos: 0, totalSomem: 0, grupos: [] }, historico: [] })),
     lerImportadasAction().catch(() => ({ total: 0, comCliente: 0, semCliente: 0 })),
+    lerEstadoLimpezaAction().catch(() => ({ previa: { apagar: 0, consertar: 0, porMotivo: {}, exemplos: [] }, historico: [] })),
   ]);
 
   const integracoes = [
@@ -104,6 +107,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
 
       <ClientesDuplicadosCard inicial={duplicados} />
+
+      <ClientesLixoCard inicial={limpeza} />
 
       <ConversasAntigasCard inicial={corte} />
 

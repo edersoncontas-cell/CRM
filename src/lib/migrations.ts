@@ -442,6 +442,19 @@ export async function aplicarMigracoes(): Promise<void> {
     // ("manual", nunca volta) da que a data de corte apagou ("corte", volta
     // se ele importar o histórico de antes do corte).
     await db.$executeRawUnsafe(`ALTER TABLE "ConversaExcluida" ADD COLUMN IF NOT EXISTS "motivo" TEXT NOT NULL DEFAULT 'manual'`);
+
+    // LimpezaClientes (v28): recibo de cada limpeza de cadastros sem identidade.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "LimpezaClientes" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "origem" TEXT NOT NULL DEFAULT 'usuario',
+        "resumo" TEXT NOT NULL,
+        "dados" TEXT NOT NULL,
+        "desfeitaEm" TIMESTAMP(3),
+        CONSTRAINT "LimpezaClientes_pkey" PRIMARY KEY ("id")
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

@@ -360,6 +360,17 @@ model UnificacaoClientes {
   desfeitaEm DateTime?
 }
 
+// Limpeza de cadastros sem identidade: cada rodada guarda os cadastros
+// apagados e os campos alterados, para desfazer exatamente.
+model LimpezaClientes {
+  id         String    @id @default(cuid())
+  criadoEm   DateTime  @default(now())
+  origem     String    @default("usuario")
+  resumo     String
+  dados      String
+  desfeitaEm DateTime?
+}
+
 // Link antigo (/clientes/<id que sumiu>) abre o cadastro que ficou.
 model ClienteRedirecionamento {
   deId          String   @id
