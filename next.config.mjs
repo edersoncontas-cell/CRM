@@ -32,10 +32,11 @@ const nextConfig = {
         "node_modules/@types/**",
         "node_modules/pdf-parse/test/**",
         "node_modules/canvas/**",
-        "tests/**",
-        "docs/**",
-        "evolution/**",
-        "scripts/**",
+        // Só node_modules aqui. O Next casa estes padrões em QUALQUER trecho
+        // do caminho ("contains"): "evolution/**" também bateria em
+        // src/app/api/webhooks/evolution/ — pastas do repositório que nunca
+        // são importadas (tests, docs, evolution, scripts) não precisam
+        // constar, o rastreador já não as leva.
       ],
     },
   },
