@@ -37,7 +37,7 @@ export function SplashIA({ saindo = false }: { saindo?: boolean }) {
           className="flex h-[124px] w-[124px] items-center justify-center overflow-hidden rounded-[30px] bg-white"
           style={{ boxShadow: "0 24px 60px rgba(255,184,28,0.28), 0 0 0 1px rgba(255,255,255,0.08)" }}
         >
-          <LogoEscavadeira size={124} recorte={false} />
+          <LogoEscavadeira size={124} />
         </div>
         <div className="mt-7 text-center">
           <div className="text-[24px] font-black tracking-tight text-white">CRM DO EDY</div>

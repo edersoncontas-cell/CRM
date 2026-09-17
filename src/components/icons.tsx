@@ -1,18 +1,15 @@
 // Logo do CRM (imagem) e ícone do rolo compactador (vetor, currentColor).
 
-// Logo do CRM: a imagem escolhida pelo Ederson (escavadeira sobre monte de
-// terra), tratada: marca d'água removida, escavadeira em amarelo, monte em
-// preto, fundo branco. Arquivo em /public/logo.png. `recorte` aproxima a
-// máquina (caixas pequenas: menu, login); sem recorte é a cena completa
-// (splash, ícone do app).
+// Logo do CRM: escavadeira amarela com contorno preto sobre monte de terra
+// preto, fundo branco, em /public/logo.png. A arte já vem enquadrada e com
+// borda própria — preta na parte branca, branca na parte preta —, por isso é
+// mostrada inteira: qualquer zoom cortaria justamente a borda.
 export function LogoEscavadeira({
   size = 40,
   className,
-  recorte = true,
 }: {
   size?: number;
   className?: string;
-  recorte?: boolean;
 }) {
   return (
     <span
@@ -27,7 +24,7 @@ export function LogoEscavadeira({
         width={size}
         height={size}
         draggable={false}
-        style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", transform: recorte ? "translate(0, -3%) scale(1.5)" : undefined }}
+        style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }}
       />
     </span>
   );
