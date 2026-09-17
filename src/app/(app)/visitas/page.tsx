@@ -11,6 +11,11 @@ import type { VisitaMapa } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
 import Link from "next/link";
 
+// As três colunas do rodapé (realizadas, não realizadas, reagendadas) juntam
+// o ano inteiro — a de realizadas passa de 60 itens. Cada uma rola por dentro,
+// em vez de esticar a página.
+const LISTA_ROLAVEL = "max-h-[520px] space-y-2 overflow-y-auto pr-1";
+
 export const dynamic = "force-dynamic";
 
 const DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
@@ -201,19 +206,19 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-emerald-700"><CheckCircle2 size={15} /> Realizadas <span className="rounded-full bg-emerald-100 px-2 text-xs">{realizadas.length}</span></h2>
           {realizadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma visita confirmada ainda. Toque no ✓ quando a visita acontecer.</p></Card>
-            : realizadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}
+            : <div className={LISTA_ROLAVEL}>{realizadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}</div>}
         </section>
         <section className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-red-700"><XCircle size={15} /> Não realizadas <span className="rounded-full bg-red-100 px-2 text-xs">{naoRealizadas.length}</span></h2>
           {naoRealizadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma.</p></Card>
-            : naoRealizadas.map((v) => <LinhaVisita key={v.id} visita={v} reagendadaPara={reagendadaPara.get(v.id) ?? null} />)}
+            : <div className={LISTA_ROLAVEL}>{naoRealizadas.map((v) => <LinhaVisita key={v.id} visita={v} reagendadaPara={reagendadaPara.get(v.id) ?? null} />)}</div>}
         </section>
         <section className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-sky-700"><CalendarClock size={15} /> Reagendadas <span className="rounded-full bg-sky-100 px-2 text-xs">{reagendadas.length}</span></h2>
           {reagendadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma.</p></Card>
-            : reagendadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}
+            : <div className={LISTA_ROLAVEL}>{reagendadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}</div>}
         </section>
       </div>
     </div>
