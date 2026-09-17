@@ -1,9 +1,9 @@
 // Logo do CRM (imagem) e ícone do rolo compactador (vetor, currentColor).
 
 // Logo do CRM: escavadeira amarela com contorno preto sobre monte de terra
-// preto, fundo branco, em /public/logo.png. A arte já vem enquadrada e com
-// borda própria — preta na parte branca, branca na parte preta —, por isso é
-// mostrada inteira: qualquer zoom cortaria justamente a borda.
+// preto, fundo branco, em /public/logo.png. A arte já vem enquadrada (antes
+// sobrava um quarto de branco no topo), por isso é mostrada inteira, sem o
+// zoom que o componente aplicava.
 export function LogoEscavadeira({
   size = 40,
   className,
