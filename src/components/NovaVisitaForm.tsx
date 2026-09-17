@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { adicionarVisita } from "@/lib/actions";
 import { Plus, X, Calendar, Clock } from "lucide-react";
 import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
+import { CampoCidade } from "@/components/CampoCidade";
 
 function formatarDataLabel(iso: string): string {
   if (!iso) return "Selecionar data";
@@ -108,8 +109,7 @@ export function NovaVisitaForm({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Cidade da visita</label>
-                <input list="cidades-es" value={cidade} onChange={(e) => setCidade(e.target.value)} placeholder="Ex.: Marataízes (aparece no mapa)" className="campo" />
-                <datalist id="cidades-es">{cidades.map((c) => <option key={c} value={c} />)}</datalist>
+                <CampoCidade valor={cidade} aoMudar={setCidade} opcoes={cidades} placeholder="Ex.: Marataízes (aparece no mapa)" className="campo" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

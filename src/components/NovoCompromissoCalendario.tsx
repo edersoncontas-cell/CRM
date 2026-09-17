@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adicionarVisita } from "@/lib/actions";
 import { criarEventoAction } from "@/lib/eventos-actions";
+import { CampoCidade } from "@/components/CampoCidade";
 import { Plus, X, CalendarDays, MapPin, Loader2 } from "lucide-react";
 
 const UFS = [
@@ -160,10 +161,13 @@ export function NovoCompromissoCalendario({
                 </div>
                 <div>
                   <label className={rotulo}>Cidade da visita</label>
-                  <input list="cidades-es-cal" value={cidadeVisita} onChange={(e) => setCidadeVisita(e.target.value)} placeholder="Ex.: Marataízes (aparece no mapa)" className={campo} />
-                  <datalist id="cidades-es-cal">
-                    {cidadesEs.map((c) => <option key={c} value={c} />)}
-                  </datalist>
+                  <CampoCidade
+                    valor={cidadeVisita}
+                    aoMudar={setCidadeVisita}
+                    opcoes={cidadesEs}
+                    placeholder="Ex.: Marataízes (aparece no mapa)"
+                    className={campo}
+                  />
                 </div>
                 <div>
                   <label className={rotulo}>Horário *</label>
@@ -218,17 +222,14 @@ export function NovoCompromissoCalendario({
                     <label className={rotulo}>
                       Cidade {carregandoCidades && <Loader2 size={11} className="ml-1 inline animate-spin" />}
                     </label>
-                    <input
-                      list="municipios-uf"
-                      value={cidadeEvento}
-                      onChange={(e) => setCidadeEvento(e.target.value)}
-                      placeholder={uf ? (carregandoCidades ? "Carregando…" : "Digite ou escolha") : "Escolha o estado"}
-                      disabled={!uf}
+                    <CampoCidade
+                      valor={cidadeEvento}
+                      aoMudar={setCidadeEvento}
+                      opcoes={municipios}
+                      placeholder={uf ? (carregandoCidades ? "Carregando…" : "Digite as primeiras letras") : "Escolha o estado"}
+                      desabilitado={!uf}
                       className={`${campo} disabled:bg-slate-50 disabled:text-slate-400`}
                     />
-                    <datalist id="municipios-uf">
-                      {municipios.map((m) => <option key={m} value={m} />)}
-                    </datalist>
                     {avisoCidades && <p className="mt-1 text-[11px] text-amber-600">{avisoCidades}</p>}
                   </div>
                 </div>

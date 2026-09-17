@@ -22,7 +22,8 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
   const celulas: (DiaCalendario | null)[] = [...Array(primeiroDiaSemana).fill(null), ...dias];
   while (celulas.length % 7) celulas.push(null);
   const diaSel = dias.find((d) => d.iso === sel);
-  const total = dias.reduce((s, d) => s + d.itens.filter((i) => !i.fixo).length, 0);
+  // Contagem é de VISITA: reunião fixa e evento não entram no número do mês.
+  const total = dias.reduce((s, d) => s + d.itens.filter((i) => !i.fixo && !i.evento).length, 0);
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_320px]">
@@ -36,25 +37,33 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
           {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => <div key={d} className="py-1 font-bold text-slate-400">{d}</div>)}
           {celulas.map((d, i) => {
             if (!d) return <div key={`v${i}`} />;
-            const visitas = d.itens.filter((it) => !it.fixo);
+            const visitas = d.itens.filter((it) => !it.fixo && !it.evento);
             const temFixo = d.itens.some((it) => it.fixo);
             const ehHoje = d.iso === hojeIso;
             const ehSel = d.iso === sel;
             const realizadas = visitas.filter((v) => v.status === "realizada").length;
             const naoRealizadas = visitas.filter((v) => v.status === "nao_realizada").length;
+            // Dia de evento (feira, convenção, viagem) fica azul claro — assim a
+            // faixa de dias do evento salta aos olhos no mês inteiro.
+            const temEvento = d.itens.some((i) => i.evento);
             return (
               <button key={d.iso} onClick={() => setSel(d.iso)}
+                title={temEvento ? d.itens.filter((i) => i.evento).map((i) => i.nome).join(" · ") : undefined}
                 className={cn("flex min-h-[52px] flex-col items-center justify-start rounded-lg border p-1 transition",
-                  ehSel ? "border-slate-900 bg-slate-900 text-agro-400" : ehHoje ? "border-brand-400 bg-brand-50 text-slate-800" : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50")}>
-                <span className={cn("text-xs font-bold", ehSel && "text-agro-400")}>{d.dia}</span>
+                  ehSel && temEvento ? "border-sky-600 bg-sky-400 text-slate-900"
+                    : ehSel ? "border-slate-900 bg-slate-900 text-agro-400"
+                    : temEvento ? cn("bg-sky-100 text-sky-900 hover:bg-sky-200", ehHoje ? "border-brand-400" : "border-sky-300")
+                    : ehHoje ? "border-brand-400 bg-brand-50 text-slate-800"
+                    : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50")}>
+                <span className={cn("text-xs font-bold", ehSel && !temEvento && "text-agro-400")}>{d.dia}</span>
                 {visitas.length > 0 && (
-                  <span className={cn("mt-0.5 rounded-full px-1.5 text-[10px] font-black", ehSel ? "bg-agro-400 text-black" : "bg-slate-900 text-agro-400")}>{visitas.length}</span>
+                  <span className={cn("mt-0.5 rounded-full px-1.5 text-[10px] font-black", ehSel && !temEvento ? "bg-agro-400 text-black" : "bg-slate-900 text-agro-400")}>{visitas.length}</span>
                 )}
                 <span className="mt-0.5 flex gap-0.5">
                   {temFixo && <span title="Reunião PME Vitória" className="h-1.5 w-1.5 rounded-full bg-agro-400 ring-1 ring-slate-400" />}
                   {realizadas > 0 && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
                   {naoRealizadas > 0 && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
-                  {d.itens.some((i) => i.evento) && <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />}
+                  {temEvento && <span className={cn("h-1.5 w-1.5 rounded-full", ehSel ? "bg-slate-900" : "bg-sky-500")} />}
                 </span>
               </button>
             );
@@ -64,7 +73,7 @@ export function CalendarioMensalVisitas({ titulo, primeiroDiaSemana, dias, hojeI
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-agro-400 ring-1 ring-slate-400" /> reunião PME (segundas)</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> realizada</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> não realizada</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" /> evento</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-sm border border-sky-300 bg-sky-100" /> dias de evento</span>
         </div>
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-3">
