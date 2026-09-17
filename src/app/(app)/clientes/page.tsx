@@ -21,13 +21,16 @@ const DIAS_ESQUECIDO = 15;
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string };
+  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string };
 }) {
   const filtro = searchParams.municipio;
   const regiaoFiltro = searchParams.regiao;
   const busca = (searchParams.q ?? "").trim();
   const apenasNaoVisitados = searchParams.naoVisitado === "1";
   const apenasVisitados = searchParams.visitado === "1";
+  // Cadastros sem cidade: não entram em nenhuma rota nem na abordagem por
+  // cidade — a aba existe para o vendedor completar esses cadastros.
+  const apenasSemCidade = searchParams.semCidade === "1";
   await garantirManutencaoSeNecessario();
 
   const corteEsquecido = new Date();
@@ -36,9 +39,9 @@ export default async function ClientesPage({
   // Só carrega a lista completa quando o vendedor de fato pediu um recorte
   // (busca, município, região ou uma das abas) — evita mostrar TODOS os
   // clientes de cara, uma lista enorme sem filtro nenhum.
-  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados;
+  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
@@ -56,6 +59,7 @@ export default async function ClientesPage({
           : {}),
         ...(apenasNaoVisitados ? { visitado: false } : {}),
         ...(apenasVisitados ? { visitado: true } : {}),
+        ...(apenasSemCidade ? { municipioId: null } : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
@@ -88,6 +92,7 @@ export default async function ClientesPage({
     googleContatosDisponivel().catch(() => false),
     lerResumoSincronizacaoGoogle(),
     db.cliente.count({ where: { googleContatoId: { not: null } } }),
+    db.cliente.count({ where: { municipioId: null, origem: { not: "prospect_ia" } } }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -117,7 +122,7 @@ export default async function ClientesPage({
       <PageHeader
         titulo="Clientes"
         subtitulo={mostrarLista
-          ? `${clientes.length} cliente(s)${filtro ? " neste município" : ""}${regiaoFiltro ? ` na região ${regiaoFiltro}` : ""}${busca ? ` para "${busca}"` : ""}`
+          ? `${clientes.length} cliente(s)${filtro ? " neste município" : ""}${regiaoFiltro ? ` na região ${regiaoFiltro}` : ""}${apenasSemCidade ? " sem cidade no cadastro" : ""}${busca ? ` para "${busca}"` : ""}`
           : `${totalClientes} cliente(s) cadastrado(s) no total`}
         acao={
           <div className="flex gap-2">
@@ -132,10 +137,10 @@ export default async function ClientesPage({
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados ? "bg-[#BFDE4D] text-black font-bold" : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados && !apenasSemCidade ? "bg-[#BFDE4D] text-black font-bold" : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`}
         >
           Todos
-          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados && !apenasVisitados ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados && !apenasVisitados && !apenasSemCidade ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
             {totalClientes}
           </span>
         </Link>
@@ -161,7 +166,26 @@ export default async function ClientesPage({
             </span>
           )}
         </Link>
+        <Link
+          href="/clientes?semCidade=1"
+          title="Clientes sem cidade no cadastro — não aparecem na abordagem por cidade nem nas rotas"
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasSemCidade ? "bg-sky-600 text-white" : "border border-sky-800/50 text-sky-400 hover:bg-sky-900/20"}`}
+        >
+          🏙️ Sem cidade
+          {totalSemCidade > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasSemCidade ? "bg-white/20 text-white" : "bg-sky-100 text-sky-700"}`}>
+              {totalSemCidade}
+            </span>
+          )}
+        </Link>
       </div>
+
+      {apenasSemCidade && (
+        <p className="mb-4 rounded-xl border border-sky-800/40 bg-sky-900/20 px-3 py-2 text-xs text-sky-200">
+          Estes cadastros não têm cidade. Sem cidade o cliente fica de fora da <b>abordagem por cidade</b> (em Visitas) e das rotas por região —
+          abra o cadastro pelo ⋯ e escolha o município.
+        </p>
+      )}
 
       <GoogleContatosSync conectado={googleConectado} resumo={resumoGoogle} totalGoogle={totalGoogle} />
 

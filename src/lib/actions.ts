@@ -446,7 +446,7 @@ export async function enviarResposta(
 
   const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
   if (!cliente?.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
-  if (!zapi.isEnabled()) return { ok: false, erro: "WhatsApp (Z-API) não está conectado. Configure em /conexao." };
+  if (!zapi.isEnabled()) return { ok: false, erro: "WhatsApp não está conectado. Configure em /conexao." };
 
   const { conv } = await acharOuCriarConversa({
     phone: cliente.telefone, lid: null, isGroup: false, contactName: cliente.nome,
@@ -465,7 +465,7 @@ export async function enviarResposta(
       sendStatus: unconfirmed ? "UNCONFIRMED" : "FAILED",
     });
     if (!unconfirmed) {
-      return { ok: false, erro: `Z-API retornou erro: ${String(e).slice(0, 200)} — verifique a conexão em /conexao.` };
+      return { ok: false, erro: `O WhatsApp recusou o envio: ${String(e).slice(0, 200)} — verifique a conexão em /conexao.` };
     }
   }
 
