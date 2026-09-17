@@ -38,3 +38,21 @@ describe("estadoDaResposta", () => {
     expect(estadoDaResposta({})).toBe("");
   });
 });
+
+import { origemPublicaDaRequisicao } from "../src/lib/zapi";
+
+describe("endereço público a partir da requisição", () => {
+  const h = (o: Record<string, string>) => ({ get: (n: string) => o[n.toLowerCase()] ?? null });
+  it("usa x-forwarded-host/proto da Vercel", () => {
+    expect(origemPublicaDaRequisicao(h({ "x-forwarded-host": "crm-lyart-ten.vercel.app", "x-forwarded-proto": "https" }))).toBe("https://crm-lyart-ten.vercel.app");
+  });
+  it("cai para host quando não há proxy, e assume https", () => {
+    expect(origemPublicaDaRequisicao(h({ host: "crm.exemplo.com" }))).toBe("https://crm.exemplo.com");
+  });
+  it("ignora localhost e rede local", () => {
+    expect(origemPublicaDaRequisicao(h({ host: "localhost:3000", "x-forwarded-proto": "http" }))).toBeNull();
+    expect(origemPublicaDaRequisicao(h({ host: "127.0.0.1:3118" }))).toBeNull();
+    expect(origemPublicaDaRequisicao(h({ host: "192.168.0.10" }))).toBeNull();
+    expect(origemPublicaDaRequisicao(h({}))).toBeNull();
+  });
+});

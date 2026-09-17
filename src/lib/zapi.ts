@@ -10,6 +10,7 @@
 import { db } from "@/lib/db";
 import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta } from "@/lib/evolution";
 import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
+import { getConfig, setConfig } from "@/lib/config";
 
 export type ZApiConfig = { instanceId: string; token: string; clientToken: string; apiUrl: string };
 export type EvolutionConfig = { url: string; apiKey: string; instance: string };
@@ -437,10 +438,37 @@ export function urlPublicaCrm(): string | null {
   return null;
 }
 
-// URL que a Evolution deve chamar. null quando não dá para descobrir.
-export function urlWebhookCrm(): string | null {
-  const base = urlPublicaCrm();
-  return base ? `${base}/api/webhooks/evolution?apikey=${encodeURIComponent(evolutionConfig()?.apiKey ?? "")}` : null;
+// Endereço pelo qual o vendedor de fato abre o CRM, confirmado por uma
+// chamada de teste que chegou. Vale mais do que qualquer variável: NEXTAUTH_URL
+// errada (domínio antigo, caminho a mais) apontava o webhook para um 404 e o
+// vigia "corrigia" de volta para o endereço errado a cada 5 minutos.
+export const CHAVE_URL_PUBLICA = "crm.urlPublica";
+export async function urlPublicaConfirmada(): Promise<string | null> {
+  const v = await getConfig(CHAVE_URL_PUBLICA).catch(() => null);
+  return v ? v.trim().replace(/\/+$/, "") : null;
+}
+export async function confirmarUrlPublica(url: string): Promise<void> {
+  await setConfig(CHAVE_URL_PUBLICA, url.trim().replace(/\/+$/, ""));
+}
+
+// Origem do navegador (host + protocolo) de uma requisição — é o endereço
+// real do CRM. Ignora localhost/IP local, que não serve para a Evolution.
+export function origemPublicaDaRequisicao(h: { get(nome: string): string | null }): string | null {
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "").split(",")[0].trim();
+  if (!host || /^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(host)) return null;
+  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
+  return `${proto}://${host}`;
+}
+
+function montarUrlWebhook(base: string): string {
+  return `${base}/api/webhooks/evolution?apikey=${encodeURIComponent(evolutionConfig()?.apiKey ?? "")}`;
+}
+
+// URL que a Evolution deve chamar: o endereço confirmado, senão o das
+// variáveis. null quando não dá para descobrir.
+export async function urlWebhookCrm(): Promise<string | null> {
+  const base = (await urlPublicaConfirmada()) ?? urlPublicaCrm();
+  return base ? montarUrlWebhook(base) : null;
 }
 
 // Token PRÓPRIO da instância na Evolution. É ele (e não a chave global) que a
@@ -496,11 +524,12 @@ export async function testarWebhookDeFora(urlConfigurada: string | null): Promis
     const tipo = res.headers.get("content-type") ?? "";
     const texto = await res.text().catch(() => "");
     if (res.ok && /json/.test(tipo)) return { ok: true, url, detalhe: `respondeu HTTP ${res.status} — a chamada chega e a chave é aceita` };
-    if (/html/.test(tipo) || /vercel/i.test(texto) && (res.status === 401 || res.status === 403)) {
-      return { ok: false, url, detalhe: `HTTP ${res.status} com uma página HTML — a Vercel está barrando com tela de login antes de chegar no CRM (URL de deploy protegida, ou domínio errado)` };
+    const html = /html/.test(tipo);
+    if (res.status === 404) return { ok: false, url, detalhe: `HTTP 404${html ? " (página de erro)" : ""} — nesse endereço não existe o webhook do CRM: o domínio ou o caminho está errado` };
+    if (html && (res.status === 401 || res.status === 403)) {
+      return { ok: false, url, detalhe: `HTTP ${res.status} com uma página HTML — a Vercel está barrando com tela de login antes de chegar no CRM (URL de deploy protegida)` };
     }
     if (res.status === 401) return { ok: false, url, detalhe: "HTTP 401 — o CRM recusou a chave que a Evolution manda" };
-    if (res.status === 404) return { ok: false, url, detalhe: "HTTP 404 — essa URL não é o webhook do CRM (caminho ou domínio errado)" };
     return { ok: false, url, detalhe: `HTTP ${res.status} ${texto.slice(0, 120)}` };
   } catch (e) {
     const tempo = e instanceof Error && e.name === "TimeoutError";
@@ -603,7 +632,7 @@ export async function contarConversasGuardadas(): Promise<number> {
 export type EtapaDiagnostico = { etapa: string; ok: boolean; detalhe: string };
 export type Diagnostico = { provedor: ProvedorWhatsApp | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string };
 
-export async function diagnosticarConexao(): Promise<Diagnostico> {
+export async function diagnosticarConexao(origemNavegador: string | null = null): Promise<Diagnostico> {
   const cfg = evolutionConfig();
   const etapas: EtapaDiagnostico[] = [];
   const fim = (conclusao: string): Diagnostico => ({
@@ -644,21 +673,42 @@ export async function diagnosticarConexao(): Promise<Diagnostico> {
     etapas.push({ etapa: `Instância "${cfg.instance}"`, ok: true, detalhe: `existe · estado "${state}"` });
     if (state === "open") {
       const w = await lerWebhookEvolution();
-      const esperado = urlWebhookCrm();
+      const esperado = await urlWebhookCrm();
       const ok = !!(w && w.enabled && esperado && (w.url ?? "").replace(/\/+$/, "") === esperado.replace(/\/+$/, ""));
-      etapas.push({ etapa: "Webhook apontado para o CRM", ok, detalhe: ok ? "certo" : `está em "${w?.url ?? "vazio"}" — deveria ser "${esperado ?? "(defina NEXTAUTH_URL)"}"` });
+      etapas.push({ etapa: "Webhook apontado para o CRM", ok, detalhe: ok ? `certo (${w?.url})` : `está em "${w?.url ?? "vazio"}" — deveria ser "${esperado ?? "(defina NEXTAUTH_URL)"}"` });
 
       // 3. A chamada chega de verdade? (o passo que faltava: webhook "certo"
-      // na Evolution mas morrendo numa tela de login da Vercel parecia tudo ok)
+      // na Evolution mas morrendo num 404 ou numa tela de login parecia tudo ok)
       const teste = await testarWebhookDeFora(w?.enabled ? w.url : null);
       etapas.push({ etapa: "Chamada de teste no webhook", ok: teste.ok, detalhe: teste.detalhe });
       if (teste.ok && ok) return fim("Tudo certo: número pareado, webhook no lugar e a chamada de teste chegou no CRM. Se ainda assim nada aparece, mande uma mensagem de teste e veja \"Últimos eventos\" abaixo.");
       if (teste.ok) return fim("As chamadas estão chegando, mas o webhook está numa URL diferente da esperada — o CRM corrige sozinho na próxima verificação (ou clique em \"Configurar webhook agora\").");
-      if (/HTML|login da Vercel/.test(teste.detalhe)) {
+
+      // 4. Não chegou. O endereço pelo qual o vendedor está abrindo o CRM
+      // AGORA é, por definição, um endereço público que funciona: testa ele
+      // e, se passar, conserta sozinho (guarda como confirmado e reaponta).
+      const baseAtual = (w?.url ?? "").replace(/\/api\/webhooks\/evolution.*$/, "");
+      if (origemNavegador && origemNavegador !== baseAtual) {
+        const candidata = montarUrlWebhook(origemNavegador);
+        const teste2 = await testarWebhookDeFora(candidata);
+        etapas.push({ etapa: `Teste pelo endereço do navegador (${origemNavegador})`, ok: teste2.ok, detalhe: teste2.detalhe });
+        if (teste2.ok) {
+          await confirmarUrlPublica(origemNavegador).catch(() => {});
+          const r = await configurarWebhookEvolution(candidata).catch(() => ({ ok: false, erro: "falhou" }));
+          etapas.push({ etapa: "Webhook reapontado", ok: r.ok, detalhe: r.ok ? `agora em ${candidata.replace(/apikey=.*$/, "apikey=…")}` : `não consegui: ${"erro" in r ? r.erro : ""}` });
+          return fim(r.ok
+            ? `Corrigido: o webhook apontava para ${baseAtual || "um endereço errado"}, que não é o CRM (por isso nada chegava). Reapontei para ${origemNavegador}, que é o endereço que você usa — mande uma mensagem de teste e veja "Últimos eventos" abaixo. Se quiser deixar a variável certa também: NEXTAUTH_URL = ${origemNavegador} na Vercel.`
+            : `O endereço certo é ${origemNavegador} (a chamada de teste chegou por ele), mas não consegui reapontar o webhook na Evolution. Clique em "Configurar webhook agora".`);
+        }
+      }
+      if (/login da Vercel/.test(teste.detalhe)) {
         return fim(
           "Achei o problema: a Evolution chama o CRM, mas a Vercel devolve uma tela de login antes de a mensagem chegar. " +
-          `Na Vercel, em Settings → Environment Variables, defina NEXTAUTH_URL com o endereço que você usa no navegador (ex.: ${urlPublicaCrm() ?? "https://SEU-CRM.vercel.app"}), faça Redeploy e clique em "Configurar webhook agora".`
+          `Na Vercel, em Settings → Environment Variables, defina NEXTAUTH_URL com o endereço que você usa no navegador (ex.: ${origemNavegador ?? urlPublicaCrm() ?? "https://SEU-CRM.vercel.app"}), faça Redeploy e clique em "Configurar webhook agora".`
         );
+      }
+      if (/404/.test(teste.detalhe)) {
+        return fim(`Achei o problema: o webhook aponta para ${baseAtual || "um endereço"} onde não existe o CRM (404). Abra esta tela pelo endereço certo do CRM e clique em "Configurar webhook agora" — ele passa a usar o endereço que está no seu navegador. Confira também NEXTAUTH_URL na Vercel (deve ser só o domínio, sem caminho no fim).`);
       }
       if (/401/.test(teste.detalhe)) return fim("A chamada chega, mas o CRM recusa a chave. Clique em \"Configurar webhook agora\" — o CRM reconfigura o webhook mandando a chave certa no cabeçalho.");
       return fim(`A Evolution não consegue entregar no CRM: ${teste.detalhe}. Clique em "Configurar webhook agora" para reapontar; se continuar, confira NEXTAUTH_URL na Vercel.`);
@@ -769,7 +819,7 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
       const msg = e instanceof Error ? e.message : String(e);
       // Instância inexistente: cria agora (o create já devolve o QR).
       if (/\(404\)/.test(msg) || /does not exist|não existe/i.test(msg)) {
-        const r = await criarInstanciaEvolution(urlWebhookCrm()).catch(() => ({ ok: false, qr: null as string | null }));
+        const r = await criarInstanciaEvolution(await urlWebhookCrm()).catch(() => ({ ok: false, qr: null as string | null }));
         if (r.ok && r.qr) return { imagem: r.qr };
         if (r.ok) {
           await new Promise((res) => setTimeout(res, 2000));

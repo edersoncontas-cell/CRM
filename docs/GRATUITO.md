@@ -255,8 +255,12 @@ que está na instância, e diz onde morre:
   agora**: o CRM reconfigura o webhook mandando a chave no cabeçalho. (O CRM
   também aceita o token próprio da instância, então isso só acontece se a
   instância mudou de token depois.)
-- **"HTTP 404"** ou **"inalcançável"** — a URL está errada; mesmo remédio:
-  `NEXTAUTH_URL` certa + Configurar webhook agora.
+- **"HTTP 404"** ou **"inalcançável"** — a URL está errada (`NEXTAUTH_URL`
+  com domínio antigo ou com caminho no fim). O diagnóstico testa em seguida o
+  endereço que está no **seu navegador** e, se a chamada chegar por ele,
+  **reaponta o webhook sozinho** e guarda esse endereço como o certo — daí em
+  diante o vigia e o botão "Configurar webhook agora" usam ele, mesmo com a
+  variável errada. Ainda assim, corrija `NEXTAUTH_URL` na Vercel quando puder.
 
 Depois, mande uma mensagem de teste para o seu número: em **Diagnóstico do
 recebimento → Últimos eventos** ela aparece como `recebida`. Se aparecer

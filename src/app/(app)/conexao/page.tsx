@@ -3,7 +3,7 @@ import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
-import { provedorWhatsApp, urlPublicaCrm } from "@/lib/zapi";
+import { provedorWhatsApp, urlPublicaCrm, urlPublicaConfirmada } from "@/lib/zapi";
 import { dataCorteWhatsApp } from "@/lib/whatsapp-corte";
 import { diaBrasiliaISO } from "@/lib/whatsapp-corte-regra";
 import { diasDesde } from "@/lib/utils";
@@ -61,7 +61,7 @@ export default async function ConexaoPage() {
   const recebeuAlgo = diag.ultimos.some((e) => e.status === "recebida" || e.status === "enviada");
   const provedor = provedorWhatsApp();
   const nomeProvedor = provedor === "evolution" ? "Evolution API" : "Z-API";
-  const base = urlPublicaCrm() ?? "https://SEU-CRM.vercel.app";
+  const base = (await urlPublicaConfirmada().catch(() => null)) ?? urlPublicaCrm() ?? "https://SEU-CRM.vercel.app";
   const urlWebhook = provedor === "evolution" ? `${base}/api/webhooks/evolution` : `${base}/api/webhooks/zapi`;
 
   return (

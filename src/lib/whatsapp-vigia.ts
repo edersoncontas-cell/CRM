@@ -45,7 +45,7 @@ export type ResultadoVigia = {
 // `forcar` = pedido manual do vendedor ("Verificar e religar agora"): ignora a
 // pausa da tela do QR, porque aí é ele mesmo mandando mexer na instância.
 export async function vigiarConexao({ agora = new Date(), forcar = false }: { agora?: Date; forcar?: boolean } = {}): Promise<ResultadoVigia> {
-  const urlWebhook = zapi.urlWebhookCrm();
+  const urlWebhook = await zapi.urlWebhookCrm();
   const status = await zapi.statusConexao(urlWebhook).catch(() => null);
 
   if (!status?.configurado) {

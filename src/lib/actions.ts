@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
@@ -1214,7 +1215,11 @@ export async function reiniciarZapi(): Promise<{ ok: boolean }> {
 }
 
 export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean; erro?: string; url?: string }> {
-  const url = zapi.urlWebhookCrm();
+  // O endereço que está no navegador do vendedor é o endereço público real
+  // do CRM — vale mais que NEXTAUTH_URL (que já apontou para um 404).
+  const origem = zapi.origemPublicaDaRequisicao(headers());
+  if (origem) await zapi.confirmarUrlPublica(origem).catch(() => {});
+  const url = await zapi.urlWebhookCrm();
   if (!url) return { ok: false, erro: "Defina NEXTAUTH_URL na Vercel (URL pública do CRM) para apontar o webhook." };
   const r = await zapi.configurarWebhookEvolution(url);
   if (r.ok) await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Webhook da Evolution API apontado para ${url}.` }).catch(() => {});
@@ -1225,7 +1230,9 @@ export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean;
 // Cria a instância na Evolution (nome de EVOLUTION_INSTANCE) já com o webhook
 // apontando para este CRM. Usado pelo botão "Criar instância" em /conexao.
 export async function criarInstanciaEvolutionAction(): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
-  const url = zapi.urlWebhookCrm();
+  const origem = zapi.origemPublicaDaRequisicao(headers());
+  if (origem) await zapi.confirmarUrlPublica(origem).catch(() => {});
+  const url = await zapi.urlWebhookCrm();
   const r = await zapi.criarInstanciaEvolution(url);
   if (r.ok) {
     // Garante o webhook mesmo quando a instância já existia ou a versão ignorou o campo no create.
