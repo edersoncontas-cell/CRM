@@ -34,6 +34,9 @@ describe("helpers de contato", () => {
   });
   it("listas editáveis: termo/palavra novos com acento e caixa batem, e a lista vazia libera tudo", () => {
     expect(motivoBloqueioComListas("Despachante Silva", [], ["despachante"])).toBe("despachante");
+    // Termo curto demais nunca bloqueia — senão "a" apagaria todo mundo.
+    expect(motivoBloqueioComListas("Wadson Pires", ["a", "sa", " s "], ["d"])).toBeNull();
+    expect(motivoBloqueioComListas("Wadson Pires", ["  pires "], [])).toBe("  pires ");
     expect(motivoBloqueioComListas("DESPACHANTE SILVA", [], ["Despachante"])).toBe("Despachante");
     expect(motivoBloqueioComListas("Cartório de Alegre", ["cartor"], [])).toBe("cartor");
     expect(motivoBloqueioComListas("Banco do Brasil", [], [])).toBeNull();

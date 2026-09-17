@@ -239,6 +239,29 @@ recua para esse dia.
   desconectado" e você reconecta em /conexao. Na Oracle, `restart: always` no
   compose sobe tudo de novo sozinho após reboot.
 
+## Mensagens não chegam no CRM (mas o WhatsApp do celular recebe)
+O envio funciona (o CRM manda o briefing do ZEUS) mas nada entra em
+**/atendimento**? Então a Evolution não está conseguindo **entregar** a
+chamada do webhook no CRM. Abra **/conexao → Diagnosticar conexão**: o passo
+**"Chamada de teste no webhook"** faz o CRM se chamar de fora, pela mesma URL
+que está na instância, e diz onde morre:
+
+- **"página HTML / tela de login da Vercel"** — a URL do webhook é a URL de
+  *deploy* (`crm-abc123-usuario.vercel.app`), que a Vercel protege com login.
+  Na Vercel → Settings → Environment Variables, defina `NEXTAUTH_URL` com o
+  endereço que você abre no navegador (ex.: `https://crm-lyart-ten.vercel.app`),
+  faça **Redeploy** e clique em **Configurar webhook agora**.
+- **"HTTP 401 — o CRM recusou a chave"** — clique em **Configurar webhook
+  agora**: o CRM reconfigura o webhook mandando a chave no cabeçalho. (O CRM
+  também aceita o token próprio da instância, então isso só acontece se a
+  instância mudou de token depois.)
+- **"HTTP 404"** ou **"inalcançável"** — a URL está errada; mesmo remédio:
+  `NEXTAUTH_URL` certa + Configurar webhook agora.
+
+Depois, mande uma mensagem de teste para o seu número: em **Diagnóstico do
+recebimento → Últimos eventos** ela aparece como `recebida`. Se aparecer
+`chave-recusada` ou `outra-instancia`, o card já diz o que fazer.
+
 ## O servidor sumiu: nada responde em `http://IP:8080`
 
 Sem esse servidor no ar não existe QR Code — quem gera o código é ele. Em

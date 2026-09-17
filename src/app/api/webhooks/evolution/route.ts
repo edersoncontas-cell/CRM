@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evolutionConfig } from "@/lib/zapi";
+import { evolutionConfig, tokenDaInstancia } from "@/lib/zapi";
 import { extrairConteudoEvolution, normalizarChaveEvolution, STATUS_EVOLUTION } from "@/lib/evolution";
 import { atualizarStatusEntrega } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
@@ -35,16 +35,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Autenticação: a Evolution v2 inclui a própria apikey no corpo de todo
-  // webhook; também aceita como header (webhook.headers na config da instância).
-  const candidatos = [str(body.apikey), req.headers.get("apikey"), req.headers.get("x-api-key"), req.nextUrl.searchParams.get("apikey")];
-    if (!candidatos.some((c) => c !== null && c === cfg.apiKey)) {
-          return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
-    }
+  // Autenticação. A chave pode vir: no cabeçalho (webhook.headers, que o CRM
+  // configura), na URL (?apikey=, que o CRM também põe) ou no corpo — e no
+  // corpo a Evolution 2.x manda o token PRÓPRIO da instância, que só é igual
+  // à chave global quando a instância foi criada com ela. Antes o CRM só
+  // aceitava a global: webhook feito à mão ou pelo instalador levava 401 e
+  // as mensagens sumiam sem rastro (nem no diagnóstico apareciam).
+  const candidatos = [str(body.apikey), req.headers.get("apikey"), req.headers.get("x-api-key"), req.nextUrl.searchParams.get("apikey")]
+    .filter((c): c is string => !!c);
+  let autorizado = candidatos.includes(cfg.apiKey);
+  if (!autorizado && candidatos.length) {
+    const token = await tokenDaInstancia();
+    autorizado = !!token && candidatos.includes(token);
+  }
+  if (!autorizado) {
+    await registrarDiag({ dir: "-", phone: null, nome: null, texto: candidatos.length ? "a chave enviada não é a do CRM nem a da instância" : "chamada sem chave nenhuma", status: "chave-recusada" });
+    return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
+  }
 
   // Isolamento de instância (uma Evolution pode hospedar vários números).
   const instancia = str(body.instance);
   if (instancia && instancia !== cfg.instance) {
+    await registrarDiag({ dir: "-", phone: null, nome: instancia, texto: `esperava a instância "${cfg.instance}"`, status: "outra-instancia" });
     return NextResponse.json({ ignorado: "outra instância" });
   }
 

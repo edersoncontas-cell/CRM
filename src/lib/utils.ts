@@ -152,12 +152,15 @@ export const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace
 
 // Termo que bloqueia o nome, ou null se o nome é aceito — pura (sem banco),
 // recebe as listas prontas. Quem decide QUAIS listas usar é lib/filtro-contatos.ts.
+// Termo com menos de 3 letras é ignorado: "a" ou "sa" na lista (um deslize
+// no card ou no assistente) bloquearia — e APAGARIA — todo contato que chega.
+const TAMANHO_MINIMO_TERMO = 3;
 export function motivoBloqueioComListas(nome: string, termos: string[], palavras: string[]): string | null {
   const n = semAcento(nome);
-  const termo = termos.find((t) => n.includes(semAcento(t)));
+  const termo = termos.find((t) => semAcento(t).trim().length >= TAMANHO_MINIMO_TERMO && n.includes(semAcento(t).trim()));
   if (termo) return termo;
   const partes = n.split(/[^a-z0-9]+/).filter(Boolean);
-  const palavra = palavras.find((p) => partes.includes(semAcento(p)));
+  const palavra = palavras.find((p) => semAcento(p).trim().length >= TAMANHO_MINIMO_TERMO && partes.includes(semAcento(p).trim()));
   return palavra ?? null;
 }
 

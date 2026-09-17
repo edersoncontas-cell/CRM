@@ -183,13 +183,14 @@ done
 
 verde "6/6 Instância \"$INSTANCIA\""
 if [ -n "$CRM_URL" ]; then
-  WEBHOOK_JSON=",\"webhook\":{\"enabled\":true,\"url\":\"$CRM_URL/api/webhooks/evolution\",\"byEvents\":false,\"base64\":true,\"events\":[\"MESSAGES_UPSERT\",\"MESSAGES_UPDATE\"]}"
+  # A chave vai também no cabeçalho e na URL: é assim que o CRM reconhece a chamada.
+  WEBHOOK_JSON=",\"webhook\":{\"enabled\":true,\"url\":\"$CRM_URL/api/webhooks/evolution?apikey=$CHAVE\",\"headers\":{\"apikey\":\"$CHAVE\"},\"byEvents\":false,\"base64\":true,\"events\":[\"MESSAGES_UPSERT\",\"MESSAGES_UPDATE\"]}"
 else
   WEBHOOK_JSON=""
 fi
 resp="$(curl -sS --max-time 30 -X POST "http://127.0.0.1:8080/instance/create" \
   -H "apikey: $CHAVE" -H "Content-Type: application/json" \
-  -d "{\"instanceName\":\"$INSTANCIA\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":true,\"syncFullHistory\":true$WEBHOOK_JSON}" || true)"
+  -d "{\"instanceName\":\"$INSTANCIA\",\"token\":\"$CHAVE\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":true,\"syncFullHistory\":true$WEBHOOK_JSON}" || true)"
 if echo "$resp" | grep -qiE '"instanceName"|already|in use'; then
   echo "   instância pronta."
 else
@@ -199,7 +200,7 @@ fi
 if [ -n "$CRM_URL" ]; then
   curl -sS --max-time 30 -X POST "http://127.0.0.1:8080/webhook/set/$INSTANCIA" \
     -H "apikey: $CHAVE" -H "Content-Type: application/json" \
-    -d "{\"webhook\":{\"enabled\":true,\"url\":\"$CRM_URL/api/webhooks/evolution\",\"byEvents\":false,\"base64\":true,\"events\":[\"MESSAGES_UPSERT\",\"MESSAGES_UPDATE\"]}}" >/dev/null 2>&1 || true
+    -d "{\"webhook\":{\"enabled\":true,\"url\":\"$CRM_URL/api/webhooks/evolution?apikey=$CHAVE\",\"headers\":{\"apikey\":\"$CHAVE\"},\"byEvents\":false,\"base64\":true,\"events\":[\"MESSAGES_UPSERT\",\"MESSAGES_UPDATE\"]}}" >/dev/null 2>&1 || true
 fi
 
 cat > "$DIR/CREDENCIAIS.txt" <<EOF

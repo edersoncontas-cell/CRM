@@ -418,11 +418,94 @@ export async function configurarWebhookEvolution(urlWebhook: string): Promise<{ 
   }
 }
 
-// URL pública deste CRM que a Evolution deve chamar (NEXTAUTH_URL na Vercel,
-// ou a URL do deploy como reserva). null quando não dá para descobrir.
+// URL pública deste CRM. Ordem: NEXTAUTH_URL (o que o vendedor definiu) →
+// VERCEL_PROJECT_PRODUCTION_URL (domínio de produção do projeto, ex.:
+// crm-xxx.vercel.app) → VERCEL_URL. Esta última é a URL ÚNICA do deploy
+// (crm-abc123-usuario.vercel.app), que a Vercel protege com login por padrão:
+// a Evolution chamava, levava uma tela de autenticação da Vercel e a mensagem
+// morria ali, sem o CRM nem ficar sabendo. Por isso ela é a última opção.
+export function urlPublicaCrm(): string | null {
+  const candidatos = [
+    process.env.NEXTAUTH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "",
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "",
+  ];
+  for (const c of candidatos) {
+    const base = (c ?? "").trim().replace(/\/+$/, "");
+    if (base) return base;
+  }
+  return null;
+}
+
+// URL que a Evolution deve chamar. null quando não dá para descobrir.
 export function urlWebhookCrm(): string | null {
-  const base = (process.env.NEXTAUTH_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")).trim().replace(/\/+$/, "");
-      return base ? `${base}/api/webhooks/evolution?apikey=${encodeURIComponent(evolutionConfig()?.apiKey ?? "")}` : null;
+  const base = urlPublicaCrm();
+  return base ? `${base}/api/webhooks/evolution?apikey=${encodeURIComponent(evolutionConfig()?.apiKey ?? "")}` : null;
+}
+
+// Token PRÓPRIO da instância na Evolution. É ele (e não a chave global) que a
+// Evolution 2.x carimba no campo "apikey" de cada webhook — quando a instância
+// foi criada sem token, ela gera um aleatório, e o webhook do CRM recusava a
+// chamada com 401 achando que era um intruso. Cache de 10 min.
+let cacheToken: { valor: string | null; em: number } | null = null;
+export async function tokenDaInstancia(): Promise<string | null> {
+  const cfg = evolutionConfig();
+  if (!cfg) return null;
+  if (cacheToken && Date.now() - cacheToken.em < 10 * 60_000) return cacheToken.valor;
+  let valor: string | null = null;
+  try {
+    const data = await evoFetch("GET", `/instance/fetchInstances?instanceName=${evoInstancia()}`, undefined, TEMPO_TELA_MS);
+    const lista: unknown[] = Array.isArray(data) ? data : [data];
+    for (const item of lista) {
+      const o = item as Record<string, unknown>;
+      const inst = (o.instance as Record<string, unknown> | undefined) ?? o;
+      const nome = String(inst.instanceName ?? inst.name ?? o.name ?? "");
+      if (nome && nome !== cfg.instance) continue;
+      const t = [o.token, o.hash, inst.token, inst.apikey, (o.hash as Record<string, unknown> | undefined)?.apikey]
+        .find((v) => typeof v === "string" && v);
+      if (typeof t === "string") { valor = t; break; }
+    }
+  } catch (e) {
+    console.error("[evolution] token da instância:", e instanceof Error ? e.message : e);
+  }
+  cacheToken = { valor, em: Date.now() };
+  return valor;
+}
+
+// Simula a Evolution chamando o webhook: faz um POST de fora (pela URL que
+// está configurada na instância) com um evento inofensivo e vê o que volta.
+// É o único jeito de descobrir, sem log da Vercel, se a chamada morre no
+// caminho (tela de login da Vercel, URL errada, chave recusada).
+export type TesteWebhook = { ok: boolean; url: string | null; detalhe: string };
+export async function testarWebhookDeFora(urlConfigurada: string | null): Promise<TesteWebhook> {
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, url: null, detalhe: "Evolution não configurada." };
+  const url = (urlConfigurada ?? "").trim();
+  if (!url) return { ok: false, url: null, detalhe: "a instância não tem webhook configurado" };
+  // O que a Evolution 2.x manda de verdade: a chave no corpo é o token da
+  // instância (ou a global, quando a instância foi criada com ela).
+  const apikeyNoCorpo = (await tokenDaInstancia()) ?? cfg.apiKey;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "crm-teste-webhook" },
+      body: JSON.stringify({ event: "connection.update", instance: cfg.instance, data: { state: "open", teste: true }, apikey: apikeyNoCorpo }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(TEMPO_TELA_MS),
+    });
+    const tipo = res.headers.get("content-type") ?? "";
+    const texto = await res.text().catch(() => "");
+    if (res.ok && /json/.test(tipo)) return { ok: true, url, detalhe: `respondeu HTTP ${res.status} — a chamada chega e a chave é aceita` };
+    if (/html/.test(tipo) || /vercel/i.test(texto) && (res.status === 401 || res.status === 403)) {
+      return { ok: false, url, detalhe: `HTTP ${res.status} com uma página HTML — a Vercel está barrando com tela de login antes de chegar no CRM (URL de deploy protegida, ou domínio errado)` };
+    }
+    if (res.status === 401) return { ok: false, url, detalhe: "HTTP 401 — o CRM recusou a chave que a Evolution manda" };
+    if (res.status === 404) return { ok: false, url, detalhe: "HTTP 404 — essa URL não é o webhook do CRM (caminho ou domínio errado)" };
+    return { ok: false, url, detalhe: `HTTP ${res.status} ${texto.slice(0, 120)}` };
+  } catch (e) {
+    const tempo = e instanceof Error && e.name === "TimeoutError";
+    return { ok: false, url, detalhe: tempo ? "não respondeu em 10s" : "endereço inalcançável (domínio errado ou fora do ar)" };
+  }
 }
 
 // Cria a instância com o nome de EVOLUTION_INSTANCE (canal Baileys, QR Code)
@@ -435,8 +518,11 @@ export async function criarInstanciaEvolution(urlWebhook: string | null): Promis
   const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE"];
   // syncFullHistory: ao parear, o celular manda o histórico inteiro das
   // conversas para a Evolution — é isso que "Importar conversas" puxa.
-  const corpoV2: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true, syncFullHistory: true };
-  const corpoV1: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true, sync_full_history: true };
+  // token = chave global: o "apikey" que a Evolution carimba em cada webhook
+  // passa a ser a chave que o CRM já conhece (sem token ela gera um aleatório).
+  const token = evolutionConfig()?.apiKey ?? "";
+  const corpoV2: Record<string, unknown> = { instanceName: nome, token, integration: "WHATSAPP-BAILEYS", qrcode: true, syncFullHistory: true };
+  const corpoV1: Record<string, unknown> = { instanceName: nome, token, integration: "WHATSAPP-BAILEYS", qrcode: true, sync_full_history: true };
   if (urlWebhook) {
     corpoV2.webhook = { enabled: true, url: urlWebhook, byEvents: false, base64: true, events: eventos };
     Object.assign(corpoV1, { webhook: urlWebhook, webhook_by_events: false, webhook_base64: true, events: eventos });
@@ -561,7 +647,21 @@ export async function diagnosticarConexao(): Promise<Diagnostico> {
       const esperado = urlWebhookCrm();
       const ok = !!(w && w.enabled && esperado && (w.url ?? "").replace(/\/+$/, "") === esperado.replace(/\/+$/, ""));
       etapas.push({ etapa: "Webhook apontado para o CRM", ok, detalhe: ok ? "certo" : `está em "${w?.url ?? "vazio"}" — deveria ser "${esperado ?? "(defina NEXTAUTH_URL)"}"` });
-      return fim(ok ? "Tudo certo: número pareado e mensagens chegando." : "Número pareado, mas o webhook está fora do lugar — o CRM corrige sozinho na próxima verificação (ou clique em \"Configurar webhook agora\").");
+
+      // 3. A chamada chega de verdade? (o passo que faltava: webhook "certo"
+      // na Evolution mas morrendo numa tela de login da Vercel parecia tudo ok)
+      const teste = await testarWebhookDeFora(w?.enabled ? w.url : null);
+      etapas.push({ etapa: "Chamada de teste no webhook", ok: teste.ok, detalhe: teste.detalhe });
+      if (teste.ok && ok) return fim("Tudo certo: número pareado, webhook no lugar e a chamada de teste chegou no CRM. Se ainda assim nada aparece, mande uma mensagem de teste e veja \"Últimos eventos\" abaixo.");
+      if (teste.ok) return fim("As chamadas estão chegando, mas o webhook está numa URL diferente da esperada — o CRM corrige sozinho na próxima verificação (ou clique em \"Configurar webhook agora\").");
+      if (/HTML|login da Vercel/.test(teste.detalhe)) {
+        return fim(
+          "Achei o problema: a Evolution chama o CRM, mas a Vercel devolve uma tela de login antes de a mensagem chegar. " +
+          `Na Vercel, em Settings → Environment Variables, defina NEXTAUTH_URL com o endereço que você usa no navegador (ex.: ${urlPublicaCrm() ?? "https://SEU-CRM.vercel.app"}), faça Redeploy e clique em "Configurar webhook agora".`
+        );
+      }
+      if (/401/.test(teste.detalhe)) return fim("A chamada chega, mas o CRM recusa a chave. Clique em \"Configurar webhook agora\" — o CRM reconfigura o webhook mandando a chave certa no cabeçalho.");
+      return fim(`A Evolution não consegue entregar no CRM: ${teste.detalhe}. Clique em "Configurar webhook agora" para reapontar; se continuar, confira NEXTAUTH_URL na Vercel.`);
     }
     return fim(`A instância existe e está "${state}" (não pareada). Clique em "Gerar novo QR" e escaneie com o celular.`);
   } catch (e) {

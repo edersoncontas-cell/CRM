@@ -3,7 +3,7 @@ import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
-import { provedorWhatsApp } from "@/lib/zapi";
+import { provedorWhatsApp, urlPublicaCrm } from "@/lib/zapi";
 import { dataCorteWhatsApp } from "@/lib/whatsapp-corte";
 import { diaBrasiliaISO } from "@/lib/whatsapp-corte-regra";
 import { diasDesde } from "@/lib/utils";
@@ -22,6 +22,24 @@ function quando(iso: string | null): string {
   return `há ${diasDesde(iso)}d`;
 }
 
+// O que cada status das últimas chamadas quer dizer — só aparece para os que
+// estão na lista, para o vendedor não ficar adivinhando por que "recebida"
+// não virou conversa.
+const EXPLICACAO_STATUS: Record<string, string> = {
+  recebida: "entrou no Atendimento.",
+  enviada: "mensagem que você mandou pelo celular, registrada na conversa.",
+  grupo: "grupo — grupos não entram no CRM.",
+  status: "story/status do WhatsApp — ignorado.",
+  "sem-texto": "chegou sem texto (figurinha, reação, mídia sem legenda) — nada para registrar.",
+  "sem-telefone": "veio sem número de origem — ignorada.",
+  antiga: "anterior à data de corte ou a uma exclusão sua — não entra (Configurações → Conversas antigas).",
+  bloqueado: "contato barrado pelo filtro de nomes ou já bloqueado — apagado do CRM (Configurações → Filtro de contatos).",
+  eco: "cópia de uma mensagem que o próprio CRM enviou — ignorada.",
+  duplicado: "a Evolution reenviou a mesma mensagem — ignorada.",
+  "chave-recusada": "a Evolution chamou com uma chave que o CRM não reconhece — clique em Configurar webhook agora.",
+  "outra-instancia": "chamada de OUTRA instância da Evolution — confira EVOLUTION_INSTANCE na Vercel.",
+};
+
 const CORES_STATUS: Record<string, string> = {
   recebida: "bg-green-100 text-green-700",
   enviada: "bg-blue-100 text-blue-700",
@@ -29,6 +47,12 @@ const CORES_STATUS: Record<string, string> = {
   status: "bg-slate-100 text-slate-400",
   "sem-texto": "bg-amber-100 text-amber-700",
   "sem-telefone": "bg-amber-100 text-amber-700",
+  antiga: "bg-slate-100 text-slate-500",
+  bloqueado: "bg-slate-100 text-slate-500",
+  eco: "bg-slate-100 text-slate-400",
+  duplicado: "bg-slate-100 text-slate-400",
+  "chave-recusada": "bg-red-100 text-red-700",
+  "outra-instancia": "bg-red-100 text-red-700",
 };
 
 export default async function ConexaoPage() {
@@ -37,7 +61,7 @@ export default async function ConexaoPage() {
   const recebeuAlgo = diag.ultimos.some((e) => e.status === "recebida" || e.status === "enviada");
   const provedor = provedorWhatsApp();
   const nomeProvedor = provedor === "evolution" ? "Evolution API" : "Z-API";
-  const base = (process.env.NEXTAUTH_URL ?? "https://crm-lyart-ten.vercel.app").replace(/\/+$/, "");
+  const base = urlPublicaCrm() ?? "https://SEU-CRM.vercel.app";
   const urlWebhook = provedor === "evolution" ? `${base}/api/webhooks/evolution` : `${base}/api/webhooks/zapi`;
 
   return (
@@ -96,6 +120,12 @@ export default async function ConexaoPage() {
               </div>
             </div>
 
+            {diag.ultimos.some((e) => e.status === "chave-recusada") && (
+              <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>A {nomeProvedor} está chamando, mas o CRM <b>recusou a chave</b> em alguma chamada. Clique em <b>Configurar webhook agora</b> (no card de cima) para reapontar com a chave certa.</span>
+              </div>
+            )}
             {recebeuAlgo ? (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
                 <CheckCircle2 size={15} /> A {nomeProvedor} está entregando mensagens ao CRM. ✅
@@ -107,6 +137,18 @@ export default async function ConexaoPage() {
                 Mande uma mensagem de teste para o seu número e clique em Atualizar.
               </div>
             )}
+
+            {(() => {
+              const presentes = Array.from(new Set(diag.ultimos.map((e) => e.status))).filter((st) => EXPLICACAO_STATUS[st] || st.startsWith("erro:"));
+              if (!presentes.length) return null;
+              return (
+                <ul className="space-y-0.5 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                  {presentes.map((st) => (
+                    <li key={st}><b>{st}</b>: {EXPLICACAO_STATUS[st] ?? "o CRM falhou ao gravar — o texto do erro está na linha."}</li>
+                  ))}
+                </ul>
+              );
+            })()}
 
             {/* Últimos eventos */}
             <div className="overflow-hidden rounded-xl border border-slate-100">

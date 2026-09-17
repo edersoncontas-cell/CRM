@@ -194,6 +194,41 @@ export function ConexaoWhatsApp() {
     );
   }
 
+  // Diagnóstico completo (servidor → chave → instância → webhook → chamada de
+  // teste). Aparece também com o número CONECTADO: "conectado mas nada chega"
+  // é justamente o caso em que ele mais ajuda.
+  const blocoDiagnostico = (legenda: string) => (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={diagnosticar}
+          disabled={diagnosticando}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 disabled:opacity-60"
+        >
+          {diagnosticando ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />} Diagnosticar conexão
+        </button>
+        <span className="text-xs text-slate-500">{legenda}</span>
+      </div>
+      {diagnostico && (
+        <div className="mt-2">
+          <ul className="space-y-1">
+            {diagnostico.etapas.map((e) => (
+              <li key={e.etapa} className="flex items-start gap-1.5 text-xs">
+                {e.ok
+                  ? <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green-600" />
+                  : <AlertTriangle size={13} className="mt-0.5 shrink-0 text-red-500" />}
+                <span className={e.ok ? "text-slate-600" : "font-semibold text-red-700"}>
+                  {e.etapa}: <span className="font-normal break-all">{e.detalhe}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 rounded-md bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">{diagnostico.conclusao}</p>
+        </div>
+      )}
+    </div>
+  );
+
   // Conectado.
   if (status.conectado) {
     return (
@@ -232,6 +267,7 @@ export function ConexaoWhatsApp() {
             </div>
           </div>
         )}
+        {status.provedor === "evolution" && blocoDiagnostico("Conectado mas nada chega? Isto testa o caminho inteiro, inclusive uma chamada de fora no webhook.")}
         <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm text-slate-600">
           <div className="flex items-center gap-1.5 font-semibold text-slate-700"><ShieldCheck size={15} className="text-green-600" /> Vigia da conexão</div>
           <p className="mt-1 text-xs text-slate-500">
@@ -339,35 +375,7 @@ export function ConexaoWhatsApp() {
       {(qrErro ?? status.erro) && <p className="mt-3 text-xs text-amber-600">{qrErro ?? status.erro}</p>}
       {qrErro && status.erro && status.erro !== qrErro && <p className="mt-1 text-xs text-amber-600">{status.erro}</p>}
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={diagnosticar}
-            disabled={diagnosticando}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100 disabled:opacity-60"
-          >
-            {diagnosticando ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />} Diagnosticar conexão
-          </button>
-          <span className="text-xs text-slate-500">Descobre em que ponto a conexão quebrou.</span>
-        </div>
-        {diagnostico && (
-          <div className="mt-2">
-            <ul className="space-y-1">
-              {diagnostico.etapas.map((e) => (
-                <li key={e.etapa} className="flex items-start gap-1.5 text-xs">
-                  {e.ok
-                    ? <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-green-600" />
-                    : <AlertTriangle size={13} className="mt-0.5 shrink-0 text-red-500" />}
-                  <span className={e.ok ? "text-slate-600" : "font-semibold text-red-700"}>
-                    {e.etapa}: <span className="font-normal break-all">{e.detalhe}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 rounded-md bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">{diagnostico.conclusao}</p>
-          </div>
-        )}
-      </div>
+      {blocoDiagnostico("Descobre em que ponto a conexão quebrou.")}
 
       <div className="mt-4 flex gap-2">
         <button
