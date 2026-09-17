@@ -236,7 +236,7 @@ export function DemandasLista({ grupos, clientes, abertas, atrasadas, hoje }: { 
           <section key={g.id}>
             <div className="mb-2 flex items-center gap-2">
               {g.id === "atrasadas" ? <AlertTriangle size={15} className="text-red-500" /> : g.id === "hoje" ? <Flag size={15} className="text-agro-600" /> : g.id === "concluidas" ? <CheckCircle2 size={15} className="text-emerald-500" /> : <CalendarClock size={15} className="text-slate-400" />}
-              <h2 className={cn("text-sm font-black uppercase tracking-wide", g.id === "atrasadas" ? "text-red-600" : "text-slate-700")}>{g.titulo}</h2>
+              <h2 className={cn("text-sm font-black uppercase tracking-wide", g.id === "atrasadas" ? "text-red-400" : "text-slate-200")}>{g.titulo}</h2>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{g.itens.length}</span>
               {g.id !== "concluidas" && g.itens.length > 1 && <span className="text-[11px] text-slate-400">arraste pela alça para mudar a ordem</span>}
             </div>

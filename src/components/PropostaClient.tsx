@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Card } from "@/components/ui";
+import { CampoNumero } from "@/components/CampoNumero";
 import { calcular, textoRetorno, brl, brl2, type DadosProposta, type MaquinaCalc, type CalcProposta } from "@/lib/proposta";
 import type { ContextoProposta } from "@/lib/proposta-pdf";
 import { salvarPropostaAction, enviarPropostaWhatsAppAction } from "@/lib/proposta-actions";
@@ -11,11 +12,11 @@ import { Calculator, FileText, Save, Loader2, Send, ExternalLink, ArrowRight, Ch
 const campo = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200";
 const rotulo = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500";
 
-function Num({ id, label, value, onChange, step = "any", sufixo }: { id: string; label: string; value: number; onChange: (v: number) => void; step?: string; sufixo?: string }) {
+function Num({ id, label, value, onChange, step, sufixo }: { id: string; label: string; value: number; onChange: (v: number) => void; step?: string; sufixo?: string }) {
   return (
     <div>
       <label htmlFor={id} className={rotulo}>{label}{sufixo ? <span className="ml-1 normal-case text-slate-400">({sufixo})</span> : null}</label>
-      <input id={id} type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} className={campo} />
+      <CampoNumero id={id} value={value} onChange={onChange} inteiro={step === "1"} className={campo} />
     </div>
   );
 }

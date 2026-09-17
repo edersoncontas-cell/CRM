@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui";
+import { CampoNumero } from "@/components/CampoNumero";
 import { brl, brl2 } from "@/lib/proposta";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Fuel } from "lucide-react";
@@ -15,7 +16,7 @@ function Num({ id, label, value, onChange, sufixo }: { id: string; label: string
   return (
     <div>
       <label htmlFor={id} className={rotulo}>{label}{sufixo ? <span className="ml-1 normal-case text-slate-400">({sufixo})</span> : null}</label>
-      <input id={id} type="number" inputMode="decimal" step="any" value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))} className={campo} />
+      <CampoNumero id={id} value={value} onChange={onChange} className={campo} />
     </div>
   );
 }

@@ -172,7 +172,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                 <section key={g.id}>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Icon size={16} style={{ color: COR_GRUPO[g.id] ?? "#475569" }} />
-                    <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{g.titulo}</h2>
+                    <h2 className="text-sm font-black uppercase tracking-wide text-slate-200">{g.titulo}</h2>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{g.itens.length}</span>
                     {g.itens.length > 1 && (
                       <button onClick={() => resolverTodosDoGrupo(g)} disabled={resolvendoGrupo === g.id}
@@ -181,7 +181,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                       </button>
                     )}
                   </div>
-                  <p className="mb-2 text-xs text-slate-500">{g.descricao}</p>
+                  <p className="mb-2 text-xs text-slate-400">{g.descricao}</p>
                   <Card className="divide-y divide-slate-100 p-0">
                     {g.itens.map((item) => {
                       const wa = item.posVenda ? waLink(item.telefone, item.posVenda.nome) : null;

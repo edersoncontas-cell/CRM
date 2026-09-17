@@ -163,7 +163,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       />
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Agenda da semana · arraste para outro dia · ✓ realizada · ✗ não realizada</h2>
+        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Agenda da semana · arraste para outro dia · ✓ realizada · ✗ não realizada</h2>
         <AgendaSemanaVisitas
           clientes={clientes}
           cidades={cidades}
@@ -187,49 +187,49 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
+        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
         <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} />
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Calendário do mês</h2>
+        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Calendário do mês</h2>
         <CalendarioMensalVisitas titulo={tituloMes} primeiroDiaSemana={diaSemanaIso(`${mesParam}-01`)} dias={diasCalendario} hojeIso={hojeIso} hrefAnterior={`/visitas?mes=${mesAnterior}`} hrefProximo={`/visitas?mes=${mesProximo}`} clientes={clientes} cidades={cidades} />
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Abordagem por cidade · escolha a cidade, tire quem não precisa e mande uma mensagem para todos</h2>
+        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Abordagem por cidade · escolha a cidade, tire quem não precisa e mande uma mensagem para todos</h2>
         <AbordagemPorCidade cidades={cidadesComClientes} />
       </section>
 
       {fimDeSemana.length > 0 && (
         <section className="mt-6 space-y-2">
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Fim de semana</h2>
+          <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Fim de semana</h2>
           {fimDeSemana.map((v) => <LinhaVisita key={v.id} visita={v} />)}
         </section>
       )}
 
       {futuras.length > 0 && (
         <section className="mt-6 space-y-2">
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Próximas semanas</h2>
+          <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Próximas semanas</h2>
           {futuras.map((v) => <LinhaVisita key={v.id} visita={v} />)}
         </section>
       )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="space-y-2">
-          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-emerald-700"><CheckCircle2 size={15} /> Realizadas <span className="rounded-full bg-emerald-100 px-2 text-xs">{realizadas.length}</span></h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-emerald-400"><CheckCircle2 size={15} /> Realizadas <span className="rounded-full bg-emerald-100 px-2 text-xs">{realizadas.length}</span></h2>
           {realizadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma visita confirmada ainda. Toque no ✓ quando a visita acontecer.</p></Card>
             : <div className={LISTA_ROLAVEL}>{realizadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}</div>}
         </section>
         <section className="space-y-2">
-          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-red-700"><XCircle size={15} /> Não realizadas <span className="rounded-full bg-red-100 px-2 text-xs">{naoRealizadas.length}</span></h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-red-400"><XCircle size={15} /> Não realizadas <span className="rounded-full bg-red-100 px-2 text-xs">{naoRealizadas.length}</span></h2>
           {naoRealizadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma.</p></Card>
             : <div className={LISTA_ROLAVEL}>{naoRealizadas.map((v) => <LinhaVisita key={v.id} visita={v} reagendadaPara={reagendadaPara.get(v.id) ?? null} />)}</div>}
         </section>
         <section className="space-y-2">
-          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-sky-700"><CalendarClock size={15} /> Reagendadas <span className="rounded-full bg-sky-100 px-2 text-xs">{reagendadas.length}</span></h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-sky-400"><CalendarClock size={15} /> Reagendadas <span className="rounded-full bg-sky-100 px-2 text-xs">{reagendadas.length}</span></h2>
           {reagendadas.length === 0
             ? <Card><p className="text-center text-sm text-slate-400">Nenhuma.</p></Card>
             : <div className={LISTA_ROLAVEL}>{reagendadas.map((v) => <LinhaVisita key={v.id} visita={v} />)}</div>}
