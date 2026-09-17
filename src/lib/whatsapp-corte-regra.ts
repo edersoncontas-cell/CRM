@@ -12,6 +12,29 @@ export function limiteMensagens(dataCorte: Date | null, excluidaEm: Date | null)
   return dataCorte ?? excluidaEm ?? null;
 }
 
+// Registros de exclusão de uma conversa (por telefone/lid). Quem apagou:
+//  - "manual": o vendedor, na tela — vale sempre;
+//  - "corte":  a data de corte — só vale enquanto o vendedor não pede para
+//              importar o histórico de ANTES do corte (aí ele quer isso de
+//              volta, e o registro do corte não pode barrar).
+export type ExclusaoRegistrada = { excluidaEm: Date; motivo: string };
+
+export function ultimaExclusaoQueVale(registros: ExclusaoRegistrada[], importandoDeAntesDoCorte: boolean): Date | null {
+  let ultima: Date | null = null;
+  for (const r of registros) {
+    if (importandoDeAntesDoCorte && r.motivo === "corte") continue;
+    if (!ultima || r.excluidaEm > ultima) ultima = r.excluidaEm;
+  }
+  return ultima;
+}
+
+// Limite para a importação de histórico: se o vendedor escolheu "a partir de"
+// uma data, é ela (mais a exclusão manual, se houver); senão vale a regra
+// normal de corte + exclusão.
+export function limiteImportacao(desde: Date | null, corte: Date | null, exclusao: Date | null): Date | null {
+  return limiteMensagens(desde ?? corte, exclusao);
+}
+
 export function mensagemAntiga(sentAt: Date, limite: Date | null): boolean {
   return limite !== null && sentAt.getTime() < limite.getTime();
 }

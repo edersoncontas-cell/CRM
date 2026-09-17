@@ -189,7 +189,7 @@ else
 fi
 resp="$(curl -sS --max-time 30 -X POST "http://127.0.0.1:8080/instance/create" \
   -H "apikey: $CHAVE" -H "Content-Type: application/json" \
-  -d "{\"instanceName\":\"$INSTANCIA\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":true$WEBHOOK_JSON}" || true)"
+  -d "{\"instanceName\":\"$INSTANCIA\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":true,\"syncFullHistory\":true$WEBHOOK_JSON}" || true)"
 if echo "$resp" | grep -qiE '"instanceName"|already|in use'; then
   echo "   instância pronta."
 else

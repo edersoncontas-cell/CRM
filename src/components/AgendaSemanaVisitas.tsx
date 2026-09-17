@@ -96,7 +96,7 @@ export function AgendaSemanaVisitas({
       </div>
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0.8, 0.4, 1)" }}>
         {arrastando && (
-          <div className="w-56 rotate-2 rounded-xl border border-brand-300 bg-white p-2 shadow-xl">
+          <div className="w-56 rounded-xl border border-brand-300 bg-white p-2 shadow-xl">
             <div className="truncate text-xs font-semibold text-slate-800">{arrastando.clienteNome}</div>
             <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400"><Clock size={10} /> {arrastando.hora}</div>
           </div>

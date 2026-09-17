@@ -344,6 +344,9 @@ model Evento {
 model ConversaExcluida {
   telefone   String   @id
   excluidaEm DateTime @default(now())
+  // "manual": o vendedor apagou a conversa (nunca volta sozinha).
+  // "corte": apagada pela data de corte — pode voltar se ele importar de antes.
+  motivo     String   @default("manual")
 }
 
 // Unificação de cadastros duplicados: cada rodada guarda, em JSON, tudo o que

@@ -369,9 +369,13 @@ export async function listarChats(page = 1, pageSize = 5): Promise<ChatResumo[]>
 // formato, então a Evolution é convertida antes de devolver.
 export async function mensagensDoChat(phone: string, amount = 200): Promise<Record<string, unknown>[]> {
   if (provedorWhatsApp() === "evolution") {
+    // "limit" é das versões antigas; nas 2.x quem manda é "offset" (tamanho
+    // da página, 50 por padrão) — sem ele a importação parava nas 50 últimas.
     const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, {
       where: { key: { remoteJid: evoJidChat(phone) } },
       limit: amount,
+      page: 1,
+      offset: amount,
     }).catch(() => null);
     const mensagens = data?.messages as Record<string, unknown> | unknown[] | undefined;
     const registros: unknown[] = Array.isArray(data)
@@ -429,8 +433,10 @@ export async function criarInstanciaEvolution(urlWebhook: string | null): Promis
   if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
   const nome = evolutionConfig()?.instance ?? "";
   const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE"];
-  const corpoV2: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true };
-  const corpoV1: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true };
+  // syncFullHistory: ao parear, o celular manda o histórico inteiro das
+  // conversas para a Evolution — é isso que "Importar conversas" puxa.
+  const corpoV2: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true, syncFullHistory: true };
+  const corpoV1: Record<string, unknown> = { instanceName: nome, integration: "WHATSAPP-BAILEYS", qrcode: true, sync_full_history: true };
   if (urlWebhook) {
     corpoV2.webhook = { enabled: true, url: urlWebhook, byEvents: false, base64: true, events: eventos };
     Object.assign(corpoV1, { webhook: urlWebhook, webhook_by_events: false, webhook_base64: true, events: eventos });
@@ -466,6 +472,40 @@ export async function lerWebhookEvolution(): Promise<{ url: string | null; enabl
   } catch {
     return null;
   }
+}
+
+// Garante que a instância pede o histórico completo ao celular. Sem isso a
+// Evolution só guarda o que chega DEPOIS de conectar, e "Importar conversas"
+// não tem de onde puxar. A troca só vale no próximo pareamento (QR).
+export async function ligarHistoricoCompleto(): Promise<{ ok: boolean; jaEstava: boolean; erro?: string }> {
+  if (provedorWhatsApp() !== "evolution") return { ok: false, jaEstava: false, erro: "Evolution API não configurada." };
+  try {
+    const lido = await evoFetch("GET", `/settings/find/${evoInstancia()}`, undefined, TEMPO_TELA_MS).catch(() => ({} as Record<string, unknown>));
+    const atual = ((lido.settings as Record<string, unknown> | undefined) ?? lido) as Record<string, unknown>;
+    if (atual.syncFullHistory === true || atual.sync_full_history === true) return { ok: true, jaEstava: true };
+    // O /settings/set substitui TODAS as opções: mando as atuais de volta e só
+    // troco a do histórico. Padrões da Evolution quando ela não devolveu nada.
+    const corpo: Record<string, unknown> = {
+      rejectCall: atual.rejectCall === true,
+      msgCall: typeof atual.msgCall === "string" ? atual.msgCall : "",
+      groupsIgnore: atual.groupsIgnore === true,
+      alwaysOnline: atual.alwaysOnline === true,
+      readMessages: atual.readMessages === true,
+      readStatus: atual.readStatus === true,
+      syncFullHistory: true,
+    };
+    await evoFetch("POST", `/settings/set/${evoInstancia()}`, corpo, TEMPO_TELA_MS);
+    return { ok: true, jaEstava: false };
+  } catch (e) {
+    return { ok: false, jaEstava: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Quantas conversas (sem grupo) a Evolution tem guardadas — zero significa
+// que o histórico do celular ainda não chegou nela.
+export async function contarConversasGuardadas(): Promise<number> {
+  const todas = await listarChats(1, 100_000).catch(() => []);
+  return todas.filter((c) => !c.isGroup).length;
 }
 
 // ---------- Diagnóstico da conexão ----------

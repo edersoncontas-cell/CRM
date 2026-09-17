@@ -176,6 +176,23 @@ não é cobrado; escolha sempre recursos marcados *Always Free*).
    recebimento** deve aparecer "recebida", e em **/atendimento** a conversa.
 7. Só depois de tudo funcionando, **cancele a Z-API**.
 
+### Trazer as conversas que já estão no celular
+O celular só manda o histórico das conversas para a Evolution **na hora de
+parear** (ler o QR) — e só manda o histórico completo se a instância pedir
+(`syncFullHistory`). O instalador já cria a instância pedindo; para uma
+instância criada antes, o botão **Importar conversas do celular** (em
+**/conexao**) liga isso sozinho na primeira vez.
+
+Então, para puxar tudo o que está no celular:
+1. **/conexao → Importar conversas do celular** (escolha "trazer a partir de"
+   qual dia). Se a Evolution ainda não tiver nada guardado, o CRM avisa.
+2. Nesse caso: **Desconectar** → leia o QR de novo → espere 1–2 minutos (o
+   celular está mandando o histórico) → clique em importar outra vez.
+
+Conversa que você apagou à mão no CRM não volta na importação. Se escolher um
+dia anterior à data de corte (Configurações → Conversas antigas), o corte
+recua para esse dia.
+
 ---
 
 ## Passo 6 — Conferência final

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { limiteMensagens, mensagemAntiga, inicioDoDiaBrasilia, diaBrasiliaISO } from "../src/lib/whatsapp-corte-regra";
+import { limiteMensagens, limiteImportacao, ultimaExclusaoQueVale, mensagemAntiga, inicioDoDiaBrasilia, diaBrasiliaISO } from "../src/lib/whatsapp-corte-regra";
 
 describe("data de corte e exclusão de conversas do WhatsApp", () => {
   const corte = new Date("2026-09-16T03:00:00Z");
@@ -34,5 +34,33 @@ describe("data de corte e exclusão de conversas do WhatsApp", () => {
     expect(d.toISOString()).toBe("2026-09-16T03:00:00.000Z");
     expect(diaBrasiliaISO(d)).toBe("2026-09-16");
     expect(diaBrasiliaISO(new Date("2026-09-16T02:59:00Z"))).toBe("2026-09-15");
+  });
+});
+
+describe("importar do celular: exclusão pelo corte x exclusão manual", () => {
+  const corte = new Date("2026-09-16T03:00:00Z");
+  const peloCorte = { excluidaEm: corte, motivo: "corte" };
+  const manual = { excluidaEm: new Date("2026-09-17T14:00:00Z"), motivo: "manual" };
+
+  it("na regra normal, as duas exclusões contam e vale a mais recente", () => {
+    expect(ultimaExclusaoQueVale([peloCorte, manual], false)).toEqual(manual.excluidaEm);
+    expect(ultimaExclusaoQueVale([peloCorte], false)).toEqual(corte);
+  });
+
+  it("importando de antes do corte, a exclusão do corte não barra — a manual continua barrando", () => {
+    expect(ultimaExclusaoQueVale([peloCorte], true)).toBeNull();
+    expect(ultimaExclusaoQueVale([peloCorte, manual], true)).toEqual(manual.excluidaEm);
+    expect(ultimaExclusaoQueVale([], true)).toBeNull();
+  });
+
+  it("limite da importação: a data escolhida manda; sem ela vale o corte", () => {
+    const desde = new Date("2026-09-01T03:00:00Z");
+    expect(limiteImportacao(desde, corte, null)).toEqual(desde);
+    expect(limiteImportacao(null, corte, null)).toEqual(corte);
+    expect(limiteImportacao(null, null, null)).toBeNull();
+    // Conversa apagada à mão depois da data escolhida: só volta o que é posterior à exclusão.
+    expect(limiteImportacao(desde, corte, manual.excluidaEm)).toEqual(manual.excluidaEm);
+    expect(mensagemAntiga(new Date("2026-09-10T12:00:00Z"), limiteImportacao(desde, corte, null))).toBe(false);
+    expect(mensagemAntiga(new Date("2026-08-31T12:00:00Z"), limiteImportacao(desde, corte, null))).toBe(true);
   });
 });

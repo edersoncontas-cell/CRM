@@ -4,7 +4,7 @@
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
-import { limiteMensagens, mensagemAntiga, inicioDoDiaBrasilia } from "@/lib/whatsapp-corte-regra";
+import { limiteMensagens, limiteImportacao, ultimaExclusaoQueVale, mensagemAntiga, inicioDoDiaBrasilia } from "@/lib/whatsapp-corte-regra";
 
 export const CHAVE_DATA_CORTE = "whatsapp.dataCorte";
 const CACHE_MS = 30_000;
@@ -35,22 +35,31 @@ function chavesTelefone(phone: string, lid?: string | null): string[] {
   return Array.from(chaves);
 }
 
-export async function registrarExclusaoConversa(conv: { externalPhone: string; lid?: string | null }, quando = new Date()): Promise<void> {
+export async function registrarExclusaoConversa(
+  conv: { externalPhone: string; lid?: string | null },
+  quando = new Date(),
+  motivo: "manual" | "corte" = "manual",
+): Promise<void> {
   const chaves = chavesTelefone(conv.externalPhone, conv.lid);
   if (!chaves.length) return;
   await Promise.all(chaves.map((telefone) =>
-    db.conversaExcluida.upsert({ where: { telefone }, update: { excluidaEm: quando }, create: { telefone, excluidaEm: quando } }),
+    db.conversaExcluida.upsert({
+      where: { telefone },
+      update: { excluidaEm: quando, motivo },
+      create: { telefone, excluidaEm: quando, motivo },
+    }),
   ));
 }
 
 // Momento da última exclusão desta conversa (por telefone ou lid), se houve.
-export async function excluidaEm(phone: string, lid?: string | null): Promise<Date | null> {
+// Com `ignorarCorte`, as exclusões feitas pela data de corte não contam (o
+// vendedor está importando de antes do corte e quer essas conversas de volta).
+export async function excluidaEm(phone: string, lid?: string | null, ignorarCorte = false): Promise<Date | null> {
   const chaves = new Set<string>(chavesTelefone(phone, lid));
   for (const v of phoneLookupVariants(phone)) chaves.add(v);
   if (!chaves.size) return null;
-  const rows = await db.conversaExcluida.findMany({ where: { telefone: { in: Array.from(chaves) } }, select: { excluidaEm: true } });
-  if (!rows.length) return null;
-  return rows.reduce((a, b) => (b.excluidaEm > a ? b.excluidaEm : a), rows[0].excluidaEm);
+  const rows = await db.conversaExcluida.findMany({ where: { telefone: { in: Array.from(chaves) } }, select: { excluidaEm: true, motivo: true } });
+  return ultimaExclusaoQueVale(rows, ignorarCorte);
 }
 
 // Data a partir da qual mensagens deste contato entram no CRM (corte global
@@ -58,6 +67,13 @@ export async function excluidaEm(phone: string, lid?: string | null): Promise<Da
 export async function limiteMensagensContato(phone: string, lid?: string | null): Promise<Date | null> {
   const [corte, exclusao] = await Promise.all([dataCorteWhatsApp(), excluidaEm(phone, lid)]);
   return limiteMensagens(corte, exclusao);
+}
+
+// Mesma coisa para a importação de histórico com "a partir de" escolhido pelo
+// vendedor: a data dele manda, e o corte automático não barra o que ele pediu.
+export async function limiteImportacaoContato(phone: string, desde: Date | null): Promise<Date | null> {
+  const [corte, exclusao] = await Promise.all([dataCorteWhatsApp(), excluidaEm(phone, null, desde !== null)]);
+  return limiteImportacao(desde, corte, exclusao);
 }
 
 export { mensagemAntiga };
@@ -101,7 +117,7 @@ export async function apagarConversasAnteriores(data: Date): Promise<ResultadoLi
   });
   if (!alvos.length) return { conversas: 0, clientesAfetados: 0 };
   await db.whatsAppConversation.deleteMany({ where: { id: { in: alvos.map((a) => a.id) } } });
-  for (const a of alvos) await registrarExclusaoConversa(a, data).catch(() => {});
+  for (const a of alvos) await registrarExclusaoConversa(a, data, "corte").catch(() => {});
   const clientes = alvos.map((a) => a.clienteId).filter((id): id is string => !!id);
   await limparRastroDeClientes(clientes);
   return { conversas: alvos.length, clientesAfetados: new Set(clientes).size };

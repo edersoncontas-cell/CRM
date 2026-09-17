@@ -4,6 +4,8 @@ import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
 import { provedorWhatsApp } from "@/lib/zapi";
+import { dataCorteWhatsApp } from "@/lib/whatsapp-corte";
+import { diaBrasiliaISO } from "@/lib/whatsapp-corte-regra";
 import { diasDesde } from "@/lib/utils";
 import { MessageCircle, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 
@@ -31,6 +33,7 @@ const CORES_STATUS: Record<string, string> = {
 
 export default async function ConexaoPage() {
   const diag = await lerDiag();
+  const corte = await dataCorteWhatsApp().catch(() => null);
   const recebeuAlgo = diag.ultimos.some((e) => e.status === "recebida" || e.status === "enviada");
   const provedor = provedorWhatsApp();
   const nomeProvedor = provedor === "evolution" ? "Evolution API" : "Z-API";
@@ -54,10 +57,10 @@ export default async function ConexaoPage() {
           <MessageCircle size={18} className="text-brand-600" /> Importar conversas para o Atendimento
         </div>
         <p className="mb-3 text-sm text-slate-500">
-          Puxa as conversas recentes do seu WhatsApp para a nova tela de <b>Atendimento</b>.
-          Rode uma vez após conectar o número (pode rodar de novo — não duplica).
+          Puxa para o <b>Atendimento</b> as conversas que já estão no seu celular, a partir do dia que você
+          escolher. Pode rodar quantas vezes quiser — não duplica. Conversa que você apagou à mão não volta.
         </p>
-        <ImportarAtendimento />
+        <ImportarAtendimento dataCorte={corte ? diaBrasiliaISO(corte) : null} />
       </Card>
 
       {/* Diagnóstico do webhook — mostra se o provedor está chamando o CRM */}

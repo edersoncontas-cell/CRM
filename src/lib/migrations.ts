@@ -437,6 +437,11 @@ export async function aplicarMigracoes(): Promise<void> {
       )
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Evento_inicio_fim_idx" ON "Evento" ("inicio", "fim")`);
+
+    // ConversaExcluida.motivo (v27): separa a conversa que o vendedor apagou
+    // ("manual", nunca volta) da que a data de corte apagou ("corte", volta
+    // se ele importar o histórico de antes do corte).
+    await db.$executeRawUnsafe(`ALTER TABLE "ConversaExcluida" ADD COLUMN IF NOT EXISTS "motivo" TEXT NOT NULL DEFAULT 'manual'`);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }
