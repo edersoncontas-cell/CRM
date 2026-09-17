@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { buildConvMatch, phoneLookupVariants } from "@/lib/whatsapp-routing";
+import { chaveNome } from "@/lib/google-contatos-util";
 
 const STATUS_RANK: Record<string, number> = { QUEUED: 0, FAILED: 0, SENT: 1, UNCONFIRMED: 1, DELIVERED: 2, READ: 3 };
 
@@ -121,18 +122,63 @@ export async function acharOuCriarConversaPorNome(name: string, isGroup: boolean
   });
   if (existente) return existente;
 
+  // Cliente com o MESMO NOME (sem acento/caixa/pontuação). O arquivo exportado
+  // não traz telefone, e antes o código procurava o cliente passando o nome
+  // para uma busca por telefone — nunca achava ninguém, e toda conversa
+  // importada nascia sem cadastro e com telefone falso: era por isso que o
+  // WhatsApp do CRM não reconhecia o contato e não deixava responder.
+  const cliente = !isGroup ? await acharClientePorNome(name) : null;
+
+  // Cliente encontrado e com telefone: a conversa dele é a de verdade. Usa a
+  // que já existe (o histórico entra na conversa certa) ou cria uma com o
+  // telefone REAL, para dar para responder por ali.
+  if (cliente?.telefone) {
+    const existentePorTelefone = await acharConversa(cliente.telefone, null, false);
+    if (existentePorTelefone) {
+      if (!existentePorTelefone.clienteId) {
+        await db.whatsAppConversation.update({ where: { id: existentePorTelefone.id }, data: { clienteId: cliente.id } });
+      }
+      return existentePorTelefone;
+    }
+    return db.whatsAppConversation.create({
+      data: {
+        externalPhone: cliente.telefone.replace(/\D/g, "") || cliente.telefone,
+        isGroup: false,
+        contactName: name,
+        clienteId: cliente.id,
+        lastMessageAt: new Date(0),
+      },
+    });
+  }
+
   const sintetico = telefoneSinteticoImportacao(name);
-  const clienteId = !isGroup ? await acharClienteId(name) : null;
   return db.whatsAppConversation.create({
     data: {
       externalPhone: sintetico,
       isGroup,
       contactName: isGroup ? null : name,
       groupName: isGroup ? name : null,
-      clienteId,
+      clienteId: cliente?.id ?? null,
       lastMessageAt: new Date(0),
     },
   });
+}
+
+async function acharClientePorNome(nome: string): Promise<{ id: string; telefone: string | null } | null> {
+  const chave = chaveNome(nome);
+  if (!chave) return null;
+  const exato = await db.cliente.findFirst({
+    where: { nome: { equals: nome.trim(), mode: "insensitive" } },
+    select: { id: true, telefone: true },
+  });
+  if (exato) return exato;
+  // Sem acerto exato, compara normalizado (acento/pontuação não contam).
+  const candidatos = await db.cliente.findMany({ select: { id: true, nome: true, telefone: true } });
+  const iguais = candidatos.filter((c) => chaveNome(c.nome) === chave);
+  // Dois clientes com o mesmo nome: não dá para escolher sozinho — deixa sem
+  // vínculo em vez de pendurar o histórico no cliente errado.
+  if (iguais.length !== 1) return null;
+  return { id: iguais[0].id, telefone: iguais[0].telefone };
 }
 
 // Insere mensagens importadas, sem duplicar (chave = direção|timestamp|primeiros

@@ -8,6 +8,8 @@ import { resumoBloqueio } from "@/lib/contatos-bloqueados";
 import { listarFiltroContatos } from "@/lib/filtro-contatos";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
 import { ConversasAntigasCard } from "@/components/ConversasAntigasCard";
+import { ConversasImportadasCard } from "@/components/ConversasImportadasCard";
+import { lerImportadasAction } from "@/lib/whatsapp-importadas-actions";
 import { lerEstadoCorteAction } from "@/lib/whatsapp-corte-actions";
 import { ClientesDuplicadosCard } from "@/components/ClientesDuplicadosCard";
 import { lerEstadoDuplicadosAction } from "@/lib/clientes-duplicados-actions";
@@ -27,7 +29,7 @@ import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -38,6 +40,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     listarFiltroContatos(),
     lerEstadoCorteAction().catch(() => ({ dia: null, conversasAnteriores: 0 })),
     lerEstadoDuplicadosAction().catch(() => ({ previa: { totalGrupos: 0, totalSomem: 0, grupos: [] }, historico: [] })),
+    lerImportadasAction().catch(() => ({ total: 0, comCliente: 0, semCliente: 0 })),
   ]);
 
   const integracoes = [
@@ -103,6 +106,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       <ClientesDuplicadosCard inicial={duplicados} />
 
       <ConversasAntigasCard inicial={corte} />
+
+      <ConversasImportadasCard inicial={importadas} />
 
       <ContatosBloqueadosCard
         termos={filtro.termos}
