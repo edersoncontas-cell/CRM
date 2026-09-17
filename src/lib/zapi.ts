@@ -525,12 +525,32 @@ export async function testarWebhookDeFora(urlConfigurada: string | null): Promis
     const texto = await res.text().catch(() => "");
     if (res.ok && /json/.test(tipo)) return { ok: true, url, detalhe: `respondeu HTTP ${res.status} — a chamada chega e a chave é aceita` };
     const html = /html/.test(tipo);
-    if (res.status === 404) return { ok: false, url, detalhe: `HTTP 404${html ? " (página de erro)" : ""} — nesse endereço não existe o webhook do CRM: o domínio ou o caminho está errado` };
+    // Quem respondeu? A Vercel carimba o motivo em x-vercel-error
+    // (NOT_FOUND, DEPLOYMENT_NOT_FOUND, DEPLOYMENT_PAUSED…) — é isso que
+    // separa "o CRM não tem essa rota" de "esse domínio não é este deploy".
+    const quem = [
+      res.headers.get("x-vercel-error") && `x-vercel-error=${res.headers.get("x-vercel-error")}`,
+      res.headers.get("x-vercel-id") && "via Vercel",
+      res.headers.get("server") && `server=${res.headers.get("server")}`,
+      res.headers.get("x-matched-path") && `rota=${res.headers.get("x-matched-path")}`,
+    ].filter(Boolean).join(" · ");
+    const trecho = texto.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+    if (res.status === 404) {
+      // GET na mesma URL: a rota do webhook responde JSON no GET. Se o GET
+      // funciona e só o POST dá 404, alguma coisa na frente barra o POST.
+      let get = "";
+      try {
+        const r2 = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(TEMPO_TELA_MS) });
+        const t2 = r2.headers.get("content-type") ?? "";
+        get = ` · GET na mesma URL: HTTP ${r2.status}${/json/.test(t2) ? " (JSON — a rota existe, só o POST está sendo barrado)" : ""}`;
+      } catch { get = " · GET na mesma URL: falhou"; }
+      return { ok: false, url, detalhe: `HTTP 404${html ? " (página de erro)" : ""} — nesse endereço não existe o webhook do CRM: o domínio ou o caminho está errado [${quem || "sem identificação"}]${get} · resposta: "${trecho}"` };
+    }
     if (html && (res.status === 401 || res.status === 403)) {
       return { ok: false, url, detalhe: `HTTP ${res.status} com uma página HTML — a Vercel está barrando com tela de login antes de chegar no CRM (URL de deploy protegida)` };
     }
     if (res.status === 401) return { ok: false, url, detalhe: "HTTP 401 — o CRM recusou a chave que a Evolution manda" };
-    return { ok: false, url, detalhe: `HTTP ${res.status} ${texto.slice(0, 120)}` };
+    return { ok: false, url, detalhe: `HTTP ${res.status} [${quem || "sem identificação"}] · resposta: "${trecho}"` };
   } catch (e) {
     const tempo = e instanceof Error && e.name === "TimeoutError";
     return { ok: false, url, detalhe: tempo ? "não respondeu em 10s" : "endereço inalcançável (domínio errado ou fora do ar)" };
@@ -688,6 +708,12 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
       // AGORA é, por definição, um endereço público que funciona: testa ele
       // e, se passar, conserta sozinho (guarda como confirmado e reaponta).
       const baseAtual = (w?.url ?? "").replace(/\/api\/webhooks\/evolution.*$/, "");
+      etapas.push({
+        etapa: "Endereço do seu navegador", ok: !!origemNavegador,
+        detalhe: origemNavegador
+          ? `${origemNavegador}${origemNavegador === baseAtual ? " — o mesmo do webhook" : " — diferente do webhook"}`
+          : "não identificado (sem cabeçalho de host)",
+      });
       if (origemNavegador && origemNavegador !== baseAtual) {
         const candidata = montarUrlWebhook(origemNavegador);
         const teste2 = await testarWebhookDeFora(candidata);
