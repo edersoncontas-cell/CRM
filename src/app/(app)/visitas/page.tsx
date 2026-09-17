@@ -120,11 +120,6 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       />
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
-        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} />
-      </section>
-
-      <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Agenda da semana · ✓ realizada · ✗ não realizada</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {dias.map((dia, i) => (
@@ -175,6 +170,11 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="mb-2 text-sm font-bold text-slate-500 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
+        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} />
       </section>
 
       <section className="mb-6">

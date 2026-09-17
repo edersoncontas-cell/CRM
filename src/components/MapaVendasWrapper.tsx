@@ -13,6 +13,12 @@ const Mapa = dynamic(() => import("./MapaVendasES"), {
   ),
 });
 
+// `isolate`: os z-index internos do Leaflet (até 1000) ficam presos aqui e
+// param de competir com o resto da página.
 export function MapaVendasWrapper(props: { pontosIniciais: PontoVenda[]; pontosTudoIniciais: PontoVenda[]; ano: number }) {
-  return <Mapa {...props} />;
+  return (
+    <div className="isolate relative z-0">
+      <Mapa {...props} />
+    </div>
+  );
 }
