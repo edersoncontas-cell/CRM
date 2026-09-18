@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { RegistrarSW } from "@/components/RegistrarSW";
 import { lerParametros } from "@/lib/parametros";
+import { startupImagesIOS } from "@/lib/ios-startup";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,6 +22,8 @@ export async function generateMetadata(): Promise<Metadata> {
     capable: true,
     title: nome,
     statusBarStyle: "black-translucent",
+    // Sem isto o iOS abre o app com o ícone grande na tela até carregar.
+    startupImage: startupImagesIOS(),
   },
   formatDetection: { telephone: false },
   };

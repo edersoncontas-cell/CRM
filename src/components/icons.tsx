@@ -1,9 +1,9 @@
 // Logo do CRM (imagem) e ícone do rolo compactador (vetor, currentColor).
 
-// Logo do CRM: escavadeira amarela com contorno preto sobre monte de terra
-// preto, fundo branco, em /public/logo.png. A arte já vem enquadrada (antes
-// sobrava um quarto de branco no topo), por isso é mostrada inteira, sem o
-// zoom que o componente aplicava.
+// Logo do CRM: escavadeira e monte de terra pretos, em silhueta, sobre o
+// amarelo New Holland (medido na chapa da E145C), em /public/logo.png. A arte
+// já vem enquadrada (antes sobrava um quarto de fundo vazio no topo), por isso
+// é mostrada inteira, sem o zoom que o componente aplicava.
 export function LogoEscavadeira({
   size = 40,
   className,
@@ -14,7 +14,7 @@ export function LogoEscavadeira({
   return (
     <span
       className={className}
-      style={{ display: "block", width: size, height: size, overflow: "hidden", background: "#ffffff" }}
+      style={{ display: "block", width: size, height: size, overflow: "hidden", background: "#fed301" }}
       aria-hidden="true"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

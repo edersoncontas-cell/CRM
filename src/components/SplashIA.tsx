@@ -7,9 +7,11 @@ import { CurvasDeNivel } from "@/components/CurvasDeNivel";
 const FASES = ["Iniciando", "Carregando seus dados", "Preparando o painel", "Pronto"];
 const DURACAO_BARRA_MS = 1900;
 
-// Tela de abertura do CRM: emblema da marca (escavadeira em amarelo New
-// Holland), nome do sistema e uma barra de progresso discreta. Sóbria e
-// rápida — some sozinha (ver SplashBoot).
+// Tela de abertura do CRM: emblema da marca (escavadeira preta sobre o amarelo
+// New Holland), nome do sistema e uma barra de progresso discreta. Sóbria e
+// rápida — some sozinha (ver SplashBoot). No iPhone instalado, a tela de
+// lançamento do sistema é só este mesmo fundo (ver lib/ios-startup.ts), para
+// a abertura começar aqui e não no ícone grande do iOS.
 export function SplashIA({ saindo = false }: { saindo?: boolean }) {
   const [fase, setFase] = useState(0);
 
@@ -34,7 +36,7 @@ export function SplashIA({ saindo = false }: { saindo?: boolean }) {
 
       <div className="relative flex flex-col items-center" style={{ animation: "splSubir .6s cubic-bezier(.2,.8,.2,1) both" }}>
         <div
-          className="flex h-[124px] w-[124px] items-center justify-center overflow-hidden rounded-[30px] bg-white"
+          className="flex h-[124px] w-[124px] items-center justify-center overflow-hidden rounded-[30px] bg-[#fed301]"
           style={{ boxShadow: "0 24px 60px rgba(255,184,28,0.28), 0 0 0 1px rgba(255,255,255,0.08)" }}
         >
           <LogoEscavadeira size={124} />
