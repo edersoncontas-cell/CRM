@@ -35,6 +35,18 @@ export function limiteImportacao(desde: Date | null, corte: Date | null, exclusa
   return limiteMensagens(desde ?? corte, exclusao);
 }
 
+// "A partir de" que a tela manda para a importação do celular: um dia
+// (AAAA-MM-DD) ou "tudo" — tudo o que o celular tem, desde o começo. Qualquer
+// outra coisa é "sem escolha" (vale o corte normal).
+export const DESDE_TUDO = "tudo";
+const DIA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+export function desdeDaImportacao(valor: unknown): Date | null {
+  if (valor === DESDE_TUDO) return new Date(0);
+  if (typeof valor === "string" && DIA_ISO.test(valor)) return inicioDoDiaBrasilia(valor);
+  return null;
+}
+
 export function mensagemAntiga(sentAt: Date, limite: Date | null): boolean {
   return limite !== null && sentAt.getTime() < limite.getTime();
 }

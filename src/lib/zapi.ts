@@ -371,22 +371,40 @@ export async function listarChats(page = 1, pageSize = 5): Promise<ChatResumo[]>
 export async function mensagensDoChat(phone: string, amount = 200): Promise<Record<string, unknown>[]> {
   if (provedorWhatsApp() === "evolution") {
     // "limit" é das versões antigas; nas 2.x quem manda é "offset" (tamanho
-    // da página, 50 por padrão) — sem ele a importação parava nas 50 últimas.
-    const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, {
-      where: { key: { remoteJid: evoJidChat(phone) } },
-      limit: amount,
-      page: 1,
-      offset: amount,
-    }).catch(() => null);
-    const mensagens = data?.messages as Record<string, unknown> | unknown[] | undefined;
-    const registros: unknown[] = Array.isArray(data)
-      ? data
-      : Array.isArray(mensagens)
-      ? mensagens
-      : Array.isArray((mensagens as Record<string, unknown> | undefined)?.records)
-      ? ((mensagens as Record<string, unknown>).records as unknown[])
-      : [];
-    return registros.map((r) => mensagemEvolutionParaZapi(r as Record<string, unknown>));
+    // da página, 50 por padrão) e "page". Uma conversa longa não cabe numa
+    // página só, então vai página por página até juntar `amount` ou acabar.
+    // Versão antiga ignora "page" e devolve sempre as mesmas: a chave de cada
+    // mensagem detecta a repetição e para.
+    const porPagina = Math.min(amount, 500);
+    const vistas = new Set<string>();
+    const saida: Record<string, unknown>[] = [];
+    for (let page = 1; saida.length < amount && page <= 40; page++) {
+      const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, {
+        where: { key: { remoteJid: evoJidChat(phone) } },
+        limit: porPagina,
+        page,
+        offset: porPagina,
+      }).catch(() => null);
+      const mensagens = data?.messages as Record<string, unknown> | unknown[] | undefined;
+      const registros: unknown[] = Array.isArray(data)
+        ? data
+        : Array.isArray(mensagens)
+        ? mensagens
+        : Array.isArray((mensagens as Record<string, unknown> | undefined)?.records)
+        ? ((mensagens as Record<string, unknown>).records as unknown[])
+        : [];
+      let novas = 0;
+      for (const r of registros) {
+        const m = mensagemEvolutionParaZapi(r as Record<string, unknown>);
+        const chave = String(m.messageId ?? "") || `${m.momment}|${JSON.stringify(m.text ?? "")}`;
+        if (vistas.has(chave)) continue;
+        vistas.add(chave);
+        saida.push(m);
+        novas++;
+      }
+      if (novas === 0 || registros.length < porPagina) break;
+    }
+    return saida;
   }
   const data = await zapiGet(`chat-messages/${phone}?amount=${amount}`).catch(() => []);
   return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];

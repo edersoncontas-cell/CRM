@@ -4,13 +4,13 @@ import { listarChats, mensagensDoChat, fotoPerfil } from "@/lib/zapi";
 import { acharOuCriarConversa, definirFotoSeVazia } from "@/lib/whatsapp-store";
 import { isGroupChatId } from "@/lib/whatsapp-routing";
 import { limiteImportacaoContato, mensagemAntiga, dataCorteWhatsApp, definirDataCorte } from "@/lib/whatsapp-corte";
-import { inicioDoDiaBrasilia } from "@/lib/whatsapp-corte-regra";
+import { desdeDaImportacao, DESDE_TUDO } from "@/lib/whatsapp-corte-regra";
+import { motivoBloqueio } from "@/lib/filtro-contatos";
+import { telefoneBloqueado, bloquearContato, apagarContatoPorTelefone } from "@/lib/contatos-bloqueados";
 import { registrarAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const DIA = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseHist(m: Record<string, unknown>) {
   const id = String(m.messageId ?? m.id ?? "");
@@ -33,34 +33,51 @@ function parseHist(m: Record<string, unknown>) {
 
 // Importa um LOTE de chats. A UI chama em loop até hasMore=false.
 //
-// `desde` (AAAA-MM-DD, opcional): o vendedor quer o que está no celular a
-// partir desse dia. Se for antes da data de corte, o corte recua para esse dia
-// — senão a importação traria as mensagens e o corte apagaria de novo.
+// `desde`: um dia (AAAA-MM-DD) — o vendedor quer o que está no celular a
+// partir dele; ou "tudo" — tudo o que o celular tem. Se for antes da data de
+// corte, o corte recua para esse dia (com "tudo", deixa de existir) — senão a
+// importação traria as mensagens e o corte apagaria de novo.
+//
+// Mesma peneira do webhook: grupo não entra, telefone bloqueado não entra, e
+// contato cujo nome bate no filtro (contabilidade, banco, hotel…) é bloqueado
+// na hora e o que já havia dele sai do CRM.
 export async function POST(req: NextRequest) {
   const { page = 1, pageSize = 5, messagesPerChat = 300, desde = null } = await req.json().catch(() => ({}));
-  const desdeData = typeof desde === "string" && DIA.test(desde) ? inicioDoDiaBrasilia(desde) : null;
+  const desdeData = desdeDaImportacao(desde);
+  const tudo = desde === DESDE_TUDO;
 
   if (page === 1 && desdeData) {
     const corte = await dataCorteWhatsApp();
     if (corte && desdeData < corte) {
-      await definirDataCorte(desdeData);
+      await definirDataCorte(tudo ? null : desdeData);
       await registrarAudit({
         acao: "perfil_atualizado", origem: "usuario",
-        descricao: `WhatsApp: importação do celular a partir de ${desde} — data de corte recuou para esse dia.`,
+        descricao: tudo
+          ? "WhatsApp: importação de tudo o que está no celular — a data de corte foi removida."
+          : `WhatsApp: importação do celular a partir de ${desde} — data de corte recuou para esse dia.`,
       }).catch(() => {});
     }
   }
 
   const chats = await listarChats(page, Math.min(Number(pageSize) || 5, 20));
-  const porChat = Math.min(Math.max(Number(messagesPerChat) || 300, 50), 1000);
+  const porChat = Math.min(Math.max(Number(messagesPerChat) || 300, 50), 5000);
 
-  let chatsProcessed = 0, messagesImported = 0, conversationsCreated = 0, chatsIgnoradosAntigos = 0;
+  let chatsProcessed = 0, messagesImported = 0, conversationsCreated = 0, chatsIgnoradosAntigos = 0, chatsBloqueados = 0;
 
   for (const chat of chats) {
     const isGroup = chat.isGroup === true || isGroupChatId(chat.phone);
     const phone = isGroup ? chat.phone : chat.phone.replace(/\D/g, "");
     // Grupos não entram no CRM (mesma regra do webhook) — nem na contagem.
     if (!phone || isGroup) continue;
+
+    if (await telefoneBloqueado(phone)) { chatsBloqueados++; continue; }
+    const motivo = chat.name ? await motivoBloqueio(chat.name) : null;
+    if (motivo) {
+      await bloquearContato(phone, chat.name ?? null, motivo);
+      await apagarContatoPorTelefone(phone).catch((e) => console.error("[import-history] bloqueio:", e));
+      chatsBloqueados++;
+      continue;
+    }
     chatsProcessed++;
 
     // Só o que é mais recente que o limite entra (data escolhida ou corte, e
@@ -117,6 +134,7 @@ export async function POST(req: NextRequest) {
     messagesImported,
     conversationsCreated,
     chatsIgnoradosAntigos,
+    chatsBloqueados,
     hasMore: chats.length >= pageSize,
     nextPage: page + 1,
   });

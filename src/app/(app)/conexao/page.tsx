@@ -81,8 +81,10 @@ export default async function ConexaoPage() {
           <MessageCircle size={18} className="text-brand-600" /> Importar conversas para o Atendimento
         </div>
         <p className="mb-3 text-sm text-slate-500">
-          Puxa para o <b>Atendimento</b> as conversas que já estão no seu celular, a partir do dia que você
-          escolher. Pode rodar quantas vezes quiser — não duplica. Conversa que você apagou à mão não volta.
+          Puxa para o <b>Atendimento</b> as conversas que já estão no seu celular — tudo, ou a partir do dia
+          que você escolher. Passa pela mesma peneira das mensagens ao vivo: grupos e contatos que batem no
+          filtro (contabilidade, banco, hotel…) ficam de fora. Pode rodar quantas vezes quiser — não duplica.
+          Conversa que você apagou à mão não volta.
         </p>
         <ImportarAtendimento dataCorte={corte ? diaBrasiliaISO(corte) : null} />
       </Card>
