@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
-import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
+import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, GEMINI_API_BASE, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, GROQ_BASE_URL } from "./groq";
@@ -38,6 +38,11 @@ export function iaHabilitada() {
   return provedorIA() !== null;
 }
 
+// Há provedor que lê imagem/PDF (ver llmVisao)?
+export function visaoHabilitada() {
+  return !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+}
+
 // Nome amigável do provedor de IA ativo (para exibir na interface).
 export function provedorIANome(): string | null {
   const p = provedorIA();
@@ -66,7 +71,7 @@ function deepseekClient() {
 // Gemini usa um formato de API próprio (REST, sem SDK) — chamada direta via fetch.
 async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }): Promise<string> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -222,7 +227,7 @@ async function chamarProvedorVisao(
 ): Promise<string> {
   if (prov === "gemini") {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -311,6 +316,31 @@ async function llmVisao(
     }
   }
   throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro));
+}
+
+// Documento que o cliente mandou no WhatsApp (CNH, RG, contrato, proposta…):
+// de quem é e quando nasceu — para registrar o aniversário no cadastro. Foto
+// que não é documento (máquina, obra, print) volta tudo null.
+export type DadosDocumento = { ehDocumento: boolean; tipoDocumento: string | null; nome: string | null; dataNascimento: string | null };
+
+export async function extrairDadosDocumentoIA(arquivo: { base64: string; mediaType: string }): Promise<DadosDocumento> {
+  const vazio: DadosDocumento = { ehDocumento: false, tipoDocumento: null, nome: null, dataNascimento: null };
+  const system = `Você lê documentos brasileiros enviados por WhatsApp: CNH, RG, CPF, contrato, proposta, nota fiscal, comprovante.
+Devolva SOMENTE um JSON válido, sem texto fora dele:
+{
+  "ehDocumento": boolean,          // true se o arquivo é um documento com dados de uma pessoa
+  "tipoDocumento": "CNH"|"RG"|"CPF"|"contrato"|"proposta"|"nota fiscal"|"outro"|null,
+  "nome": string|null,             // nome completo da pessoa titular, exatamente como está escrito
+  "dataNascimento": "AAAA-MM-DD"|null // data de NASCIMENTO da pessoa — nunca data de emissão, validade ou do contrato
+}
+Se for foto de máquina, obra, print de conversa ou qualquer coisa que não seja documento: {"ehDocumento": false, "tipoDocumento": null, "nome": null, "dataNascimento": null}.
+Nunca invente: campo que não está legível no documento é null.`;
+  const raw = await llmVisao(system, "Leia o documento e devolva o JSON.", arquivo, { maxTokens: 300, json: true });
+  const ini = raw.indexOf("{"), fim = raw.lastIndexOf("}");
+  if (ini === -1 || fim === -1) return vazio;
+  const p = JSON.parse(raw.slice(ini, fim + 1)) as Record<string, unknown>;
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return { ehDocumento: p.ehDocumento === true, tipoDocumento: s(p.tipoDocumento), nome: s(p.nome), dataNascimento: s(p.dataNascimento) };
 }
 
 const schemaInstrucao = (marcas: string, regiao: string) => `Você é o cérebro de um CRM de um vendedor de máquinas pesadas da LINHA AMARELA / CONSTRUCTION

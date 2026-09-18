@@ -21,6 +21,8 @@ type ClienteData = {
   interesseFuturo?: boolean;
   interesseFuturoData?: string | null;
   interesseFuturoNota?: string | null;
+  dataNascimento?: string | null;
+  dataNascimentoOrigem?: string | null;
 };
 
 export function ClienteAcoes({

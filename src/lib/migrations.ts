@@ -455,6 +455,26 @@ export async function aplicarMigracoes(): Promise<void> {
         CONSTRAINT "LimpezaClientes_pkey" PRIMARY KEY ("id")
       )
     `);
+
+    // Cliente.dataNascimento (v29): aniversário do cliente, para a mensagem
+    // de parabéns; a origem diz se foi digitado ou lido de um documento.
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "dataNascimento" TIMESTAMP(3)`);
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "dataNascimentoOrigem" TEXT`);
+
+    // MidiaEnvio (v29): anexo ou arte de uma mensagem em massa, guardado uma
+    // vez e reaproveitado em cada lote de envio.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "MidiaEnvio" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "mimeType" TEXT NOT NULL,
+        "nome" TEXT NOT NULL,
+        "tipo" TEXT NOT NULL,
+        "origem" TEXT NOT NULL,
+        "base64" TEXT NOT NULL,
+        CONSTRAINT "MidiaEnvio_pkey" PRIMARY KEY ("id")
+      )
+    `);
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

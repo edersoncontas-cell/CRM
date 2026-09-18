@@ -62,6 +62,10 @@ model Cliente {
   // cliente e quando foi sincronizado pela última vez.
   googleContatoId String?
   googleSincronizadoEm DateTime?
+  // Aniversário: digitado no cadastro ("manual") ou lido pela IA de um
+  // documento que o cliente mandou no WhatsApp ("documento:CNH", "documento:contrato"…).
+  dataNascimento  DateTime?
+  dataNascimentoOrigem String?
   indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
   indicadoPorId   String?
   indicados       Cliente[] @relation("Indicacoes")
@@ -369,6 +373,18 @@ model LimpezaClientes {
   resumo     String
   dados      String
   desfeitaEm DateTime?
+}
+
+// Anexo ou arte de uma mensagem em massa (promoção, data comemorativa),
+// guardado uma vez e reaproveitado em cada lote de envio. Vive poucos dias.
+model MidiaEnvio {
+  id        String   @id @default(cuid())
+  criadoEm  DateTime @default(now())
+  mimeType  String
+  nome      String
+  tipo      String   // image | video | document
+  origem    String   // upload | gemini
+  base64    String
 }
 
 // Link antigo (/clientes/<id que sumiu>) abre o cadastro que ficou.

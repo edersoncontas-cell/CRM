@@ -256,6 +256,18 @@ export async function sendImageBase64(phone: string, base64: string, mimeType: s
   return extractMessageId(data) ?? "";
 }
 
+// Vídeo enviado a partir do CRM (base64) — promoção/divulgação em massa.
+export async function sendVideoBase64(phone: string, base64: string, mimeType: string, caption?: string, fileName = "video.mp4"): Promise<string> {
+  if (provedorWhatsApp() === "evolution") {
+    const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
+      number: evoDestino(phone), mediatype: "video", mimetype: mimeType, media: base64, caption: caption ?? "", fileName,
+    });
+    return extractMessageId(data) ?? "";
+  }
+  const data = await zapiPost("send-video", { phone: normalizePhone(phone), video: `data:${mimeType};base64,${base64}`, caption: caption ?? "" });
+  return extractMessageId(data) ?? "";
+}
+
 // Áudio gravado no CRM (base64). A Evolution converte para o formato de
 // mensagem de voz do WhatsApp; a Z-API aceita data URL.
 export async function sendAudioBase64(phone: string, base64: string, mimeType: string): Promise<string> {

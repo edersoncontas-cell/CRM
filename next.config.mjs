@@ -10,6 +10,13 @@ const nextConfig = {
     // (ver checagem no client em FichasTecnicasClient.tsx).
     serverActions: { bodySizeLimit: "10mb" },
 
+    // A rota que cria arte com o Gemini lê as fotos das máquinas do disco
+    // como referência — na Vercel, "public/" não vai junto da função sem
+    // isto.
+    outputFileTracingIncludes: {
+      "/api/midia/gerar": ["./public/nh-escavadeiras.jpg", "./public/dynapac-rolos.jpg"],
+    },
+
     // Cada rota vira uma função na Vercel e leva junto tudo o que o Next
     // "rastreia" como dependência — hoje são ~80 funções, e o que sobra em
     // disco é o que conta na cota de Armazenamento de Funções. Nada aqui é

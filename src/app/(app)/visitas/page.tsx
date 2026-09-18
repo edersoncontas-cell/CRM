@@ -8,7 +8,7 @@ import { ConfirmacaoVisita } from "@/components/ConfirmacaoVisita";
 import { CalendarioMensalVisitas, type DiaCalendario, type ItemCalendario } from "@/components/CalendarioMensalVisitas";
 import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users } from "lucide-react";
 import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
-import { AbordagemPorCidade } from "@/components/AbordagemPorCidade";
+import { MensagemClientes } from "@/components/MensagemClientes";
 import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
 import type { VisitaMapa } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
@@ -197,8 +197,8 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Abordagem por cidade · escolha a cidade, tire quem não precisa e mande uma mensagem para todos</h2>
-        <AbordagemPorCidade cidades={cidadesComClientes} />
+        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mensagem para clientes · visita, promoção, data comemorativa ou aniversário · tire quem não precisa e mande para todos</h2>
+        <MensagemClientes cidades={cidadesComClientes} />
       </section>
 
       {fimDeSemana.length > 0 && (

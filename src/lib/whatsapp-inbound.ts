@@ -18,6 +18,7 @@ import { limiteMensagensContato, mensagemAntiga } from "@/lib/whatsapp-corte";
 import { processarMensagem } from "@/lib/zeus/pipeline";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer, isEnabled as transcricaoHabilitada } from "@/lib/integrations/transcription";
+import { registrarAniversarioDeMidia } from "@/lib/aniversario-documento";
 
 export type EventoMensagem = {
   fromMe: boolean;
@@ -171,6 +172,17 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
       // Cliente respondeu: sai da cadência de 7 toques (se estiver numa).
       if (clienteIdAtual) {
         await pausarCadenciasDoCliente(clienteIdAtual).catch((e) => console.error("[cadencias] pausar:", e));
+      }
+
+      // Foto ou PDF de cliente sem aniversário no cadastro: pode ser CNH,
+      // contrato… a IA lê e registra a data de nascimento. Fora do caminho da
+      // resposta ao provedor, nunca derruba o webhook.
+      if (clienteIdAtual && (c.mediaType === "image" || c.mediaType === "document")) {
+        waitUntil(
+          registrarAniversarioDeMidia({ conversationId: conv.id, messageId: ev.messageId, mediaType: c.mediaType })
+            .then((r) => { if (r.status !== "ignorado") console.log("[aniversario]", r); })
+            .catch((e) => console.error("[aniversario] documento:", e)),
+        );
       }
 
       // Chama o Orientador de Vendas IMEDIATAMENTE para toda conversa com

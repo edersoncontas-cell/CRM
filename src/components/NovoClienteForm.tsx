@@ -75,6 +75,9 @@ export function NovoClienteForm({
               <Campo label="Endereço">
                 <input name="endereco" placeholder="Rua, nº, bairro" className="campo" />
               </Campo>
+              <Campo label="Data de nascimento (para a mensagem de aniversário)">
+                <input type="date" name="dataNascimento" className="campo" style={{ width: "100%", boxSizing: "border-box", minHeight: "38px" }} />
+              </Campo>
               <Campo label="Origem">
                 <select name="origem" className="campo">
                   <option value="manual">Manual</option>

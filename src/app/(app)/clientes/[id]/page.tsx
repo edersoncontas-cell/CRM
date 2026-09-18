@@ -16,7 +16,8 @@ import { LinhaTempoCliente } from "@/components/LinhaTempoCliente";
 import { notFound, redirect } from "next/navigation";
 import { clienteRedirecionado } from "@/lib/clientes-duplicados";
 import Link from "next/link";
-import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake, Cake } from "lucide-react";
+import { diaMes, idadeEm, diasAteAniversario, descreverOrigem } from "@/lib/aniversario-regra";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,12 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             {cliente.municipio && (
               <span className="flex items-center gap-1"><MapPin size={14} /> {cliente.municipio.nome}</span>
             )}
+            {cliente.dataNascimento && (
+              <span className="flex items-center gap-1" title={descreverOrigem(cliente.dataNascimentoOrigem) ?? undefined}>
+                <Cake size={14} /> {diaMes(cliente.dataNascimento)} · {idadeEm(cliente.dataNascimento, new Date())} anos
+                {diasAteAniversario(cliente.dataNascimento, new Date()) <= 7 && <Badge tom="yellow">🎂 aniversário {diasAteAniversario(cliente.dataNascimento, new Date()) === 0 ? "hoje" : `em ${diasAteAniversario(cliente.dataNascimento, new Date())} dia(s)`}</Badge>}
+              </span>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge tom={statusBadge.tom}>{statusBadge.label}</Badge>
@@ -146,6 +153,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
                 ? cliente.interesseFuturoData.toISOString().slice(0, 10)
                 : null,
               interesseFuturoNota: cliente.interesseFuturoNota,
+              dataNascimento: cliente.dataNascimento ? cliente.dataNascimento.toISOString().slice(0, 10) : null,
+              dataNascimentoOrigem: cliente.dataNascimentoOrigem,
             }}
             municipios={municipios}
             maquinas={maquinas}

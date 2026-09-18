@@ -37,6 +37,8 @@ export function EditarClienteForm({
     interesseFuturo?: boolean;
     interesseFuturoData?: string | null;
     interesseFuturoNota?: string | null;
+    dataNascimento?: string | null; // AAAA-MM-DD
+    dataNascimentoOrigem?: string | null;
   };
   municipios: Municipio[];
   maquinas?: MaquinaOpt[];
@@ -122,6 +124,15 @@ export function EditarClienteForm({
                   <input name="email" type="email" defaultValue={cliente.email ?? ""} placeholder="cliente@email.com" className="campo" />
                 </Campo>
               </div>
+              <Campo label={cliente.dataNascimentoOrigem?.startsWith("documento:") ? `Data de nascimento (lida pela IA de ${cliente.dataNascimentoOrigem.slice(10)})` : "Data de nascimento (para a mensagem de aniversário)"}>
+                <input
+                  type="date"
+                  name="dataNascimento"
+                  defaultValue={cliente.dataNascimento ?? ""}
+                  className="campo"
+                  style={{ width: "100%", boxSizing: "border-box", minHeight: "38px", maxWidth: "100%" }}
+                />
+              </Campo>
               <Campo label="Cidade / região">
                 <select name="municipioId" defaultValue={cliente.municipioId ?? ""} className="campo">
                   <option value="">—</option>

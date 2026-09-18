@@ -52,6 +52,8 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
       interesseFuturo: formData.get("interesseFuturo") === "on",
       interesseFuturoData: parseDataBR(String(formData.get("interesseFuturoData") ?? "")),
       interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
+      dataNascimento: parseDataBR(String(formData.get("dataNascimento") ?? "")),
+      dataNascimentoOrigem: String(formData.get("dataNascimento") ?? "").trim() ? "manual" : null,
     },
   });
   // Google Contatos (quando o envio está ligado): o cliente novo vai para a agenda do celular.
@@ -77,6 +79,18 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
 
   const status = String(formData.get("status") ?? "potencial") || "potencial";
   const tel = String(formData.get("telefone") ?? "").replace(/^(\+55|55)(?=\d{10,11}$)/, "");
+  // Aniversário: só mexe se o formulário trouxe o campo. Mudou → "manual";
+  // igual ao que já estava → mantém a origem (pode ter vindo de um documento).
+  const nascimento: { dataNascimento?: Date | null; dataNascimentoOrigem?: string | null } = {};
+  if (formData.has("dataNascimento")) {
+    const novo = parseDataBR(String(formData.get("dataNascimento") ?? ""));
+    const atual = await db.cliente.findUnique({ where: { id }, select: { dataNascimento: true } });
+    const mesmoDia = !!novo && !!atual?.dataNascimento && novo.toISOString().slice(0, 10) === atual.dataNascimento.toISOString().slice(0, 10);
+    if (!mesmoDia) {
+      nascimento.dataNascimento = novo;
+      nascimento.dataNascimentoOrigem = novo ? "manual" : null;
+    }
+  }
   await db.cliente.update({
     where: { id },
     data: {
@@ -89,6 +103,7 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
       interesseFuturo: formData.get("interesseFuturo") === "on",
       interesseFuturoData: parseDataBR(String(formData.get("interesseFuturoData") ?? "")),
       interesseFuturoNota: String(formData.get("interesseFuturoNota") ?? "") || null,
+      ...nascimento,
     },
   });
   await enviarClienteParaGoogle(id).catch((e) => console.error("[google] contato:", e));

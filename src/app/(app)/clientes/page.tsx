@@ -342,6 +342,8 @@ export default async function ClientesPage({
                             ? c.interesseFuturoData.toISOString().slice(0, 10)
                             : null,
                           interesseFuturoNota: c.interesseFuturoNota,
+                          dataNascimento: c.dataNascimento ? c.dataNascimento.toISOString().slice(0, 10) : null,
+                          dataNascimentoOrigem: c.dataNascimentoOrigem,
                         }}
                         municipios={municipios}
                         maquinas={maquinas}

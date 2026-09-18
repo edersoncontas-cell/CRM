@@ -29,6 +29,16 @@ export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 // "gemini-2.5-flash-lite" (ainda mais barato) via GEMINI_MODEL se precisar.
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
+// Endereço da API do Gemini — só muda em teste (servidor falso local).
+export const GEMINI_API_BASE = (process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
+
+// Geração de IMAGEM no Gemini (arte para a mensagem de promoção/data
+// comemorativa). Tenta os modelos nesta ordem: o da env, depois os nomes
+// atuais do Google — quando um sai do ar/é renomeado, o próximo assume.
+export const GEMINI_IMAGE_MODELS = Array.from(new Set(
+  [process.env.GEMINI_IMAGE_MODEL, "gemini-3.1-flash-image", "gemini-2.5-flash-image"].filter((m): m is string => !!m && m.trim() !== ""),
+));
+
 // DeepSeek — o mais barato entre os provedores de texto pagos, API compatível
 // com o formato da OpenAI. "deepseek-chat"/"deepseek-reasoner" foram
 // descontinuados em favor de deepseek-v4-flash/deepseek-v4-pro.
