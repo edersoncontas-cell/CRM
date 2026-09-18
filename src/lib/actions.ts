@@ -63,6 +63,25 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
   return { ok: true };
 }
 
+// Cadastro rápido pelo nome, de dentro do campo "Cliente" (visita, calendário,
+// negociação): quem não está na lista entra na hora e o cadastro completo pode
+// ser feito depois. Se já existir alguém com o mesmo nome (sem acento/maiúscula),
+// reaproveita em vez de duplicar.
+export async function criarClienteRapidoAction(nomeBruto: string): Promise<{ ok: boolean; id?: string; nome?: string; erro?: string }> {
+  const nome = String(nomeBruto ?? "").replace(/\s+/g, " ").trim();
+  if (nome.length < 2) return { ok: false, erro: "Digite o nome do cliente." };
+  if (nome.length > 120) return { ok: false, erro: "Nome muito longo." };
+  if (await deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
+  const existente = await db.cliente.findFirst({ where: { nome: { equals: nome, mode: "insensitive" } }, select: { id: true, nome: true } });
+  if (existente) return { ok: true, id: existente.id, nome: existente.nome };
+  const novo = await db.cliente.create({ data: { nome, origem: "manual" }, select: { id: true, nome: true } });
+  await enviarClienteParaGoogle(novo.id).catch((e) => console.error("[google] contato:", e));
+  revalidatePath("/clientes");
+  revalidatePath("/visitas");
+  revalidatePath("/negociacoes");
+  return { ok: true, id: novo.id, nome: novo.nome };
+}
+
 // Converte o campo date (YYYY-MM-DD) em Date ao meio-dia de Brasília (ou null).
 function parseDataBR(raw: string): Date | null {
   const d = raw.trim();

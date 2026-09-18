@@ -6,6 +6,7 @@ import { adicionarVisita } from "@/lib/actions";
 import { Plus, X, Calendar, Clock } from "lucide-react";
 import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
 import { CampoCidade } from "@/components/CampoCidade";
+import { CampoCliente } from "@/components/CampoCliente";
 
 function formatarDataLabel(iso: string): string {
   if (!iso) return "Selecionar data";
@@ -102,10 +103,13 @@ export function NovaVisitaForm({
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Cliente *</label>
-                <select value={clienteId} onChange={(e) => { setClienteId(e.target.value); const c = clientes.find((x) => x.id === e.target.value); if (c?.cidade && !cidade) setCidade(c.cidade); }} className="campo">
-                  <option value="">— Selecionar —</option>
-                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
+                <CampoCliente
+                  clientes={clientes}
+                  valor={clienteId}
+                  aoMudar={(id, c) => { setClienteId(id); if (c?.cidade && !cidade) setCidade(c.cidade); }}
+                  className="campo"
+                  autoFoco={!clienteInicial}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Cidade da visita</label>

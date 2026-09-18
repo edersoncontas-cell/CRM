@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { adicionarVisita } from "@/lib/actions";
 import { criarEventoAction } from "@/lib/eventos-actions";
 import { CampoCidade } from "@/components/CampoCidade";
+import { CampoCliente } from "@/components/CampoCliente";
 import { Plus, X, CalendarDays, MapPin, Loader2 } from "lucide-react";
 
 const UFS = [
@@ -154,10 +155,12 @@ export function NovoCompromissoCalendario({
               <div className="space-y-3">
                 <div>
                   <label className={rotulo}>Cliente *</label>
-                  <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={campo}>
-                    <option value="">— Selecionar —</option>
-                    {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
+                  <CampoCliente
+                    clientes={clientes}
+                    valor={clienteId}
+                    aoMudar={(id, c) => { setClienteId(id); if (c?.cidade && !cidadeVisita) setCidadeVisita(c.cidade); }}
+                    className={campo}
+                  />
                 </div>
                 <div>
                   <label className={rotulo}>Cidade da visita</label>

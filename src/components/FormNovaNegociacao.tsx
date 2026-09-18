@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { X, Calendar, Bell, Trash2, Repeat } from "lucide-react";
+import { CampoCliente } from "@/components/CampoCliente";
 import { papelDaColuna } from "@/lib/pipeline";
 import { criarNegociacaoCompleta, editarNegociacaoCompleta, excluirNegociacao } from "@/lib/actions";
 import { WheelDatePicker, WheelDateTimePicker, WheelMonthPicker } from "@/components/WheelDatePicker";
@@ -281,10 +282,7 @@ export function FormNovaNegociacao({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Cliente</label>
-                <select name="clienteId" className={inputCls}>
-                  <option value="">— Selecionar —</option>
-                  {(clientes ?? []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
+                <CampoCliente clientes={clientes ?? []} name="clienteId" className={inputCls} placeholder="Buscar pelo nome" />
               </div>
               <div>
                 <label className={labelCls}>Novo cliente</label>
