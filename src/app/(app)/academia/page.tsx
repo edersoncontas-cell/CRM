@@ -18,7 +18,7 @@ export default async function AcademiaPage() {
     <div>
       <PageHeader
         titulo="Academia de Vendas"
-        subtitulo="Trilha de formação em 10 níveis e 60 aulas, escrita para quem vende máquinas pesadas no sul do ES: fundamentos, psicologia, neurociência, prospecção, diagnóstico, valor, objeções, fechamentos agressivos, negociação e pós-venda — com casos reais, scripts, tabelas, checklists, quiz, missão prática, prova final e treino com IA em cada módulo."
+        subtitulo="Formação de consultor de máquinas pesadas em 10 níveis e 60 aulas, no padrão de escola de negócios: frameworks nomeados (SPIN, MEDDICC, BATNA, Challenger, LAER-C, DISC), contas feitas passo a passo com números do sul do ES, diálogos anotados, casos com resultado e lição, missão prática em cada aula, quiz de cenários com alternativas embaralhadas, prova por módulo, revisão espaçada, treino com IA em duas rodadas com rubrica e certificação final."
       />
       <AcademiaAbas
         trilha={<AcademiaTrilha progressoInicial={progresso} />}

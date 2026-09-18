@@ -1,5 +1,5 @@
 // Tipos da Trilha de Formação da Academia de Vendas.
-// Cada módulo (nível) tem objetivos, 6 aulas, uma prova final e leituras.
+// Cada módulo (nível) tem objetivos, aulas, uma prova final e leituras.
 // Cada aula tem blocos de conteúdo de vários tipos, missão prática e quiz.
 
 export type Bloco =
@@ -11,8 +11,16 @@ export type Bloco =
   | { tipo: "checklist"; titulo?: string; itens: string[] }
   | { tipo: "tabela"; titulo?: string; colunas: string[]; linhas: string[][] }
   | { tipo: "erros"; titulo?: string; itens: string[] }
-  | { tipo: "exercicio"; titulo?: string; texto: string };
+  | { tipo: "exercicio"; titulo?: string; texto: string }
+  // Framework nomeado (SPIN, MEDDICC, BATNA…): de onde vem e os passos.
+  | { tipo: "framework"; nome: string; origem: string; passos: string[] }
+  // Diálogo anotado vendedor × cliente, com notas do professor entre as falas.
+  | { tipo: "dialogo"; titulo?: string; falas: { quem: "vendedor" | "cliente" | "nota"; texto: string }[] }
+  // Conta feita passo a passo (TCO, custo/hora, payback…) com conclusão.
+  | { tipo: "conta"; titulo?: string; linhas: [string, string][]; conclusao: string };
 
+// Quiz: 4 opções, uma certa. A posição da certa varia no conteúdo e ainda é
+// embaralhada na tela (ver embaralharOpcoes) — decorar posição não passa.
 export type Pergunta = { pergunta: string; opcoes: string[]; correta: number; explicacao: string };
 
 export type Aula = {
