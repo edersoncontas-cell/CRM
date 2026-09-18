@@ -1,15 +1,35 @@
 import { db } from "@/lib/db";
+import { redirect } from "next/navigation";
 import { AtendimentoClient, type ConvLista } from "@/components/AtendimentoClient";
 import * as zapi from "@/lib/zapi";
 import { lerParametros } from "@/lib/parametros";
+import { acharOuCriarConversa } from "@/lib/whatsapp-store";
 
 export const dynamic = "force-dynamic";
+
+// ?cliente=<id> (botão WhatsApp da Central, ficha do cliente…): abre a
+// conversa desse cliente — e cria uma vazia se ele ainda não tem, para dar
+// para escrever daqui mesmo.
+async function conversaDoCliente(clienteId: string): Promise<string | null> {
+  const existente = await db.whatsAppConversation.findFirst({ where: { clienteId, isGroup: false }, orderBy: { lastMessageAt: "desc" }, select: { id: true } });
+  if (existente) return existente.id;
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true, telefone: true } });
+  if (!cliente?.telefone || cliente.telefone.replace(/\D/g, "").length < 10) return null;
+  const { conv } = await acharOuCriarConversa({ phone: cliente.telefone, lid: null, isGroup: false, contactName: cliente.nome });
+  if (!conv.clienteId) await db.whatsAppConversation.update({ where: { id: conv.id }, data: { clienteId } }).catch(() => {});
+  return conv.id;
+}
 
 export default async function AtendimentoPage({
   searchParams,
 }: {
-  searchParams: { conversa?: string };
+  searchParams: { conversa?: string; cliente?: string };
 }) {
+  if (!searchParams.conversa && searchParams.cliente) {
+    const id = await conversaDoCliente(searchParams.cliente).catch(() => null);
+    redirect(id ? `/atendimento?conversa=${id}` : "/atendimento");
+  }
+
   const [conversas, rascunhos, aguardando, status, parametros] = await Promise.all([
     db.whatsAppConversation.findMany({
       orderBy: { lastMessageAt: "desc" },

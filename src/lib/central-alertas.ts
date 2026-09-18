@@ -168,6 +168,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
           telefone: c.telefone,
           clienteNome: c.nome,
+          clienteId: c.id,
         };
       }),
     },

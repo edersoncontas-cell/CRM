@@ -23,16 +23,12 @@ const ROTULO_SEV: Record<SeveridadeAlerta, { texto: string; classe: string }> = 
   baixa: { texto: "quando puder", classe: "bg-slate-100 text-slate-500" },
 };
 
-function waLink(item: ItemCentral): string | null {
-  const d = (item.telefone ?? "").replace(/\D/g, "");
-  if (d.length < 10) return null;
-  const numero = d.startsWith("55") ? d : `55${d}`;
-  const primeiro = (item.clienteNome ?? "").trim().split(" ")[0];
-  const saudacao = primeiro && !/^\d/.test(primeiro) ? `Olá ${primeiro}, tudo bem?` : "Olá, tudo bem?";
-  const texto = item.posVenda
-    ? `${saudacao} Passando para saber como está a máquina e se precisa de alguma coisa.`
-    : `${saudacao} Aqui é o Edy, da New Holland Construction.`;
-  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+// Abre a conversa do cliente no Atendimento (dentro do CRM). Sem telefone
+// não há como conversar, então o botão nem aparece.
+function linkConversa(item: ItemCentral): string | null {
+  if (!item.clienteId) return null;
+  if ((item.telefone ?? "").replace(/\D/g, "").length < 10) return null;
+  return `/atendimento?cliente=${item.clienteId}`;
 }
 
 export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupos: GrupoCentral[]; graficos: GraficosCentral; grupoInicial: string | null }) {
@@ -183,7 +179,7 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                   <p className="mb-2 text-xs text-slate-400">{g.descricao}</p>
                   <Card className="divide-y divide-slate-100 p-0">
                     {g.itens.map((item) => {
-                      const wa = waLink(item);
+                      const wa = linkConversa(item);
                       return (
                         // No celular os botões vão para a linha de baixo e ocupam a
                         // largura toda (quebrando em duas linhas se precisar);
@@ -208,9 +204,9 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                               </Link>
                             )}
                             {wa && (
-                              <a href={wa} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700">
+                              <Link href={wa} className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700">
                                 <MessageCircle size={13} /> WhatsApp
-                              </a>
+                              </Link>
                             )}
                             <button
                               onClick={() => resolver(item)}
