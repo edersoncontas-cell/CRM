@@ -21,15 +21,17 @@ function Num({ id, label, value, onChange, sufixo }: { id: string; label: string
   );
 }
 
-function ColunaMaquina({ prefixo, titulo, m, onChange, cor, placeholder }: { prefixo: string; titulo: string; m: Maquina; onChange: (m: Maquina) => void; cor: string; placeholder: string }) {
+// Uma faixa por máquina: modelo, consumo e valor na mesma linha — o que
+// importa na tela é o resultado, não o formulário.
+function LinhaMaquina({ prefixo, titulo, m, onChange, cor, placeholder }: { prefixo: string; titulo: string; m: Maquina; onChange: (m: Maquina) => void; cor: string; placeholder: string }) {
   const set = <K extends keyof Maquina>(k: K, v: Maquina[K]) => onChange({ ...m, [k]: v });
   return (
-    <div className="rounded-xl border p-3" style={{ borderColor: `${cor}66`, background: `${cor}0d` }}>
-      <div className="mb-2 text-xs font-black uppercase tracking-wide" style={{ color: cor }}>{titulo}</div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="col-span-2"><label htmlFor={`${prefixo}-nome`} className={rotulo}>Modelo</label><input id={`${prefixo}-nome`} value={m.nome} placeholder={placeholder} onChange={(e) => set("nome", e.target.value)} className={campo} /></div>
+    <div className="rounded-xl border p-2.5" style={{ borderColor: `${cor}66`, background: `${cor}0d` }}>
+      <div className="mb-1.5 text-[11px] font-black uppercase tracking-wide" style={{ color: cor }}>{titulo}</div>
+      <div className="grid grid-cols-[1fr_72px_96px] gap-2">
+        <div><label htmlFor={`${prefixo}-nome`} className={rotulo}>Modelo</label><input id={`${prefixo}-nome`} value={m.nome} placeholder={placeholder} onChange={(e) => set("nome", e.target.value)} className={campo} /></div>
+        <Num id={`${prefixo}-consumo`} label="L/h" value={m.consumoLh} onChange={(v) => set("consumoLh", v)} />
         <Num id={`${prefixo}-valor`} label="Valor" sufixo="R$" value={m.valor} onChange={(v) => set("valor", v)} />
-        <Num id={`${prefixo}-consumo`} label="Consumo" sufixo="L/h" value={m.consumoLh} onChange={(v) => set("consumoLh", v)} />
       </div>
     </div>
   );
@@ -61,83 +63,82 @@ export function CalculadoraCustoHora() {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <div className="space-y-4 lg:col-span-2">
-        <Card>
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-black uppercase tracking-wide text-slate-700">Números do cliente</div>
-            <button onClick={() => { try { window.localStorage.removeItem(CHAVE); } catch {} setC(padrao()); }} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800"><RotateCcw size={12} /> Limpar</button>
-          </div>
-          <p className="mb-3 text-xs text-slate-500">Use os números que o cliente te deu: quantas horas a máquina roda por mês, quanto ele paga no diesel e por quantos anos vai ficar com ela. Os valores ficam salvos neste aparelho.</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <Num id="k-horas" label="Horas trabalhadas" sufixo="por mês" value={c.horasMes} onChange={(v) => set({ horasMes: v })} />
-            <Num id="k-diesel" label="Diesel" sufixo="R$/L" value={c.dieselLitro} onChange={(v) => set({ dieselLitro: v })} />
-            <Num id="k-horizonte" label="Horizonte" sufixo="anos com a máquina" value={c.horizonteAnos} onChange={(v) => set({ horizonteAnos: v })} />
-          </div>
-        </Card>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <ColunaMaquina prefixo="conc" titulo="Concorrente" m={c.concorrente} onChange={(m) => set({ concorrente: m })} cor="#b86a00" placeholder="ex.: PC130" />
-          <ColunaMaquina prefixo="nh" titulo="New Holland" m={c.newHolland} onChange={(m) => set({ newHolland: m })} cor="#2e7d4f" placeholder="ex.: E145C" />
+      {/* Entrada: uma coluna enxuta. O resultado é o que o cliente olha. */}
+      <Card className="space-y-3 self-start lg:col-span-1">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-black uppercase tracking-wide text-slate-700">Números do cliente</div>
+          <button onClick={() => { try { window.localStorage.removeItem(CHAVE); } catch {} setC(padrao()); }} className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"><RotateCcw size={11} /> Limpar</button>
         </div>
-      </div>
+        <div className="grid grid-cols-3 gap-2">
+          <Num id="k-horas" label="Horas" sufixo="mês" value={c.horasMes} onChange={(v) => set({ horasMes: v })} />
+          <Num id="k-diesel" label="Diesel" sufixo="R$/L" value={c.dieselLitro} onChange={(v) => set({ dieselLitro: v })} />
+          <Num id="k-horizonte" label="Anos" sufixo="c/ máq." value={c.horizonteAnos} onChange={(v) => set({ horizonteAnos: v })} />
+        </div>
+        <LinhaMaquina prefixo="conc" titulo="Concorrente" m={c.concorrente} onChange={(m) => set({ concorrente: m })} cor="#b86a00" placeholder="ex.: PC130" />
+        <LinhaMaquina prefixo="nh" titulo="New Holland" m={c.newHolland} onChange={(m) => set({ newHolland: m })} cor="#2e7d4f" placeholder="ex.: E145C" />
+        <p className="text-[11px] text-slate-400">Os números ficam salvos neste aparelho. Valor da máquina é opcional — com ele, aparece a conta descontando a diferença de preço.</p>
+      </Card>
 
-      <div className="space-y-3">
-        <Card>
-          <div className="mb-2 text-sm font-black uppercase tracking-wide text-slate-700">Resultado</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-1 pr-2"></th><th className="py-1 pr-2 text-amber-700">Concorrente</th><th className="py-1 text-green-700">New Holland</th></tr></thead>
-              <tbody>
-                {linhas.map((l) => (
-                  <tr key={l.rotulo} className="border-t border-slate-100">
-                    <td className="py-1.5 pr-2 text-slate-500">{l.rotulo}</td>
-                    <td className="py-1.5 pr-2 font-semibold text-slate-700 tabular-nums">{l.conc}</td>
-                    <td className="py-1.5 font-bold text-green-700 tabular-nums">{l.nh}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card className={cn(economiza ? "border-green-300 bg-green-50" : "border-amber-300 bg-amber-50")}>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500"><Fuel size={13} /> Economia só em combustível com {nomeNH}</div>
+      {/* Resultado: dois terços da tela, economia em destaque. */}
+      <div className="space-y-4 lg:col-span-2">
+        <Card className={cn("p-5 sm:p-6", economiza ? "border-green-300 bg-green-50" : "border-amber-300 bg-amber-50")}>
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-600"><Fuel size={14} /> Economia só em combustível com {nomeNH}</div>
           {economiza ? (
             <>
-              <div className="mt-1 text-3xl font-black text-green-700">{brl(r.horizonte)}</div>
-              <div className="text-xs font-semibold text-green-800">em {c.horizonteAnos} anos, comparando com {nomeConc}</div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-white/70 p-2"><div className="text-[10px] uppercase text-slate-400">por mês</div><div className="text-sm font-bold text-slate-800">{brl(r.mes)}</div></div>
-                <div className="rounded-lg bg-white/70 p-2"><div className="text-[10px] uppercase text-slate-400">por ano</div><div className="text-sm font-bold text-slate-800">{brl(r.ano)}</div></div>
-                <div className="rounded-lg bg-white/70 p-2"><div className="text-[10px] uppercase text-slate-400">litros/mês</div><div className="text-sm font-bold text-slate-800">{Math.round(r.litrosMes)} L</div></div>
+              <div className="mt-1 text-5xl font-black leading-none tracking-tight text-green-700 sm:text-6xl">{brl(r.horizonte)}</div>
+              <div className="mt-2 text-sm font-semibold text-green-800">em {c.horizonteAnos} anos, comparando com {nomeConc}</div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por mês</div><div className="text-base font-black text-slate-800 sm:text-2xl">{brl(r.mes)}</div></div>
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por ano</div><div className="text-base font-black text-slate-800 sm:text-2xl">{brl(r.ano)}</div></div>
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">litros/mês</div><div className="text-base font-black text-slate-800 sm:text-2xl">{Math.round(r.litrosMes)} L</div></div>
               </div>
-              <div className="mt-2 text-xs text-slate-600">
+              <div className="mt-3 text-xs text-slate-600">
                 {r.difLh.toLocaleString("pt-BR")} L/h a menos × {brl2(c.dieselLitro)} × {c.horasMes} h/mês.
               </div>
             </>
           ) : (
-            <div className="mt-1 text-sm font-semibold text-amber-800">
+            <div className="mt-2 text-base font-semibold text-amber-800">
               {r.difLh === 0 ? "Os dois consomem o mesmo. Preencha o consumo real de cada máquina." : `Pelos números informados, ${nomeNH} consome ${Math.abs(r.difLh).toLocaleString("pt-BR")} L/h a mais. Confira o consumo.`}
             </div>
           )}
         </Card>
 
-        {temPreco && (
-          <Card className={cn(r.liquido >= 0 ? "border-green-300 bg-white" : "border-amber-300 bg-white")}>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Descontando a diferença de preço</div>
-            <div className="mt-1 text-xs text-slate-600">
-              {r.diferencaPreco > 0
-                ? <>{nomeNH} custa <b>{brl(r.diferencaPreco)}</b> a mais na compra.</>
-                : r.diferencaPreco < 0
-                  ? <>{nomeNH} custa <b>{brl(-r.diferencaPreco)}</b> a menos na compra.</>
-                  : <>As duas custam o mesmo na compra.</>}
-            </div>
-            <div className={cn("mt-1 text-2xl font-black", r.liquido >= 0 ? "text-green-700" : "text-amber-700")}>
-              {r.liquido >= 0 ? `${brl(r.liquido)} a favor do cliente` : `${brl(-r.liquido)} contra`}
-            </div>
-            <div className="text-xs text-slate-500">economia em combustível em {c.horizonteAnos} anos menos a diferença de preço</div>
-            {r.paybackMeses > 0 && <div className="mt-1 text-xs text-slate-600">A diferença de preço se paga só com o diesel em <b>{r.paybackMeses} meses</b>.</div>}
+        <div className={cn("grid grid-cols-1 gap-4", temPreco && "md:grid-cols-2")}>
+          <Card>
+            <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-700">Comparação</div>
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-1 pr-2"></th><th className="py-1 pr-2 text-amber-700">Concorrente</th><th className="py-1 text-green-700">New Holland</th></tr></thead>
+              <tbody>
+                {linhas.map((l) => (
+                  <tr key={l.rotulo} className="border-t border-slate-100">
+                    <td className="py-2 pr-2 text-xs text-slate-500">{l.rotulo}</td>
+                    <td className="py-2 pr-2 font-semibold text-slate-700 tabular-nums">{l.conc}</td>
+                    <td className="py-2 font-bold text-green-700 tabular-nums">{l.nh}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </Card>
-        )}
+
+          {temPreco && (
+            <Card className={cn(r.liquido >= 0 ? "border-green-300" : "border-amber-300")}>
+              <div className="text-xs font-black uppercase tracking-wide text-slate-700">Descontando a diferença de preço</div>
+              <div className="mt-1 text-sm text-slate-600">
+                {r.diferencaPreco > 0
+                  ? <>{nomeNH} custa <b>{brl(r.diferencaPreco)}</b> a mais na compra.</>
+                  : r.diferencaPreco < 0
+                    ? <>{nomeNH} custa <b>{brl(-r.diferencaPreco)}</b> a menos na compra.</>
+                    : <>As duas custam o mesmo na compra.</>}
+              </div>
+              <div className={cn("mt-2 text-3xl font-black leading-tight", r.liquido >= 0 ? "text-green-700" : "text-amber-700")}>
+                {r.liquido >= 0 ? `${brl(r.liquido)}` : `${brl(-r.liquido)}`}
+                <div className="text-sm font-bold">{r.liquido >= 0 ? "a favor do cliente" : "contra o cliente"}</div>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">economia em combustível em {c.horizonteAnos} anos menos a diferença de preço</div>
+              {r.paybackMeses > 0 && <div className="mt-2 text-sm text-slate-700">A diferença de preço se paga só com o diesel em <b>{r.paybackMeses} meses</b>.</div>}
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );
