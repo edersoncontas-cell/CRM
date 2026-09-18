@@ -96,6 +96,23 @@ export function dataISO(nascimento: Date): string {
   return `${p.ano}-${String(p.mes).padStart(2, "0")}-${String(p.dia).padStart(2, "0")}`;
 }
 
+export function anoBrasilia(d: Date): number {
+  return partesBrasilia(d).ano;
+}
+
+// Envio automático de parabéns: manda hoje se é o dia, tem telefone e ainda
+// não foi mandado neste ano (o cron pode rodar mais de uma vez no dia).
+export function deveMandarParabens(
+  c: { dataNascimento: Date | null; telefone: string | null; status?: string | null },
+  hoje: Date,
+  enviadoNoAno: number | null,
+): boolean {
+  if (!c.dataNascimento || !c.telefone || (c.telefone.replace(/\D/g, "").length < 10)) return false;
+  if (c.status === "nao_cliente") return false;
+  if (diasAteAniversario(c.dataNascimento, hoje) !== 0) return false;
+  return enviadoNoAno !== anoBrasilia(hoje);
+}
+
 // "documento:CNH" → "lido de uma CNH pela IA"; "manual" → "informado no cadastro".
 export function descreverOrigem(origem: string | null): string | null {
   if (!origem) return null;

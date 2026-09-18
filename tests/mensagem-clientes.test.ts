@@ -35,7 +35,7 @@ describe("mensagem para clientes: público por tipo", () => {
     expect(publicosDoTipo("promocao")).toEqual(["todos", "cidade"]);
     expect(publicosDoTipo("comemorativa")).toEqual(["todos", "cidade"]);
     expect(publicosDoTipo("aniversario")).toEqual(["aniversariantes"]);
-    expect(publicoPadrao("aniversario")).toEqual({ modo: "aniversariantes", dias: 7 });
+    expect(publicoPadrao("aniversario")).toEqual({ modo: "aniversariantes", dias: 0 });
     expect(publicoPadrao("promocao")).toEqual({ modo: "todos" });
   });
 });

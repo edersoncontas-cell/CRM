@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   interpretarDataNascimento, idadeEm, idadePlausivel, nomeCombina, diasAteAniversario, aniversarioNaJanela, diaMes, dataISO, descreverOrigem,
+  deveMandarParabens, anoBrasilia,
 } from "../src/lib/aniversario-regra";
+import { personalizarTexto } from "../src/lib/abordagem-cidade-regra";
 
 const hoje = new Date("2026-09-18T15:00:00Z"); // 18/09/2026 em Brasília
 
@@ -78,5 +80,29 @@ describe("aniversário: origem em palavras", () => {
     expect(descreverOrigem("manual")).toBe("informado no cadastro");
     expect(descreverOrigem("documento:CNH")).toBe("lido pela IA de CNH recebido no WhatsApp");
     expect(descreverOrigem(null)).toBeNull();
+  });
+});
+
+describe("aniversário: envio automático às 8h", () => {
+  const nascHoje = interpretarDataNascimento("1980-09-18")!;
+
+  it("manda no dia, com telefone, uma vez por ano", () => {
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: "27999990001" }, hoje, null)).toBe(true);
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: "27999990001" }, hoje, 2025)).toBe(true);
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: "27999990001" }, hoje, anoBrasilia(hoje))).toBe(false);
+  });
+
+  it("não manda fora do dia, sem telefone ou para 'não é cliente'", () => {
+    expect(deveMandarParabens({ dataNascimento: interpretarDataNascimento("1980-09-19")!, telefone: "27999990001" }, hoje, null)).toBe(false);
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: null }, hoje, null)).toBe(false);
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: "123" }, hoje, null)).toBe(false);
+    expect(deveMandarParabens({ dataNascimento: nascHoje, telefone: "27999990001", status: "nao_cliente" }, hoje, null)).toBe(false);
+  });
+});
+
+describe("aniversário: só o primeiro nome na mensagem", () => {
+  it("DUDA RETRO ROSSI vira Duda", () => {
+    expect(personalizarTexto("Feliz aniversário, {nome}!", "DUDA RETRO ROSSI")).toBe("Feliz aniversário, Duda!");
+    expect(personalizarTexto("Feliz aniversário, {nome}!", "josé carlos terraplanagem")).toBe("Feliz aniversário, José!");
   });
 });

@@ -11,7 +11,7 @@ export const TIPOS_MENSAGEM: { id: TipoMensagem; nome: string; descricao: string
   { id: "visita", nome: "Agendar visita", descricao: "Você vai estar na cidade e quer marcar visitas." },
   { id: "promocao", nome: "Promoção / divulgação", descricao: "Oferta, condição especial ou lançamento — com imagem ou vídeo." },
   { id: "comemorativa", nome: "Data comemorativa", descricao: "Dia do Operador, Dia do Cliente, Natal, Ano Novo…" },
-  { id: "aniversario", nome: "Aniversário", descricao: "Parabéns para quem faz aniversário hoje ou nos próximos dias." },
+  { id: "aniversario", nome: "Aniversário", descricao: "Parabéns para quem faz aniversário hoje ou nos próximos 30 dias — ou automático, todo dia às 8h." },
 ];
 
 export type DataComemorativa = { id: string; nome: string; dia: number; mes: number; tema: string };
@@ -53,7 +53,8 @@ export function datasPorProximidade(hoje = new Date()): DataComemorativa[] {
   return [...DATAS_COMEMORATIVAS].sort((a, b) => proximaOcorrencia(a, hoje).diasAte - proximaOcorrencia(b, hoje).diasAte);
 }
 
-export type JanelaAniversario = 0 | 7 | 30;
+export type JanelaAniversario = 0 | 30;
+export const JANELAS_ANIVERSARIO: JanelaAniversario[] = [0, 30];
 export type Publico =
   | { modo: "todos" }
   | { modo: "cidade"; municipioId: string }
@@ -67,7 +68,7 @@ export function publicosDoTipo(tipo: TipoMensagem): Publico["modo"][] {
 
 export function publicoPadrao(tipo: TipoMensagem): Publico {
   if (tipo === "visita") return { modo: "cidade", municipioId: "" };
-  if (tipo === "aniversario") return { modo: "aniversariantes", dias: 7 };
+  if (tipo === "aniversario") return { modo: "aniversariantes", dias: 0 };
   return { modo: "todos" };
 }
 

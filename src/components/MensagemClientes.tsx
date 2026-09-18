@@ -1,15 +1,19 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Sparkles, Send, X, Undo2, Loader2, CheckCircle2, AlertTriangle, Phone, Paperclip, Wand2, Cake, Megaphone, CalendarHeart, MapPin, Trash2, FileText, Film,
 } from "lucide-react";
-import { listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, type ClienteAlvo } from "@/lib/mensagem-clientes-actions";
+import {
+  listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
+  type ClienteAlvo,
+} from "@/lib/mensagem-clientes-actions";
+import type { ConfigAniversario } from "@/lib/aniversario-automatico";
 import { personalizarTexto, dividirEmLotes } from "@/lib/abordagem-cidade-regra";
 import {
-  TIPOS_MENSAGEM, datasPorProximidade, rotuloDataComemorativa, publicosDoTipo, publicoPadrao, validarAnexo, BASES_ARTE, LIMITE_ANEXO_BYTES,
-  type TipoMensagem, type Publico, type JanelaAniversario, type BaseArte, type TipoMidia,
+  TIPOS_MENSAGEM, datasPorProximidade, rotuloDataComemorativa, publicosDoTipo, publicoPadrao, validarAnexo, BASES_ARTE, LIMITE_ANEXO_BYTES, JANELAS_ANIVERSARIO,
+  type TipoMensagem, type Publico, type BaseArte, type TipoMidia,
 } from "@/lib/mensagem-clientes-regra";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +85,26 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [progresso, setProgresso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ enviados: number; falhas: { nome: string; erro: string }[] } | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
+  // Parabéns automático (todo dia às 8h): ligado/desligado + texto modelo.
+  const [automatico, setAutomatico] = useState<ConfigAniversario | null>(null);
+  const [salvandoAuto, setSalvandoAuto] = useState(false);
+  const [avisoAuto, setAvisoAuto] = useState<string | null>(null);
+  useEffect(() => {
+    if (tipo !== "aniversario" || automatico) return;
+    lerAutomaticoAniversarioAction().then(setAutomatico).catch(() => null);
+  }, [tipo, automatico]);
+
+  async function salvarAutomatico(ativo: boolean) {
+    if (!automatico) return;
+    setSalvandoAuto(true); setAvisoAuto(null);
+    // O texto que está na caixa vira o modelo do automático (se tiver algo).
+    const r: { ok: boolean; erro?: string; config?: ConfigAniversario } = await definirAutomaticoAniversarioAction({ ativo, texto: texto.trim() || automatico.texto })
+      .catch(() => ({ ok: false, erro: "Não consegui salvar agora." }));
+    setSalvandoAuto(false);
+    if (!r.ok || !r.config) { setAvisoAuto(r.erro ?? "Não consegui salvar agora."); return; }
+    setAutomatico(r.config);
+    setAvisoAuto(ativo ? "Ligado: todo dia às 8h os aniversariantes recebem este texto, cada um com o próprio primeiro nome." : "Desligado.");
+  }
 
   const dataSel = datas.find((d) => d.id === dataId) ?? datas[0];
   const cidadeNome = publico.modo === "cidade" ? (cidades.find((c) => c.id === publico.municipioId)?.nome ?? "") : "";
@@ -219,7 +243,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
           )}
           {publico.modo === "aniversariantes" && (
             <div className="flex flex-wrap gap-2">
-              {([0, 7, 30] as JanelaAniversario[]).map((d) => (
+              {JANELAS_ANIVERSARIO.map((d) => (
                 <Chip key={d} ativo={publico.dias === d} onClick={() => escolherPublico({ modo: "aniversariantes", dias: d })} disabled={enviando}>
                   {d === 0 ? "Hoje" : `Próximos ${d} dias`}
                 </Chip>
@@ -287,6 +311,40 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
               <select value={dataId} onChange={(e) => setDataId(e.target.value)} disabled={enviando} className={campo}>
                 {datas.map((d) => <option key={d.id} value={d.id}>{d.nome} · {rotuloDataComemorativa(d)}</option>)}
               </select>
+            </div>
+          )}
+          {tipo === "aniversario" && (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-amber-800">Envio automático · todo dia às 8h</div>
+                  <p className="mt-0.5 text-[11px] text-amber-800/80">Quem faz aniversário no dia recebe o texto abaixo pelo WhatsApp, só com o primeiro nome (&quot;DUDA RETRO ROSSI&quot; vira &quot;Duda&quot;). Uma vez por ano, por cliente.</p>
+                </div>
+                {automatico ? (
+                  <button
+                    type="button"
+                    onClick={() => salvarAutomatico(!automatico.ativo)}
+                    disabled={salvandoAuto}
+                    className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-60",
+                      automatico.ativo ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-900 text-agro-400 hover:bg-slate-800")}
+                  >
+                    {salvandoAuto ? <Loader2 size={12} className="animate-spin" /> : <Cake size={12} />}
+                    {automatico.ativo ? "Ligado · desligar" : "Ligar automático"}
+                  </button>
+                ) : <span className="text-[11px] text-amber-700">carregando…</span>}
+              </div>
+              {automatico && (
+                <div className="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-xs text-slate-700">
+                  <span className="font-semibold text-slate-500">Texto do automático: </span>
+                  <span className="whitespace-pre-wrap">{automatico.texto}</span>
+                  {texto.trim() && texto.trim() !== automatico.texto && (
+                    <button type="button" onClick={() => salvarAutomatico(automatico.ativo)} disabled={salvandoAuto} className="ml-2 font-semibold text-brand-700 hover:underline disabled:opacity-50">
+                      usar o texto da caixa abaixo
+                    </button>
+                  )}
+                </div>
+              )}
+              {avisoAuto && <p className="mt-1 text-[11px] font-semibold text-amber-800">{avisoAuto}</p>}
             </div>
           )}
           {tipo === "promocao" && (

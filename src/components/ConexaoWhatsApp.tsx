@@ -181,11 +181,11 @@ export function ConexaoWhatsApp() {
           </li>
           <li className="flex gap-2">
             <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-            <div>
+            <div className="min-w-0 break-words">
               <b>3. Colar na Vercel</b> (Settings → Environment Variables) as três variáveis que o comando imprime:
-              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_URL</code>
-              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_KEY</code>
-              <code className="mx-1 rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_INSTANCE</code>
+              <code className="mx-1 break-all rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_URL</code>
+              <code className="mx-1 break-all rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_API_KEY</code>
+              <code className="mx-1 break-all rounded bg-amber-100 px-1.5 py-0.5">EVOLUTION_INSTANCE</code>
               e fazer <b>Redeploy</b>. Volte aqui e escaneie o QR.
             </div>
           </li>

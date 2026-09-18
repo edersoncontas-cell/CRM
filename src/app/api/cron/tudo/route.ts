@@ -43,6 +43,8 @@ const JOBS: Job[] = [
   { path: "/api/cron/mercado", minutos: 30 },
   { path: "/api/cron/google-contatos", minutos: 60 },
   { path: "/api/cron/zeus-diario", minutos: 20 * 60, horaBrasilia: 9 },
+  // Parabéns de aniversário: a partir das 8h, uma vez por dia.
+  { path: "/api/cron/aniversarios", minutos: 20 * 60, horaBrasilia: 8 },
   { path: "/api/cron/academia-atualizar", minutos: 6 * 24 * 60, horaBrasilia: 8, diaSemana: 1 },
   // Robô do Orientador: lições do histórico (taxa de fechamento, motivo de
   // perda, tempo até fechar) + reaprende o jeito de falar do vendedor.

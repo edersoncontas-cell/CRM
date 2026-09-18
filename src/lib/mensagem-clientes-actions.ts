@@ -17,6 +17,7 @@ import { semCodigoPais, diasDesde } from "@/lib/utils";
 import { personalizarTexto, periodoSemanaQueVem } from "@/lib/abordagem-cidade-regra";
 import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversario-regra";
 import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
+import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
 import {
   DATAS_COMEMORATIVAS, modeloPadrao, legendaDaMidia, type Publico, type TipoMensagem,
 } from "@/lib/mensagem-clientes-regra";
@@ -84,6 +85,17 @@ export async function listarPublicoAction(publico: Publico): Promise<{ titulo: s
     select: SELECAO, orderBy: { nome: "asc" },
   });
   return { titulo: "todos os clientes", clientes: rows.map((c) => paraAlvo(c, hoje)) };
+}
+
+export async function lerAutomaticoAniversarioAction(): Promise<ConfigAniversario> {
+  return lerConfigAniversario();
+}
+
+export async function definirAutomaticoAniversarioAction(c: ConfigAniversario): Promise<{ ok: boolean; erro?: string; config?: ConfigAniversario }> {
+  const texto = c.texto.trim();
+  if (c.ativo && !texto) return { ok: false, erro: "Escreva o texto do parabéns antes de ligar o automático." };
+  if (c.ativo && !/\{nome\}/i.test(texto)) return { ok: false, erro: "O texto precisa ter {nome} — é onde entra o primeiro nome do cliente." };
+  return { ok: true, config: await definirConfigAniversario({ ativo: c.ativo, texto: texto || (await textoPadraoAniversario()) }) };
 }
 
 export type PedidoTexto = { tipo: TipoMensagem; cidade?: string; dataId?: string; promocao?: string };

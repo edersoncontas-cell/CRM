@@ -23,12 +23,16 @@ const ROTULO_SEV: Record<SeveridadeAlerta, { texto: string; classe: string }> = 
   baixa: { texto: "quando puder", classe: "bg-slate-100 text-slate-500" },
 };
 
-function waLink(telefone: string | null | undefined, nome: string): string | null {
-  const d = (telefone ?? "").replace(/\D/g, "");
+function waLink(item: ItemCentral): string | null {
+  const d = (item.telefone ?? "").replace(/\D/g, "");
   if (d.length < 10) return null;
   const numero = d.startsWith("55") ? d : `55${d}`;
-  const texto = encodeURIComponent(`Olá ${nome.split(" ")[0]}, tudo bem? Passando para saber como está a máquina e se precisa de alguma coisa.`);
-  return `https://wa.me/${numero}?text=${texto}`;
+  const primeiro = (item.clienteNome ?? "").trim().split(" ")[0];
+  const saudacao = primeiro && !/^\d/.test(primeiro) ? `Olá ${primeiro}, tudo bem?` : "Olá, tudo bem?";
+  const texto = item.posVenda
+    ? `${saudacao} Passando para saber como está a máquina e se precisa de alguma coisa.`
+    : `${saudacao} Aqui é o Edy, da New Holland Construction.`;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
 
 export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupos: GrupoCentral[]; graficos: GraficosCentral; grupoInicial: string | null }) {
@@ -79,12 +83,17 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
   }
 
   // "Resolvido" em qualquer item: some da lista NA HORA (otimista) — o
-  // servidor confirma (com retentativa) por trás, sem travar a tela.
+  // servidor confirma (com retentativa) por trás, sem travar a tela. No
+  // pós-venda com marco pendente, "Resolvido" também registra o marco como
+  // cumprido (era o antigo botão "Marco feito", que fazia a mesma coisa).
   async function resolver(item: ItemCentral) {
     setResolvidos((s) => new Set(s).add(item.id));
-    const ok = await comRetentativa(() =>
-      item.alertaId ? resolverAlerta(item.alertaId) : ocultarItemCentralAction(item.id, item.clienteId ?? null)
-    );
+    const marco = item.posVenda?.marcoPendente;
+    const ok = await comRetentativa(async () => {
+      if (item.alertaId) return resolverAlerta(item.alertaId);
+      if (marco && item.posVenda) await registrarContatoPosVenda(item.posVenda.clienteId, marco.tipo, `Marco de ${marco.label} cumprido.`);
+      return ocultarItemCentralAction(item.id, item.clienteId ?? null);
+    });
     if (!ok) {
       // Falhou de verdade (não só um soluço passageiro): volta a aparecer.
       setResolvidos((s) => { const n = new Set(s); n.delete(item.id); return n; });
@@ -115,16 +124,6 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
       setResolvidos((s) => { const n = new Set(s); itens.forEach((i) => n.delete(i.id)); return n; });
       return;
     }
-    agendarRefresh();
-  }
-
-  async function marcoFeito(item: ItemCentral) {
-    const p = item.posVenda;
-    if (!p?.marcoPendente) return;
-    setOcupado(item.id);
-    await registrarContatoPosVenda(p.clienteId, p.marcoPendente.tipo, `Marco de ${p.marcoPendente.label} cumprido.`);
-    setOcupado(null);
-    setResolvidos((s) => new Set(s).add(item.id));
     agendarRefresh();
   }
 
@@ -184,48 +183,43 @@ export function CentralAlertasClient({ grupos, graficos, grupoInicial }: { grupo
                   <p className="mb-2 text-xs text-slate-400">{g.descricao}</p>
                   <Card className="divide-y divide-slate-100 p-0">
                     {g.itens.map((item) => {
-                      const wa = item.posVenda ? waLink(item.telefone, item.posVenda.nome) : null;
+                      const wa = waLink(item);
                       return (
-                        <div key={item.id} className={cn("flex flex-wrap items-start gap-3 border-l-4 px-4 py-3", COR_SEV[item.severidade])}>
+                        // No celular os botões vão para a linha de baixo e ocupam a
+                        // largura toda (quebrando em duas linhas se precisar);
+                        // em tela larga ficam à direita do texto.
+                        <div key={item.id} className={cn("flex flex-col gap-2 border-l-4 px-3 py-3 sm:flex-row sm:items-start sm:gap-3 sm:px-4", COR_SEV[item.severidade])}>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold text-slate-800">{item.titulo}</span>
+                              <span className="break-words font-semibold text-slate-800">{item.titulo}</span>
                               <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide", ROTULO_SEV[item.severidade].classe)}>{ROTULO_SEV[item.severidade].texto}</span>
                             </div>
-                            {item.detalhe && <p className="mt-0.5 text-sm text-slate-600">{item.detalhe}</p>}
+                            {item.detalhe && <p className="mt-0.5 break-words text-sm text-slate-600">{item.detalhe}</p>}
                             {item.quando && <p className="mt-0.5 text-[11px] text-slate-400">{item.quando}</p>}
                           </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
                             {item.posVenda ? (
-                              <>
-                                <button onClick={() => setModalPosVenda(item.posVenda ?? null)} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800">
-                                  <History size={13} /> Histórico e contato
-                                </button>
-                                {wa && (
-                                  <a href={wa} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700">
-                                    <MessageCircle size={13} /> WhatsApp
-                                  </a>
-                                )}
-                                {item.posVenda.marcoPendente && (
-                                  <button onClick={() => marcoFeito(item)} disabled={ocupado === item.id} className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
-                                    {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Marco feito
-                                  </button>
-                                )}
-                                <Link href={item.href} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Cliente <ArrowRight size={13} /></Link>
-                                <button onClick={() => resolver(item)} disabled={ocupado === item.id} title="Some da lista até o cliente falar de novo" className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
-                                  {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
-                                </button>
-                              </>
+                              <button onClick={() => setModalPosVenda(item.posVenda ?? null)} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800">
+                                <History size={13} /> Histórico e contato
+                              </button>
                             ) : (
-                              <>
-                                <Link href={item.href} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800">
-                                  {item.hrefLabel} <ArrowRight size={13} />
-                                </Link>
-                                <button onClick={() => resolver(item)} disabled={ocupado === item.id} title={item.alertaId ? "Marcar como resolvido" : "Some da lista até o cliente falar de novo"} className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60">
-                                  {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
-                                </button>
-                              </>
+                              <Link href={item.href} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-agro-400 hover:bg-slate-800">
+                                {item.hrefLabel} <ArrowRight size={13} />
+                              </Link>
                             )}
+                            {wa && (
+                              <a href={wa} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700">
+                                <MessageCircle size={13} /> WhatsApp
+                              </a>
+                            )}
+                            <button
+                              onClick={() => resolver(item)}
+                              disabled={ocupado === item.id}
+                              title={item.alertaId ? "Marcar como resolvido" : item.posVenda?.marcoPendente ? "Registra o marco como cumprido e tira da lista" : "Tira da lista de vez"}
+                              className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 disabled:opacity-60"
+                            >
+                              {ocupado === item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Resolvido
+                            </button>
                           </div>
                         </div>
                       );

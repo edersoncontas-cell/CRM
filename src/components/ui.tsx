@@ -21,7 +21,7 @@ export function PageHeader({
           <p className="mt-1 text-sm text-slate-400">{subtitulo}</p>
         )}
       </div>
-      {acao && <div className="flex shrink-0 items-center gap-2">{acao}</div>}
+      {acao && <div className="flex max-w-full flex-wrap items-center gap-2">{acao}</div>}
     </div>
   );
 }

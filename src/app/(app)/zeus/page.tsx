@@ -49,7 +49,7 @@ export default async function ZeusPage() {
   const auditRows: AuditRow[] = audits.map((a) => ({ id: a.id, acao: a.acao, descricao: a.descricao, criadoEm: a.criadoEm.toISOString() }));
 
   return (
-    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
+    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: "rgba(191,222,77,0.15)", border: "1px solid rgba(191,222,77,0.3)" }}>
           <ShieldCheck size={24} style={{ color: "#BFDE4D" }} />

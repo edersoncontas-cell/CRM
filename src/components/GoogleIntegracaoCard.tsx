@@ -59,7 +59,7 @@ export function GoogleIntegracaoCard({ status, feedback, msg, resumo, enviarAtiv
               <p className="font-semibold text-slate-700">Como ativar (uma vez, 10 minutos, grátis):</p>
               <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                 <li>Crie a credencial OAuth no Google Cloud e ative as APIs Calendar e People.</li>
-                <li>Cadastre este URI de redirecionamento: <code className="rounded bg-white px-1">{status.redirectUri}</code></li>
+                <li>Cadastre este URI de redirecionamento: <code className="break-all rounded bg-white px-1">{status.redirectUri}</code></li>
                 <li>Defina <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> e <code>GOOGLE_REDIRECT_URI</code> na Vercel e faça um redeploy.</li>
               </ol>
               <p className="mt-1">Passo a passo com telas em <code>docs/GOOGLE.md</code> no repositório.</p>

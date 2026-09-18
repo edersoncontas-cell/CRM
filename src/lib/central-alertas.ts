@@ -25,6 +25,7 @@ export type ItemCentral = {
   // Só no grupo pós-venda: dados completos para o modal de histórico/contato.
   posVenda?: ItemPosVenda;
   telefone?: string | null;
+  clienteNome?: string | null;
   // Cliente ligado ao item (quando há): o "Resolvido" some até o cliente
   // mandar mensagem nova.
   clienteId?: string | null;
@@ -80,19 +81,19 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       where: { aguardandoResposta: true, OR: [{ ultimoContato: null }, { ultimoContato: { lte: umaHoraAtras } }] },
       orderBy: { ultimoContato: "asc" },
       take: 500,
-      select: { id: true, nome: true, ultimoContato: true },
+      select: { id: true, nome: true, ultimoContato: true, telefone: true },
     }),
     db.alerta.findMany({
       where: { resolvido: false, tipo: { not: "aguardando_resposta" } },
       orderBy: [{ severidade: "asc" }, { criadoEm: "desc" }],
       take: 200,
-      include: { cliente: { select: { nome: true } } },
+      include: { cliente: { select: { nome: true, telefone: true } } },
     }),
     listarClientesPosVenda().catch(() => []),
     db.visita.findMany({
       where: { data: { gte: hoje, lt: depoisDeAmanha } },
       orderBy: { data: "asc" },
-      include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+      include: { cliente: { select: { nome: true, telefone: true, municipio: { select: { nome: true } } } } },
     }),
     db.tarefaKanban.findMany({
       where: { dueDate: { lt: amanha }, coluna: { not: "demandas_concluida" } },
@@ -118,33 +119,16 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       where: { status: "aberta", dataVisita: null },
       orderBy: { ultimoContato: "asc" },
       take: 300,
-      select: { id: true, estagio: true, maquinaModelo: true, valor: true, proximaAcao: true, ultimoContato: true, clienteId: true, cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
+      select: { id: true, estagio: true, maquinaModelo: true, valor: true, proximaAcao: true, ultimoContato: true, clienteId: true, cliente: { select: { nome: true, telefone: true, municipio: { select: { nome: true } } } } },
     }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }),
-    // Itens que o vendedor marcou como resolvidos. Voltam sozinhos quando o
-    // cliente manda mensagem nova depois de resolvido (conversa nova). Não
-    // inclui "aguardando"/"atacar" (esses resolvem só por aguardandoResposta).
-    db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000 }).catch(() => [] as { id: string; chave: string; clienteId: string | null; ocultoEm: Date }[]),
+    // Itens que o vendedor marcou como resolvidos. Resolvido é de vez: a
+    // chave de cada item carrega a SITUAÇÃO (marco pendente, período sem
+    // contato…), então ele só volta se a situação mudar — antes, qualquer
+    // mensagem do cliente reabria tudo e "Resolvido" parecia não pegar.
+    db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000, select: { chave: true } }).catch(() => [] as { chave: string }[]),
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
-
-  // Reabre o que foi resolvido se o cliente voltou a falar depois.
-  const ocultosComCliente = ocultos.filter((o) => o.clienteId);
-  if (ocultosComCliente.length) {
-    const maisAntigo = ocultosComCliente.reduce((m, o) => (o.ocultoEm < m ? o.ocultoEm : m), ocultosComCliente[0].ocultoEm);
-    const novasMsgs = await db.whatsAppMessage.findMany({
-      where: { direction: "IN", isDraft: false, sentAt: { gt: maisAntigo }, conversation: { clienteId: { in: ocultosComCliente.map((o) => o.clienteId!) } } },
-      select: { sentAt: true, conversation: { select: { clienteId: true } } },
-    }).catch(() => []);
-    const ultimaPorCliente = new Map<string, Date>();
-    for (const m of novasMsgs) {
-      const cid = m.conversation.clienteId;
-      if (cid && (!ultimaPorCliente.has(cid) || ultimaPorCliente.get(cid)! < m.sentAt)) ultimaPorCliente.set(cid, m.sentAt);
-    }
-    const reabrir = ocultosComCliente.filter((o) => (ultimaPorCliente.get(o.clienteId!) ?? new Date(0)) > o.ocultoEm).map((o) => o.id);
-    if (reabrir.length) await db.alertaOculto.deleteMany({ where: { id: { in: reabrir } } }).catch(() => {});
-    for (const o of ocultos) if (reabrir.includes(o.id)) o.chave = `__reaberto__${o.id}`;
-  }
   const chavesOcultas = new Set(ocultos.map((o) => o.chave));
   const precisamDeVisita = negAbertas.filter((n) => { const cat = categorizar(n.estagio); return cat === "em_negociacao" || cat === "banco"; });
   const diasSem = (d: Date | null) => (d ? Math.floor((Date.now() - d.getTime()) / (24 * HORA)) : null);
@@ -182,6 +166,8 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           href: conv ? `/atendimento?conversa=${conv}` : `/clientes/${c.id}`,
           hrefLabel: conv ? "Responder" : "Abrir cliente",
           quando: c.ultimoContato ? formatDateTime(c.ultimoContato) : null,
+          telefone: c.telefone,
+          clienteNome: c.nome,
         };
       }),
     },
@@ -192,8 +178,11 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       itens: semContato.map((c) => {
         const dias = diasSem(c.ultimoContato) ?? 0;
         return {
-          id: `semcontato:${c.id}`,
+          // O último contato faz parte da chave: resolvido agora, volta só se
+          // passar mais um período sem contato depois de um contato novo.
+          id: `semcontato:${c.id}:${c.ultimoContato?.getTime() ?? 0}`,
           titulo: c.nome,
+          clienteNome: c.nome,
           detalhe: [`há ${dias} dias sem contato`, c.municipio?.nome].filter(Boolean).join(" · "),
           severidade: dias >= 90 ? ("alta" as const) : dias >= 60 ? ("media" as const) : ("baixa" as const),
           href: `/clientes/${c.id}`,
@@ -212,6 +201,8 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
         return {
           id: `visitar:${n.id}`,
           titulo: n.cliente.nome,
+          clienteNome: n.cliente.nome,
+          telefone: n.cliente.telefone,
           detalhe: [n.maquinaModelo, n.proximaAcao ?? "Agendar visita", n.cliente.municipio?.nome, dias != null ? `${dias}d sem contato` : null].filter(Boolean).join(" · "),
           severidade: (dias ?? 0) >= 30 ? ("alta" as const) : (dias ?? 0) >= 14 ? ("media" as const) : ("baixa" as const),
           href: `/clientes/${n.clienteId}`,
@@ -228,6 +219,8 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
         id: `alerta:${a.id}`,
         alertaId: a.id,
         titulo: `${ROTULO_TIPO_ALERTA[a.tipo] ?? a.tipo}: ${a.cliente.nome}`,
+        clienteNome: a.cliente.nome,
+        telefone: a.cliente.telefone,
         detalhe: a.mensagem,
         severidade: a.severidade === "alta" ? ("alta" as const) : a.severidade === "media" ? ("media" as const) : ("baixa" as const),
         href: `/clientes/${a.clienteId}`,
@@ -243,8 +236,11 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
         .filter((p) => p.marcoPendente || (p.diasSemContato ?? 0) >= 90 || !p.entregaTecnica)
         .slice(0, 80)
         .map((p) => ({
-          id: `posvenda:${p.clienteId}`,
+          // A situação faz parte da chave: resolvido este marco, o cliente só
+          // volta quando vencer o próximo (ou ficar 90+ dias sem contato).
+          id: `posvenda:${p.clienteId}:${p.marcoPendente?.tipo ?? "-"}:${p.entregaTecnica ? "et" : "-"}:${(p.diasSemContato ?? 0) >= 90 ? "frio" : "-"}`,
           titulo: `${p.nome}${p.maquina ? ` · ${p.maquina}` : ""}`,
+          clienteNome: p.nome,
           detalhe: [
             p.marcoPendente ? `Marco de ${p.marcoPendente.label} pendente` : null,
             !p.entregaTecnica ? "Entrega técnica não registrada" : null,
@@ -269,6 +265,8 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
         return {
           id: `visita:${v.id}`,
           titulo: `${ehHoje ? "Hoje" : "Amanhã"}: ${v.cliente.nome}`,
+          clienteNome: v.cliente.nome,
+          telefone: v.cliente.telefone,
           detalhe: [v.cliente.municipio?.nome, v.observacao].filter(Boolean).join(" · ") || null,
           severidade: ehHoje ? ("alta" as const) : ("media" as const),
           href: `/clientes/${v.clienteId}`,

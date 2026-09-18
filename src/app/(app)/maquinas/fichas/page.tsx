@@ -29,7 +29,7 @@ export default async function FichasTecnicasPage() {
   const temChaveIA = iaHabilitada();
 
   return (
-    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-6 p-6 md:-m-8 md:p-8">
+    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
       <div className="mb-7">
         <div className="flex items-center gap-3 mb-1">
           <div className="rounded-xl p-2" style={{ background: "rgba(96,165,250,0.1)" }}>
