@@ -69,17 +69,16 @@ export function ClientesDuplicadosCard({ inicial }: { inicial: EstadoDuplicados 
 
   return (
     <Card className="mt-6">
-      <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">
+      <div className="mb-1.5 flex items-center gap-2 font-semibold text-slate-700">
         <Users size={18} className="text-brand-600" /> Cadastros duplicados
       </div>
-      <p className="text-sm text-slate-600">
-        Junta cadastros com o mesmo telefone, e cadastros com o mesmo nome quando um deles não tem telefone. Mesmo nome com números
-        diferentes são pessoas diferentes e ficam os dois. Fica quem tem telefone (de preferência o que veio do Google); negociações, frota,
-        visitas, conversas, alertas, tarefas e histórico do outro passam para ele, e os campos vazios são preenchidos. Nada se perde, e cada
-        rodada pode ser desfeita.
+      <p className="text-xs leading-snug text-slate-500">
+        Junta cadastros com o mesmo telefone, e cadastros com o mesmo nome quando um deles não tem telefone. Fica quem tem telefone (de
+        preferência o que veio do Google); negociações, frota, visitas, conversas, alertas, tarefas e histórico do outro passam para ele.
+        Nada se perde, cada rodada pode ser desfeita.
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-2 flex flex-wrap items-center gap-3">
         <button type="button" onClick={unificarTudo} disabled={ocupado !== null || previa.totalGrupos === 0}
           className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50">
           {ocupado === "unificar" ? <Loader2 size={14} className="animate-spin" /> : <Merge size={14} />}
@@ -122,18 +121,18 @@ export function ClientesDuplicadosCard({ inicial }: { inicial: EstadoDuplicados 
       {aviso && <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{aviso}</div>}
 
       {historico.length > 0 && (
-        <div className="mt-3">
+        <div className="mt-2">
           <div className="text-xs font-semibold text-slate-600">Rodadas feitas</div>
-          <ul className="mt-1 space-y-1 text-xs">
+          <ul className="mt-1 max-h-56 space-y-0.5 overflow-y-auto text-xs">
             {historico.map((h) => (
-              <li key={h.id} className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5">
-                <span className="text-slate-400">{fmtData(h.criadoEm)}</span>
-                <span className="text-slate-700">{h.resumo}</span>
+              <li key={h.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1">
+                <span className="shrink-0 text-slate-400">{fmtData(h.criadoEm)}</span>
+                <span className="truncate text-slate-700" title={h.resumo}>{h.resumo}</span>
                 {h.desfeitaEm
-                  ? <span className="ml-auto rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">desfeita em {fmtData(h.desfeitaEm)}</span>
+                  ? <span className="ml-auto shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">desfeita em {fmtData(h.desfeitaEm)}</span>
                   : (
                     <button type="button" onClick={() => desfazer(h.id)} disabled={ocupado !== null}
-                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                      className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">
                       {ocupado === h.id ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />} Desfazer
                     </button>
                   )}
