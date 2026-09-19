@@ -146,9 +146,9 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     // Muitos de propósito: com poucos pontos, o "vizinho mais próximo" ainda
     // é longe e o fio vira uma linha atravessando a tela. Densidade alta é o
     // que encurta os filamentos e faz virar tecido.
-    const alvo = leve ? 20 : 74;
+    const alvo = leve ? 34 : 130;
     const pontos: { x: number; y: number }[] = [];
-    for (let k = 0; k < 900 && pontos.length < alvo; k++) {
+    for (let k = 0; k < 1400 && pontos.length < alvo; k++) {
       const x = arred(-100 + pseudoAleatorio(k * 1.37 + 31) * 1200);
       const y = arred(130 + pseudoAleatorio(k * 2.53 + 32) * 870);
       if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 368) continue;
@@ -170,7 +170,7 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
       for (const { j, dist } of perto) {
         const chave = i < j ? `${i}-${j}` : `${j}-${i}`;
         // Fio comprido não é sinapse, é risco atravessando o quadro.
-        if (vistos.has(chave) || dist > 170) continue;
+        if (vistos.has(chave) || dist > 125) continue;
         vistos.add(chave);
         const q = pontos[j];
         // Arco de leve, para o fio não ficar com cara de régua.
@@ -199,7 +199,7 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     // quadro. Assim o fundo fica denso de fios e o custo do movimento
     // continua fixo — e o celular não fica com dois pulsos perdidos, como
     // acontecia quando isso era sorteado.
-    const alvoPulsos = leve ? 12 : 34;
+    const alvoPulsos = leve ? 16 : 46;
     const passo = Math.max(1, Math.round(filamentos.length / alvoPulsos));
     filamentos.forEach((f, n) => { f.comPulso = n % passo === 0; });
 

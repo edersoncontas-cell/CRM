@@ -16,13 +16,15 @@ import {
 import type { RelatorioGerado } from "@/lib/cerebro/relatorio-diario";
 import type { IdeiaRadar } from "@/lib/cerebro/radar";
 import { SESSOES } from "@/lib/cerebro/sessoes";
-import { ListaComLimite } from "@/components/ListaComLimite";
-
-// Padrão dos cards da Central Inteligente: nenhuma lista aparece inteira de
-// uma vez — 5 itens e "ver mais", para o card nunca estufar a página nem
-// esticar os vizinhos no mesmo grid.
-const LIMITE_LISTA = 5;
-const botaoVerMaisEscuro = "mt-2 inline-flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white";
+// PADRÃO dos cards: toda lista mora dentro de um quadro de altura fixa e
+// rola por dentro dele. O card passa a ter tamanho previsível, não importa
+// quantos itens cheguem — a página inteira para de crescer.
+//
+// Isto substituiu o "ver mais": contar ITENS não resolvia, porque aqui cada
+// item é alto (título, sessão, ganho, link). Cinco ideias do Radar já davam
+// mais de mil pixels de card, e a página continuava enorme. O que precisa
+// ser limitado é a ALTURA, não a quantidade.
+const quadroRolagem = "max-h-[46vh] overflow-y-auto pr-1";
 
 const painel = { background: "#111a24", border: "1px solid #1e2a36" } as const;
 const campo = "w-full rounded-xl bg-[#0b1119] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600";
@@ -126,14 +128,9 @@ export function PainelRelatorio({ inicial }: { inicial: RelatorioGerado[] }) {
             ))}
           </div>
 
-          <ListaComLimite
-            itens={atual.detalhes.negocio}
-            limite={LIMITE_LISTA}
-            classNameLista="mb-3 space-y-1.5"
-            classNameBotao={`mb-3 ${botaoVerMaisEscuro}`}
-            chave={(c, i) => `${c.conversaId}-${i}`}
-            renderItem={(c) => (
-              <div className="flex items-start gap-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.04)" }}>
+          <ul className={`mb-3 space-y-1.5 ${quadroRolagem}`}>
+            {atual.detalhes.negocio.map((c, i) => (
+              <li key={`${c.conversaId}-${i}`} className="flex items-start gap-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.04)" }}>
                 <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black ${c.novo ? "bg-emerald-400/20 text-emerald-300" : "bg-sky-400/20 text-sky-300"}`}>
                   {c.novo ? "NOVO" : "CARTEIRA"}
                 </span>
@@ -149,9 +146,9 @@ export function PainelRelatorio({ inicial }: { inicial: RelatorioGerado[] }) {
                     <ExternalLink size={13} />
                   </Link>
                 )}
-              </div>
-            )}
-          />
+              </li>
+            ))}
+          </ul>
 
           <details className="group">
             <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-white">
@@ -206,14 +203,9 @@ export function PainelRadar({ inicial }: { inicial: IdeiaRadar[] }) {
       {visiveis.length === 0 ? (
         <p className="text-xs text-slate-500">Nenhuma ideia ainda. A pesquisa roda sozinha no fim do dia.</p>
       ) : (
-        <ListaComLimite
-          itens={visiveis}
-          limite={LIMITE_LISTA}
-          classNameLista="space-y-2"
-          classNameBotao={botaoVerMaisEscuro}
-          chave={(i) => i.id}
-          renderItem={(i) => (
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${COR_ESFORCO[i.esforco] ?? "#ffcb2d"}` }}>
+        <ul className={`space-y-2 ${quadroRolagem}`}>
+          {visiveis.map((i) => (
+            <li key={i.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${COR_ESFORCO[i.esforco] ?? "#ffcb2d"}` }}>
               <div className="flex items-start gap-2">
                 <Lightbulb size={14} className="mt-0.5 shrink-0" style={{ color: COR_ESFORCO[i.esforco] ?? "#ffcb2d" }} />
                 <div className="min-w-0 flex-1">
@@ -237,9 +229,9 @@ export function PainelRadar({ inicial }: { inicial: IdeiaRadar[] }) {
                   fonte <ExternalLink size={10} />
                 </a>
               )}
-            </div>
-          )}
-        />
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -317,14 +309,9 @@ export function PainelMemoria({ inicial }: { inicial: Memoria[] }) {
       {memorias.length === 0 ? (
         <p className="mt-3 text-xs text-slate-500">Nada guardado ainda.</p>
       ) : (
-        <ListaComLimite
-          itens={memorias}
-          limite={LIMITE_LISTA}
-          classNameLista="mt-3 space-y-2"
-          classNameBotao={botaoVerMaisEscuro}
-          chave={(m) => m.id}
-          renderItem={(m) => (
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <ul className={`mt-3 space-y-2 ${quadroRolagem}`}>
+          {memorias.map((m) => (
+            <li key={m.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)" }}>
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-bold text-slate-100">{m.titulo}</div>
@@ -335,9 +322,9 @@ export function PainelMemoria({ inicial }: { inicial: Memoria[] }) {
                 <button onClick={() => esquecer(m.id)} title="Esquecer" className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-red-400"><Trash2 size={13} /></button>
               </div>
               <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-slate-400">{m.conteudo}</p>
-            </div>
-          )}
-        />
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
