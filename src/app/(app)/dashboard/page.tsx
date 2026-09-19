@@ -244,10 +244,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               { rotulo: "Trimestre", valor: `${ritmo.vendasTrimestre}/${Math.ceil(ritmo.metaTrimestre)}`, sub: "máquinas faturadas", cor: T.violeta },
               { rotulo: "Vendas/semana", valor: ritmo.vendasPorSemanaNecessarias.toFixed(1), sub: "necessárias até dez", cor: T.rosa },
               { rotulo: "Visitas/semana", valor: `${ritmo.visitasSemana}/${Math.ceil(ritmo.visitasPorSemanaNecessarias)}`, sub: "feitas / necessárias", cor: T.ciano },
-              { rotulo: "Negociações/semana", valor: `${ritmo.negociacoesSemana}/${Math.ceil(ritmo.negociacoesPorSemanaNecessarias)}`, sub: "novas / necessárias", cor: T.verde },
+              { rotulo: "Negociações / semana", valor: `${ritmo.negociacoesSemana}/${Math.ceil(ritmo.negociacoesPorSemanaNecessarias)}`, sub: "novas / necessárias", cor: T.verde },
             ].map((k) => (
               <div key={k.rotulo} className="rounded-xl p-3" style={{ background: T.sobre, border: `1px solid ${T.borda}` }}>
-                <div className="text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>{k.rotulo}</div>
+                <div className="text-[10px] font-black uppercase leading-tight tracking-wide" style={{ color: T.mudo }}>{k.rotulo}</div>
                 <div className="mt-1 text-xl font-black leading-none" style={{ color: k.cor }}>{k.valor}</div>
                 <div className="mt-1 text-[11px]" style={{ color: T.texto2 }}>{k.sub}</div>
               </div>
@@ -310,28 +310,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <p className="text-xs" style={{ color: T.mudo }}>Nenhuma venda faturada em {anoSel} ainda.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="text-left text-[10px] font-black uppercase tracking-widest" style={{ color: T.mudo }}>
-                    <th className="pb-2 pr-2">#</th><th className="pb-2 pr-2">Cliente</th><th className="pb-2 pr-2 text-right">Faturamento</th><th className="pb-2 pr-2 text-right">Qtd</th><th className="pb-2 text-right">Ticket</th>
+                    <th className="pb-2 pr-1 sm:pr-2">#</th><th className="w-full pb-2 pr-2">Cliente</th><th className="whitespace-nowrap pb-2 pr-2 text-right">Faturamento</th><th className="pb-2 pr-1 text-right sm:pr-2">Qtd</th><th className="hidden pb-2 text-right sm:table-cell">Ticket</th>
                   </tr>
                 </thead>
                 <tbody>
                   {resumo.topClientes.map((c, i) => (
                     <tr key={c.id} style={{ borderTop: `1px solid ${T.borda}` }}>
-                      <td className="py-2 pr-2">
+                      <td className="py-2 pr-1 sm:pr-2">
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black"
                           style={{ background: i < 3 ? `linear-gradient(135deg, ${[T.amarelo, T.ciano, T.laranja][i]}, ${T.rosa})` : T.sobre2, color: i < 3 ? "#111" : T.texto2 }}>
                           {i < 3 ? <Trophy size={12} /> : i + 1}
                         </span>
                       </td>
-                      <td className="py-2 pr-2">
-                        <Link href={`/clientes/${c.id}`} className="font-semibold hover:underline">{c.nome}</Link>
-                        {c.cidade && <span className="ml-1 text-[11px]" style={{ color: T.mudo }}><MapPin size={10} className="mr-0.5 inline" />{c.cidade}</span>}
+                      <td className="w-full max-w-0 py-2 pr-2">
+                        <Link href={`/clientes/${c.id}`} className="block truncate font-semibold hover:underline">{c.nome}</Link>
+                        {c.cidade && <span className="block truncate text-[11px] sm:ml-1 sm:inline" style={{ color: T.mudo }}><MapPin size={10} className="mr-0.5 inline" />{c.cidade}</span>}
                       </td>
-                      <td className="py-2 pr-2 text-right font-black" style={{ color: T.verde }}>{formatCurrency(c.faturamento)}</td>
-                      <td className="py-2 pr-2 text-right" style={{ color: T.texto2 }}>{c.qtd}</td>
-                      <td className="py-2 text-right" style={{ color: T.texto2 }}>{formatCurrency(c.ticket)}</td>
+                      <td className="whitespace-nowrap py-2 pr-2 text-right font-black tabular-nums" style={{ color: T.verde }}>{formatCurrency(c.faturamento)}</td>
+                      <td className="py-2 pr-1 text-right tabular-nums sm:pr-2" style={{ color: T.texto2 }}>{c.qtd}</td>
+                      <td className="hidden whitespace-nowrap py-2 text-right tabular-nums sm:table-cell" style={{ color: T.texto2 }}>{formatCurrency(c.ticket)}</td>
                     </tr>
                   ))}
                 </tbody>

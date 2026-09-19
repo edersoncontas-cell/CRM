@@ -88,9 +88,9 @@ export function CalculadoraCustoHora() {
               <div className="mt-1 text-5xl font-black leading-none tracking-tight text-green-700 sm:text-6xl">{brl(r.horizonte)}</div>
               <div className="mt-2 text-sm font-semibold text-green-800">em {c.horizonteAnos} anos, comparando com {nomeConc}</div>
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por mês</div><div className="text-base font-black text-slate-800 sm:text-2xl">{brl(r.mes)}</div></div>
-                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por ano</div><div className="text-base font-black text-slate-800 sm:text-2xl">{brl(r.ano)}</div></div>
-                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">litros/mês</div><div className="text-base font-black text-slate-800 sm:text-2xl">{Math.round(r.litrosMes)} L</div></div>
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por mês</div><div className="break-words text-sm font-black tabular-nums text-slate-800 sm:text-2xl">{brl(r.mes)}</div></div>
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">por ano</div><div className="break-words text-sm font-black tabular-nums text-slate-800 sm:text-2xl">{brl(r.ano)}</div></div>
+                <div className="rounded-xl bg-white/80 p-2 sm:p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">litros/mês</div><div className="break-words text-sm font-black tabular-nums text-slate-800 sm:text-2xl">{Math.round(r.litrosMes)} L</div></div>
               </div>
               <div className="mt-3 text-xs text-slate-600">
                 {r.difLh.toLocaleString("pt-BR")} L/h a menos × {brl2(c.dieselLitro)} × {c.horasMes} h/mês.
