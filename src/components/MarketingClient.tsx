@@ -131,11 +131,11 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
   async function mandarParaClientes(p: PostSalvo) {
     const r = await prepararEnvioDoPostAction(p.id);
     if (!r.ok) { setErro(r.erro ?? "Não consegui preparar o envio."); return; }
-    // O envio em lote mora na tela de Visitas (mensagem para clientes): leva o
-    // texto pronto na área de transferência e abre lá.
+    // O envio em lote é a aba ao lado: leva o texto pronto na área de
+    // transferência e abre lá com o anexo já guardado.
     await navigator.clipboard.writeText(r.texto ?? "").catch(() => null);
     setAviso("Texto copiado. Abrindo o envio para clientes…");
-    setTimeout(() => { window.location.href = "/visitas#mensagem-clientes"; }, 900);
+    setTimeout(() => { window.location.href = "/marketing?aba=mensagem"; }, 900);
   }
 
   return (
@@ -291,7 +291,7 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
           </ul>
         )}
         <p className="mt-3 text-[11px] leading-snug text-slate-400">
-          Para mandar em massa com anexo, use <Link href="/visitas#mensagem-clientes" className="font-semibold text-brand-600 hover:underline">Mensagem para clientes</Link>.
+          Para mandar em massa com anexo, use a aba <Link href="/marketing?aba=mensagem" className="font-semibold text-brand-600 hover:underline">Mensagem para clientes</Link>.
         </p>
       </div>
     </div>

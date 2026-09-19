@@ -5,7 +5,7 @@ import { sendText } from "@/lib/zapi";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Ações sobre um rascunho da Agnes: "send" (aprovar e enviar) ou "discard" (descartar).
+// Ações sobre um rascunho do Orientador: "send" (aprovar e enviar) ou "discard" (descartar).
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { messageId, action, body } = await req.json().catch(() => ({}));
   if (!messageId || !["send", "discard"].includes(action)) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const zapiMessageId = await sendText(conv.externalPhone, texto);
     const msg = await db.whatsAppMessage.update({
       where: { id: messageId },
-      data: { body: texto, isDraft: false, draftStatus: "APPROVED", sendStatus: "SENT", zapiMessageId, operatorDisplayName: "Agnes", sentAt: new Date() },
+      data: { body: texto, isDraft: false, draftStatus: "APPROVED", sendStatus: "SENT", zapiMessageId, operatorDisplayName: "Orientador de Vendas", sentAt: new Date() },
     });
     await db.whatsAppConversation.update({ where: { id: conv.id }, data: { lastMessageAt: msg.sentAt } });
     return NextResponse.json({ ok: true, message: msg });

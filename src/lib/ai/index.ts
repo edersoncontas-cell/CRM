@@ -1093,7 +1093,7 @@ IMPORTANTE: retorne SOMENTE um JSON válido, array com até 8 objetos (pode ser 
 
 export type { ExtracaoConversa };
 
-// ---------- WhatsApp / Agnes ----------
+// ---------- WhatsApp / Orientador ----------
 
 // Classifica a conversa em uma palavra (CLIENTE | LEAD | GRUPO | OUTRO).
 export async function classificarConversaIA(amostra: string): Promise<string> {

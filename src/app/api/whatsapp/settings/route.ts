@@ -9,7 +9,7 @@ export async function GET() {
   return NextResponse.json({ auditMode: s.auditMode, isActive: s.isActive, autoHoraInicio: s.autoHoraInicio, autoHoraFim: s.autoHoraFim, autoLimiteDia: s.autoLimiteDia });
 }
 
-// Ajusta o comportamento da Agnes: auditMode (rascunho x automático) e master on/off.
+// Ajusta o comportamento do Orientador: auditMode (rascunho x automático) e master on/off.
 export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const s = await getWaSettings();

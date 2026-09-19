@@ -437,7 +437,7 @@ export async function atualizarCotacaoCafeAction(formData: FormData): Promise<{ 
 // Aprende o estilo de fala do Ederson a partir das mensagens que ele já enviou
 // e salva no banco para a IA imitar nas respostas.
 // CRÍTICO: excluir TODAS as mensagens geradas por IA (Cérebro, Orientador de
-// Vendas, rascunhos aprovados como "Agnes") — sem isso a IA aprende o estilo
+// Vendas, e os antigos gravados como "Agnes") — sem isso a IA aprende o estilo
 // com as próprias respostas dela, um ciclo vicioso que amplifica os vícios de
 // fraseado (ex: toda resposta começando com a mesma saudação).
 const OPERADORES_IA = ["Cérebro", "Orientador de Vendas", "Agnes"];

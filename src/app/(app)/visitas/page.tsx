@@ -6,9 +6,8 @@ import { AgendaSemanaVisitas } from "@/components/AgendaSemanaVisitas";
 import { BotaoRemoverVisita } from "@/components/BotaoRemoverVisita";
 import { ConfirmacaoVisita } from "@/components/ConfirmacaoVisita";
 import { CalendarioMensalVisitas, type DiaCalendario, type ItemCalendario } from "@/components/CalendarioMensalVisitas";
-import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users } from "lucide-react";
+import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users, Megaphone, ArrowRight } from "lucide-react";
 import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
-import { MensagemClientes } from "@/components/MensagemClientes";
 import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
 import type { VisitaMapa } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
@@ -197,8 +196,17 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mensagem para clientes · visita, promoção, data comemorativa ou aniversário · tire quem não precisa e mande para todos</h2>
-        <MensagemClientes cidades={cidadesComClientes} />
+        <Link
+          href="/marketing?aba=mensagem"
+          className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-200 transition hover:border-agro-400"
+        >
+          <Megaphone size={18} className="shrink-0 text-agro-400" />
+          <span className="min-w-0 flex-1">
+            <b className="text-white">Avisar os clientes que você vai passar na cidade</b>
+            <span className="block text-xs text-slate-400">Mensagem em massa (visita, promoção, data comemorativa, aniversário) agora fica em Marketing.</span>
+          </span>
+          <ArrowRight size={16} className="shrink-0 text-slate-400" />
+        </Link>
       </section>
 
       {fimDeSemana.length > 0 && (

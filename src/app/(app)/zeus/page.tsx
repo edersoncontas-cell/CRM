@@ -20,6 +20,8 @@ const CRONS_MONITORADOS = [
   { nome: "agnes-dispatch", minutosEsperados: 15 },
   { nome: "whatsapp-retry", minutosEsperados: 15 },
   { nome: "zeus-diario", minutosEsperados: 24 * 60 },
+  { nome: "relatorio-diario", minutosEsperados: 24 * 60 },
+  { nome: "radar-inovacao", minutosEsperados: 24 * 60 },
 ];
 
 export default async function ZeusPage() {

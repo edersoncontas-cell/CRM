@@ -8,6 +8,7 @@ import { TOOL_DEFS, executarFerramenta, rotuloFerramenta } from "@/lib/zeus/cere
 import { zeusReport } from "@/lib/zeus/eventos";
 import { provedoresCompat, rodadaAgenteCompat } from "@/lib/ai/agente-compat";
 import { lerParametros } from "@/lib/parametros";
+import { regrasParaPrompt } from "@/lib/contexto-negocio";
 
 export const runtime = "nodejs";
 // 60s é o teto do plano Hobby (grátis) da Vercel sem Fluid Compute — acima
@@ -34,12 +35,19 @@ function anthropicClient() {
 
 // ── System prompt honesto: descreve exatamente as tools disponíveis ─────────
 async function montarSystemPrompt(modoTreinamento: boolean): Promise<string> {
-  const [estilo, p, foto] = await Promise.all([
+  const [estilo, p, foto, regras, memorias] = await Promise.all([
     db.estiloDeFala.findFirst().catch(() => null),
     lerParametros(),
     fotografiaDoNegocio().catch(() => ""),
+    // Regras da realidade do negócio (Academia › "A sua realidade manda mais
+    // que a teoria") e o que o vendedor ensinou ao Cérebro na Central.
+    regrasParaPrompt("orientador").catch(() => ""),
+    db.memoriaCerebro.findMany({ orderBy: { criadoEm: "desc" }, take: 30, select: { titulo: true, conteudo: true } }).catch(() => []),
   ]);
   const academiaTxt = resumoAcademia();
+  const memoriaTxt = memorias.length
+    ? memorias.map((m) => `- ${m.titulo}: ${m.conteudo.slice(0, 600)}`).join("\n")
+    : "";
 
   return `Você é o CÉREBRO — o gerente comercial e braço direito de ${p.nomeVendedor}, vendedor de máquinas pesadas da linha
 amarela (${p.marcas}) no ${p.regiao}. Você conhece o CRM inteiro e opera nele por ferramentas. Você pensa como um
@@ -53,6 +61,7 @@ padrão claro, chame atualizar_estilo_fala com o guia COMPLETO e atualizado (o q
 brevemente o que salvou e peça mais exemplos se fizer sentido.
 ` : ""}
 Data/hora atual (Brasília): ${agoraBrasiliaExtenso()}.
+${regras ? `\n${regras}\n` : ""}${memoriaTxt ? `\n## O que o vendedor te ensinou (memórias da Central Inteligente — trate como verdade)\n${memoriaTxt}\n` : ""}
 
 ## Fotografia do negócio agora (dados reais, use como ponto de partida)
 ${foto || "(indisponível)"}

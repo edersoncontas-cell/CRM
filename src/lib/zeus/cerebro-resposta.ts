@@ -7,6 +7,7 @@
 
 import { db } from "@/lib/db";
 import { METODOLOGIAS, PERFIS_DISC, OBJECOES, FECHAMENTOS } from "@/lib/academia";
+import { ETAPAS } from "@/lib/academia/etapas";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { lerParametros } from "@/lib/parametros";
@@ -162,6 +163,15 @@ export async function montarContextoCliente(conv: {
 }
 
 // Monta trecho da Academia de Vendas relevante para o contexto da conversa.
+// Resumo curto das etapas da venda (Academia › Etapas da Venda) para o
+// Orientador saber em que etapa o cliente está e o que se cobra nela.
+export function resumoDasEtapas(): string {
+  return [
+    "## Etapas da venda (Academia) — use para dizer em que etapa está e o que falta",
+    ...ETAPAS.map((e) => `- ${e.nome}: ${e.objetivo} Avança quando: ${e.criteriosDeAvanco.join("; ")}.`),
+  ].join("\n");
+}
+
 export function montarContextoAcademia(historico: string): string {
   const hist = historico.toLowerCase();
 

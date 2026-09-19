@@ -23,6 +23,7 @@ import { getWaSettings } from "@/lib/whatsapp-settings";
 import { METODO_VENDA, ESTILOS_CLIENTE, ETAPAS_ROTEIRO, normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
+import { resumoDasEtapas } from "@/lib/zeus/cerebro-resposta";
 import { Prisma } from "@prisma/client";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
@@ -264,6 +265,8 @@ ${regras ? `\n${regras}\n` : ""}
 ${args.contextoCliente}
 
 ${args.contextoAcademia}
+
+${resumoDasEtapas()}
 ${args.estilo ? `\n## Estilo de comunicação do vendedor (real, aprendido das mensagens dele — use para calibrar "personalidade.comoFalar" e nunca contradizer)\n${args.estilo}` : ""}
 ${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (referência leve para calibrar tom do alerta e da condução — não cite números ao cliente, não trate como regra fixa)\n${args.licoes.map((l) => `- ${l}`).join("\n")}` : ""}`;
 
