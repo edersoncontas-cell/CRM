@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Brain } from "lucide-react";
+import { CosmosFundo } from "@/components/CerebroCosmos";
 import {
   LIGACOES,
   ligacoesDaSessao,
@@ -28,6 +29,17 @@ export type NoGrafo = SessaoCerebro & {
   total: number;        // número que resume a sessão (clientes, negociações…)
   rotuloTotal: string;  // o que esse número significa
 };
+
+// Qual fundo o Cérebro usa. "sinapses" é o tecido neural (o que está no ar);
+// "universo" é o céu profundo com Via Láctea, constelações, estrelas cadentes
+// e meteoro (ver CerebroCosmos). Trocar aqui troca o painel inteiro — as
+// sessões, as ligações e a interação continuam idênticas nos dois.
+const FUNDO: "sinapses" | "universo" = "sinapses";
+
+const CEU = {
+  sinapses: "radial-gradient(circle at 50% 45%, #10202b 0%, #0a1119 55%, #070d13 100%)",
+  universo: "radial-gradient(circle at 50% 45%, #0b1430 0%, #060a1c 55%, #02040c 100%)",
+} as const;
 
 const CENTRO = { x: 500, y: 500 };
 // Raio que as ligações entre sessões precisam contornar para não passar por
@@ -248,7 +260,7 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
   }), [leve]);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl" style={{ background: "radial-gradient(circle at 50% 45%, #10202b 0%, #0a1119 55%, #070d13 100%)", border: "1px solid #1e2a36" }}>
+    <div className="relative overflow-hidden rounded-2xl" style={{ background: CEU[FUNDO], border: "1px solid #1e2a36" }}>
       <svg
         // Folga na horizontal para o nome das sessões das pontas caber
         // inteiro (no celular era o que cortava "Academia de Vendas"); na
@@ -304,12 +316,14 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
           ))}
         </defs>
 
+        {FUNDO === "universo" && <CosmosFundo leve={leve} animar={animar} />}
+
         {/* Tecido neural do fundo: neurônios inteiros (corpo + dendritos)
             preenchendo o vazio em volta do anel. Primeiro no DOM = pintado
             primeiro = fica atrás de tudo. Cada um deriva devagar e uma ponta
             dispara de vez em quando, tudo em CSS (nada de SMIL aqui, senão
             o custo explodiria). */}
-        <g opacity={0.62}>
+        <g opacity={0.62} style={{ display: FUNDO === "sinapses" ? undefined : "none" }}>
           {/* Filamentos entre os neurônios: o fio apagado sempre visível e,
               por cima, o pulso correndo. O pulso NÃO acende nem apaga — ele
               atravessa o fio e recomeça, então de longe o fundo nunca dá a

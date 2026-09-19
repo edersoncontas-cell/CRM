@@ -297,6 +297,48 @@ img, video, iframe {
   transform-box: fill-box;
 }
 
+/* ── Fundo em céu profundo (alternativa ao tecido de sinapses) ────────── */
+
+/* Cintilação: varia pouco e NUNCA apaga — estrela que pisca no zero vira
+   pisca-pisca de Natal, não céu. */
+@keyframes cosmos-cintila {
+  0%, 100% { opacity: var(--op, 0.6); }
+  50% { opacity: calc(var(--op, 0.6) * 0.45); }
+}
+.cosmos-cintila {
+  animation-name: cosmos-cintila;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+/* Estrela cadente: risca o céu num trecho curto do ciclo e some. Aqui
+   aparecer e sumir É o fenômeno, não um defeito. */
+@keyframes cosmos-cadente {
+  0% { transform: translate(0, 0); opacity: 0; }
+  3% { opacity: 1; }
+  16% { opacity: 1; }
+  22% { transform: translate(var(--dx, 400px), var(--dy, 200px)); opacity: 0; }
+  100% { transform: translate(var(--dx, 400px), var(--dy, 200px)); opacity: 0; }
+}
+.cosmos-cadente {
+  animation-name: cosmos-cadente;
+  animation-timing-function: cubic-bezier(0.3, 0, 0.7, 1);
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards;
+}
+
+/* O meteoro: atravessa inteiro, mais devagar e bem mais raro. */
+@keyframes cosmos-meteoro {
+  0% { transform: translate(0, 0); opacity: 0; }
+  2% { opacity: 1; }
+  12% { opacity: 1; }
+  17% { transform: translate(var(--dx, 1000px), var(--dy, 500px)); opacity: 0; }
+  100% { transform: translate(var(--dx, 1000px), var(--dy, 500px)); opacity: 0; }
+}
+.cosmos-meteoro {
+  animation: cosmos-meteoro 34s cubic-bezier(0.25, 0, 0.75, 1) 6s infinite backwards;
+}
+
 @keyframes cerebro-respirar {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.07); }
@@ -310,7 +352,8 @@ img, video, iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cerebro-neuronio, .cerebro-pulso, .cerebro-no {
+  .cerebro-neuronio, .cerebro-pulso, .cerebro-no,
+  .cosmos-cintila, .cosmos-cadente, .cosmos-meteoro {
     animation: none !important;
   }
 }
