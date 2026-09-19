@@ -258,6 +258,62 @@ img, video, iframe {
     }
 }
 
+/* ── Grafo do Cérebro: sinapses conectadas ──────────────────────────────
+   Só decoração (poeira neural, disparos aleatórios, fluxo de energia no
+   anel) — tudo em CSS puro (transform/opacity), nunca SMIL, para não pesar
+   com dezenas de elementos animados. Respeita prefers-reduced-motion. */
+@keyframes cerebro-flutuar {
+  0%, 100% { transform: translate(0, 0); opacity: var(--op, 0.3); }
+  50% { transform: translate(var(--dx, 6px), var(--dy, -8px)); opacity: calc(var(--op, 0.3) * 1.8); }
+}
+.cerebro-neuronio {
+  animation-name: cerebro-flutuar;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  transform-box: fill-box;
+}
+
+@keyframes cerebro-faisca {
+  0%, 88%, 100% { opacity: 0; transform: scale(0.5); }
+  94% { opacity: 1; transform: scale(1.7); }
+}
+.cerebro-faisca {
+  animation-name: cerebro-faisca;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Traço quase inteiro com uma falha que corre: lê como energia passando
+   pela sinapse. Pontilhado curto deixava a ligação com cara de tracejado
+   tímido em vez de ligação de verdade. */
+@keyframes cerebro-fluxo {
+  to { stroke-dashoffset: -37; }
+}
+.cerebro-anel {
+  stroke-dasharray: 30 7;
+  animation: cerebro-fluxo 1.9s linear infinite;
+}
+
+@keyframes cerebro-respirar {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+.cerebro-no {
+  animation-name: cerebro-respirar;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cerebro-neuronio, .cerebro-faisca, .cerebro-anel, .cerebro-no {
+    animation: none !important;
+  }
+}
+
 /* Mapa do Dashboard: azulejos do OpenStreetMap (sem chave) escurecidos por CSS */
 .mapa-escuro {
   filter: invert(1) hue-rotate(200deg) brightness(0.8) contrast(0.95) saturate(0.55);

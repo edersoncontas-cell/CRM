@@ -1,17 +1,28 @@
 "use client";
 
-// O grafo do Cérebro: cada sessão do CRM é um nó ligado ao centro por uma
-// sinapse, com pulsos correndo o tempo todo do nó para o Cérebro — é a
-// imagem de que o Cérebro vê tudo, analisa tudo e conecta tudo.
+// O grafo do Cérebro: cada sessão do CRM é um neurônio. Duas camadas de
+// sinapse — as que vão até o centro (a sessão mandando o que aconteceu) e
+// as que ligam uma sessão à outra (o caminho real do dado dentro do CRM,
+// ver LIGACOES). Pulsos correm o tempo todo nas duas, é a imagem de que o
+// Cérebro vê tudo, analisa tudo e conecta tudo.
 //
-// Tocar (ou passar o mouse) num nó acende aquela sinapse, abre os sub-nós da
-// sessão e mostra o que ela faz, com o atalho para entrar. Tudo em SVG, que
-// fica nítido em qualquer tela e não pesa como uma biblioteca de grafos.
+// Tocar (ou passar o mouse) num nó acende aquela sinapse e as ligações
+// dela, abre os sub-nós da sessão e mostra o que ela faz, com o atalho para
+// entrar. Tudo em SVG, que fica nítido em qualquer tela e não pesa como uma
+// biblioteca de grafos.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Brain } from "lucide-react";
-import { posicoesDoGrafo, posicoesDosRamos, ROTULO_GRUPO, type SessaoCerebro } from "@/lib/cerebro/sessoes";
+import {
+  LIGACOES,
+  ligacoesDaSessao,
+  posicoesDoGrafo,
+  posicoesDosRamos,
+  ROTULO_GRUPO,
+  SESSOES_POR_ID,
+  type SessaoCerebro,
+} from "@/lib/cerebro/sessoes";
 
 export type NoGrafo = SessaoCerebro & {
   total: number;        // número que resume a sessão (clientes, negociações…)
@@ -19,10 +30,15 @@ export type NoGrafo = SessaoCerebro & {
 };
 
 const CENTRO = { x: 500, y: 500 };
+// Raio que as ligações entre sessões precisam contornar para não passar por
+// cima do núcleo e do brilho do Cérebro.
+const RAIO_LIVRE = 180;
+
+type Ponto = { x: number; y: number };
 
 // Curva suave do centro até o nó (uma linha reta fica dura; a curva dá a
 // sensação de sinapse).
-function curva(alvo: { x: number; y: number }, desvio: number): string {
+function curva(alvo: Ponto, desvio: number): string {
   const mx = (CENTRO.x + alvo.x) / 2;
   const my = (CENTRO.y + alvo.y) / 2;
   const dx = alvo.x - CENTRO.x;
@@ -34,26 +50,95 @@ function curva(alvo: { x: number; y: number }, desvio: number): string {
   return `M ${CENTRO.x} ${CENTRO.y} Q ${cx} ${cy} ${alvo.x} ${alvo.y}`;
 }
 
+// Curva entre DOIS NÓS (não passa pelo centro): é o que faz o desenho virar
+// uma rede de verdade em vez de uma estrela.
+//
+// O arco abre só o TANTO QUE FALTA para escapar do núcleo: ligação entre
+// vizinhos, que já passa longe do centro, fica quase reta; ligação entre
+// sessões opostas, que passaria por cima do Cérebro, desvia para o lado e
+// corta o miolo por dentro do anel. Abrir sempre o mesmo tanto inchava as
+// curtas para fora dos nós e o grafo virava uma gaiola.
+function curvaEntreNos(a: Ponto, b: Ponto): string {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const norma = Math.hypot(dx, dy) || 1;
+  let px = -dy / norma;
+  let py = dx / norma;
+  // Escolhe, das duas perpendiculares, a que afasta do centro.
+  if (px * (mx - CENTRO.x) + py * (my - CENTRO.y) < 0) { px = -px; py = -py; }
+  // Distância do centro até a RETA a—b (não até o meio dela).
+  const distReta = Math.abs(dx * (CENTRO.y - a.y) - dy * (CENTRO.x - a.x)) / norma;
+  const pico = 16 + Math.max(0, RAIO_LIVRE - distReta);
+  // Numa curva quadrática o desenho chega à metade do ponto de controle.
+  return `M ${a.x} ${a.y} Q ${mx + px * pico * 2} ${my + py * pico * 2} ${b.x} ${b.y}`;
+}
+
+// Pseudo-aleatório determinístico (mesma semente = mesmo valor sempre): a
+// poeira neural de fundo usa isso em vez de Math.random(), senão o HTML do
+// servidor e o do cliente divergiriam (hydration mismatch).
+function pseudoAleatorio(semente: number): number {
+  const x = Math.sin(semente * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; titulo?: string }) {
   const [ativo, setAtivo] = useState<string | null>(null);
   const [animar, setAnimar] = useState(true);
+  // Celular anda com menos pulso: o desenho inteiro passa de ~40 animações
+  // de movimento para ~25, que é o que mantém o grafo liso num aparelho
+  // simples sem tirar a sensação de rede viva.
+  const [leve, setLeve] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (mq?.matches) setAnimar(false);
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setAnimar(false);
+    setLeve(window.innerWidth < 640);
   }, []);
 
   const posicoes = useMemo(() => posicoesDoGrafo(nos), [nos]);
-  const selecionado = ativo ? nos.find((n) => n.id === ativo) ?? null : null;
+  const porId = useMemo(() => new Map(nos.map((n) => [n.id, n])), [nos]);
+  const selecionado = ativo ? porId.get(ativo) ?? null : null;
+
+  // As sinapses entre sessões, já com posição e caminho prontos.
+  const ligacoes = useMemo(() => {
+    return LIGACOES.map((l, i) => {
+      const a = porId.get(l.de);
+      const b = porId.get(l.para);
+      const pa = posicoes.get(l.de);
+      const pb = posicoes.get(l.para);
+      if (!a || !b || !pa || !pb) return null;
+      return { id: `lig${i}`, a, b, pa, pb, d: curvaEntreNos(pa, pb), fluxo: l.fluxo };
+    }).filter((l): l is NonNullable<typeof l> => l !== null);
+  }, [porId, posicoes]);
+
+  // Poeira neural de fundo: pontinhos que flutuam devagar, só para o painel
+  // parecer um tecido vivo (puramente decorativo, sem interação).
+  const poeira = useMemo(() => Array.from({ length: leve ? 12 : 26 }, (_, i) => {
+    const angulo = pseudoAleatorio(i * 7.13 + 1) * Math.PI * 2;
+    const raio = 150 + pseudoAleatorio(i * 3.71 + 2) * 500;
+    return {
+      x: CENTRO.x + Math.cos(angulo) * raio,
+      y: CENTRO.y + Math.sin(angulo) * raio * 0.74,
+      raio: 1.1 + pseudoAleatorio(i * 5.37 + 3) * 2.1,
+      op: 0.16 + pseudoAleatorio(i * 2.91 + 4) * 0.3,
+      dx: (pseudoAleatorio(i * 11.3 + 5) - 0.5) * 30,
+      dy: (pseudoAleatorio(i * 13.7 + 6) - 0.5) * 30,
+      dur: 5 + pseudoAleatorio(i * 4.11 + 7) * 5,
+      delay: pseudoAleatorio(i * 6.93 + 8) * 6,
+    };
+  }), [leve]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl" style={{ background: "radial-gradient(circle at 50% 45%, #10202b 0%, #0a1119 55%, #070d13 100%)", border: "1px solid #1e2a36" }}>
       <svg
-        // Folga em volta do círculo para o nome das sessões das pontas caber
-        // inteiro — no celular era o que cortava "Academia de Vendas".
-        viewBox="-150 -40 1300 1110"
+        // Folga na horizontal para o nome das sessões das pontas caber
+        // inteiro (no celular era o que cortava "Academia de Vendas"); na
+        // vertical o desenho é enquadrado justo, senão sobra tanto vazio em
+        // cima e embaixo que o grafo fica perdido no meio do card.
+        viewBox="-150 88 1300 952"
         className="mx-auto block w-full"
-        style={{ aspectRatio: "1300 / 1110", maxHeight: "min(78vh, 760px)" }}
+        style={{ aspectRatio: "1300 / 952", maxHeight: "min(78vh, 760px)" }}
         role="img"
         aria-label="Mapa das sessões do CRM ligadas ao Cérebro"
       >
@@ -64,6 +149,13 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
             <stop offset="70%" stopColor="#6d28d9" stopOpacity="0.55" />
             <stop offset="100%" stopColor="#6d28d9" stopOpacity="0" />
           </radialGradient>
+          {/* Halo do nó: usa currentColor, então UM gradiente só serve para
+              as 12 sessões — cada nó pinta o seu com a própria cor. */}
+          <radialGradient id="halo-no">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.5" />
+            <stop offset="55%" stopColor="currentColor" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+          </radialGradient>
           <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="7" result="b" />
             <feMerge>
@@ -71,9 +163,92 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+
+          {/* Cada sinapse até o centro nasce na cor do Cérebro e chega na cor
+              da sessão — é o dado saindo dali e virando pensamento. */}
+          {nos.map((n) => {
+            const p = posicoes.get(n.id);
+            if (!p) return null;
+            return (
+              <linearGradient key={`g-raio-${n.id}`} id={`g-raio-${n.id}`} gradientUnits="userSpaceOnUse" x1={CENTRO.x} y1={CENTRO.y} x2={p.x} y2={p.y}>
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.15" />
+                <stop offset="55%" stopColor={n.cor} stopOpacity="0.45" />
+                <stop offset="100%" stopColor={n.cor} stopOpacity="0.95" />
+              </linearGradient>
+            );
+          })}
+          {/* Ligação entre sessões: vai da cor de uma até a cor da outra. */}
+          {ligacoes.map((l) => (
+            <linearGradient key={`g-${l.id}`} id={`g-${l.id}`} gradientUnits="userSpaceOnUse" x1={l.pa.x} y1={l.pa.y} x2={l.pb.x} y2={l.pb.y}>
+              <stop offset="0%" stopColor={l.a.cor} />
+              <stop offset="100%" stopColor={l.b.cor} />
+            </linearGradient>
+          ))}
         </defs>
 
-        {/* Sinapses */}
+        {/* Poeira neural: só textura de fundo, flutua devagar e não reage a
+            nada. Fica ATRÁS de tudo (primeiro no DOM = primeiro pintado). */}
+        {animar && (
+          <g>
+            {poeira.map((p, i) => (
+              <circle
+                key={`poeira-${i}`}
+                cx={p.x}
+                cy={p.y}
+                r={p.raio}
+                fill="#7dd3fc"
+                className="cerebro-neuronio"
+                style={{
+                  ["--dx" as string]: `${p.dx}px`,
+                  ["--dy" as string]: `${p.dy}px`,
+                  ["--op" as string]: p.op,
+                  animationDuration: `${p.dur}s`,
+                  animationDelay: `${p.delay}s`,
+                }}
+              />
+            ))}
+          </g>
+        )}
+
+        {/* Sinapses ENTRE sessões: o caminho do dado dentro do CRM. Ficam
+            atrás do núcleo, então o arco que passa perto do centro some por
+            trás do brilho e dá profundidade. */}
+        <g>
+          {ligacoes.map((l, i) => {
+            const ligada = ativo === l.a.id || ativo === l.b.id;
+            const apagada = ativo !== null && !ligada;
+            return (
+              <g key={l.id} opacity={apagada ? 0.07 : ligada ? 1 : 0.5} style={{ transition: "opacity .25s" }}>
+                {/* Traço inteiro: quem mostra o fluxo é o pulso que corre por
+                    cima. Tracejado deixava a ligação com cara de linha
+                    pontilhada de rascunho, não de sinapse. */}
+                <path
+                  id={`caminho-${l.id}`}
+                  d={l.d}
+                  fill="none"
+                  stroke={`url(#g-${l.id})`}
+                  strokeWidth={ligada ? 2.6 : 1.4}
+                  strokeLinecap="round"
+                  style={{ transition: "stroke-width .25s" }}
+                />
+                {animar && (
+                  <circle r={ligada ? 4.6 : 3} fill={l.b.cor} opacity={ligada ? 1 : 0.7}>
+                    <animateMotion
+                      dur={`${(ligada ? 2.2 : 5.2 + (i % 4) * 0.7).toFixed(2)}s`}
+                      repeatCount="indefinite"
+                      begin={`${(i * 0.43).toFixed(2)}s`}
+                      calcMode="linear"
+                    >
+                      <mpath href={`#caminho-${l.id}`} />
+                    </animateMotion>
+                  </circle>
+                )}
+              </g>
+            );
+          })}
+        </g>
+
+        {/* Sinapses até o centro */}
         {nos.map((n, i) => {
           const p = posicoes.get(n.id);
           if (!p) return null;
@@ -81,60 +256,102 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
           const d = curva(p, desvio);
           const aceso = !ativo || ativo === n.id;
           const destaque = ativo === n.id;
+          // Sessão mais movimentada = pulso mais rápido e mais gordo — o
+          // Cérebro "sente" mais forte o que está mais ativo agora.
+          const intensidade = Math.min(1, n.total / 40);
+          const durBase = (3.4 + (i % 5) * 0.45) * (1 - intensidade * 0.3);
+          const durBranco = (4.6 + (i % 4) * 0.5) * (1 - intensidade * 0.3);
           return (
-            <g key={`sinapse-${n.id}`} opacity={aceso ? 1 : 0.16} style={{ transition: "opacity .25s" }}>
-              <path id={`caminho-${n.id}`} d={d} fill="none" stroke={destaque ? n.cor : "#2b3a49"} strokeWidth={destaque ? 2.6 : 1.4} strokeLinecap="round" />
+            <g key={`sinapse-${n.id}`} opacity={aceso ? 1 : 0.14} style={{ transition: "opacity .25s" }}>
+              <path
+                id={`caminho-${n.id}`}
+                d={d}
+                fill="none"
+                stroke={`url(#g-raio-${n.id})`}
+                strokeWidth={destaque ? 3 : 1.7}
+                strokeLinecap="round"
+                style={{ transition: "stroke-width .25s" }}
+              />
               {animar && (
                 <>
-                  <circle r={destaque ? 6 : 4} fill={n.cor} filter="url(#glow)">
-                    <animateMotion dur={`${3.4 + (i % 5) * 0.45}s`} repeatCount="indefinite" begin={`${(i * 0.37).toFixed(2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear">
+                  <circle r={destaque ? 6 : 4 + intensidade * 1.4} fill={n.cor} filter="url(#glow)">
+                    <animateMotion dur={`${durBase.toFixed(2)}s`} repeatCount="indefinite" begin={`${(i * 0.37).toFixed(2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear">
                       <mpath href={`#caminho-${n.id}`} />
                     </animateMotion>
                   </circle>
-                  <circle r={3} fill="#ffffff" opacity={0.75}>
-                    <animateMotion dur={`${4.6 + (i % 4) * 0.5}s`} repeatCount="indefinite" begin={`${(i * 0.53 + 1.2).toFixed(2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear">
-                      <mpath href={`#caminho-${n.id}`} />
-                    </animateMotion>
-                  </circle>
+                  {!leve && (
+                    <circle r={3} fill="#ffffff" opacity={0.75}>
+                      <animateMotion dur={`${durBranco.toFixed(2)}s`} repeatCount="indefinite" begin={`${(i * 0.53 + 1.2).toFixed(2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear">
+                        <mpath href={`#caminho-${n.id}`} />
+                      </animateMotion>
+                    </circle>
+                  )}
+                  {!leve && intensidade > 0.5 && (
+                    <circle r={3.4} fill={n.cor} opacity={0.85}>
+                      <animateMotion dur={`${(durBase * 1.15).toFixed(2)}s`} repeatCount="indefinite" begin={`${(i * 0.37 + durBase / 2).toFixed(2)}s`} keyPoints="1;0" keyTimes="0;1" calcMode="linear">
+                        <mpath href={`#caminho-${n.id}`} />
+                      </animateMotion>
+                    </circle>
+                  )}
                 </>
               )}
             </g>
           );
         })}
 
-        {/* Sub-nós da sessão acesa */}
+        {/* Dendritos da sessão acesa: disparam para fora do nó quando ele
+            acende. Sem rótulo de propósito — o nome de cada função já está
+            na ficha embaixo, e escrito aqui ficava cortado atrás dela nos
+            nós da parte de baixo do círculo. */}
         {selecionado && (() => {
           const p = posicoes.get(selecionado.id);
           if (!p) return null;
-          return posicoesDosRamos(selecionado, p).map((r) => {
-            // O rótulo sai para o lado de fora da ponta (nunca por cima do
-            // nome da sessão nem de outro ramo).
-            const cos = Math.cos(r.angulo);
-            const ancora = cos > 0.25 ? "start" : cos < -0.25 ? "end" : "middle";
-            const dx = cos > 0.25 ? 13 : cos < -0.25 ? -13 : 0;
-            const dy = ancora === "middle" ? (Math.sin(r.angulo) > 0 ? 26 : -16) : 5;
-            return (
-              <g key={`ramo-${selecionado.id}-${r.rotulo}`}>
-                <line x1={p.x} y1={p.y} x2={r.x} y2={r.y} stroke={selecionado.cor} strokeWidth={1} opacity={0.5} />
-                <circle cx={r.x} cy={r.y} r={7} fill="#0b1520" stroke={selecionado.cor} strokeWidth={1.6} />
-                <text x={r.x + dx} y={r.y + dy} textAnchor={ancora} fill="#cbd5e1" fontSize={18} fontWeight={600}>{r.rotulo}</text>
-              </g>
-            );
-          });
+          return posicoesDosRamos(selecionado, p).map((r, i) => (
+            <g key={`ramo-${selecionado.id}-${r.rotulo}`} opacity={0.75}>
+              <line x1={p.x} y1={p.y} x2={r.x} y2={r.y} stroke={selecionado.cor} strokeWidth={1.2} opacity={0.5}>
+                {animar && <animate attributeName="stroke-opacity" values="0;0.5" dur="0.35s" begin={`${(i * 0.06).toFixed(2)}s`} fill="freeze" />}
+              </line>
+              <circle cx={r.x} cy={r.y} r={animar ? 0 : 6} fill={selecionado.cor}>
+                {animar && <animate attributeName="r" values="0;6" dur="0.35s" begin={`${(i * 0.06).toFixed(2)}s`} fill="freeze" />}
+              </circle>
+            </g>
+          ));
         })()}
 
-        {/* Centro: o Cérebro */}
+        {/* Centro: o Cérebro — pensa em ondas que saem de dentro para fora */}
         <g>
+          {animar && [0, 1.6].map((atraso) => (
+            <circle key={`onda-${atraso}`} cx={CENTRO.x} cy={CENTRO.y} r={46} fill="none" stroke="#38bdf8" strokeWidth={1.5}>
+              <animate attributeName="r" values="46;178" dur="3.2s" repeatCount="indefinite" begin={`${atraso}s`} />
+              <animate attributeName="opacity" values="0.5;0" dur="3.2s" repeatCount="indefinite" begin={`${atraso}s`} />
+            </circle>
+          ))}
           <circle cx={CENTRO.x} cy={CENTRO.y} r={120} fill="url(#brilho-cerebro)" opacity={0.85}>
             {animar && <animate attributeName="r" values="112;126;112" dur="4s" repeatCount="indefinite" />}
           </circle>
           <circle cx={CENTRO.x} cy={CENTRO.y} r={46} fill="#0b1e2b" stroke="#38bdf8" strokeWidth={2} filter="url(#glow)" />
           <text x={CENTRO.x} y={CENTRO.y + 8} textAnchor="middle" fill="#e2f6ff" fontSize={26} fontWeight={800}>IA</text>
-          <text x={CENTRO.x} y={CENTRO.y + 92} textAnchor="middle" fill="#7dd3fc" fontSize={26} fontWeight={800} letterSpacing="3">{titulo.toUpperCase()}</text>
+          {/* Contorno escuro grosso por baixo (paintOrder) para o nome não
+              ficar riscado pelas sinapses que passam atrás dele. */}
+          <text
+            x={CENTRO.x}
+            y={CENTRO.y + 152}
+            textAnchor="middle"
+            fill="#7dd3fc"
+            fontSize={24}
+            fontWeight={800}
+            letterSpacing="4"
+            stroke="#0a1119"
+            strokeWidth={6}
+            strokeLinejoin="round"
+            paintOrder="stroke"
+          >
+            {titulo.toUpperCase()}
+          </text>
         </g>
 
         {/* Nós das sessões */}
-        {nos.map((n) => {
+        {nos.map((n, i) => {
           const p = posicoes.get(n.id);
           if (!p) return null;
           const aceso = !ativo || ativo === n.id;
@@ -165,12 +382,28 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
             >
               {/* alvo de toque maior que o círculo: no celular o dedo acerta */}
               <circle cx={p.x} cy={p.y} r={46} fill="transparent" />
-              <circle cx={p.x} cy={p.y} r={destaque ? 30 : 23} fill="#0b1520" stroke={n.cor} strokeWidth={destaque ? 3.4 : 2.2} filter={destaque ? "url(#glow)" : undefined} />
+              {/* corpo do neurônio: o halo é o gradiente pintado com a cor da
+                  sessão (currentColor), por isso um gradiente só serve todas */}
+              <circle cx={p.x} cy={p.y} r={destaque ? 58 : 44} fill="url(#halo-no)" style={{ color: n.cor, transition: "r .25s" }} />
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={destaque ? 30 : 23}
+                fill="#0b1520"
+                stroke={n.cor}
+                strokeWidth={destaque ? 3.4 : 2.2}
+                filter={destaque ? "url(#glow)" : undefined}
+                className={animar && !destaque ? "cerebro-no" : undefined}
+                style={animar && !destaque ? { animationDuration: `${3.6 + (i % 4) * 0.5}s`, animationDelay: `${(i * 0.31).toFixed(2)}s` } : undefined}
+              />
               <text x={p.x} y={p.y + 7} textAnchor="middle" fill={n.cor} fontSize={20} fontWeight={800}>{n.total > 999 ? "999+" : n.total}</text>
               {!destaque && (
+                // Contorno escuro por baixo do texto (paintOrder): agora que
+                // há sinapses cruzando o fundo, sem isso o nome da sessão
+                // fica riscado pelas linhas.
                 <>
-                  <text x={xr} y={yr} textAnchor={ancora} fill="#e2e8f0" fontSize={22} fontWeight={700}>{n.nome}</text>
-                  <text x={xr} y={yr + 20} textAnchor={ancora} fill="#7c8da0" fontSize={17}>{n.rotuloTotal}</text>
+                  <text x={xr} y={yr} textAnchor={ancora} fill="#e2e8f0" fontSize={22} fontWeight={700} stroke="#0a1119" strokeWidth={5} strokeLinejoin="round" paintOrder="stroke">{n.nome}</text>
+                  <text x={xr} y={yr + 20} textAnchor={ancora} fill="#7c8da0" fontSize={17} stroke="#0a1119" strokeWidth={4} strokeLinejoin="round" paintOrder="stroke">{n.rotuloTotal}</text>
                 </>
               )}
             </g>
@@ -202,11 +435,27 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
                   <span key={r} className="rounded-lg px-2 py-0.5 text-[11px] text-slate-300" style={{ background: "rgba(255,255,255,0.06)" }}>{r}</span>
                 ))}
               </div>
+              {/* O que as sinapses acesas estão dizendo: por onde o dado desta
+                  sessão entra e sai. */}
+              {ligacoesDaSessao(selecionado.id).length > 0 && (
+                <div className="mt-2.5 space-y-1 border-t pt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                  {ligacoesDaSessao(selecionado.id).map((l) => {
+                    const outro = SESSOES_POR_ID.get(l.outro);
+                    return (
+                      <div key={l.outro} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: outro?.cor ?? "#64748b" }} />
+                        <span className="font-bold text-slate-300">{outro?.nome ?? l.outro}</span>
+                        <span className="truncate">— {l.fluxo}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           ) : (
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Brain size={15} style={{ color: "#38bdf8" }} />
-              <span>Toque em uma sessão para ver o que ela faz e entrar. Os pulsos são os dados de cada sessão chegando ao Cérebro.</span>
+              <span>Toque em uma sessão para ver o que ela faz e entrar. Os pulsos são os dados correndo entre as sessões e chegando ao Cérebro.</span>
             </div>
           )}
         </div>

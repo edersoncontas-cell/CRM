@@ -84,6 +84,39 @@ export const SESSOES: SessaoCerebro[] = [
 
 export const SESSOES_POR_ID = new Map(SESSOES.map((s) => [s.id, s]));
 
+// Como as sessões se alimentam umas das outras — é isto que o Cérebro quer
+// dizer com "conecta tudo". Cada ligação vira uma sinapse desenhada ENTRE
+// dois nós do grafo (fora as que vão até o centro), e o texto do fluxo
+// explica o caminho do dado quando a sessão é aberta. Só entra aqui o que
+// acontece de verdade no CRM — nada decorativo.
+export type LigacaoSessao = { de: string; para: string; fluxo: string };
+
+export const LIGACOES: LigacaoSessao[] = [
+  { de: "whatsapp", para: "orientador", fluxo: "a conversa vira leitura da IA" },
+  { de: "orientador", para: "negociacoes", fluxo: "a leitura vira negociação no funil" },
+  { de: "orientador", para: "alertas", fluxo: "o cliente que esfriou vira alerta" },
+  { de: "academia", para: "orientador", fluxo: "o treino afina o conselho" },
+  { de: "negociacoes", para: "financeiro", fluxo: "negociação ganha vira comissão" },
+  { de: "financeiro", para: "dashboard", fluxo: "o faturado vira placar do ano" },
+  { de: "maquinas", para: "negociacoes", fluxo: "a ficha técnica vira proposta" },
+  { de: "clientes", para: "whatsapp", fluxo: "o cliente é a conversa" },
+  { de: "clientes", para: "visitas", fluxo: "a carteira define a rota da semana" },
+  { de: "clientes", para: "marketing", fluxo: "a carteira é o público da campanha" },
+  { de: "marketing", para: "whatsapp", fluxo: "a campanha sai pelo WhatsApp" },
+  { de: "alertas", para: "demandas", fluxo: "o alerta vira tarefa do dia" },
+  { de: "visitas", para: "demandas", fluxo: "a visita marcada vira tarefa" },
+];
+
+// Com quem esta sessão troca dado (nos dois sentidos), já com o texto do
+// fluxo — usado na ficha que abre ao tocar num nó.
+export function ligacoesDaSessao(id: string): { outro: string; fluxo: string }[] {
+  return LIGACOES.flatMap((l) =>
+    l.de === id ? [{ outro: l.para, fluxo: l.fluxo }]
+    : l.para === id ? [{ outro: l.de, fluxo: l.fluxo }]
+    : []
+  );
+}
+
 export type GrupoSessao = SessaoCerebro["grupo"];
 
 export const ROTULO_GRUPO: Record<GrupoSessao, string> = {
@@ -93,13 +126,21 @@ export const ROTULO_GRUPO: Record<GrupoSessao, string> = {
   operacao: "Operação",
 };
 
+// Mesma ordem usada para posicionar os nós no círculo (agrupados por área) —
+// exportada para quem precisar saber QUEM É VIZINHO DE QUEM no anel (o
+// grafo usa isso para desenhar as sinapses entre sessões vizinhas, não só
+// as que vão até o centro).
+const ORDEM_GRUPO: GrupoSessao[] = ["vendas", "relacionamento", "inteligencia", "operacao"];
+export function ordenarPorGrupo<T extends { grupo: GrupoSessao }>(sessoes: T[]): T[] {
+  return [...sessoes].sort((a, b) => ORDEM_GRUPO.indexOf(a.grupo) - ORDEM_GRUPO.indexOf(b.grupo));
+}
+
 // Posição de cada nó em volta do Cérebro (coordenadas 0–1000 do SVG). Os nós
 // ficam distribuídos no círculo, agrupados por área, para o desenho nascer
 // organizado em vez de aleatório — e igual em toda recarga da página.
 export function posicoesDoGrafo(sessoes: SessaoCerebro[] = SESSOES): Map<string, { x: number; y: number; angulo: number }> {
   const centro = { x: 500, y: 500 };
-  const ordem: GrupoSessao[] = ["vendas", "relacionamento", "inteligencia", "operacao"];
-  const ordenadas = [...sessoes].sort((a, b) => ordem.indexOf(a.grupo) - ordem.indexOf(b.grupo));
+  const ordenadas = ordenarPorGrupo(sessoes);
   const mapa = new Map<string, { x: number; y: number; angulo: number }>();
   const n = ordenadas.length || 1;
   ordenadas.forEach((s, i) => {
