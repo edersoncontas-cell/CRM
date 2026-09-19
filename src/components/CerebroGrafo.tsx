@@ -139,45 +139,95 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
   // anel de sessões, onde antes só sobrava preto. É o tecido em que o
   // Cérebro está mergulhado — fica bem apagado de propósito, para dar
   // profundidade sem disputar atenção com o grafo de verdade.
-  const neuroniosFundo = useMemo(() => {
+  const tecido = useMemo(() => {
     // Espalha pelo RETÂNGULO do quadro (não por um círculo), senão os cantos
     // ficam vazios e o tecido não fecha. Descarta quem cair perto do miolo,
     // que é onde mora o grafo de verdade.
-    const alvo = leve ? 10 : 22;
+    // Muitos de propósito: com poucos pontos, o "vizinho mais próximo" ainda
+    // é longe e o fio vira uma linha atravessando a tela. Densidade alta é o
+    // que encurta os filamentos e faz virar tecido.
+    const alvo = leve ? 20 : 74;
     const pontos: { x: number; y: number }[] = [];
-    for (let k = 0; k < 220 && pontos.length < alvo; k++) {
-      const x = arred(-90 + pseudoAleatorio(k * 1.37 + 31) * 1180);
-      const y = arred(148 + pseudoAleatorio(k * 2.53 + 32) * 832);
-      if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 375) continue;
+    for (let k = 0; k < 900 && pontos.length < alvo; k++) {
+      const x = arred(-100 + pseudoAleatorio(k * 1.37 + 31) * 1200);
+      const y = arred(130 + pseudoAleatorio(k * 2.53 + 32) * 870);
+      if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 368) continue;
       pontos.push({ x, y });
     }
-    return pontos.map(({ x, y }, i) => {
-      const quantos = 4 + Math.floor(pseudoAleatorio(i * 3.31 + 13) * 3);
+
+    // Cada neurônio se liga aos dois vizinhos mais próximos: é a ligação
+    // entre eles que faz o fundo virar TECIDO, e não pontos soltos.
+    const vistos = new Set<string>();
+    const filamentos: {
+      d: string; comprimento: number; calda: number; dur: number; atraso: number; cor: string; comPulso: boolean;
+    }[] = [];
+    pontos.forEach((p, i) => {
+      const perto = pontos
+        .map((q, j) => ({ j, dist: Math.hypot(q.x - p.x, q.y - p.y) }))
+        .filter((o) => o.j !== i)
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 2);
+      for (const { j, dist } of perto) {
+        const chave = i < j ? `${i}-${j}` : `${j}-${i}`;
+        // Fio comprido não é sinapse, é risco atravessando o quadro.
+        if (vistos.has(chave) || dist > 170) continue;
+        vistos.add(chave);
+        const q = pontos[j];
+        // Arco de leve, para o fio não ficar com cara de régua.
+        const mx = (p.x + q.x) / 2;
+        const my = (p.y + q.y) / 2;
+        const desvio = (pseudoAleatorio(i * 3.7 + j * 1.9 + 51) - 0.5) * 26;
+        const nx = -(q.y - p.y) / (dist || 1);
+        const ny = (q.x - p.x) / (dist || 1);
+        const n = filamentos.length;
+        filamentos.push({
+          d: `M ${p.x} ${p.y} Q ${arred(mx + nx * desvio)} ${arred(my + ny * desvio)} ${q.x} ${q.y}`,
+          comprimento: arred(dist),
+          // Cauda curta: um risco de luz passando, não um rastro comprido.
+          calda: arred(5 + pseudoAleatorio(n * 2.1 + 52) * 5),
+          dur: arred(2.6 + pseudoAleatorio(n * 4.3 + 53) * 4.4),
+          // Curto: atraso longo deixava o tecido parado nos primeiros segundos.
+          atraso: arred(pseudoAleatorio(n * 6.7 + 54) * 2.8),
+          cor: n % 4 === 0 ? "#a78bfa" : n % 7 === 0 ? "#34d399" : "#38bdf8",
+          comPulso: false, // definido abaixo, por contagem
+        });
+      }
+    });
+
+    // Quem pulsa: escolhido por CONTAGEM, não por sorteio. Fio parado é
+    // praticamente de graça (pinta uma vez); fio com pulso repinta a cada
+    // quadro. Assim o fundo fica denso de fios e o custo do movimento
+    // continua fixo — e o celular não fica com dois pulsos perdidos, como
+    // acontecia quando isso era sorteado.
+    const alvoPulsos = leve ? 12 : 34;
+    const passo = Math.max(1, Math.round(filamentos.length / alvoPulsos));
+    filamentos.forEach((f, n) => { f.comPulso = n % passo === 0; });
+
+    const neuronios = pontos.map(({ x, y }, i) => {
+      const quantos = 2 + Math.floor(pseudoAleatorio(i * 3.31 + 13) * 2);
       const giro = pseudoAleatorio(i * 7.77 + 14) * Math.PI * 2;
       const dendritos = Array.from({ length: quantos }, (_, j) => {
         const a = giro + (j / quantos) * Math.PI * 2 + (pseudoAleatorio(i * 2.13 + j * 1.7) - 0.5) * 0.8;
-        // Curto de propósito: dendrito comprido vira risco solto atravessando
-        // o quadro em vez de célula.
-        const comp = 26 + pseudoAleatorio(i * 4.41 + j * 2.3) * 44;
-        const pontaX = arred(x + Math.cos(a) * comp);
-        const pontaY = arred(y + Math.sin(a) * comp);
-        // Controle fora da reta: o dendrito sai torto, como na natureza.
+        // Bem curto: o que dá corpo ao fundo agora são os filamentos entre
+        // os neurônios, não espetos saindo de cada um.
+        const comp = 12 + pseudoAleatorio(i * 4.41 + j * 2.3) * 20;
         const curvatura = (pseudoAleatorio(i * 6.1 + j * 3.1) - 0.5) * 0.9;
-        const cx = arred(x + Math.cos(a + curvatura) * comp * 0.6);
-        const cy = arred(y + Math.sin(a + curvatura) * comp * 0.6);
-        return { d: `M ${x} ${y} Q ${cx} ${cy} ${pontaX} ${pontaY}`, pontaX, pontaY };
+        return {
+          d: `M ${x} ${y} Q ${arred(x + Math.cos(a + curvatura) * comp * 0.6)} ${arred(y + Math.sin(a + curvatura) * comp * 0.6)} ${arred(x + Math.cos(a) * comp)} ${arred(y + Math.sin(a) * comp)}`,
+        };
       });
       return {
         x, y, dendritos,
-        corpo: arred(2.2 + pseudoAleatorio(i * 8.3 + 15) * 2.4),
-        op: arred(0.1 + pseudoAleatorio(i * 1.9 + 16) * 0.14),
-        dx: arred((pseudoAleatorio(i * 10.7 + 17) - 0.5) * 22),
-        dy: arred((pseudoAleatorio(i * 12.3 + 18) - 0.5) * 22),
-        dur: arred(7 + pseudoAleatorio(i * 5.9 + 19) * 6),
-        delay: arred(pseudoAleatorio(i * 3.3 + 20) * 7),
+        corpo: arred(1.8 + pseudoAleatorio(i * 8.3 + 15) * 2),
+        dx: arred((pseudoAleatorio(i * 10.7 + 17) - 0.5) * 16),
+        dy: arred((pseudoAleatorio(i * 12.3 + 18) - 0.5) * 16),
+        dur: arred(9 + pseudoAleatorio(i * 5.9 + 19) * 7),
+        delay: arred(pseudoAleatorio(i * 3.3 + 20) * 8),
         cor: i % 3 === 0 ? "#a78bfa" : "#38bdf8",
       };
     });
+
+    return { neuronios, filamentos };
   }, [leve]);
 
   // Poeira neural de fundo: pontinhos que flutuam devagar, só para o painel
@@ -259,61 +309,73 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
             primeiro = fica atrás de tudo. Cada um deriva devagar e uma ponta
             dispara de vez em quando, tudo em CSS (nada de SMIL aqui, senão
             o custo explodiria). */}
-        {animar && (
-          <g>
-            {neuroniosFundo.map((n, i) => (
-              <g
-                key={`neuronio-${i}`}
-                className="cerebro-neuronio"
-                style={{
-                  ["--dx" as string]: `${n.dx}px`,
-                  ["--dy" as string]: `${n.dy}px`,
-                  ["--op" as string]: n.op,
-                  animationDuration: `${n.dur}s`,
-                  animationDelay: `${n.delay}s`,
-                }}
-              >
-                {n.dendritos.map((d, j) => (
-                  <path key={j} d={d.d} fill="none" stroke={n.cor} strokeWidth={0.9} strokeLinecap="round" />
-                ))}
-                <circle cx={n.x} cy={n.y} r={n.corpo} fill={n.cor} />
-                {/* uma ponta pisca: o neurônio disparando */}
-                <circle
-                  cx={n.dendritos[0].pontaX}
-                  cy={n.dendritos[0].pontaY}
-                  r={2}
-                  fill={n.cor}
-                  className="cerebro-faisca"
-                  style={{ animationDuration: `${4 + (i % 5) * 0.8}s`, animationDelay: `${(i * 0.9).toFixed(2)}s` }}
+        <g opacity={0.62}>
+          {/* Filamentos entre os neurônios: o fio apagado sempre visível e,
+              por cima, o pulso correndo. O pulso NÃO acende nem apaga — ele
+              atravessa o fio e recomeça, então de longe o fundo nunca dá a
+              impressão de ter parado. */}
+          {tecido.filamentos.map((f, i) => (
+            <g key={`fil-${i}`}>
+              <path d={f.d} fill="none" stroke="#2d5a78" strokeWidth={0.8} strokeLinecap="round" />
+              {animar && f.comPulso && (
+                <path
+                  d={f.d}
+                  fill="none"
+                  stroke={f.cor}
+                  strokeWidth={1.7}
+                  strokeLinecap="round"
+                  className="cerebro-pulso"
+                  style={{
+                    // vão = comprimento do fio: nunca mais de um pulso por vez
+                    strokeDasharray: `${f.calda} ${f.comprimento}`,
+                    ["--traco" as string]: f.calda + f.comprimento,
+                    animationDuration: `${f.dur}s`,
+                    animationDelay: `${f.atraso}s`,
+                  }}
                 />
-              </g>
-            ))}
-          </g>
-        )}
+              )}
+            </g>
+          ))}
+          {tecido.neuronios.map((n, i) => (
+            <g
+              key={`neuronio-${i}`}
+              className={animar ? "cerebro-neuronio" : undefined}
+              style={animar ? {
+                ["--dx" as string]: `${n.dx}px`,
+                ["--dy" as string]: `${n.dy}px`,
+                animationDuration: `${n.dur}s`,
+                animationDelay: `${n.delay}s`,
+              } : undefined}
+            >
+              {n.dendritos.map((d, j) => (
+                <path key={j} d={d.d} fill="none" stroke={n.cor} strokeWidth={0.8} strokeLinecap="round" opacity={0.55} />
+              ))}
+              <circle cx={n.x} cy={n.y} r={n.corpo} fill={n.cor} opacity={0.8} />
+            </g>
+          ))}
+        </g>
 
-        {/* Poeira neural: só textura de fundo, flutua devagar e não reage a
-            nada. Fica ATRÁS de tudo (primeiro no DOM = primeiro pintado). */}
-        {animar && (
-          <g>
-            {poeira.map((p, i) => (
-              <circle
-                key={`poeira-${i}`}
-                cx={p.x}
-                cy={p.y}
-                r={p.raio}
-                fill="#7dd3fc"
-                className="cerebro-neuronio"
-                style={{
-                  ["--dx" as string]: `${p.dx}px`,
-                  ["--dy" as string]: `${p.dy}px`,
-                  ["--op" as string]: p.op,
-                  animationDuration: `${p.dur}s`,
-                  animationDelay: `${p.delay}s`,
-                }}
-              />
-            ))}
-          </g>
-        )}
+        {/* Poeira neural: partícula solta entre os neurônios, só textura.
+            Opacidade FIXA — quem dá vida é o pulso nos filamentos. */}
+        <g>
+          {poeira.map((p, i) => (
+            <circle
+              key={`poeira-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={p.raio}
+              fill="#7dd3fc"
+              opacity={p.op}
+              className={animar ? "cerebro-neuronio" : undefined}
+              style={animar ? {
+                ["--dx" as string]: `${p.dx}px`,
+                ["--dy" as string]: `${p.dy}px`,
+                animationDuration: `${p.dur}s`,
+                animationDelay: `${p.delay}s`,
+              } : undefined}
+            />
+          ))}
+        </g>
 
         {/* Sinapses ENTRE sessões: o caminho do dado dentro do CRM. Ficam
             atrás do núcleo, então o arco que passa perto do centro some por

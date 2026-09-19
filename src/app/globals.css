@@ -258,31 +258,43 @@ img, video, iframe {
     }
 }
 
-/* ── Grafo do Cérebro: sinapses conectadas ──────────────────────────────
-   Só decoração (poeira neural, disparos aleatórios, fluxo de energia no
-   anel) — tudo em CSS puro (transform/opacity), nunca SMIL, para não pesar
-   com dezenas de elementos animados. Respeita prefers-reduced-motion. */
-@keyframes cerebro-flutuar {
-  0%, 100% { transform: translate(0, 0); opacity: var(--op, 0.3); }
-  50% { transform: translate(var(--dx, 6px), var(--dy, -8px)); opacity: calc(var(--op, 0.3) * 1.8); }
+/* ── Grafo do Cérebro: tecido de sinapses do fundo ──────────────────────
+   Tudo aqui é decoração, em CSS puro, para aguentar muitos elementos sem
+   pesar. Respeita prefers-reduced-motion.
+
+   REGRA: nada de acender e apagar. Antes o fundo tinha faísca (opacidade
+   indo a zero) e os neurônios oscilavam de opacidade — de longe isso vira
+   um pisca-pisca, a animação parece PARAR entre um lampejo e outro. O
+   movimento agora é só o pulso correndo dentro do fio, sem interrupção. */
+
+/* O pulso: um traço curto que percorre o filamento sem parar. A "cauda" é o
+   tamanho do traço (--calda) e o vão é o comprimento do fio, para nunca
+   aparecer mais de um pulso por filamento. */
+@keyframes cerebro-pulso {
+  from { stroke-dashoffset: var(--traco, 100); }
+  to { stroke-dashoffset: 0; }
 }
-.cerebro-neuronio {
-  animation-name: cerebro-flutuar;
-  animation-timing-function: ease-in-out;
+.cerebro-pulso {
+  animation-name: cerebro-pulso;
+  animation-timing-function: linear;
   animation-iteration-count: infinite;
-  transform-box: fill-box;
+  /* backwards: durante o atraso inicial o traço já fica na posição de
+     partida (fora do fio). Sem isto, ele aparecia parado na ponta do
+     filamento até a vez dele chegar. */
+  animation-fill-mode: backwards;
 }
 
-@keyframes cerebro-faisca {
-  0%, 88%, 100% { opacity: 0; transform: scale(0.5); }
-  94% { opacity: 1; transform: scale(1.7); }
+/* Deriva lenta do tecido: só translada, a opacidade fica FIXA (era ela que
+   fazia o fundo piscar). */
+@keyframes cerebro-deriva {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(var(--dx, 6px), var(--dy, -8px)); }
 }
-.cerebro-faisca {
-  animation-name: cerebro-faisca;
+.cerebro-neuronio {
+  animation-name: cerebro-deriva;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
   transform-box: fill-box;
-  transform-origin: center;
 }
 
 @keyframes cerebro-respirar {
@@ -298,7 +310,7 @@ img, video, iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cerebro-neuronio, .cerebro-faisca, .cerebro-no {
+  .cerebro-neuronio, .cerebro-pulso, .cerebro-no {
     animation: none !important;
   }
 }
