@@ -112,6 +112,51 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     }).filter((l): l is NonNullable<typeof l> => l !== null);
   }, [porId, posicoes]);
 
+  // Neurônios de fundo: corpo + dendritos ramificados, espalhados FORA do
+  // anel de sessões, onde antes só sobrava preto. É o tecido em que o
+  // Cérebro está mergulhado — fica bem apagado de propósito, para dar
+  // profundidade sem disputar atenção com o grafo de verdade.
+  const neuroniosFundo = useMemo(() => {
+    // Espalha pelo RETÂNGULO do quadro (não por um círculo), senão os cantos
+    // ficam vazios e o tecido não fecha. Descarta quem cair perto do miolo,
+    // que é onde mora o grafo de verdade.
+    const alvo = leve ? 10 : 22;
+    const pontos: { x: number; y: number }[] = [];
+    for (let k = 0; k < 220 && pontos.length < alvo; k++) {
+      const x = -90 + pseudoAleatorio(k * 1.37 + 31) * 1180;
+      const y = 148 + pseudoAleatorio(k * 2.53 + 32) * 832;
+      if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 375) continue;
+      pontos.push({ x, y });
+    }
+    return pontos.map(({ x, y }, i) => {
+      const quantos = 4 + Math.floor(pseudoAleatorio(i * 3.31 + 13) * 3);
+      const giro = pseudoAleatorio(i * 7.77 + 14) * Math.PI * 2;
+      const dendritos = Array.from({ length: quantos }, (_, j) => {
+        const a = giro + (j / quantos) * Math.PI * 2 + (pseudoAleatorio(i * 2.13 + j * 1.7) - 0.5) * 0.8;
+        // Curto de propósito: dendrito comprido vira risco solto atravessando
+        // o quadro em vez de célula.
+        const comp = 26 + pseudoAleatorio(i * 4.41 + j * 2.3) * 44;
+        const pontaX = x + Math.cos(a) * comp;
+        const pontaY = y + Math.sin(a) * comp;
+        // Controle fora da reta: o dendrito sai torto, como na natureza.
+        const curvatura = (pseudoAleatorio(i * 6.1 + j * 3.1) - 0.5) * 0.9;
+        const cx = x + Math.cos(a + curvatura) * comp * 0.6;
+        const cy = y + Math.sin(a + curvatura) * comp * 0.6;
+        return { d: `M ${x} ${y} Q ${cx} ${cy} ${pontaX} ${pontaY}`, pontaX, pontaY };
+      });
+      return {
+        x, y, dendritos,
+        corpo: 2.2 + pseudoAleatorio(i * 8.3 + 15) * 2.4,
+        op: 0.1 + pseudoAleatorio(i * 1.9 + 16) * 0.14,
+        dx: (pseudoAleatorio(i * 10.7 + 17) - 0.5) * 22,
+        dy: (pseudoAleatorio(i * 12.3 + 18) - 0.5) * 22,
+        dur: 7 + pseudoAleatorio(i * 5.9 + 19) * 6,
+        delay: pseudoAleatorio(i * 3.3 + 20) * 7,
+        cor: i % 3 === 0 ? "#a78bfa" : "#38bdf8",
+      };
+    });
+  }, [leve]);
+
   // Poeira neural de fundo: pontinhos que flutuam devagar, só para o painel
   // parecer um tecido vivo (puramente decorativo, sem interação).
   const poeira = useMemo(() => Array.from({ length: leve ? 12 : 26 }, (_, i) => {
@@ -185,6 +230,43 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
             </linearGradient>
           ))}
         </defs>
+
+        {/* Tecido neural do fundo: neurônios inteiros (corpo + dendritos)
+            preenchendo o vazio em volta do anel. Primeiro no DOM = pintado
+            primeiro = fica atrás de tudo. Cada um deriva devagar e uma ponta
+            dispara de vez em quando, tudo em CSS (nada de SMIL aqui, senão
+            o custo explodiria). */}
+        {animar && (
+          <g>
+            {neuroniosFundo.map((n, i) => (
+              <g
+                key={`neuronio-${i}`}
+                className="cerebro-neuronio"
+                style={{
+                  ["--dx" as string]: `${n.dx}px`,
+                  ["--dy" as string]: `${n.dy}px`,
+                  ["--op" as string]: n.op,
+                  animationDuration: `${n.dur}s`,
+                  animationDelay: `${n.delay}s`,
+                }}
+              >
+                {n.dendritos.map((d, j) => (
+                  <path key={j} d={d.d} fill="none" stroke={n.cor} strokeWidth={0.9} strokeLinecap="round" />
+                ))}
+                <circle cx={n.x} cy={n.y} r={n.corpo} fill={n.cor} />
+                {/* uma ponta pisca: o neurônio disparando */}
+                <circle
+                  cx={n.dendritos[0].pontaX}
+                  cy={n.dendritos[0].pontaY}
+                  r={2}
+                  fill={n.cor}
+                  className="cerebro-faisca"
+                  style={{ animationDuration: `${4 + (i % 5) * 0.8}s`, animationDelay: `${(i * 0.9).toFixed(2)}s` }}
+                />
+              </g>
+            ))}
+          </g>
+        )}
 
         {/* Poeira neural: só textura de fundo, flutua devagar e não reage a
             nada. Fica ATRÁS de tudo (primeiro no DOM = primeiro pintado). */}

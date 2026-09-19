@@ -285,17 +285,6 @@ img, video, iframe {
   transform-origin: center;
 }
 
-/* Traço quase inteiro com uma falha que corre: lê como energia passando
-   pela sinapse. Pontilhado curto deixava a ligação com cara de tracejado
-   tímido em vez de ligação de verdade. */
-@keyframes cerebro-fluxo {
-  to { stroke-dashoffset: -37; }
-}
-.cerebro-anel {
-  stroke-dasharray: 30 7;
-  animation: cerebro-fluxo 1.9s linear infinite;
-}
-
 @keyframes cerebro-respirar {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.07); }
@@ -309,7 +298,7 @@ img, video, iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cerebro-neuronio, .cerebro-faisca, .cerebro-anel, .cerebro-no {
+  .cerebro-neuronio, .cerebro-faisca, .cerebro-no {
     animation: none !important;
   }
 }
