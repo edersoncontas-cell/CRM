@@ -17,6 +17,7 @@ import {
 } from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
 import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
+import { Celebracao } from "@/components/Celebracao";
 import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
@@ -97,6 +98,7 @@ export function FunilNegociacoes({
   const [filtro, setFiltro] = useState("");
   const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
   const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
+  const [celebrando, setCelebrando] = useState(false);
   const [confirmPerda, setConfirmPerda] = useState<{ cardId: string; cliente: string; estagio: string } | null>(null);
   const [novaNegociacaoAberta, setNovaNegociacaoAberta] = useState(false);
   const [estagioPreSelecionado, setEstagioPreSelecionado] = useState<string | null>(null);
@@ -182,10 +184,22 @@ export function FunilNegociacoes({
       )
     );
     moverNegociacao(card.id, novoEstagio);
-    // Ao cair na coluna FATURADO, pergunta se o faturamento foi hoje (ou retroativo).
+    // Ao cair na coluna FATURADO: fogos + pergunta se o faturamento foi hoje (ou retroativo).
     if (papel === "faturado") {
+      comemorar();
       setConfirmFaturamento({ cardId: card.id, cliente: card.cliente });
     }
+  }
+
+  // Comemoração de venda faturada (fogos com cifrões, confete e BORA PRA CIMA).
+  function comemorar() {
+    setCelebrando(false);
+    // Reinicia a animação mesmo se outra estiver rodando.
+    requestAnimationFrame(() => setCelebrando(true));
+  }
+  function colunaEhFaturado(estagio: string): boolean {
+    const col = colunas.find((c) => c.titulo === estagio);
+    return col ? papelDaColuna(col) === "faturado" : estagio.toLowerCase().includes("faturad");
   }
 
   return (
@@ -356,8 +370,11 @@ export function FunilNegociacoes({
           clientes={clientes}
           maquinasProprias={maquinasProprias}
           onFechar={() => { setNovaNegociacaoAberta(false); setEstagioPreSelecionado(null); }}
+          onSucesso={(info) => { if (info && !info.excluida && colunaEhFaturado(info.estagio)) comemorar(); }}
         />
       )}
+
+      <Celebracao ativa={celebrando} onFim={() => setCelebrando(false)} />
 
       {confirmPerda && (
         <PopupMotivoPerda
@@ -372,7 +389,8 @@ export function FunilNegociacoes({
         />
       )}
 
-      {confirmFaturamento && (
+      {/* A pergunta da data só aparece depois da comemoração, para não ficar por baixo dos fogos. */}
+      {confirmFaturamento && !celebrando && (
         <PopupConfirmarFaturamento
           cliente={confirmFaturamento.cliente}
           onFechar={() => setConfirmFaturamento(null)}
@@ -571,13 +589,16 @@ const COR_KPI_ICON: Record<string, string> = {
 };
 function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; rotulo: string; valor: string; sub?: string; cor: string }) {
   return (
-    <div className={`rounded-2xl border p-4 ${COR_KPI[cor] ?? "bg-slate-50 border-slate-100"}`}>
-      <div className="flex items-start gap-3">
-        <div className={`rounded-xl p-2 ${COR_KPI_ICON[cor] ?? "bg-slate-100 text-slate-600"}`}>{icone}</div>
-        <div className="min-w-0">
-          <div className="text-xs font-medium text-slate-500 truncate">{rotulo}</div>
-          <div className="text-xl font-bold text-slate-800 leading-tight">{valor}</div>
-          {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+    // No celular o card tem ~170 px: ícone em cima e número embaixo, com
+    // tamanho que encolhe quando o valor é comprido (R$ 2.149.000), para nunca
+    // vazar do card. No desktop volta a ficar ícone ao lado.
+    <div className={`min-w-0 rounded-2xl border p-3 sm:p-4 ${COR_KPI[cor] ?? "bg-slate-50 border-slate-100"}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+        <div className={`w-fit rounded-xl p-2 ${COR_KPI_ICON[cor] ?? "bg-slate-100 text-slate-600"}`}>{icone}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium leading-tight text-slate-500">{rotulo}</div>
+          <div className={`break-words font-bold leading-tight tabular-nums text-slate-800 ${valor.length > 10 ? "text-base sm:text-xl" : "text-xl"}`}>{valor}</div>
+          {sub && <div className="mt-0.5 break-words text-xs leading-snug text-slate-400">{sub}</div>}
         </div>
       </div>
     </div>

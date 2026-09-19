@@ -137,7 +137,8 @@ export function FormNovaNegociacao({
   estagioInicial?: string;
   maquinasProprias: MaquinaPropria[];
   onFechar: () => void;
-  onSucesso?: () => void;
+  // Recebe a coluna em que a negociação ficou (para o funil comemorar se caiu em Faturado).
+  onSucesso?: (info?: { estagio: string; excluida?: boolean }) => void;
   negociacaoId?: string;
   valoresIniciais?: ValoresNegociacao;
 }) {
@@ -240,7 +241,7 @@ export function FormNovaNegociacao({
         setErro((r as { erro?: string }).erro ?? "Erro ao salvar negociação.");
         return;
       }
-      onSucesso?.();
+      onSucesso?.({ estagio });
       onFechar();
     });
   }
@@ -250,7 +251,7 @@ export function FormNovaNegociacao({
     if (!confirm(`Excluir negociação de ${clienteNomeFixo ?? "este cliente"}?`)) return;
     startTransition(async () => {
       await excluirNegociacao(negociacaoId);
-      onSucesso?.();
+      onSucesso?.({ estagio, excluida: true });
       onFechar();
     });
   }
