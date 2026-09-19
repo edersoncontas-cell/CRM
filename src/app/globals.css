@@ -80,26 +80,42 @@ body {
     @apply outline-none ring-2 ring-brand-500 ring-offset-2;
 }
 
-/* Inputs e selects consistentes */
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
-    @apply rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-shadow;
-    /* Evitar zoom automático no iOS ao focar em inputs */
-    font-size: max(16px, 1rem);
-    /* Garantir que não ultrapassem o container */
-    max-width: 100%;
-    box-sizing: border-box;
-    /* Remover resize handle nos textareas */
-    resize: none;
-    /* Remover aparência nativa que pode causar artefatos visuais */
-    -webkit-appearance: none;
-    appearance: none;
-}
-input:not([type="checkbox"]):not([type="radio"]):focus,
-select:focus,
-textarea:focus {
-    @apply border-brand-400 outline-none ring-2 ring-brand-100;
+/* Inputs e selects consistentes.
+   IMPORTANTE — especificidade, não @layer (o Tailwind v3 achata o @layer em
+   ordem de saída; não existe cascade layer de verdade no CSS final). O bug
+   de verdade era outro: "input:not([type=checkbox]):not([type=radio])" tem
+   especificidade (0,2,1) — cada :not() com seletor de atributo dentro conta
+   como uma classe — e isso é MAIOR que qualquer classe do Tailwind sozinha,
+   tipo .pl-9 (0,1,0). Resultado: nenhuma classe de um componente conseguia
+   vencer o px-3/py-2 daqui, não importa a ordem escrita no className — foi o
+   que causou a lupa por cima do texto no campo de busca da Central
+   Inteligente, e por isso um componente (BuscaClientesInstantanea) precisou
+   do gambiarra "!pl-9". A correção: :where() sempre conta como
+   especificidade zero, então a exclusão de checkbox/radio continua
+   funcionando mas para de "pesar" — a regra volta a valer (0,0,1), como um
+   <input> comum, e qualquer classe do Tailwind escrita no componente ganha
+   dela normalmente. */
+@layer base {
+    input:where(:not([type="checkbox"])):where(:not([type="radio"])),
+    select,
+    textarea {
+        @apply rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-shadow;
+        /* Evitar zoom automático no iOS ao focar em inputs */
+        font-size: max(16px, 1rem);
+        /* Garantir que não ultrapassem o container */
+        max-width: 100%;
+        box-sizing: border-box;
+        /* Remover resize handle nos textareas */
+        resize: none;
+        /* Remover aparência nativa que pode causar artefatos visuais */
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    input:where(:not([type="checkbox"])):where(:not([type="radio"])):focus,
+    select:focus,
+    textarea:focus {
+        @apply border-brand-400 outline-none ring-2 ring-brand-100;
+    }
 }
 
 /* ── Input type=date: normalizar em iOS ── */

@@ -16,6 +16,13 @@ import {
 import type { RelatorioGerado } from "@/lib/cerebro/relatorio-diario";
 import type { IdeiaRadar } from "@/lib/cerebro/radar";
 import { SESSOES } from "@/lib/cerebro/sessoes";
+import { ListaComLimite } from "@/components/ListaComLimite";
+
+// Padrão dos cards da Central Inteligente: nenhuma lista aparece inteira de
+// uma vez — 5 itens e "ver mais", para o card nunca estufar a página nem
+// esticar os vizinhos no mesmo grid.
+const LIMITE_LISTA = 5;
+const botaoVerMaisEscuro = "mt-2 inline-flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-white";
 
 const painel = { background: "#111a24", border: "1px solid #1e2a36" } as const;
 const campo = "w-full rounded-xl bg-[#0b1119] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600";
@@ -119,29 +126,32 @@ export function PainelRelatorio({ inicial }: { inicial: RelatorioGerado[] }) {
             ))}
           </div>
 
-          {atual.detalhes.negocio.length > 0 && (
-            <ul className="mb-3 space-y-1.5">
-              {atual.detalhes.negocio.map((c, i) => (
-                <li key={`${c.conversaId}-${i}`} className="flex items-start gap-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black ${c.novo ? "bg-emerald-400/20 text-emerald-300" : "bg-sky-400/20 text-sky-300"}`}>
-                    {c.novo ? "NOVO" : "CARTEIRA"}
+          <ListaComLimite
+            itens={atual.detalhes.negocio}
+            limite={LIMITE_LISTA}
+            classNameLista="mb-3 space-y-1.5"
+            classNameBotao={`mb-3 ${botaoVerMaisEscuro}`}
+            chave={(c, i) => `${c.conversaId}-${i}`}
+            renderItem={(c) => (
+              <div className="flex items-start gap-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.04)" }}>
+                <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black ${c.novo ? "bg-emerald-400/20 text-emerald-300" : "bg-sky-400/20 text-sky-300"}`}>
+                  {c.novo ? "NOVO" : "CARTEIRA"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-bold text-slate-100">{c.nome}</span>
+                  {c.municipio && <span className="text-slate-500"> · {c.municipio}</span>}
+                  <span className="block text-slate-400">
+                    {[c.maquina, c.financiamento ? "financiamento" : null].filter(Boolean).join(" · ") || c.motivo}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="font-bold text-slate-100">{c.nome}</span>
-                    {c.municipio && <span className="text-slate-500"> · {c.municipio}</span>}
-                    <span className="block text-slate-400">
-                      {[c.maquina, c.financiamento ? "financiamento" : null].filter(Boolean).join(" · ") || c.motivo}
-                    </span>
-                  </span>
-                  {c.clienteId && (
-                    <Link href={`/clientes/${c.clienteId}`} className="shrink-0 text-slate-500 hover:text-white" title="Abrir o cliente">
-                      <ExternalLink size={13} />
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+                </span>
+                {c.clienteId && (
+                  <Link href={`/clientes/${c.clienteId}`} className="shrink-0 text-slate-500 hover:text-white" title="Abrir o cliente">
+                    <ExternalLink size={13} />
+                  </Link>
+                )}
+              </div>
+            )}
+          />
 
           <details className="group">
             <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-white">
@@ -196,9 +206,14 @@ export function PainelRadar({ inicial }: { inicial: IdeiaRadar[] }) {
       {visiveis.length === 0 ? (
         <p className="text-xs text-slate-500">Nenhuma ideia ainda. A pesquisa roda sozinha no fim do dia.</p>
       ) : (
-        <ul className="space-y-2">
-          {visiveis.map((i) => (
-            <li key={i.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${COR_ESFORCO[i.esforco] ?? "#ffcb2d"}` }}>
+        <ListaComLimite
+          itens={visiveis}
+          limite={LIMITE_LISTA}
+          classNameLista="space-y-2"
+          classNameBotao={botaoVerMaisEscuro}
+          chave={(i) => i.id}
+          renderItem={(i) => (
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${COR_ESFORCO[i.esforco] ?? "#ffcb2d"}` }}>
               <div className="flex items-start gap-2">
                 <Lightbulb size={14} className="mt-0.5 shrink-0" style={{ color: COR_ESFORCO[i.esforco] ?? "#ffcb2d" }} />
                 <div className="min-w-0 flex-1">
@@ -222,9 +237,9 @@ export function PainelRadar({ inicial }: { inicial: IdeiaRadar[] }) {
                   fonte <ExternalLink size={10} />
                 </a>
               )}
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+        />
       )}
     </section>
   );
@@ -285,34 +300,45 @@ export function PainelMemoria({ inicial }: { inicial: Memoria[] }) {
       <div className="mt-4 flex gap-2">
         <div className="relative flex-1">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          {/* Sem px-3 aqui: junto com pl-9 os dois brigam pelo padding-left
+              (mesma especificidade, e o px-3 do "campo" vence na cascata do
+              Tailwind) e a lupa ficava em cima do texto digitado. */}
           <input
             value={termo}
             onChange={(e) => setTermo(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") buscar(); }}
             placeholder="Procurar memórias — título ou trecho…"
-            className={`${campo} pl-9`}
+            className="w-full rounded-xl bg-[#0b1119] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-600"
           />
         </div>
         <button onClick={buscar} disabled={ocupado} className="rounded-xl px-3 py-2 text-xs font-bold text-slate-200 disabled:opacity-60" style={{ background: "rgba(255,255,255,0.07)" }}>Buscar</button>
       </div>
 
-      <ul className="mt-3 space-y-2">
-        {memorias.length === 0 && <li className="text-xs text-slate-500">Nada guardado ainda.</li>}
-        {memorias.map((m) => (
-          <li key={m.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)" }}>
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-bold text-slate-100">{m.titulo}</div>
-                <div className="text-[10px] text-slate-500">
-                  {dataCurta(m.criadoEm)}{m.sessao ? ` · ${SESSOES.find((s) => s.id === m.sessao)?.nome ?? m.sessao}` : ""}
+      {memorias.length === 0 ? (
+        <p className="mt-3 text-xs text-slate-500">Nada guardado ainda.</p>
+      ) : (
+        <ListaComLimite
+          itens={memorias}
+          limite={LIMITE_LISTA}
+          classNameLista="mt-3 space-y-2"
+          classNameBotao={botaoVerMaisEscuro}
+          chave={(m) => m.id}
+          renderItem={(m) => (
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-bold text-slate-100">{m.titulo}</div>
+                  <div className="text-[10px] text-slate-500">
+                    {dataCurta(m.criadoEm)}{m.sessao ? ` · ${SESSOES.find((s) => s.id === m.sessao)?.nome ?? m.sessao}` : ""}
+                  </div>
                 </div>
+                <button onClick={() => esquecer(m.id)} title="Esquecer" className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-red-400"><Trash2 size={13} /></button>
               </div>
-              <button onClick={() => esquecer(m.id)} title="Esquecer" className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-white/5 hover:text-red-400"><Trash2 size={13} /></button>
+              <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-slate-400">{m.conteudo}</p>
             </div>
-            <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-slate-400">{m.conteudo}</p>
-          </li>
-        ))}
-      </ul>
+          )}
+        />
+      )}
     </section>
   );
 }

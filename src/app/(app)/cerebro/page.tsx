@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
-import { CerebroChat } from "@/components/CerebroChat";
 import { CerebroGrafo, type NoGrafo } from "@/components/CerebroGrafo";
 import { PainelRelatorio, PainelRadar, PainelMemoria } from "@/components/CentralCerebro";
 import { SESSOES } from "@/lib/cerebro/sessoes";
@@ -91,36 +90,34 @@ export default async function CerebroPage() {
         <CerebroGrafo nos={nos} titulo="Cérebro" />
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* items-start: um card com lista mais longa (mesmo já limitada, com
+          "ver mais") nunca estica os vizinhos para a mesma altura — cada um
+          fica do tamanho do próprio conteúdo. */}
+      <div className="mb-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         <PainelRelatorio inicial={relatorios} />
         <PainelRadar inicial={ideias} />
         <PainelMemoria inicial={memorias} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <CerebroChat />
-        </div>
-        <div className="rounded-2xl p-4" style={{ background: "#111a24", border: "1px solid #1e2a36" }}>
-          <div className="mb-3 text-sm font-black text-white">O que o Cérebro fez</div>
-          {audits.length === 0 ? (
-            <p className="text-xs text-zinc-600">Nenhuma ação registrada ainda.</p>
-          ) : (
-            <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-              {audits.map((a) => (
-                <div key={a.id} className="rounded-xl px-3 py-2 text-xs" style={{ background: "#0b1119" }}>
-                  <div className="mb-0.5 flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: a.origem === "ia" || a.origem === "cerebro" ? "#38bdf8" : a.origem === "usuario" ? "#ffcb2d" : "#71809a" }}>
-                      {a.origem === "ia" || a.origem === "cerebro" ? "Cérebro" : a.origem === "usuario" ? "Você" : "Sistema"}
-                    </span>
-                    <span className="shrink-0 text-zinc-600">{new Date(a.criadoEm).toLocaleDateString("pt-BR")}</span>
-                  </div>
-                  <p className="leading-relaxed text-zinc-400">{a.descricao}</p>
+      <div className="rounded-2xl p-4" style={{ background: "#111a24", border: "1px solid #1e2a36" }}>
+        <div className="mb-3 text-sm font-black text-white">O que o Cérebro fez</div>
+        {audits.length === 0 ? (
+          <p className="text-xs text-zinc-600">Nenhuma ação registrada ainda.</p>
+        ) : (
+          <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+            {audits.map((a) => (
+              <div key={a.id} className="rounded-xl px-3 py-2 text-xs" style={{ background: "#0b1119" }}>
+                <div className="mb-0.5 flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: a.origem === "ia" || a.origem === "cerebro" ? "#38bdf8" : a.origem === "usuario" ? "#ffcb2d" : "#71809a" }}>
+                    {a.origem === "ia" || a.origem === "cerebro" ? "Cérebro" : a.origem === "usuario" ? "Você" : "Sistema"}
+                  </span>
+                  <span className="shrink-0 text-zinc-600">{new Date(a.criadoEm).toLocaleDateString("pt-BR")}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <p className="leading-relaxed text-zinc-400">{a.descricao}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

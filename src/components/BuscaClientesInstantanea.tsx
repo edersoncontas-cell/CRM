@@ -38,7 +38,7 @@ export function BuscaClientesInstantanea({ valorInicial }: { valorInicial: strin
           value={valor}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Buscar cliente por nome ou telefone..."
-          className="w-full rounded-lg border py-2 !pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]"
+          className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:border-[#BFDE4D]"
           style={{ background: "#18181b", borderColor: "#27272a", color: "#fafafa" }}
         />
       </div>
