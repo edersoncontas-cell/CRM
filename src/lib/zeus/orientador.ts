@@ -22,6 +22,7 @@ import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { METODO_VENDA, ESTILOS_CLIENTE, ETAPAS_ROTEIRO, normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
+import { regrasParaPrompt } from "@/lib/contexto-negocio";
 import { Prisma } from "@prisma/client";
 
 export type Temperatura = "muito_quente" | "quente" | "morna" | "fria";
@@ -154,6 +155,10 @@ visitas + condições de pagamento + alertas). Devolva SOMENTE um JSON válido, 
   "sinaisCompra": string[],                // sinais positivos concretos que apareceram (citando)
   "sinaisRisco": string[],                 // sinais de risco concretos (citando)
   "tratamentoObjecoes": [ { "objecao": string, "comoTratar": string } ],  // para cada objeção real, como responder (sem inventar números)
+  "tecnicaAcademia": {                     // a técnica da Academia de Vendas (seção abaixo) que se aplica NESTE momento; null se nenhuma encaixa
+    "nome": string,                        // nome exato como aparece na Academia (metodologia, objeção ou fechamento)
+    "porque": string                       // 1 frase: por que ela serve agora, citando o que o cliente falou
+  } | null,
   "conversaEncerrada": boolean             // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
 }
 REGRAS CRÍTICAS:
@@ -205,8 +210,9 @@ export async function gerarRespostaRapida(args: {
 }): Promise<string> {
   if (!iaHabilitada()) return "";
 
+  const regras = await regrasParaPrompt("orientador").catch(() => "");
   const system = `${PERSONA}
-
+${regras ? `\n${regras}\n` : ""}
 ## Contexto do cliente
 ${args.contextoCliente}
 ${args.dicas ? `\n## Orientações do coaching para ESTA resposta (siga)\n${args.dicas}` : ""}
@@ -251,8 +257,9 @@ export async function gerarAnaliseOrientador(args: {
     return fallback("IA não configurada (defina OPENAI_API_KEY, ANTHROPIC_API_KEY ou GROQ_API_KEY).");
   }
 
+  const regras = await regrasParaPrompt("orientador").catch(() => "");
   const system = `${SYSTEM_BASE}
-
+${regras ? `\n${regras}\n` : ""}
 ## Contexto completo do cliente
 ${args.contextoCliente}
 

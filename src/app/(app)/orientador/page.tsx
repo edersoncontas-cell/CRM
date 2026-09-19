@@ -15,7 +15,7 @@ export default async function OrientadorPage({ searchParams }: { searchParams: {
     <div>
       <PageHeader
         titulo="Orientador de Vendas"
-        subtitulo="A leitura da IA de cada cliente com quem você conversou no período. A negociação entra no funil sozinha quando a conversa levanta máquina + condição de pagamento ou visita — para tirar ou editar um card, use o próprio funil."
+        subtitulo="Seu gerente de vendas lendo cada conversa: quem atacar primeiro, o que perguntar agora, como falar com aquele cliente e o que falta para fechar. A negociação entra no funil sozinha quando a conversa levanta máquina + pagamento ou visita."
       />
       <OrientadorLista itens={itens} contagem={contagem} periodo={periodo} />
     </div>

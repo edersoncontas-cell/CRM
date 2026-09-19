@@ -15,7 +15,7 @@ import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { vigiarConexao, lerMemoriaVigia, type ResultadoVigia } from "@/lib/whatsapp-vigia";
 import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
 import { registrarAudit } from "./audit";
-import { mesAnoAtualBrasilia } from "./utils";
+import { mesAnoAtualBrasilia, inicioDoDiaBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
@@ -2406,6 +2406,13 @@ export async function contarClientesConversados(): Promise<Record<PeriodoOrienta
   return Object.fromEntries(entradas) as Record<PeriodoOrientador, number>;
 }
 
+// Nível do alerta do coaching guardado como JSON — usado pela ordem de atacar.
+function nivelDoAlerta(coaching: unknown): "vermelho" | "amarelo" | "verde" | null {
+  const c = coaching as { alertaAgora?: { nivel?: string } } | null;
+  const n = c?.alertaAgora?.nivel;
+  return n === "vermelho" || n === "amarelo" || n === "verde" ? n : null;
+}
+
 // Cards do Orientador: um por cliente com conversa no período (a conversa
 // mais recente manda), com a análise da IA quando já existe. Cards ocultados
 // (X vermelho / ✓ negociação criada) só voltam se chegar mensagem nova.
@@ -2425,15 +2432,19 @@ export async function listarOrientadorPorPeriodo(periodo: PeriodoOrientador) {
   const ids = Array.from(porCliente.keys());
   if (!ids.length) return [];
 
-  const clientes = await db.cliente.findMany({
-    where: { id: { in: ids } },
-    select: {
-      id: true, nome: true, orientadorOcultoEm: true,
-      municipio: { select: { nome: true } },
-      orientador: true,
-    },
-  });
+  const [clientes, contextos] = await Promise.all([
+    db.cliente.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true, nome: true, orientadorOcultoEm: true,
+        municipio: { select: { nome: true } },
+        orientador: true,
+      },
+    }),
+    db.notaContextoCliente.groupBy({ by: ["clienteId"], where: { clienteId: { in: ids } }, _count: { _all: true } }).catch(() => []),
+  ]);
   const mapa = new Map(clientes.map((c) => [c.id, c]));
+  const contextoPorCliente = new Map(contextos.map((c) => [c.clienteId, c._count._all]));
 
   const itens = [];
   for (const id of ids) {
@@ -2456,6 +2467,11 @@ export async function listarOrientadorPorPeriodo(periodo: PeriodoOrientador) {
       probabilidadeFechamento: a?.probabilidadeFechamento ?? null,
       proximaAcao: a?.proximaAcao ?? null,
       atualizadoEm: a ? a.atualizadoEm.toISOString() : null,
+      // Usados pela ordem de atacar (lib/orientador-prioridade.ts): quem está
+      // devendo resposta e se o coaching levantou alerta vermelho.
+      ultimaFoiDoCliente: ult ? ult.direction === "IN" : false,
+      alertaNivel: nivelDoAlerta(a?.coaching),
+      temContexto: (contextoPorCliente.get(id) ?? 0) > 0,
     });
   }
   return itens;
@@ -2501,6 +2517,12 @@ export async function buscarOrientadorAnalise(clienteId: string) {
     include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } },
   });
   if (!a) return null;
+  const { normalizarCoaching } = await import("@/lib/zeus/orientador-coaching");
+  const contexto = await db.notaContextoCliente.findMany({
+    where: { clienteId }, orderBy: { criadoEm: "desc" }, take: 20,
+    select: { id: true, texto: true, origem: true, criadoEm: true },
+  }).catch(() => []);
+
   return {
     clienteNome: a.cliente.nome,
     municipio: a.cliente.municipio?.nome ?? null,
@@ -2515,7 +2537,35 @@ export async function buscarOrientadorAnalise(clienteId: string) {
     oportunidadesPerdidas: a.oportunidadesPerdidas,
     resumoNegociacao: a.resumoNegociacao,
     atualizadoEm: a.atualizadoEm.toISOString(),
+    // O coaching inteiro (a IA sempre gerou; a tela só mostrava um terço).
+    combinados: a.combinados ?? [],
+    pendencias: a.pendencias ?? [],
+    coaching: normalizarCoaching(a.coaching),
+    contexto: contexto.map((c) => ({ id: c.id, texto: c.texto, origem: c.origem, criadoEm: c.criadoEm.toISOString() })),
   };
+}
+
+// "Virar demanda": a próxima ação do Orientador entra na lista de tarefas com
+// prazo, em vez de ficar só na tela.
+export async function proximaAcaoViraDemandaAction(clienteId: string, texto: string, quando: "hoje" | "amanha" = "hoje"): Promise<{ ok: boolean; erro?: string }> {
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } });
+  if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+  const prazo = inicioDoDiaBrasilia(new Date(), quando === "amanha" ? 1 : 0);
+  await db.tarefaKanban.create({
+    data: {
+      titulo: texto.slice(0, 200),
+      descricao: `Próxima ação do Orientador para ${cliente.nome}.`,
+      coluna: "demandas",
+      clienteId,
+      prioridade: "alta",
+      origem: "orientador",
+      dueDate: prazo,
+    },
+  });
+  await registrarAudit({ acao: "tarefa_criada", origem: "usuario", clienteId, descricao: `Próxima ação virou demanda: ${texto.slice(0, 120)}` }).catch(() => {});
+  revalidatePath("/pipeline");
+  revalidatePath("/orientador");
+  return { ok: true };
 }
 
 // ---------- Setor de Pós-venda ----------

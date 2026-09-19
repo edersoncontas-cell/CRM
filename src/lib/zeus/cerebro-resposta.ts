@@ -24,7 +24,7 @@ export async function montarContextoCliente(conv: {
   }
 
   try {
-    const [cliente, negociacoes, visitas] = await Promise.all([
+    const [cliente, negociacoes, visitas, notasContexto] = await Promise.all([
       db.cliente.findUnique({
         where: { id: conv.clienteId },
         include: {
@@ -44,6 +44,14 @@ export async function montarContextoCliente(conv: {
         orderBy: { data: "desc" },
         take: 3,
       }),
+      // O que o VENDEDOR contou sobre este cliente e nunca apareceu na
+      // conversa (quem decide, histórico, jeito de tratar).
+      db.notaContextoCliente.findMany({
+        where: { clienteId: conv.clienteId },
+        orderBy: { criadoEm: "desc" },
+        take: 15,
+        select: { texto: true, criadoEm: true },
+      }).catch(() => []),
     ]);
 
     if (!cliente) return `Cliente ID ${conv.clienteId} — dados não encontrados.`;
@@ -129,6 +137,16 @@ export async function montarContextoCliente(conv: {
             linhas.push(`• [${maq?.modelo ?? "?"}] ${nt.texto}`);
           }
         }
+      }
+    }
+
+    // O que o VENDEDOR ensinou sobre este cliente (nunca esteve na conversa).
+    // Vale como fato: quem decide, histórico, jeito de tratar, combinados de
+    // viva-voz. A IA tem de respeitar isso antes de qualquer dedução dela.
+    if (notasContexto.length > 0) {
+      linhas.push(`--- O QUE O VENDEDOR SABE DESTE CLIENTE (fora do WhatsApp — trate como verdade) ---`);
+      for (const n of notasContexto) {
+        linhas.push(`• [${n.criadoEm.toLocaleDateString("pt-BR")}] ${n.texto}`);
       }
     }
 

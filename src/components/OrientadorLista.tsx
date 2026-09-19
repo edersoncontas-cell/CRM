@@ -1,15 +1,23 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, Badge, EmptyState } from "@/components/ui";
-import { buscarOrientadorAnalise, zerarOrientadorAction, analisarLoteOrientadorAction } from "@/lib/actions";
-import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
-import { formatDateTime } from "@/lib/utils";
 import {
-  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Loader2, MessageCircle, Sparkles, RefreshCw, Eraser,
-  CalendarPlus, Handshake,
+  buscarOrientadorAnalise, zerarOrientadorAction, analisarLoteOrientadorAction, proximaAcaoViraDemandaAction,
+} from "@/lib/actions";
+import { adicionarContextoClienteAction, removerContextoClienteAction } from "@/lib/contexto-cliente-actions";
+import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
+import {
+  ordenarPorPrioridade, aplicarFiltro, leituraDesatualizada, idadeDaLeitura, pontuarPrioridade,
+  FILTROS, type FiltroOrientador,
+} from "@/lib/orientador-prioridade";
+import { formatDateTime, cn } from "@/lib/utils";
+import {
+  Flame, ThermometerSun, Snowflake, X, Compass, Target, AlertTriangle, MessageSquareQuote, Loader2, MessageCircle,
+  Sparkles, RefreshCw, Eraser, CalendarPlus, Handshake, GraduationCap, ListTodo, Check, BookOpen, Plus, Trash2,
+  ShieldAlert, HelpCircle, TrendingUp, TrendingDown, Route, Copy,
 } from "lucide-react";
 
 type Item = {
@@ -25,7 +33,25 @@ type Item = {
   probabilidadeFechamento: number | null;
   proximaAcao: string | null;
   atualizadoEm: string | null;
+  ultimaFoiDoCliente?: boolean;
+  alertaNivel?: "vermelho" | "amarelo" | "verde" | null;
+  temContexto?: boolean;
 };
+
+type Coaching = {
+  personalidade: { estilo: string | null; descricao: string; comoFalar: string[]; evitar: string[]; papel: string | null };
+  alertaAgora: { nivel: "vermelho" | "amarelo" | "verde"; titulo: string; motivo: string } | null;
+  conducao: { nota: number; acertos: string[]; correcoes: string[] };
+  perguntasAgora: string[];
+  informacoesFaltando: string[];
+  roteiro: { etapa: string; status: "feito" | "agora" | "depois"; dica: string }[];
+  sinaisCompra: string[];
+  sinaisRisco: string[];
+  tratamentoObjecoes: { objecao: string; comoTratar: string }[];
+  tecnicaAcademia: { nome: string; porque: string } | null;
+};
+
+type NotaContexto = { id: string; texto: string; origem: string; criadoEm: string };
 
 type Detalhe = {
   clienteNome: string;
@@ -41,6 +67,10 @@ type Detalhe = {
   oportunidadesPerdidas: string[];
   resumoNegociacao: string | null;
   atualizadoEm: string;
+  combinados: string[];
+  pendencias: string[];
+  coaching: Coaching;
+  contexto: NotaContexto[];
 };
 
 const TEMPERATURA_INFO: Record<string, { label: string; tom: "red" | "orange" | "yellow" | "blue"; icon: typeof Flame }> = {
@@ -48,6 +78,12 @@ const TEMPERATURA_INFO: Record<string, { label: string; tom: "red" | "orange" | 
   quente: { label: "Quente", tom: "orange", icon: Flame },
   morna: { label: "Morna", tom: "yellow", icon: ThermometerSun },
   fria: { label: "Fria", tom: "blue", icon: Snowflake },
+};
+
+const COR_ALERTA: Record<string, { fundo: string; texto: string; borda: string }> = {
+  vermelho: { fundo: "bg-red-50", texto: "text-red-700", borda: "border-red-200" },
+  amarelo: { fundo: "bg-amber-50", texto: "text-amber-800", borda: "border-amber-200" },
+  verde: { fundo: "bg-emerald-50", texto: "text-emerald-700", borda: "border-emerald-200" },
 };
 
 function BadgeTemperatura({ temperatura }: { temperatura: string }) {
@@ -66,16 +102,32 @@ function tempoRelativo(iso: string): string {
   return `há ${d} dia${d > 1 ? "s" : ""}`;
 }
 
-// ── Card de leitura (só leitura: a negociação entra no funil sozinha) ──────
+function Secao({ icone, titulo, children }: { icone: React.ReactNode; titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {icone} {titulo}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Card de leitura ─────────────────────────────────────────────────────────
 function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
   a: Item; analisando: boolean; onAbrir: () => void; onAnalisar: () => void;
 }) {
+  const desatualizado = leituraDesatualizada(a);
+  const alerta = a.alertaNivel ? COR_ALERTA[a.alertaNivel] : null;
   return (
     <div className="h-full">
-      <Card className="flex h-full flex-col transition hover:border-brand-300 hover:shadow-md">
+      <Card className={cn("flex h-full flex-col transition hover:border-brand-300 hover:shadow-md", a.alertaNivel === "vermelho" && "border-red-200")}>
         <div className="mb-2 flex items-start gap-2">
           <button onClick={onAbrir} className="min-w-0 flex-1 text-left">
-            <div className="truncate font-semibold text-slate-800">{a.clienteNome}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-semibold text-slate-800">{a.clienteNome}</span>
+              {a.temContexto && <BookOpen size={12} className="shrink-0 text-violet-500" aria-label="Tem contexto que você ensinou" />}
+            </div>
             {a.municipio && <div className="text-xs text-slate-400">{a.municipio}</div>}
           </button>
           {a.temperatura ? <BadgeTemperatura temperatura={a.temperatura} /> : (
@@ -85,14 +137,27 @@ function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
           )}
         </div>
 
+        {/* O aviso do momento — o que a IA já calculava e ninguém via */}
+        {alerta && a.alertaNivel && (
+          <div className={cn("mb-2 flex items-start gap-1.5 rounded-lg border p-2 text-[11px] font-semibold", alerta.fundo, alerta.texto, alerta.borda)}>
+            <ShieldAlert size={13} className="mt-0.5 shrink-0" />
+            <span className="line-clamp-2">
+              {a.alertaNivel === "vermelho" ? "Atenção agora" : a.alertaNivel === "amarelo" ? "Fique de olho" : "Momento de avançar"}
+            </span>
+          </div>
+        )}
+
         <button onClick={onAbrir} className="flex-1 text-left">
           {a.ultimaMensagem && (
             <div className="mb-2 flex items-start gap-1.5 text-xs text-slate-500">
-              <MessageCircle size={12} className="mt-0.5 shrink-0 text-emerald-500" />
+              <MessageCircle size={12} className={cn("mt-0.5 shrink-0", a.ultimaFoiDoCliente ? "text-emerald-500" : "text-slate-300")} />
               <span className="line-clamp-2">{a.ultimaMensagem}</span>
             </div>
           )}
-          <div className="mb-2 text-[11px] text-slate-400">Última mensagem {tempoRelativo(a.ultimaMensagemEm)}</div>
+          <div className="mb-2 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
+            <span>{a.ultimaFoiDoCliente ? "Esperando você" : "Você respondeu"} · {tempoRelativo(a.ultimaMensagemEm)}</span>
+            <span className={cn(desatualizado && "font-semibold text-amber-600")}>{idadeDaLeitura(a.atualizadoEm)}</span>
+          </div>
           {a.estagioVenda && <div className="mb-2 text-sm text-slate-600">{a.estagioVenda}</div>}
           {a.probabilidadeFechamento != null && (
             <div className="mb-2 flex items-center gap-2">
@@ -112,25 +177,35 @@ function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
 
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
           <Link
-            href={`/visitas?cliente=${a.clienteId}&novo=1`}
-            title="Agendar visita para este cliente (abre o calendário de visitas)"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-sky-800 ring-1 ring-sky-200 hover:bg-sky-200"
+            href={`/atendimento?cliente=${a.clienteId}`}
+            title="Abrir a conversa no WhatsApp"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-200"
           >
-            <CalendarPlus size={15} strokeWidth={2.5} /> Agendar visita
+            <MessageCircle size={15} strokeWidth={2.5} /> Conversa
           </Link>
           <Link
-            href="/negociacoes"
-            title="Ver a negociação deste cliente no funil (entra sozinha quando a conversa levanta máquina + pagamento ou visita)"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200"
+            href={`/visitas?cliente=${a.clienteId}&novo=1`}
+            title="Agendar visita para este cliente"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-100 px-2 py-2 text-xs font-black uppercase tracking-wide text-sky-800 ring-1 ring-sky-200 hover:bg-sky-200"
           >
-            <Handshake size={15} strokeWidth={2.5} /> Funil
+            <CalendarPlus size={15} strokeWidth={2.5} /> Visita
           </Link>
+          <button
+            onClick={(e) => { e.stopPropagation(); onAnalisar(); }}
+            disabled={analisando}
+            title="Reler a conversa com a IA agora"
+            className={cn("flex items-center justify-center rounded-lg px-2 py-2 ring-1 disabled:opacity-60",
+              desatualizado ? "bg-amber-100 text-amber-800 ring-amber-200 hover:bg-amber-200" : "bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200")}
+          >
+            {analisando ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} strokeWidth={2.5} />}
+          </button>
         </div>
       </Card>
     </div>
   );
 }
 
+// ── Lista ───────────────────────────────────────────────────────────────────
 export function OrientadorLista({ itens, contagem, periodo }: {
   itens: Item[]; contagem: Record<PeriodoOrientador, number>; periodo: PeriodoOrientador;
 }) {
@@ -142,6 +217,9 @@ export function OrientadorLista({ itens, contagem, periodo }: {
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string; link?: string } | null>(null);
   const [analisando, setAnalisando] = useState<Set<string>>(new Set());
   const [lote, setLote] = useState<{ total: number; feitas: number } | null>(null);
+  const [filtro, setFiltro] = useState<FiltroOrientador>("todos");
+  const [novoContexto, setNovoContexto] = useState("");
+  const [salvandoContexto, setSalvandoContexto] = useState(false);
   const [, startTransition] = useTransition();
 
   async function analisarUm(item: Item) {
@@ -152,11 +230,10 @@ export function OrientadorLista({ itens, contagem, periodo }: {
     startTransition(() => router.refresh());
   }
 
-  // Analisa as conversas sem leitura, das mais recentes para as mais antigas,
-  // em lotes de 3 (limite de tempo de cada chamada).
+  // Analisa primeiro quem está no topo da ordem de atacar, em lotes de 3.
   async function analisarRecentes() {
-    const alvo = itens.filter((i) => !removidos.has(i.clienteId) && !i.temperatura).slice(0, 15);
-    if (!alvo.length) { setAviso({ tipo: "ok", texto: "Todos os cards visíveis já têm leitura da IA." }); return; }
+    const alvo = visiveis.filter((i) => leituraDesatualizada(i)).slice(0, 15);
+    if (!alvo.length) { setAviso({ tipo: "ok", texto: "Todas as leituras estão em dia." }); return; }
     setLote({ total: alvo.length, feitas: 0 });
     let feitas = 0;
     for (let i = 0; i < alvo.length; i += 3) {
@@ -174,27 +251,57 @@ export function OrientadorLista({ itens, contagem, periodo }: {
   }
 
   async function zerar() {
-    if (!window.confirm("Zerar o Orientador? Todas as leituras antigas da IA são apagadas e os cards escondidos voltam. As análises novas são feitas sob demanda (botão “analisar” em cada card ou “Analisar recentes”).")) return;
+    if (!window.confirm("Zerar o Orientador? Todas as leituras antigas da IA são apagadas e os cards escondidos voltam. O contexto que você ensinou sobre cada cliente NÃO é apagado.")) return;
     const r = await zerarOrientadorAction();
     setRemovidos(new Set());
-    setAviso({ tipo: "ok", texto: `Orientador zerado: ${r.apagadas} leitura(s) antiga(s) apagada(s). Use “Analisar recentes” para a IA reler as conversas.` });
+    setAviso({ tipo: "ok", texto: `Orientador zerado: ${r.apagadas} leitura(s) antiga(s) apagada(s). Use “Analisar” para a IA reler.` });
     startTransition(() => router.refresh());
   }
 
   async function abrir(clienteId: string) {
     setAberto(clienteId);
     setCarregando(true);
+    setNovoContexto("");
     const d = await buscarOrientadorAnalise(clienteId);
-    setDetalhe(d);
+    setDetalhe(d as Detalhe | null);
     setCarregando(false);
   }
 
-  const visiveis = itens.filter((i) => !removidos.has(i.clienteId));
+  async function salvarContexto() {
+    if (!aberto || !novoContexto.trim()) return;
+    setSalvandoContexto(true);
+    const r = await adicionarContextoClienteAction(aberto, novoContexto);
+    setSalvandoContexto(false);
+    if (!r.ok || !r.nota) { setAviso({ tipo: "erro", texto: r.erro ?? "Não consegui guardar." }); return; }
+    setDetalhe((d) => (d ? { ...d, contexto: [r.nota!, ...d.contexto] } : d));
+    setNovoContexto("");
+  }
+
+  async function esquecerContexto(id: string) {
+    setDetalhe((d) => (d ? { ...d, contexto: d.contexto.filter((c) => c.id !== id) } : d));
+    await removerContextoClienteAction(id);
+  }
+
+  async function virarDemanda(quando: "hoje" | "amanha") {
+    if (!aberto || !detalhe?.proximaAcao) return;
+    const r = await proximaAcaoViraDemandaAction(aberto, detalhe.proximaAcao, quando);
+    setAviso(r.ok
+      ? { tipo: "ok", texto: `Virou demanda para ${quando === "hoje" ? "hoje" : "amanhã"}.`, link: "/pipeline" }
+      : { tipo: "erro", texto: r.erro ?? "Não consegui criar a demanda." });
+  }
+
+  const visiveis = useMemo(() => {
+    const semRemovidos = itens.filter((i) => !removidos.has(i.clienteId));
+    return ordenarPorPrioridade(aplicarFiltro(semRemovidos, filtro));
+  }, [itens, removidos, filtro]);
+
   const periodos = Object.entries(PERIODOS_ORIENTADOR) as [PeriodoOrientador, (typeof PERIODOS_ORIENTADOR)[PeriodoOrientador]][];
+  const esperando = itens.filter((i) => i.ultimaFoiDoCliente).length;
+  const c = detalhe?.coaching;
 
   return (
     <>
-      {/* Contadores de clientes conversados por janela (também no Dashboard) */}
+      {/* Contadores de clientes conversados por janela */}
       <div className="mb-4 grid grid-cols-3 gap-2 md:grid-cols-6">
         {periodos.map(([k, p]) => (
           <Link
@@ -208,19 +315,37 @@ export function OrientadorLista({ itens, contagem, periodo }: {
         ))}
       </div>
 
+      {/* Ordem de atacar + filtros */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {FILTROS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFiltro(f.id)}
+            title={f.ajuda}
+            className={cn("rounded-lg px-3 py-1.5 text-xs font-bold transition",
+              filtro === f.id ? "bg-slate-900 text-agro-400" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+          >
+            {f.nome}
+            {f.id === "esperando" && esperando > 0 && <span className="ml-1 rounded-full bg-emerald-500 px-1.5 text-[10px] text-white">{esperando}</span>}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button onClick={analisarRecentes} disabled={!!lote} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60">
-          {lote ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {lote ? `Analisando ${lote.feitas}/${lote.total}…` : "Analisar recentes com a IA"}
+          {lote ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {lote ? `Analisando ${lote.feitas}/${lote.total}…` : "Atualizar as leituras"}
         </button>
         <button onClick={zerar} disabled={!!lote} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60">
           <Eraser size={14} /> Zerar e recomeçar
         </button>
-        <span className="text-xs text-slate-500">A IA lê a conversa inteira, o cadastro e as negociações antes de opinar. A negociação entra no funil sozinha quando a conversa levanta máquina + pagamento ou visita.</span>
+        <span className="text-xs text-slate-500">
+          Os cards vêm na <b>ordem de atacar</b>: temperatura, chance de fechar, quem está esperando você e alerta do momento.
+        </span>
       </div>
 
       {aviso && (
         <div className={`mb-4 flex items-start justify-between gap-3 rounded-xl border p-3 text-sm ${aviso.tipo === "ok" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700"}`}>
-          <span>{aviso.texto}{aviso.link && <> <Link href={aviso.link} className="font-semibold underline">Abrir funil</Link></>}</span>
+          <span>{aviso.texto}{aviso.link && <> <Link href={aviso.link} className="font-semibold underline">abrir</Link></>}</span>
           <button onClick={() => setAviso(null)} aria-label="Fechar"><X size={16} /></button>
         </div>
       )}
@@ -229,8 +354,12 @@ export function OrientadorLista({ itens, contagem, periodo }: {
         {visiveis.length === 0 ? (
           <EmptyState
             icone={<Compass size={28} />}
-            texto={`Nenhum cliente com conversa no período (${PERIODOS_ORIENTADOR[periodo].label.toLowerCase()})`}
-            subtexto="Assim que um cliente cadastrado mandar mensagem no WhatsApp, o card dele aparece aqui automaticamente."
+            texto={filtro === "todos"
+              ? `Nenhum cliente com conversa no período (${PERIODOS_ORIENTADOR[periodo].label.toLowerCase()})`
+              : "Nenhum cliente neste filtro"}
+            subtexto={filtro === "todos"
+              ? "Assim que um cliente cadastrado mandar mensagem no WhatsApp, o card dele aparece aqui automaticamente."
+              : "Troque o filtro acima para ver os demais."}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -247,23 +376,25 @@ export function OrientadorLista({ itens, contagem, periodo }: {
         )}
       </div>
 
+      {/* ── Painel completo do cliente ── */}
       {aberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAberto(null)}>
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4" onClick={() => setAberto(null)}>
+          <div className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             {carregando ? (
               <div className="py-10 text-center text-sm text-slate-400">Carregando…</div>
             ) : !detalhe ? (
               <div className="py-8 text-center text-sm text-slate-500">
-                A IA ainda não analisou esta conversa. Assim que a próxima mensagem chegar, a leitura completa aparece aqui.
+                A IA ainda não leu esta conversa. Toque em “analisar” no card para ela ler agora.
                 <div className="mt-3"><Link href={`/clientes/${aberto}`} className="text-xs font-semibold text-brand-600 hover:underline">ver cadastro</Link></div>
               </div>
             ) : (
               <>
                 <div className="mb-4 flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-bold text-slate-800">{detalhe.clienteNome}</h2>
                       <Link href={`/clientes/${aberto}`} className="text-xs font-semibold text-brand-600 hover:underline">ver cadastro</Link>
+                      <Link href={`/atendimento?cliente=${aberto}`} className="text-xs font-semibold text-emerald-700 hover:underline">abrir conversa</Link>
                     </div>
                     {detalhe.municipio && <p className="text-xs text-slate-400">{detalhe.municipio}</p>}
                   </div>
@@ -273,8 +404,19 @@ export function OrientadorLista({ itens, contagem, periodo }: {
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <BadgeTemperatura temperatura={detalhe.temperatura} />
                   <Badge tom="slate">{detalhe.estagioVenda}</Badge>
-                  {detalhe.perfilComprador && <Badge tom="purple">{detalhe.perfilComprador}</Badge>}
+                  {c?.personalidade.estilo && <Badge tom="purple">{c.personalidade.estilo}{c.personalidade.papel ? ` · ${c.personalidade.papel}` : ""}</Badge>}
+                  {detalhe.perfilComprador && <Badge tom="blue">{detalhe.perfilComprador}</Badge>}
                 </div>
+
+                {/* Alerta do momento */}
+                {c?.alertaAgora && (
+                  <div className={cn("mb-3 rounded-xl border p-3", COR_ALERTA[c.alertaAgora.nivel].fundo, COR_ALERTA[c.alertaAgora.nivel].borda)}>
+                    <div className={cn("flex items-start gap-2 text-sm font-bold", COR_ALERTA[c.alertaAgora.nivel].texto)}>
+                      <ShieldAlert size={16} className="mt-0.5 shrink-0" /> {c.alertaAgora.titulo}
+                    </div>
+                    <p className={cn("mt-1 text-xs", COR_ALERTA[c.alertaAgora.nivel].texto)}>{c.alertaAgora.motivo}</p>
+                  </div>
+                )}
 
                 {detalhe.resumoNegociacao && <p className="mb-3 text-sm text-slate-600">{detalhe.resumoNegociacao}</p>}
 
@@ -290,39 +432,202 @@ export function OrientadorLista({ itens, contagem, periodo }: {
                   </div>
                 )}
 
+                {/* Próxima ação + virar demanda */}
                 {detalhe.proximaAcao && (
-                  <div className="mb-3 flex items-start gap-2 rounded-lg bg-brand-50 p-3 text-sm text-brand-800">
-                    <Target size={15} className="mt-0.5 shrink-0" />
-                    <div><span className="font-semibold">Próxima ação: </span>{detalhe.proximaAcao}</div>
+                  <div className="mb-3 rounded-lg bg-brand-50 p-3 text-sm text-brand-800">
+                    <div className="flex items-start gap-2">
+                      <Target size={15} className="mt-0.5 shrink-0" />
+                      <div><span className="font-semibold">Próxima ação: </span>{detalhe.proximaAcao}</div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button onClick={() => virarDemanda("hoje")} className="inline-flex items-center gap-1 rounded-lg bg-brand-900 px-2.5 py-1 text-[11px] font-bold text-agro-400">
+                        <ListTodo size={12} /> Virar demanda de hoje
+                      </button>
+                      <button onClick={() => virarDemanda("amanha")} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-brand-700 ring-1 ring-brand-200">
+                        <ListTodo size={12} /> Para amanhã
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {detalhe.objecoes.length > 0 && (
-                  <div className="mb-3">
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Objeções identificadas</div>
-                    <div className="flex flex-wrap gap-1.5">{detalhe.objecoes.map((o) => <Badge key={o} tom="orange">{o}</Badge>)}</div>
+                {/* Técnica da Academia */}
+                {c?.tecnicaAcademia && (
+                  <Secao icone={<GraduationCap size={12} />} titulo="Técnica da Academia para agora">
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                      <div className="text-sm font-bold text-violet-900">{c.tecnicaAcademia.nome}</div>
+                      <p className="mt-0.5 text-xs text-violet-800">{c.tecnicaAcademia.porque}</p>
+                      <Link href="/academia" className="mt-1.5 inline-block text-[11px] font-semibold text-violet-700 underline">treinar isso na Academia</Link>
+                    </div>
+                  </Secao>
+                )}
+
+                {/* Perguntas que destravam */}
+                {c && c.perguntasAgora.length > 0 && (
+                  <Secao icone={<HelpCircle size={12} />} titulo="Pergunte agora, nesta ordem">
+                    <ol className="space-y-1 text-sm text-slate-700">
+                      {c.perguntasAgora.map((p, i) => (
+                        <li key={i} className="flex items-start gap-2 rounded-lg bg-slate-50 p-2">
+                          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-agro-400">{i + 1}</span>
+                          <span className="flex-1">{p}</span>
+                          <button onClick={() => navigator.clipboard.writeText(p).catch(() => null)} title="Copiar" className="shrink-0 text-slate-400 hover:text-slate-700"><Copy size={12} /></button>
+                        </li>
+                      ))}
+                    </ol>
+                  </Secao>
+                )}
+
+                {/* Combinados e pendências */}
+                {(detalhe.combinados.length > 0 || detalhe.pendencias.length > 0) && (
+                  <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {detalhe.combinados.length > 0 && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                        <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-700"><Check size={12} /> Já combinado</div>
+                        <ul className="space-y-1 text-xs text-emerald-900">{detalhe.combinados.map((x, i) => <li key={i}>• {x}</li>)}</ul>
+                      </div>
+                    )}
+                    {detalhe.pendencias.length > 0 && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-700"><AlertTriangle size={12} /> Falta</div>
+                        <ul className="space-y-1 text-xs text-amber-900">{detalhe.pendencias.map((x, i) => <li key={i}>• {x}</li>)}</ul>
+                      </div>
+                    )}
                   </div>
+                )}
+
+                {/* Como falar com este cliente */}
+                {c && (c.personalidade.descricao || c.personalidade.comoFalar.length > 0) && (
+                  <Secao icone={<MessageSquareQuote size={12} />} titulo="Como falar com ele">
+                    {c.personalidade.descricao && <p className="mb-1 text-sm text-slate-600">{c.personalidade.descricao}</p>}
+                    {c.personalidade.comoFalar.length > 0 && (
+                      <ul className="space-y-0.5 text-xs text-slate-600">{c.personalidade.comoFalar.map((x, i) => <li key={i}>✓ {x}</li>)}</ul>
+                    )}
+                    {c.personalidade.evitar.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-xs text-red-600">{c.personalidade.evitar.map((x, i) => <li key={i}>✗ {x}</li>)}</ul>
+                    )}
+                  </Secao>
+                )}
+
+                {/* Roteiro até o fechamento */}
+                {c && c.roteiro.length > 0 && (
+                  <Secao icone={<Route size={12} />} titulo="Caminho até fechar">
+                    <ol className="space-y-1">
+                      {c.roteiro.map((e, i) => (
+                        <li key={i} className={cn("flex items-center gap-2 rounded-lg px-2 py-1 text-xs",
+                          e.status === "feito" ? "text-slate-400" : e.status === "agora" ? "bg-agro-400/20 font-bold text-slate-800" : "text-slate-600")}>
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", e.status === "feito" ? "bg-emerald-400" : e.status === "agora" ? "bg-agro-500" : "bg-slate-300")} />
+                          <span className="flex-1">{e.etapa}</span>
+                          {e.dica && <span className="text-[11px] text-slate-500">{e.dica}</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  </Secao>
+                )}
+
+                {/* Sinais */}
+                {c && (c.sinaisCompra.length > 0 || c.sinaisRisco.length > 0) && (
+                  <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {c.sinaisCompra.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-600"><TrendingUp size={12} /> Sinais de compra</div>
+                        <ul className="space-y-0.5 text-xs text-slate-600">{c.sinaisCompra.map((x, i) => <li key={i}>• {x}</li>)}</ul>
+                      </div>
+                    )}
+                    {c.sinaisRisco.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-red-600"><TrendingDown size={12} /> Sinais de risco</div>
+                        <ul className="space-y-0.5 text-xs text-slate-600">{c.sinaisRisco.map((x, i) => <li key={i}>• {x}</li>)}</ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Objeções com tratamento */}
+                {c && c.tratamentoObjecoes.length > 0 && (
+                  <Secao icone={<AlertTriangle size={12} />} titulo="Objeções e como responder">
+                    <ul className="space-y-1.5">
+                      {c.tratamentoObjecoes.map((o, i) => (
+                        <li key={i} className="rounded-lg border border-slate-200 p-2">
+                          <div className="text-xs font-bold text-slate-700">{o.objecao}</div>
+                          <p className="text-xs text-slate-600">{o.comoTratar}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </Secao>
+                )}
+
+                {/* Como o vendedor conduziu */}
+                {c && (c.conducao.acertos.length > 0 || c.conducao.correcoes.length > 0) && (
+                  <Secao icone={<Compass size={12} />} titulo={`Sua condução — nota ${c.conducao.nota}/10`}>
+                    {c.conducao.acertos.length > 0 && <ul className="space-y-0.5 text-xs text-emerald-700">{c.conducao.acertos.map((x, i) => <li key={i}>✓ {x}</li>)}</ul>}
+                    {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-amber-700">{c.conducao.correcoes.map((x, i) => <li key={i}>→ {x}</li>)}</ul>}
+                  </Secao>
                 )}
 
                 {detalhe.oportunidadesPerdidas.length > 0 && (
-                  <div className="mb-3">
-                    <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <AlertTriangle size={12} /> Oportunidades perdidas
-                    </div>
+                  <Secao icone={<AlertTriangle size={12} />} titulo="Oportunidades perdidas">
                     <ul className="space-y-1 text-sm text-slate-600">{detalhe.oportunidadesPerdidas.map((o, i) => <li key={i}>• {o}</li>)}</ul>
-                  </div>
+                  </Secao>
                 )}
 
                 {detalhe.melhorResposta && (
-                  <div className="mb-1 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <MessageSquareQuote size={12} /> Melhor resposta sugerida
+                  <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <MessageSquareQuote size={12} /> Melhor resposta sugerida
+                      </div>
+                      <button onClick={() => navigator.clipboard.writeText(detalhe.melhorResposta ?? "").catch(() => null)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">
+                        <Copy size={11} /> Copiar
+                      </button>
                     </div>
                     <p className="text-sm text-slate-700">{detalhe.melhorResposta}</p>
                   </div>
                 )}
 
-                <div className="mt-3 text-xs text-slate-400">Atualizado {formatDateTime(detalhe.atualizadoEm)}</div>
+                {/* ── O que só você sabe ── */}
+                <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+                  <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                    <BookOpen size={12} /> O que só você sabe deste cliente
+                  </div>
+                  <p className="mb-2 text-[11px] leading-snug text-violet-800">
+                    O que não aparece no WhatsApp: quem decide junto, histórico de compra, o jeito dele, combinados por telefone.
+                    Fica para sempre no histórico e a IA passa a considerar isso em toda leitura.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      value={novoContexto}
+                      onChange={(e) => setNovoContexto(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") salvarContexto(); }}
+                      placeholder="Ex.: quem decide é o filho, o Marcelo; ele já comprou duas conosco"
+                      className="flex-1 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-violet-400"
+                    />
+                    <button onClick={salvarContexto} disabled={salvandoContexto || !novoContexto.trim()} className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                      {salvandoContexto ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Guardar
+                    </button>
+                  </div>
+                  {detalhe.contexto.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {detalhe.contexto.map((n) => (
+                        <li key={n.id} className="flex items-start gap-2 rounded-lg bg-white p-2 text-xs text-slate-700">
+                          <span className="flex-1">{n.texto}</span>
+                          <span className="shrink-0 text-[10px] text-slate-400">{new Date(n.criadoEm).toLocaleDateString("pt-BR")}</span>
+                          <button onClick={() => esquecerContexto(n.id)} title="Apagar" className="shrink-0 text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                  <span>Leitura da IA: {formatDateTime(detalhe.atualizadoEm)}</span>
+                  <span>Prioridade {pontuarPrioridade({
+                    clienteId: aberto,
+                    temperatura: detalhe.temperatura,
+                    probabilidadeFechamento: detalhe.probabilidadeFechamento,
+                    ultimaMensagemEm: detalhe.atualizadoEm,
+                    atualizadoEm: detalhe.atualizadoEm,
+                    alertaNivel: c?.alertaAgora?.nivel ?? null,
+                  })}/100</span>
+                </div>
               </>
             )}
           </div>

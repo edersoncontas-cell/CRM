@@ -548,6 +548,27 @@ export async function aplicarMigracoes(): Promise<void> {
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MemoriaCerebro_criadoEm_idx" ON "MemoriaCerebro" ("criadoEm")`);
 
+    // NotaContextoCliente (v31): o que o vendedor conta sobre o cliente fora
+    // da conversa do WhatsApp e passa a valer para sempre.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "NotaContextoCliente" (
+        "id" TEXT NOT NULL,
+        "clienteId" TEXT NOT NULL,
+        "texto" TEXT NOT NULL,
+        "origem" TEXT NOT NULL DEFAULT 'vendedor',
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "NotaContextoCliente_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "NotaContextoCliente_clienteId_criadoEm_idx" ON "NotaContextoCliente" ("clienteId", "criadoEm")`);
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "NotaContextoCliente"
+          ADD CONSTRAINT "NotaContextoCliente_clienteId_fkey"
+          FOREIGN KEY ("clienteId") REFERENCES "Cliente"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+
     // ── Catálogo Dynapac atualizado (v30) ──────────────────────────────────
     // Os rolos de solo passam a usar o nome curto da fábrica (CA6500 D →
     // CA65 D). Renomear em vez de recriar preserva ficha técnica, notas,

@@ -25,6 +25,9 @@ export type Coaching = {
   sinaisCompra: string[];
   sinaisRisco: string[];
   tratamentoObjecoes: { objecao: string; comoTratar: string }[];
+  // Liga o Orientador à Academia de Vendas: a técnica que se aplica NESTE
+  // momento da conversa, com o motivo — o vendedor treina o que está usando.
+  tecnicaAcademia: { nome: string; porque: string } | null;
 };
 
 export const ESTILOS_CLIENTE: EstiloCliente[] = ["Dominante", "Influente", "Estável", "Analítico"];
@@ -67,6 +70,7 @@ export function coachingVazio(): Coaching {
     sinaisCompra: [],
     sinaisRisco: [],
     tratamentoObjecoes: [],
+    tecnicaAcademia: null,
   };
 }
 
@@ -107,6 +111,11 @@ export function normalizarCoaching(raw: unknown): Coaching {
     sinaisCompra: lista(p.sinaisCompra, 5),
     sinaisRisco: lista(p.sinaisRisco, 5),
     tratamentoObjecoes: tratamento,
+    tecnicaAcademia: (() => {
+      const t = (p.tecnicaAcademia && typeof p.tecnicaAcademia === "object" ? p.tecnicaAcademia : null) as Record<string, unknown> | null;
+      const nome = texto(t?.nome, 80);
+      return nome ? { nome, porque: texto(t?.porque, 240) } : null;
+    })(),
   };
 }
 
@@ -117,6 +126,7 @@ export function dicasParaResposta(c: Coaching, proximaAcao: string): string {
   if (c.personalidade.estilo) linhas.push(`Cliente ${c.personalidade.estilo}${c.personalidade.papel ? ` (${c.personalidade.papel})` : ""}: ${c.personalidade.comoFalar.join("; ")}${c.personalidade.evitar.length ? `. Evite: ${c.personalidade.evitar.join("; ")}` : ""}`);
   if (c.informacoesFaltando.length) linhas.push(`Ainda falta saber: ${c.informacoesFaltando.join("; ")}`);
   if (c.perguntasAgora.length) linhas.push(`Perguntas que destravam agora: ${c.perguntasAgora.join(" | ")}`);
+  if (c.tecnicaAcademia) linhas.push(`Técnica da Academia para agora: ${c.tecnicaAcademia.nome} — ${c.tecnicaAcademia.porque}`);
   if (proximaAcao) linhas.push(`Próxima ação definida: ${proximaAcao}`);
   return linhas.join("\n");
 }

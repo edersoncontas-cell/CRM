@@ -52,7 +52,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v26: tabela Evento (compromissos de vários dias na agenda).
 // v30: tabelas da Central Inteligente (RelatorioDiario, IdeiaInovacao,
 // PostMarketing, MemoriaCerebro).
-export const CHAVE_MANUTENCAO = "manutencao.v30";
+// v31: NotaContextoCliente — o que o vendedor ensina sobre um cliente e que
+// nunca apareceria na conversa do WhatsApp.
+export const CHAVE_MANUTENCAO = "manutencao.v31";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

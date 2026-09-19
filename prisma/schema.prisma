@@ -79,6 +79,7 @@ model Cliente {
   orientador     OrientadorAnalise?
   posVendaContatos PosVendaContato[]
   cadencias      Cadencia[]
+  notasContexto  NotaContextoCliente[]
   @@index([leadScore])
   @@index([googleContatoId])
   @@index([aguardandoResposta, ultimoContato])
@@ -665,4 +666,18 @@ model MemoriaCerebro {
   origem    String   @default("texto") // texto | arquivo | relatorio | radar
   sessao    String?  // sessão do CRM a que se refere (opcional)
   @@index([criadoEm])
+}
+
+// Contexto que o vendedor ensina sobre UM cliente e que não aparece na
+// conversa do WhatsApp ("o filho decide junto", "já comprou duas conosco",
+// "obra dele atrasou por chuva"). Fica para sempre no histórico do cliente e
+// entra no contexto do Orientador e do Cérebro.
+model NotaContextoCliente {
+  id        String   @id @default(cuid())
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId String
+  texto     String
+  origem    String   @default("vendedor") // vendedor | orientador | cerebro
+  criadoEm  DateTime @default(now())
+  @@index([clienteId, criadoEm])
 }

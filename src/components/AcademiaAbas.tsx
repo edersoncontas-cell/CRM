@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { GraduationCap, Library } from "lucide-react";
+import { GraduationCap, Library, Footprints } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Abas da Academia: Trilha de Formação (currículo por níveis) e Biblioteca
 // (material de referência + gerador de estratégias). Recebe os dois painéis
 // já renderizados pelo servidor.
-export function AcademiaAbas({ trilha, biblioteca }: { trilha: React.ReactNode; biblioteca: React.ReactNode }) {
-  const [aba, setAba] = useState<"trilha" | "biblioteca">("trilha");
+export function AcademiaAbas({ trilha, etapas, biblioteca }: { trilha: React.ReactNode; etapas: React.ReactNode; biblioteca: React.ReactNode }) {
+  const [aba, setAba] = useState<"etapas" | "trilha" | "biblioteca">("etapas");
   const abas = [
+    { id: "etapas" as const, label: "Etapas da Venda", icon: Footprints },
     { id: "trilha" as const, label: "Trilha de Formação", icon: GraduationCap },
     { id: "biblioteca" as const, label: "Biblioteca de referência", icon: Library },
   ];
@@ -23,6 +24,7 @@ export function AcademiaAbas({ trilha, biblioteca }: { trilha: React.ReactNode; 
           </button>
         ))}
       </div>
+      <div hidden={aba !== "etapas"}>{etapas}</div>
       <div hidden={aba !== "trilha"}>{trilha}</div>
       <div hidden={aba !== "biblioteca"}>{biblioteca}</div>
     </div>
