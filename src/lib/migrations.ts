@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { RENOMEAR_DYNAPAC, DYNAPAC_FORA_DE_LINHA } from "./dynapac-catalogo";
 
 let applied = false;
 
@@ -475,6 +476,110 @@ export async function aplicarMigracoes(): Promise<void> {
         CONSTRAINT "MidiaEnvio_pkey" PRIMARY KEY ("id")
       )
     `);
+    // ── Central Inteligente do Cérebro (v30) ───────────────────────────────
+    // Relatório do fim do dia, radar de inovação, posts de marketing e as
+    // memórias ensinadas ao Cérebro.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "RelatorioDiario" (
+        "id" TEXT NOT NULL,
+        "dia" TIMESTAMP(3) NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "resumo" TEXT NOT NULL,
+        "dados" TEXT NOT NULL,
+        "totalConversas" INTEGER NOT NULL DEFAULT 0,
+        "negociacoes" INTEGER NOT NULL DEFAULT 0,
+        "novos" INTEGER NOT NULL DEFAULT 0,
+        "carteira" INTEGER NOT NULL DEFAULT 0,
+        "enviadoEm" TIMESTAMP(3),
+        CONSTRAINT "RelatorioDiario_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "RelatorioDiario_dia_key" ON "RelatorioDiario" ("dia")`);
+
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "IdeiaInovacao" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "sessao" TEXT NOT NULL,
+        "titulo" TEXT NOT NULL,
+        "melhoria" TEXT NOT NULL,
+        "beneficio" TEXT NOT NULL,
+        "ganho" TEXT NOT NULL,
+        "esforco" TEXT NOT NULL DEFAULT 'medio',
+        "fonte" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'nova',
+        CONSTRAINT "IdeiaInovacao_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "IdeiaInovacao_status_criadoEm_idx" ON "IdeiaInovacao" ("status", "criadoEm")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "IdeiaInovacao_sessao_idx" ON "IdeiaInovacao" ("sessao")`);
+
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "PostMarketing" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "tipo" TEXT NOT NULL,
+        "tema" TEXT NOT NULL,
+        "legenda" TEXT NOT NULL,
+        "hashtags" TEXT NOT NULL DEFAULT '',
+        "maquina" TEXT,
+        "imagemBase64" TEXT,
+        "imagemMime" TEXT,
+        "agendadoPara" TIMESTAMP(3),
+        "status" TEXT NOT NULL DEFAULT 'rascunho',
+        "publicadoEm" TIMESTAMP(3),
+        "canal" TEXT,
+        CONSTRAINT "PostMarketing_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PostMarketing_status_agendadoPara_idx" ON "PostMarketing" ("status", "agendadoPara")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PostMarketing_criadoEm_idx" ON "PostMarketing" ("criadoEm")`);
+
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "MemoriaCerebro" (
+        "id" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "titulo" TEXT NOT NULL,
+        "conteudo" TEXT NOT NULL,
+        "origem" TEXT NOT NULL DEFAULT 'texto',
+        "sessao" TEXT,
+        CONSTRAINT "MemoriaCerebro_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MemoriaCerebro_criadoEm_idx" ON "MemoriaCerebro" ("criadoEm")`);
+
+    // ── Catálogo Dynapac atualizado (v30) ──────────────────────────────────
+    // Os rolos de solo passam a usar o nome curto da fábrica (CA6500 D →
+    // CA65 D). Renomear em vez de recriar preserva ficha técnica, notas,
+    // fotos e o histórico de cada máquina. As negociações que citam o nome
+    // antigo acompanham a troca para o funil não mostrar modelo inexistente.
+    for (const [antigo, novo] of Object.entries(RENOMEAR_DYNAPAC)) {
+      // Se o nome novo já existe (banco novo, que já nasceu com o catálogo
+      // atual), o antigo é duplicata: apaga em vez de renomear (o UNIQUE
+      // marca+modelo recusaria o UPDATE).
+      await db.$executeRawUnsafe(
+        `DELETE FROM "Maquina" WHERE "marca" = 'Dynapac' AND "modelo" = $1
+           AND EXISTS (SELECT 1 FROM "Maquina" m2 WHERE m2."marca" = 'Dynapac' AND m2."modelo" = $2)`,
+        antigo, novo,
+      );
+      await db.$executeRawUnsafe(
+        `UPDATE "Maquina" SET "modelo" = $2 WHERE "marca" = 'Dynapac' AND "modelo" = $1`,
+        antigo, novo,
+      );
+      await db.$executeRawUnsafe(
+        `UPDATE "Negociacao" SET "maquinaModelo" = $2 WHERE "maquinaModelo" = $1`,
+        antigo, novo,
+      );
+    }
+    // Modelos fora de linha sem equivalente: sai do catálogo (as negociações
+    // antigas guardam o nome como texto e continuam intactas).
+    for (const fora of DYNAPAC_FORA_DE_LINHA) {
+      await db.$executeRawUnsafe(
+        `DELETE FROM "NotaMaquina" WHERE "maquinaId" IN (SELECT "id" FROM "Maquina" WHERE "marca" = 'Dynapac' AND "modelo" = $1)`,
+        fora,
+      );
+      await db.$executeRawUnsafe(`DELETE FROM "Maquina" WHERE "marca" = 'Dynapac' AND "modelo" = $1`, fora);
+    }
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
   }

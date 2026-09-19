@@ -9,7 +9,8 @@ import { llmTexto, iaHabilitada } from "./index";
 
 const CONTEXTO = `Mercado: venda consultiva de máquinas pesadas New Holland Construction (retroescavadeiras B95C/B110B,
 escavadeiras E145C/E175C/E215C/E245C, pás-carregadeiras W130B/W170B/W190B, motoniveladoras RG140B/RG170B) e
-rolos compactadores Dynapac (CA1500/CA2500/CA3500, CC1200/CC2200) no sul do Espírito Santo. Clientes típicos:
+e a linha Dynapac de compactação e pavimentação (rolos de solo CA15 D a CA65 PD, tandem CC2200 VI/CC4200 VI,
+pneumáticos CP2100/CP2700, vibroacabadoras SD2500CS) no sul do Espírito Santo. Clientes típicos:
 construtoras e empreiteiras, prefeituras (licitação/pregão), pedreiras/mineração de granito, produtores e
 cooperativas de café, locadoras de máquinas, pequenos terraplenadores. Concorrentes: Caterpillar, Komatsu, Volvo,
 JCB, Case, XCMG, Sany, LiuGong. Financiamento: FINAME/BNDES, CDC de banco, consórcio, Banco CNH, usada na troca.`;

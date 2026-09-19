@@ -450,7 +450,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   // ── Rolo de solo (Dynapac CA) ─────────────────────────────────────────────
   {
     marca: "Dynapac",
-    modelo: "CA2500",
+    modelo: "CA25 D",
     especificacoes: [
       "Peso operacional: 10.100 kg",
       "Largura do cilindro: 2.130 mm",
@@ -461,7 +461,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Dynapac",
-    modelo: "CA3500",
+    modelo: "CA35 D",
     especificacoes: [
       "Motor: Cummins QSF3.8 (Tier 4F)",
       "Potência: 130 cv",
@@ -473,7 +473,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Dynapac",
-    modelo: "CA5000",
+    modelo: "CA50 D",
     especificacoes: [
       "Peso operacional: 16.000 kg",
       "Largura do cilindro: 2.130 mm",
@@ -483,7 +483,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
 
   {
     marca: "Dynapac",
-    modelo: "CA1500",
+    modelo: "CA15 D",
     especificacoes: [
       "Motor: Deutz TD3.6 (ou Cummins QSB3.3)",
       "Potência: 75 cv",
@@ -494,7 +494,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Dynapac",
-    modelo: "CA4000",
+    modelo: "CA40 D",
     especificacoes: [
       "Motor: Cummins",
       "Potência: 162 cv (119 kW)",
@@ -505,7 +505,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Dynapac",
-    modelo: "CA6500",
+    modelo: "CA65 D",
     especificacoes: [
       "Potência: 200 cv",
       "Peso operacional: 20.700 kg",
@@ -519,19 +519,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   // ── Rolo tandem asfalto (Dynapac CC) ──────────────────────────────────────
   {
     marca: "Dynapac",
-    modelo: "CC1300",
-    especificacoes: [
-      "Motor: Kubota",
-      "Potência: 45 cv (33 kW)",
-      "Peso operacional: 4.000 kg",
-      "Largura de trabalho: 1.300 mm",
-      "Força centrífuga: 33 / 36 kN",
-      "Versão combi disponível (cilindro + 4 pneus)",
-    ].join("\n"),
-  },
-  {
-    marca: "Dynapac",
-    modelo: "CC2200",
+    modelo: "CC2200 VI",
     especificacoes: [
       "Motor: Deutz TCD 3.6 (Tier 4F)",
       "Potência: 74 cv",
@@ -542,7 +530,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
   },
   {
     marca: "Dynapac",
-    modelo: "CC4200",
+    modelo: "CC4200 VI",
     especificacoes: [
       "Motor: Cummins QSB4.5",
       "Potência: 130 cv",
@@ -554,7 +542,7 @@ export const FICHAS_VERIFICADAS: FichaVerificada[] = [
 
   {
     marca: "Dynapac",
-    modelo: "CC6200",
+    modelo: "CC6200 VI",
     especificacoes: [
       "Peso operacional: 12.200 kg",
       "Largura de trabalho: 2.130 mm",
@@ -671,7 +659,7 @@ async function garantirDiferencialCabineMotoniveladora(): Promise<void> {
 let fichasGarantidas = false;
 
 // Versão das fichas. Bump aqui quando FICHAS_VERIFICADAS mudar para reaplicar.
-const FICHAS_VERSAO = "v1";
+const FICHAS_VERSAO = "v2"; // v2: nomes novos do catálogo Dynapac (CA25 D, CC2200 VI…)
 const CHAVE_VERSAO = "fichas_verificadas_versao";
 
 // Preenche o campo `especificacoes` das máquinas que têm ficha verificada,

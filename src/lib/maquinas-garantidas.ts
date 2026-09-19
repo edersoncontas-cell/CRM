@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { CATALOGO_DYNAPAC } from "@/lib/dynapac-catalogo";
 
 // Máquinas próprias adicionadas DEPOIS do seed inicial. Como o deploy roda só
 // `prisma db push` (não o seed), elas não entrariam em bancos já populados.
@@ -9,8 +10,8 @@ type MaquinaNova = {
   modelo: string;
   categoria: string;
   proprio: boolean;
-  pesoOperacional: number;
-  potencia: number;
+  pesoOperacional?: number;
+  potencia?: number;
   descricao: string;
   pontosFortes: string;
   diferenciais: string;
@@ -39,6 +40,11 @@ const MAQUINAS_GARANTIDAS: MaquinaNova[] = [
     pontosFortes: "90 cv e ROC de 1.360 kg; elevação vertical para trabalhos pesados.",
     diferenciais: "Robustez New Holland com baixo custo operacional.",
   },
+  // Catálogo Dynapac atual (rolos de solo com o nome curto CA25 D/PD, tandem,
+  // pneumáticos, vibroacabadoras, alimentador, fresadoras e linha leve). Como
+  // o deploy não roda o seed, é aqui que o banco de produção recebe os
+  // modelos novos — a migração v30 cuida de renomear os antigos.
+  ...CATALOGO_DYNAPAC,
 ];
 
 let maquinasGarantidas = false;
@@ -57,8 +63,8 @@ export async function garantirMaquinasNovas(): Promise<void> {
           modelo: m.modelo,
           categoria: m.categoria,
           proprio: m.proprio,
-          pesoOperacional: m.pesoOperacional,
-          potencia: m.potencia,
+          pesoOperacional: m.pesoOperacional ?? null,
+          potencia: m.potencia ?? null,
           descricao: m.descricao,
           pontosFortes: m.pontosFortes,
           diferenciais: m.diferenciais,

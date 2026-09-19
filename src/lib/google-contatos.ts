@@ -16,7 +16,8 @@ import { getConfig, setConfig } from "@/lib/config";
 import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle } from "@/lib/integrations/google";
 import { planejarSincronizacao, clientesParaEnviar, nomeGenerico, type ClienteResumo } from "@/lib/google-contatos-util";
 import { deveDescartarContato, listarFiltroContatos } from "@/lib/filtro-contatos";
-import { listarTelefonesBloqueados, limparContatosIndesejados } from "@/lib/contatos-bloqueados";
+import { listarTelefonesBloqueados, limparContatosIndesejados, bloquearContato, apagarContatoPorTelefone, desbloquearContato } from "@/lib/contatos-bloqueados";
+import { nomeMarcadoComAsterisco, MOTIVO_ASTERISCO } from "@/lib/utils";
 
 const CHAVE_ULTIMA = "google.contatos.ultima";
 const CHAVE_ENVIAR = "google.contatos.enviar";
@@ -34,6 +35,10 @@ export type ResumoSincronizacao = {
   ignorados: number;
   semTelefone: number;
   pendentesEnvio: number;
+  // Contatos marcados com "*" no celular: bloqueados (e apagados do CRM) nesta
+  // rodada / desbloqueados porque o vendedor tirou o asterisco.
+  asteriscoBloqueados: number;
+  asteriscoLiberados: number;
 };
 
 export async function lerResumoSincronizacaoGoogle(): Promise<ResumoSincronizacao | null> {
@@ -62,20 +67,24 @@ const SELECAO_CLIENTE = { id: true, nome: true, telefone: true, email: true, end
 // Rodada completa. Nunca lança: o erro vai para o resumo.
 export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> {
   const agora = new Date();
-  const base: ResumoSincronizacao = { em: agora.toISOString(), ok: false, lidos: 0, criados: 0, atualizados: 0, enviados: 0, ignorados: 0, semTelefone: 0, pendentesEnvio: 0 };
+  const base: ResumoSincronizacao = { em: agora.toISOString(), ok: false, lidos: 0, criados: 0, atualizados: 0, enviados: 0, ignorados: 0, semTelefone: 0, pendentesEnvio: 0, asteriscoBloqueados: 0, asteriscoLiberados: 0 };
   if (!(await googleContatosDisponivel())) return gravar({ ...base, erro: "Conta Google não conectada." });
 
   try {
     // Antes de ler o Google, tira do CRM o que não é cliente (contabilidade, banco…).
     await limparContatosIndesejados();
-    const [contatos, clientes, municipios, bloqueados, filtro] = await Promise.all([
+    const [contatos, clientes, municipios, filtro] = await Promise.all([
       listarContatosGoogle(),
       db.cliente.findMany({ select: SELECAO_CLIENTE }) as Promise<ClienteResumo[]>,
       db.municipio.findMany({ select: { id: true, nome: true } }),
-      listarTelefonesBloqueados(),
       listarFiltroContatos(),
     ]);
-    const plano = planejarSincronizacao(contatos, clientes, municipios, bloqueados, filtro);
+    // Asterisco no fim do nome = "não é cliente" (marca feita pelo vendedor no
+    // próprio celular). Antes de qualquer coisa: bloqueia o número e apaga o
+    // que já existia dele; e quem perdeu o asterisco volta a ser aceito.
+    const { asteriscoBloqueados, asteriscoLiberados } = await aplicarMarcaAsterisco(contatos);
+
+    const plano = planejarSincronizacao(contatos, clientes, municipios, await listarTelefonesBloqueados(), filtro);
 
     // Google → CRM
     for (const c of plano.criar) {
@@ -99,7 +108,7 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
       }
     }
 
-    return gravar({ ...base, ok: true, lidos: contatos.length, criados: plano.criar.length, atualizados: plano.atualizar.length, enviados, ignorados: plano.ignorados, semTelefone: plano.semTelefone, pendentesEnvio });
+    return gravar({ ...base, ok: true, asteriscoBloqueados, asteriscoLiberados, lidos: contatos.length, criados: plano.criar.length, atualizados: plano.atualizar.length, enviados, ignorados: plano.ignorados, semTelefone: plano.semTelefone, pendentesEnvio });
   } catch (e) {
     return gravar({ ...base, erro: e instanceof Error ? e.message : String(e) });
   }
@@ -124,4 +133,33 @@ export async function enviarClienteParaGoogle(clienteId: string): Promise<void> 
   }
   const id = await criarContatoGoogle(dados);
   await db.cliente.update({ where: { id: c.id }, data: { googleContatoId: id, googleSincronizadoEm: new Date() } });
+}
+
+// Aplica a marca de asterisco vinda da agenda do celular. Nunca lança: uma
+// falha aqui não pode derrubar a sincronização inteira.
+async function aplicarMarcaAsterisco(contatos: { nome: string; telefones: string[] }[]): Promise<{ asteriscoBloqueados: number; asteriscoLiberados: number }> {
+  let asteriscoBloqueados = 0;
+  let asteriscoLiberados = 0;
+  for (const c of contatos) {
+    const telefones = c.telefones.map((t) => t.replace(/\D/g, "")).filter(Boolean);
+    if (!telefones.length) continue;
+    try {
+      if (nomeMarcadoComAsterisco(c.nome)) {
+        for (const t of telefones) {
+          await bloquearContato(t, c.nome, MOTIVO_ASTERISCO);
+          await apagarContatoPorTelefone(t);
+        }
+        asteriscoBloqueados++;
+      } else {
+        // Tirou o asterisco no celular: volta a ser contato normal (só desfaz
+        // bloqueio que veio do asterisco, nunca os das listas de filtro).
+        for (const t of telefones) {
+          if (await desbloquearContato(t, MOTIVO_ASTERISCO)) asteriscoLiberados++;
+        }
+      }
+    } catch (e) {
+      console.error("[google-contatos] marca de asterisco:", e);
+    }
+  }
+  return { asteriscoBloqueados, asteriscoLiberados };
 }

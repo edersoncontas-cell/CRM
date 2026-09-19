@@ -50,7 +50,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v25: tabelas da unificação de cadastros duplicados (histórico para
 // desfazer + redirecionamento dos links antigos).
 // v26: tabela Evento (compromissos de vários dias na agenda).
-export const CHAVE_MANUTENCAO = "manutencao.v29";
+// v30: tabelas da Central Inteligente (RelatorioDiario, IdeiaInovacao,
+// PostMarketing, MemoriaCerebro).
+export const CHAVE_MANUTENCAO = "manutencao.v30";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

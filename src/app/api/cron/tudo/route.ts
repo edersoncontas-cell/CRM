@@ -46,6 +46,10 @@ const JOBS: Job[] = [
   // Parabéns de aniversário: a partir das 8h, uma vez por dia.
   { path: "/api/cron/aniversarios", minutos: 20 * 60, horaBrasilia: 8 },
   { path: "/api/cron/academia-atualizar", minutos: 6 * 24 * 60, horaBrasilia: 8, diaSemana: 1 },
+  // Fim do dia: relatório do que aconteceu (só conversas de negociação) e a
+  // varredura mundial do radar de inovação. 19h e 20h de Brasília.
+  { path: "/api/cron/relatorio-diario", minutos: 20 * 60, horaBrasilia: 19 },
+  { path: "/api/cron/radar-inovacao", minutos: 20 * 60, horaBrasilia: 20 },
   // Robô do Orientador: lições do histórico (taxa de fechamento, motivo de
   // perda, tempo até fechar) + reaprende o jeito de falar do vendedor.
   { path: "/api/cron/orientador-aprender", minutos: 7 * 24 * 60, horaBrasilia: 5, diaSemana: 1 },

@@ -29,6 +29,16 @@ export async function bloquearContato(telefone: string, nome: string | null, mot
   await db.contatoBloqueado.upsert({ where: { telefone: t }, update: { nome: nome ?? undefined, motivo: motivo ?? undefined }, create: { telefone: t, nome, motivo } });
 }
 
+// Desfaz o bloqueio de um telefone — só quando o motivo bate com o informado
+// (ex.: o vendedor tirou o asterisco do nome na agenda do celular). Devolve
+// true se havia mesmo um bloqueio daquele motivo.
+export async function desbloquearContato(telefone: string, motivo: string): Promise<boolean> {
+  const variantes = phoneLookupVariants(telefone);
+  if (!variantes.length) return false;
+  const r = await db.contatoBloqueado.deleteMany({ where: { telefone: { in: variantes }, motivo } });
+  return r.count > 0;
+}
+
 // Apaga só o que está ligado a UM telefone (usado na chegada de mensagem de
 // contato bloqueado — barato, sem varrer o banco inteiro).
 export async function apagarContatoPorTelefone(telefone: string): Promise<void> {

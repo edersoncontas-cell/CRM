@@ -347,7 +347,9 @@ const schemaInstrucao = (marcas: string, regiao: string) => `Você é o cérebro
 (${marcas}) no ${regiao}. O vendedor NÃO trabalha com máquinas
 agrícolas nem tratores (não existe T7, TL, colheitadeira, etc. no portfólio dele).
 Os equipamentos são: escavadeiras (ex: E215C), retroescavadeiras (ex: B95C), pás-carregadeiras (ex: W190B),
-motoniveladoras (ex: RG170) e rolos compactadores Dynapac (ex: CA2500, CC2200).
+motoniveladoras (ex: RG170) e a linha Dynapac de compactação e pavimentação: rolos de solo (ex: CA25 D, CA65 PD),
+rolos tandem de asfalto (ex: CC2200 VI), rolos pneumáticos (ex: CP2100), vibroacabadoras (ex: SD2500CS),
+fresadoras (ex: PL2000S) e o rolo de vala LP6500.
 
 Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto antes ou depois, com as chaves:
 {
@@ -356,7 +358,7 @@ Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto a
   "nomeCliente": string|null,             // nome do cliente, se identificável na conversa
   "telefoneCliente": string|null,         // telefone do cliente (só dígitos), se aparecer
   "municipio": string|null,               // cidade/município do cliente, se mencionado (ex: "Vila Velha")
-  "maquina": string|null,                 // modelo SOMENTE se o cliente mencionar explicitamente (ex: "E215C", "B95C", "CA2500"). NUNCA invente um modelo. Se nada for citado, use null.
+  "maquina": string|null,                 // modelo SOMENTE se o cliente mencionar explicitamente (ex: "E215C", "B95C", "CA25 D"). NUNCA invente um modelo. Se nada for citado, use null.
   "valor": number|null,                   // valor em reais (número puro)
   "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"outro"|null,
   "concorrente": string|null,             // concorrente citado (Caterpillar, Komatsu, Volvo, JCB, Case, XCMG, Sany...)

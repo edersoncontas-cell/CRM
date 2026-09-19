@@ -55,8 +55,10 @@ const CAT_LABEL: Record<string, string> = {
   rolo_solo: "Rolo de Solo",
   rolo_tandem: "Rolo Tandem",
   rolo_pneumatico: "Rolo Pneumático",
-  paver: "Paver",
-  leve: "Leve",
+  paver: "Vibroacabadora",
+  alimentador: "Alimentador de Massa",
+  fresadora: "Fresadora",
+  leve: "Compactação Leve",
 };
 
 function EditModal({

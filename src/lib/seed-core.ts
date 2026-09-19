@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { CATALOGO_DYNAPAC } from "./dynapac-catalogo";
 
 const MUNICIPIOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Cachoeiro de Itapemirim", lat: -20.8489, lng: -41.1128 },
@@ -128,57 +129,11 @@ const MINHAS: MaquinaSeed[] = [
     pontosFortes: "Maior potência e estabilidade; produtividade em pista longa.",
     diferenciais: "Robustez para serviço severo com revenda forte." },
 
-  // Dynapac — rolos de solo (CA)
-  { marca: "Dynapac", modelo: "CA1500", categoria: "rolo_solo", proprio: true, pesoOperacional: 7000,
-    descricao: "Rolo compactador de solo de pequeno porte.",
-    pontosFortes: "Compactação eficiente em camadas finas; manobrabilidade.",
-    diferenciais: "Tecnologia sueca de compactação com fabricação nacional." },
-  { marca: "Dynapac", modelo: "CA2500", categoria: "rolo_solo", proprio: true, pesoOperacional: 10500,
-    descricao: "Rolo de solo de 10,5 t, o mais popular do segmento.",
-    pontosFortes: "Excelente custo-benefício; alta produtividade; assistência ampla.",
-    diferenciais: "Líder de base instalada no Brasil e telemetria Dyn@Link." },
-  { marca: "Dynapac", modelo: "CA3500", categoria: "rolo_solo", proprio: true, pesoOperacional: 11500,
-    descricao: "Rolo de solo para grandes aterros e rochas.",
-    pontosFortes: "Amplitude para compactar camadas espessas; robustez.",
-    diferenciais: "Sistema de compactação inteligente e acabamento superior." },
-  { marca: "Dynapac", modelo: "CA4000", categoria: "rolo_solo", proprio: true, pesoOperacional: 12000,
-    descricao: "Rolo de solo de alta capacidade para obras pesadas.",
-    pontosFortes: "Força de compactação; estabilidade; baixo consumo.",
-    diferenciais: "Qualidade Dynapac com suporte local." },
-  { marca: "Dynapac", modelo: "CA5000", categoria: "rolo_solo", proprio: true, pesoOperacional: 15000,
-    descricao: "Rolo de solo pesado para grandes terraplenagens.",
-    pontosFortes: "Produtividade em grandes volumes; durabilidade.",
-    diferenciais: "Tecnologia de medição de compactação." },
-  { marca: "Dynapac", modelo: "CA6500", categoria: "rolo_solo", proprio: true, pesoOperacional: 19000,
-    descricao: "Rolo de solo de 19 t para mineração e barragens.",
-    pontosFortes: "Máxima força de compactação; estrutura reforçada.",
-    diferenciais: "Referência em compactação pesada no Brasil." },
-  // Dynapac — tandem asfalto (CC)
-  { marca: "Dynapac", modelo: "CC1300", categoria: "rolo_tandem", proprio: true, pesoOperacional: 4000,
-    descricao: "Rolo tandem de 4 t para asfalto e reparos.",
-    pontosFortes: "Acabamento de qualidade; ideal para ruas e tapa-buracos.",
-    diferenciais: "Acabamento premium da tecnologia sueca." },
-  { marca: "Dynapac", modelo: "CC2200", categoria: "rolo_tandem", proprio: true, pesoOperacional: 7000,
-    descricao: "Rolo tandem de 7 t, fabricado no Brasil, com cabine fechada.",
-    pontosFortes: "Produtividade; conforto do operador; ótimo acabamento.",
-    diferenciais: "Fabricação nacional e disponibilidade imediata." },
-  { marca: "Dynapac", modelo: "CC4200", categoria: "rolo_tandem", proprio: true, pesoOperacional: 10000,
-    descricao: "Rolo tandem vibratório de 7,7 a 12 t, fabricado no Brasil.",
-    pontosFortes: "Compactação uniforme; acabamento superior; robustez.",
-    diferenciais: "Linha completa nacional com forte suporte." },
-  { marca: "Dynapac", modelo: "CC6200", categoria: "rolo_tandem", proprio: true, pesoOperacional: 12000,
-    descricao: "Rolo tandem pesado para rodovias e grandes pavimentações.",
-    pontosFortes: "Alta produção; qualidade de acabamento em rodovia.",
-    diferenciais: "Tecnologia Dynapac para grandes obras." },
-  // Dynapac — pneumáticos (CP)
-  { marca: "Dynapac", modelo: "CP2100", categoria: "rolo_pneumatico", proprio: true, pesoOperacional: 10000,
-    descricao: "Rolo pneumático para selagem e acabamento de asfalto.",
-    pontosFortes: "Selagem superficial; impermeabilização; versatilidade de lastro.",
-    diferenciais: "Acabamento e selagem de referência." },
-  { marca: "Dynapac", modelo: "CP2700", categoria: "rolo_pneumatico", proprio: true, pesoOperacional: 20000,
-    descricao: "Rolo pneumático pesado para rodovias.",
-    pontosFortes: "Grande capacidade de lastro; produtividade em rodovia.",
-    diferenciais: "Robustez e acabamento Dynapac." },
+  // Dynapac — catálogo atual (rolos de solo CA, tandem CC, pneumáticos CP,
+  // vibroacabadoras, alimentador, fresadoras e compactação leve), em
+  // lib/dynapac-catalogo.ts para o seed, a manutenção e a migração usarem a
+  // mesma lista.
+  ...CATALOGO_DYNAPAC,
 ];
 
 // ===== CONCORRENTES (ramo construction Brasil) =====

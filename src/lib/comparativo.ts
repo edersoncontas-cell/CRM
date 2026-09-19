@@ -31,6 +31,8 @@ export const CATEGORIAS: Record<string, string> = {
   rolo_tandem: "Rolo tandem (asfalto)",
   rolo_pneumatico: "Rolo pneumático",
   paver: "Vibroacabadora",
+  alimentador: "Alimentador de massa",
+  fresadora: "Fresadora de asfalto",
   leve: "Equipamento leve",
 };
 

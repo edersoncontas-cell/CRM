@@ -1,3 +1,5 @@
+import { MODELOS_DYNAPAC, nomeCurtoRoloSolo } from "@/lib/dynapac-catalogo";
+
 // Extração heurística (fallback sem ANTHROPIC_API_KEY).
 // Cobre o essencial: modelo de máquina, valor, condição de pagamento,
 // concorrente, data/hora de visita e sentimento — usando regex em PT-BR.
@@ -51,7 +53,9 @@ export function extrairIntencao(texto: string): IntencaoConversa {
   return "outro";
 }
 
-// Modelos da minha linha (New Holland Construction + Dynapac) — portfólio oficial.
+// Modelos da minha linha (New Holland Construction + Dynapac) — portfólio
+// oficial. Os Dynapac vêm do catálogo único (lib/dynapac-catalogo.ts), com os
+// nomes curtos dos rolos de solo (CA25 D, CA65 PD…).
 const MODELOS_NEW_HOLLAND = [
   // New Holland Construction
   "E35D", "E145C", "E175C", "E215C", "E245C", "E385C", "E405C", "E485C", "E505C",
@@ -59,9 +63,8 @@ const MODELOS_NEW_HOLLAND = [
   "L320", "L330",
   "W130B", "W170B", "W190B", "W130", "W170", "W190",
   "RG140", "RG170", "RG200",
-  // Dynapac
-  "CA1500", "CA2500", "CA3500", "CA4000", "CA5000", "CA6500",
-  "CC1300", "CC2200", "CC4200", "CC6200", "CP2100", "CP2700",
+  // Dynapac (rolos, vibroacabadoras, fresadoras, linha leve)
+  ...MODELOS_DYNAPAC,
 ];
 
 const CONCORRENTES = [
@@ -99,14 +102,30 @@ export function extrairValor(texto: string): number | null {
   return null;
 }
 
+// O cliente escreve do jeito dele: "CA25D", "ca 25 d", "CA 2500 PD". Cada
+// modelo vira um padrão que aceita espaço opcional e, no caso dos rolos de
+// solo, também o nome antigo de quatro dígitos — e a resposta sai sempre no
+// nome oficial do catálogo, para o funil não encher de grafias diferentes.
+function padraoDoModelo(modelo: string): RegExp {
+  const corpo = modelo
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\\?\s+/g, "\\s*");
+  return new RegExp(`\\b${corpo}(\\.\\d+)?\\b`);
+}
+
+// Rolo de solo escrito de qualquer jeito: "CA2500" (nome antigo), "CA25",
+// "ca 25 pd". Sem o sufixo, assume D (cilindro liso, o mais vendido) — o
+// vendedor troca para PD no card do funil em um clique.
+const PADRAO_SOLO = /\bCA\s?(\d{2})(?:00)?\s?(PD|D)?\b/;
+
 export function extrairMaquina(texto: string): string | null {
   const upper = texto.toUpperCase();
   for (const modelo of MODELOS_NEW_HOLLAND) {
-    // procura o modelo como token (ex.: "T7", "T7.245")
-    const re = new RegExp(`\\b${modelo.replace(".", "\\.")}(\\.\\d+)?\\b`);
-    const m = upper.match(re);
-    if (m) return m[0];
+    const m = upper.match(padraoDoModelo(modelo));
+    if (m) return modelo.includes(" ") ? modelo : m[0];
   }
+  const solo = upper.match(PADRAO_SOLO);
+  if (solo) return nomeCurtoRoloSolo(`CA${solo[1]}${solo[2] ?? "D"}`);
   return null;
 }
 

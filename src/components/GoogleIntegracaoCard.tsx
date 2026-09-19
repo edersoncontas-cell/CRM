@@ -97,6 +97,8 @@ export function GoogleIntegracaoCard({ status, feedback, msg, resumo, enviarAtiv
               Última sincronização {new Date(ultimo.em).toLocaleString("pt-BR")}: {ultimo.lidos} contato(s) lido(s) · {ultimo.criados} cliente(s) novo(s) · {ultimo.atualizados} atualizado(s) · {ultimo.enviados} enviado(s) ao Google
               {ultimo.semTelefone > 0 && <> · {ultimo.semTelefone} sem telefone (ignorados)</>}
               {ultimo.pendentesEnvio > 0 && <> · {ultimo.pendentesEnvio} ainda por enviar (segue na próxima rodada)</>}
+              {ultimo.asteriscoBloqueados > 0 && <> · <b>{ultimo.asteriscoBloqueados} marcado(s) com * ficaram de fora</b></>}
+              {ultimo.asteriscoLiberados > 0 && <> · {ultimo.asteriscoLiberados} voltaram (asterisco removido)</>}
             </p>
           )}
           {ultimo && !ultimo.ok && ultimo.erro && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{ultimo.erro}</p>}

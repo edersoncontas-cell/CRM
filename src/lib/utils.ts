@@ -155,7 +155,20 @@ export const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace
 // Termo com menos de 3 letras é ignorado: "a" ou "sa" na lista (um deslize
 // no card ou no assistente) bloquearia — e APAGARIA — todo contato que chega.
 const TAMANHO_MINIMO_TERMO = 3;
+// Contato marcado pelo vendedor na agenda do celular: nome terminado em "*"
+// (ex.: "Compadre Zé *"). É a marca manual de "isto não é cliente" — vale
+// mais que qualquer lista e tira o contato do CRM inteiro: não vira cliente,
+// não entra na lista de contatos, não recebe nem gera mensagem, não aparece
+// em relatório e não abre negociação. Tirar o asterisco no celular desfaz o
+// bloqueio na sincronização seguinte.
+export const MOTIVO_ASTERISCO = "asterisco no nome (*)";
+
+export function nomeMarcadoComAsterisco(nome: string | null | undefined): boolean {
+  return /\*+\s*$/.test((nome ?? "").trim());
+}
+
 export function motivoBloqueioComListas(nome: string, termos: string[], palavras: string[]): string | null {
+  if (nomeMarcadoComAsterisco(nome)) return MOTIVO_ASTERISCO;
   const n = semAcento(nome);
   const termo = termos.find((t) => semAcento(t).trim().length >= TAMANHO_MINIMO_TERMO && n.includes(semAcento(t).trim()));
   if (termo) return termo;

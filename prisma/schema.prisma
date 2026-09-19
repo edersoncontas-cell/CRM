@@ -599,3 +599,70 @@ model CerebroMessage {
   criadoEm   DateTime @default(now())
   @@index([sessionId, criadoEm])
 }
+
+// ── Central Inteligente (Cérebro) ────────────────────────────────────────────
+
+// Relatório do fim do dia do vendedor: só conversas em que houve negociação
+// de verdade (máquina, modelo, financiamento, proposta…), separando contato
+// novo de cliente da carteira. Um por dia; refeito se pedido de novo.
+model RelatorioDiario {
+  id             String   @id @default(cuid())
+  dia            DateTime @unique // início do dia (Brasília)
+  criadoEm       DateTime @default(now())
+  resumo         String   // texto pronto (o que vai pro WhatsApp)
+  dados          String   // JSON: conversas classificadas, visitas, movimentos do funil
+  totalConversas Int      @default(0)
+  negociacoes    Int      @default(0)
+  novos          Int      @default(0)
+  carteira       Int      @default(0)
+  enviadoEm      DateTime?
+}
+
+// Radar de inovação: ideia encontrada pela pesquisa diária (Gemini + busca)
+// para melhorar uma sessão do CRM — o que é, benefício e ganho esperado.
+model IdeiaInovacao {
+  id         String   @id @default(cuid())
+  criadoEm   DateTime @default(now())
+  sessao     String   // id da sessão do CRM (negociacoes, whatsapp, marketing…)
+  titulo     String
+  melhoria   String   // o que mudaria no CRM
+  beneficio  String   // o que o vendedor ganha
+  ganho      String   // tamanho do ganho (ex.: "-30 min/dia", "mais conversões")
+  esforco    String   @default("medio") // baixo | medio | alto
+  fonte      String?  // URL de onde veio
+  status     String   @default("nova") // nova | aplicar | aplicada | descartada
+  @@index([status, criadoEm])
+  @@index([sessao])
+}
+
+// Marketing (só Gemini): post pronto (legenda + arte) para redes sociais ou
+// para mandar aos clientes. A arte fica guardada em base64 por até 90 dias.
+model PostMarketing {
+  id            String   @id @default(cuid())
+  criadoEm      DateTime @default(now())
+  tipo          String   // diario | semanal | mensal | campanha | promocao
+  tema          String
+  legenda       String
+  hashtags      String   @default("")
+  maquina       String?
+  imagemBase64  String?
+  imagemMime    String?
+  agendadoPara  DateTime?
+  status        String   @default("rascunho") // rascunho | pronto | publicado
+  publicadoEm   DateTime?
+  canal         String?  // instagram | facebook | whatsapp | outro
+  @@index([status, agendadoPara])
+  @@index([criadoEm])
+}
+
+// Memória ensinada ao Cérebro ("Ensinar algo novo"): texto que o vendedor
+// colou ou arquivo lido; entra no contexto do chat e da busca de memórias.
+model MemoriaCerebro {
+  id        String   @id @default(cuid())
+  criadoEm  DateTime @default(now())
+  titulo    String
+  conteudo  String
+  origem    String   @default("texto") // texto | arquivo | relatorio | radar
+  sessao    String?  // sessão do CRM a que se refere (opcional)
+  @@index([criadoEm])
+}

@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +22,7 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/atendimento", label: "WhatsApp", icon: MessageCircle },
       { href: "/visitas", label: "Visitas", icon: MapPin },
       { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/marketing", label: "Marketing", icon: Megaphone },
     ],
   },
   {
@@ -48,7 +49,7 @@ export const GRUPOS: GrupoMenu[] = [
   {
     label: "Sistema",
     links: [
-      { href: "/cerebro", label: "Cérebro IA", icon: Brain, fixo: true },
+      { href: "/cerebro", label: "Central Inteligente", icon: Brain, fixo: true },
       { href: "/zeus", label: "ZEUS", icon: ShieldCheck, fixo: true },
       { href: "/conexao", label: "Conexão WhatsApp", icon: Smartphone },
       { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
