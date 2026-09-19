@@ -15,7 +15,23 @@ export function RegistrarSW() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // Já existia um worker no comando antes de registrarmos? Se sim, quando
+    // o controle trocar é porque saiu VERSÃO NOVA, e a aba precisa recarregar
+    // para mostrar o CRM atualizado — sem isso o aparelho continuava exibindo
+    // a versão antiga até o usuário fechar tudo na mão. Na primeira visita
+    // (sem worker anterior) a troca é normal e não recarrega nada.
+    const jaTinhaWorker = Boolean(navigator.serviceWorker.controller);
+    let recarregando = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!jaTinhaWorker || recarregando) return;
+      recarregando = true;
+      window.location.reload();
+    });
+
     navigator.serviceWorker.register("/sw.js").then(async (reg) => {
+      // Força a checagem de versão nova a cada abertura do CRM.
+      reg.update().catch(() => {});
+
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidKey || !("PushManager" in window)) return;
 

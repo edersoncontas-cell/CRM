@@ -11,7 +11,7 @@
 // entrar. Tudo em SVG, que fica nítido em qualquer tela e não pesa como uma
 // biblioteca de grafos.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Brain } from "lucide-react";
 import {
@@ -47,7 +47,7 @@ function curva(alvo: Ponto, desvio: number): string {
   // Empurra o meio da curva na perpendicular à reta centro→nó.
   const cx = mx + (-dy / norma) * desvio;
   const cy = my + (dx / norma) * desvio;
-  return `M ${CENTRO.x} ${CENTRO.y} Q ${cx} ${cy} ${alvo.x} ${alvo.y}`;
+  return `M ${CENTRO.x} ${CENTRO.y} Q ${arred(cx)} ${arred(cy)} ${alvo.x} ${alvo.y}`;
 }
 
 // Curva entre DOIS NÓS (não passa pelo centro): é o que faz o desenho virar
@@ -72,15 +72,33 @@ function curvaEntreNos(a: Ponto, b: Ponto): string {
   const distReta = Math.abs(dx * (CENTRO.y - a.y) - dy * (CENTRO.x - a.x)) / norma;
   const pico = 16 + Math.max(0, RAIO_LIVRE - distReta);
   // Numa curva quadrática o desenho chega à metade do ponto de controle.
-  return `M ${a.x} ${a.y} Q ${mx + px * pico * 2} ${my + py * pico * 2} ${b.x} ${b.y}`;
+  return `M ${a.x} ${a.y} Q ${arred(mx + px * pico * 2)} ${arred(my + py * pico * 2)} ${b.x} ${b.y}`;
 }
 
-// Pseudo-aleatório determinístico (mesma semente = mesmo valor sempre): a
-// poeira neural de fundo usa isso em vez de Math.random(), senão o HTML do
-// servidor e o do cliente divergiriam (hydration mismatch).
+// Pseudo-aleatório determinístico para a decoração de fundo — Math.random()
+// aqui faria o HTML do servidor não bater com o do cliente.
+//
+// CUIDADO: não dá para usar Math.sin nisto. A especificação do JavaScript
+// NÃO exige que seno/cosseno deem o mesmo bit em todo motor, e o Node e o
+// navegador realmente divergem na última casa (853.4480594691995 contra
+// 853.4480594691612). Isso já quebrou a hidratação desta página uma vez e
+// derrubou a interação inteira do grafo. Aqui só entra conta de inteiro
+// (mulberry32), que é exata e igual em qualquer lugar.
 function pseudoAleatorio(semente: number): number {
-  const x = Math.sin(semente * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
+  let a = (Math.trunc(semente * 1000) + 0x9e3779b9) >>> 0;
+  a = (a + 0x6d2b79f5) >>> 0;
+  let t = a;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+// Todo número que vira atributo do SVG passa por aqui. Mesmo com o sorteio
+// exato, seno e cosseno continuam podendo variar na última casa entre
+// servidor e navegador — arredondar mata a diferença antes dela virar uma
+// string diferente no HTML.
+function arred(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
 export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; titulo?: string }) {
@@ -90,6 +108,11 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
   // de movimento para ~25, que é o que mantém o grafo liso num aparelho
   // simples sem tirar a sensação de rede viva.
   const [leve, setLeve] = useState(false);
+  // No celular o navegador AINDA dispara mouseover/mouseenter fingindo ser
+  // mouse antes do clique. Sem saber disso, o toque acendia a sessão no
+  // mouseenter e o clique logo em seguida apagava — o dedo parecia não
+  // funcionar. Ref (e não estado) porque precisa valer já no mesmo evento.
+  const veioDeToque = useRef(false);
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setAnimar(false);
@@ -123,8 +146,8 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     const alvo = leve ? 10 : 22;
     const pontos: { x: number; y: number }[] = [];
     for (let k = 0; k < 220 && pontos.length < alvo; k++) {
-      const x = -90 + pseudoAleatorio(k * 1.37 + 31) * 1180;
-      const y = 148 + pseudoAleatorio(k * 2.53 + 32) * 832;
+      const x = arred(-90 + pseudoAleatorio(k * 1.37 + 31) * 1180);
+      const y = arred(148 + pseudoAleatorio(k * 2.53 + 32) * 832);
       if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 375) continue;
       pontos.push({ x, y });
     }
@@ -136,22 +159,22 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
         // Curto de propósito: dendrito comprido vira risco solto atravessando
         // o quadro em vez de célula.
         const comp = 26 + pseudoAleatorio(i * 4.41 + j * 2.3) * 44;
-        const pontaX = x + Math.cos(a) * comp;
-        const pontaY = y + Math.sin(a) * comp;
+        const pontaX = arred(x + Math.cos(a) * comp);
+        const pontaY = arred(y + Math.sin(a) * comp);
         // Controle fora da reta: o dendrito sai torto, como na natureza.
         const curvatura = (pseudoAleatorio(i * 6.1 + j * 3.1) - 0.5) * 0.9;
-        const cx = x + Math.cos(a + curvatura) * comp * 0.6;
-        const cy = y + Math.sin(a + curvatura) * comp * 0.6;
+        const cx = arred(x + Math.cos(a + curvatura) * comp * 0.6);
+        const cy = arred(y + Math.sin(a + curvatura) * comp * 0.6);
         return { d: `M ${x} ${y} Q ${cx} ${cy} ${pontaX} ${pontaY}`, pontaX, pontaY };
       });
       return {
         x, y, dendritos,
-        corpo: 2.2 + pseudoAleatorio(i * 8.3 + 15) * 2.4,
-        op: 0.1 + pseudoAleatorio(i * 1.9 + 16) * 0.14,
-        dx: (pseudoAleatorio(i * 10.7 + 17) - 0.5) * 22,
-        dy: (pseudoAleatorio(i * 12.3 + 18) - 0.5) * 22,
-        dur: 7 + pseudoAleatorio(i * 5.9 + 19) * 6,
-        delay: pseudoAleatorio(i * 3.3 + 20) * 7,
+        corpo: arred(2.2 + pseudoAleatorio(i * 8.3 + 15) * 2.4),
+        op: arred(0.1 + pseudoAleatorio(i * 1.9 + 16) * 0.14),
+        dx: arred((pseudoAleatorio(i * 10.7 + 17) - 0.5) * 22),
+        dy: arred((pseudoAleatorio(i * 12.3 + 18) - 0.5) * 22),
+        dur: arred(7 + pseudoAleatorio(i * 5.9 + 19) * 6),
+        delay: arred(pseudoAleatorio(i * 3.3 + 20) * 7),
         cor: i % 3 === 0 ? "#a78bfa" : "#38bdf8",
       };
     });
@@ -163,14 +186,14 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     const angulo = pseudoAleatorio(i * 7.13 + 1) * Math.PI * 2;
     const raio = 150 + pseudoAleatorio(i * 3.71 + 2) * 500;
     return {
-      x: CENTRO.x + Math.cos(angulo) * raio,
-      y: CENTRO.y + Math.sin(angulo) * raio * 0.74,
-      raio: 1.1 + pseudoAleatorio(i * 5.37 + 3) * 2.1,
-      op: 0.16 + pseudoAleatorio(i * 2.91 + 4) * 0.3,
-      dx: (pseudoAleatorio(i * 11.3 + 5) - 0.5) * 30,
-      dy: (pseudoAleatorio(i * 13.7 + 6) - 0.5) * 30,
-      dur: 5 + pseudoAleatorio(i * 4.11 + 7) * 5,
-      delay: pseudoAleatorio(i * 6.93 + 8) * 6,
+      x: arred(CENTRO.x + Math.cos(angulo) * raio),
+      y: arred(CENTRO.y + Math.sin(angulo) * raio * 0.74),
+      raio: arred(1.1 + pseudoAleatorio(i * 5.37 + 3) * 2.1),
+      op: arred(0.16 + pseudoAleatorio(i * 2.91 + 4) * 0.3),
+      dx: arred((pseudoAleatorio(i * 11.3 + 5) - 0.5) * 30),
+      dy: arred((pseudoAleatorio(i * 13.7 + 6) - 0.5) * 30),
+      dur: arred(5 + pseudoAleatorio(i * 4.11 + 7) * 5),
+      delay: arred(pseudoAleatorio(i * 6.93 + 8) * 6),
     };
   }), [leve]);
 
@@ -454,9 +477,16 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
               key={n.id}
               opacity={aceso ? 1 : 0.22}
               style={{ cursor: "pointer", transition: "opacity .25s" }}
-              onMouseEnter={() => setAtivo(n.id)}
-              onMouseLeave={() => setAtivo((a) => (a === n.id ? null : a))}
-              onClick={() => setAtivo((a) => (a === n.id ? null : n.id))}
+              onPointerDown={(e) => { veioDeToque.current = e.pointerType === "touch"; }}
+              onMouseEnter={() => { if (!veioDeToque.current) setAtivo(n.id); }}
+              onMouseLeave={() => { if (!veioDeToque.current) setAtivo((a) => (a === n.id ? null : a)); }}
+              onClick={() => {
+                // No mouse o hover já acendeu a sessão, então o clique só
+                // confirma (alternar apagaria o nó recém-aceso e pareceria
+                // defeito). No toque o clique é que manda, e tocar de novo
+                // no mesmo nó fecha a ficha.
+                setAtivo((a) => (veioDeToque.current && a === n.id ? null : n.id));
+              }}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setAtivo((a) => (a === n.id ? null : n.id)); }}
@@ -495,8 +525,15 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
 
       {/* Ficha da sessão acesa */}
       <div className="p-3 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:bottom-0 sm:p-4">
+        {/* sm:pointer-events-none é OBRIGATÓRIO, não é enfeite: no desktop a
+            ficha flutua POR CIMA do grafo e cresce quando uma sessão é
+            escolhida. Se ela capturasse o mouse, ao acender um nó da parte
+            de baixo ela cobriria o próprio nó → o mouse "saía" do nó → a
+            ficha encolhia → o mouse "entrava" de novo, num pisca-pisca sem
+            fim que fazia o grafo parecer que não respondia a nada. Só o
+            botão Abrir volta a receber clique. */}
         <div
-          className="pointer-events-auto mx-auto max-w-2xl rounded-2xl px-4 py-3 backdrop-blur"
+          className="pointer-events-auto mx-auto max-w-2xl rounded-2xl px-4 py-3 backdrop-blur sm:pointer-events-none"
           style={{ background: "rgba(8,16,24,0.88)", border: `1px solid ${selecionado ? selecionado.cor : "#1e2a36"}` }}
         >
           {selecionado ? (
@@ -507,7 +544,7 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
                 <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300" style={{ background: "rgba(255,255,255,0.08)" }}>
                   {ROTULO_GRUPO[selecionado.grupo]}
                 </span>
-                <Link href={selecionado.href} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold" style={{ background: selecionado.cor, color: "#0b1520" }}>
+                <Link href={selecionado.href} className="pointer-events-auto ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold" style={{ background: selecionado.cor, color: "#0b1520" }}>
                   Abrir <ArrowUpRight size={13} />
                 </Link>
               </div>
