@@ -29,13 +29,29 @@ const fmtBRL = (v: number | null, casas = 2) =>
 const NH_AMARELO = "#ffcb2d";
 const NH_BORDA = "#e09e00";
 const NH_TEXTO = "#141416";
-// "todas as palavras sejam na cor preta exceto o árabica que fique cor de
-// café, ou marrom". Tudo preto — inclusive a variação, que antes era verde e
-// vermelha. A alta e a baixa não se perdem: continuam nas setas ▲ e ▼, que
-// são forma, não cor (e por isso também funcionam para quem não distingue
-// verde de vermelho).
+
+// "Quero os ativos na cor branca e o percentual com a setinha pra cima ou pra
+//  baixo no padrão de verde quando positiva e vermelho quando negativo."
+//
+// O NOME do ativo sai branco; o PREÇO fica no preto forte, porque é o número
+// que ele lê de relance dirigindo — trocar o preço por branco custaria
+// legibilidade onde ela mais importa.
+//
+// Branco sobre o amarelo da marca tem contraste baixo (≈1.7:1). Em vez de
+// recusar a cor pedida ou entregar um borrão no sol, o nome leva uma sombra
+// fina escura: o branco continua branco e ganha borda para se destacar do
+// amarelo.
+const NH_BRANCO = "#ffffff";
+const SOMBRA_NO_AMARELO = "0 1px 2px rgba(0,0,0,0.55)";
+
+// Verde e vermelho ESCUROS, pelo mesmo motivo: o verde-claro e o vermelho-claro
+// de costume somem sobre amarelo. Estes continuam sendo lidos como verde e
+// vermelho, e continuam legíveis. As setas ▲ e ▼ seguem ao lado — são forma,
+// não cor, e é o que faz a informação chegar também a quem não distingue as
+// duas.
+const VERDE_ALTA = "#0f7a33";
+const VERMELHO_BAIXA = "#c0261c";
 const NH_SUAVE = "rgba(20,20,22,0.66)";
-const CAFE = "#5b3a1e";
 
 /**
  * As cotações do letreiro — AS MESMAS dos cartões do topo do Dashboard.
@@ -72,15 +88,16 @@ function cotacoesDaFita(c: CotacoesMercado): CotacaoFita[] {
 function Peca({ item }: { item: ItemFita }) {
   if (item.tipo === "cotacao") {
     const seta = item.pct == null ? "" : item.pct > 0 ? "▲" : item.pct < 0 ? "▼" : "•";
-    // O arábica é o preço que manda no bolso do cliente dele: sai na cor do
-    // café, e é o único que destoa do preto.
-    const ehArabica = /arabica/i.test(item.chave);
+    // Sem variação no dia (0,00% ou dado ausente) não é alta nem baixa: fica no
+    // preto. Pintar de verde um dia parado diria que subiu.
+    const corDaVariacao =
+      item.pct == null || item.pct === 0 ? NH_TEXTO : item.pct > 0 ? VERDE_ALTA : VERMELHO_BAIXA;
     return (
       <span className="inline-flex shrink-0 items-baseline gap-1.5 pr-8 text-[12px]">
-        <span className="font-black uppercase tracking-wider" style={{ color: ehArabica ? CAFE : NH_SUAVE }}>{item.rotulo}</span>
-        <span className="font-bold" style={{ color: ehArabica ? CAFE : NH_TEXTO }}>{item.valor}</span>
+        <span className="font-black uppercase tracking-wider" style={{ color: NH_BRANCO, textShadow: SOMBRA_NO_AMARELO }}>{item.rotulo}</span>
+        <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>
         {item.pct != null && (
-          <span className="text-[11px] font-bold" style={{ color: ehArabica ? CAFE : NH_TEXTO }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
+          <span className="text-[11px] font-black" style={{ color: corDaVariacao }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
         )}
       </span>
     );

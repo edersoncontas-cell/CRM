@@ -120,9 +120,13 @@ export function NovoCompromissoCalendario({
 
   return (
     <>
+      {/* Verde cheio, texto branco e em negrito, a pedido do vendedor. Era um
+          retângulo tracejado cinza no topo do calendário — parecia moldura, não
+          botão, e é o caminho de agendar a visita, a ação mais usada da tela.
+          O verde é o mesmo das visitas realizadas na legenda logo abaixo. */}
       <button
         onClick={() => setAberto(true)}
-        className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 py-1.5 text-xs font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600"
+        className="flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700"
       >
         <Plus size={13} /> Adicionar
       </button>

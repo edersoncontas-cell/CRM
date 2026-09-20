@@ -79,9 +79,21 @@ function diasNoMes(mes: number, ano: number): number {
   return new Date(ano, mes, 0).getDate();
 }
 
+// A folha que envolve os quatro seletores (data, data+hora, horário, mês).
+//
+//   "quando vou registrar uma nova visita e clico para selecionar uma data
+//    futura, o pop up de selecionar a data e hora ficam por trás da janela
+//    atual que aparece"
+//
+// O z-index alto NÃO é exagero: o seletor quase sempre é aberto de DENTRO de
+// um modal ("Nova visita", "Novo compromisso", nova negociação), e esses
+// modais estão em z-[100]. Em z-50 a folha abria atrás da janela que a
+// chamou — a data ficava impossível de escolher. Ele tem de ficar acima de
+// qualquer janela que possa abri-lo, por isso é o maior número interativo do
+// CRM. Quem for mexer: não baixe sem conferir o z-index dos modais.
 function Folha({ title, onClose, children }: { title?: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
       <div
         className="w-full max-w-sm rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl"
         style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
