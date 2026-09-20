@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { buildConvMatch, phoneLookupVariants } from "@/lib/whatsapp-routing";
+import { buildConvMatch, phoneLookupVariants, chavesDeIdentidade, hash32, somenteDigitos } from "@/lib/whatsapp-routing";
 import { chaveNome } from "@/lib/google-contatos-util";
 
 const STATUS_RANK: Record<string, number> = { QUEUED: 0, FAILED: 0, SENT: 1, UNCONFIRMED: 1, DELIVERED: 2, READ: 3 };
@@ -34,10 +34,10 @@ function deveAtualizarNome(atual: string | null, novo: string | null): boolean {
   return false;                                            // Atual já é nome real → preserva
 }
 
-async function acharClienteId(phone: string): Promise<string | null> {
+async function acharClienteIdCom(tx: ClientePrisma, phone: string): Promise<string | null> {
   const variants = phoneLookupVariants(phone);
   if (!variants.length) return null;
-  const c = await db.cliente.findFirst({ where: { telefone: { in: variants } }, select: { id: true } });
+  const c = await tx.cliente.findFirst({ where: { telefone: { in: variants } }, select: { id: true } });
   return c?.id ?? null;
 }
 
@@ -46,11 +46,38 @@ export async function acharConversa(phone: string, lid: string | null, isGroup: 
   return db.whatsAppConversation.findFirst({ where, orderBy: { lastMessageAt: "desc" } });
 }
 
+// Namespace das travas, para não esbarrar em outro advisory lock do sistema.
+const TRAVA_CONVERSA = 0x5747;
+
+type ClientePrisma = Prisma.TransactionClient | typeof db;
+
 export async function acharOuCriarConversa(args: {
   phone: string; lid: string | null; isGroup: boolean;
   contactName?: string | null; groupName?: string | null; photoUrl?: string | null;
 }) {
-  let conv = await acharConversa(args.phone, args.lid, args.isGroup);
+  // Tudo dentro de uma transação com trava por IDENTIDADE DO CONTATO. Sem
+  // isto, um álbum de mídias (que chega em vários webhooks simultâneos) fazia
+  // os eventos não acharem a conversa ao mesmo tempo e criarem uma cada um —
+  // era isso que enchia a lista com o mesmo contato repetido, cada linha com
+  // uma mídia. O índice único não resolvia porque as chaves eram diferentes
+  // entre si, embora do mesmo contato.
+  //
+  // A trava some sozinha no fim da transação (xact), inclusive se der erro —
+  // não tem como ficar presa.
+  return db.$transaction(async (tx) => {
+    for (const chave of chavesDeIdentidade(args)) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TRAVA_CONVERSA}::int, ${hash32(chave)}::int)`;
+    }
+    return resolverConversa(tx, args);
+  });
+}
+
+async function resolverConversa(tx: ClientePrisma, args: {
+  phone: string; lid: string | null; isGroup: boolean;
+  contactName?: string | null; groupName?: string | null; photoUrl?: string | null;
+}) {
+  const where = buildConvMatch(args) as Prisma.WhatsAppConversationWhereInput;
+  let conv = await tx.whatsAppConversation.findFirst({ where, orderBy: { lastMessageAt: "desc" } });
   if (conv) {
     const patch: Prisma.WhatsAppConversationUpdateInput = {};
 
@@ -71,16 +98,34 @@ export async function acharOuCriarConversa(args: {
       patch.groupName = args.groupName;
     }
 
+    // Conversa que nasceu só com o @lid guarda no externalPhone os DÍGITOS DO
+    // LID, que não são um telefone — não dá para responder por ali. Quando o
+    // provedor enfim manda o número real (senderPn), promove. Se o número real
+    // já estiver em outra conversa, deixa quieto: a unificação junta as duas.
+    if (!args.isGroup && conv.lid && conv.externalPhone === somenteDigitos(conv.lid)
+        && args.phone && args.phone !== conv.externalPhone) {
+      patch.externalPhone = args.phone;
+    }
+
     if (Object.keys(patch).length) {
-      conv = await db.whatsAppConversation.update({ where: { id: conv.id }, data: patch });
+      try {
+        conv = await tx.whatsAppConversation.update({ where: { id: conv.id }, data: patch });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && patch.externalPhone) {
+          delete patch.externalPhone;
+          if (Object.keys(patch).length) {
+            conv = await tx.whatsAppConversation.update({ where: { id: conv.id }, data: patch });
+          }
+        } else throw e;
+      }
     }
     return { conv, criada: false };
   }
 
   // Conversa nova: cria com os dados disponíveis
-  const clienteId = !args.isGroup ? await acharClienteId(args.phone) : null;
+  const clienteId = !args.isGroup ? await acharClienteIdCom(tx, args.phone) : null;
   try {
-    conv = await db.whatsAppConversation.create({
+    conv = await tx.whatsAppConversation.create({
       data: {
         externalPhone: args.phone,
         lid: args.isGroup ? null : args.lid,
@@ -94,12 +139,15 @@ export async function acharOuCriarConversa(args: {
     });
     return { conv, criada: true };
   } catch (e) {
-    // Corrida: dois webhooks quase simultâneos para o mesmo contato podem
-    // ambos não encontrar a conversa e tentar criar — @@unique([externalPhone])
-    // rejeita o segundo. Em vez de propagar o erro, busca a conversa que o
-    // outro request acabou de criar e segue normalmente.
+    // Rede de segurança: a trava acima já serializa a criação, mas se por
+    // algum motivo dois create do MESMO texto ainda se cruzarem, o
+    // @@unique([externalPhone]) rejeita o segundo — e aqui a gente pega a
+    // conversa que o outro acabou de criar em vez de estourar o webhook.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const existente = await acharConversa(args.phone, args.lid, args.isGroup);
+      const existente = await tx.whatsAppConversation.findFirst({
+        where: buildConvMatch(args) as Prisma.WhatsAppConversationWhereInput,
+        orderBy: { lastMessageAt: "desc" },
+      });
       if (existente) return { conv: existente, criada: false };
     }
     throw e;

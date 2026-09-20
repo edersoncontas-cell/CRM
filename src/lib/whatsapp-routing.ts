@@ -22,6 +22,58 @@ export function phoneLookupVariants(phone: string): string[] {
   return [...set].filter(Boolean);
 }
 
+// ── Identidade do contato (para travar a criação da conversa) ───────────────
+// O índice único do banco é no TEXTO EXATO do externalPhone, mas a busca da
+// conversa é por VARIANTES do número e pelo @lid. Quando um álbum de mídias
+// chega (vários webhooks ao mesmo tempo) e dois eventos do MESMO contato
+// resolvem para textos diferentes porém equivalentes — "5527999183562" e
+// "552799183562", ou o telefone real e os dígitos do @lid — os dois create
+// passam e nascem duas conversas. O banco não tem como barrar, porque as
+// chaves são de fato diferentes.
+//
+// Daí estas chaves: elas são IGUAIS para todo evento do mesmo contato, e é
+// nelas que a criação trava (pg_advisory_xact_lock), fazendo o segundo evento
+// esperar e encontrar o que o primeiro criou.
+
+export function somenteDigitos(s: string): string {
+  return s.split("@")[0].split(":")[0].replace(/\D/g, "");
+}
+
+// Representante único do conjunto de variantes. Números equivalentes geram o
+// MESMO conjunto, então ordenar e juntar dá a mesma string para os dois.
+export function chaveCanonicaTelefone(phone: string): string {
+  const v = phoneLookupVariants(phone);
+  if (!v.length) return "";
+  return [...new Set(v)].sort().join(",");
+}
+
+// Todas as chaves em que este evento precisa travar. Quando o evento traz
+// telefone E @lid, ele trava nas duas: assim ele se encontra tanto com o
+// evento que só tem o telefone quanto com o que só tem o @lid.
+// Vem ORDENADO de propósito — todo mundo pega as travas na mesma ordem, que é
+// o que evita um travar esperando o outro.
+export function chavesDeIdentidade(args: { phone: string; lid?: string | null; isGroup: boolean }): string[] {
+  if (args.isGroup) return [`g:${args.phone}`];
+  const chaves: string[] = [];
+  const tel = chaveCanonicaTelefone(args.phone);
+  if (tel) chaves.push(`tel:${tel}`);
+  const lid = args.lid ? somenteDigitos(args.lid) : "";
+  if (lid) chaves.push(`lid:${lid}`);
+  if (!chaves.length) chaves.push(`cru:${args.phone}`);
+  return [...new Set(chaves)].sort();
+}
+
+// FNV-1a de 32 bits, devolvido como inteiro COM SINAL — é o que o
+// pg_advisory_xact_lock(int, int) aceita.
+export function hash32(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h | 0;
+}
+
 type ConvMatch = { externalPhone: string } | { OR: Array<{ externalPhone: { in: string[] } } | { lid: string }> };
 
 // `where` do Prisma para achar a conversa do evento.
