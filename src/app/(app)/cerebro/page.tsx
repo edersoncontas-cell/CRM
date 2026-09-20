@@ -90,10 +90,17 @@ export default async function CerebroPage() {
         <CerebroGrafo nos={nos} />
       </div>
 
-      {/* items-start: um card com lista mais longa (mesmo já limitada, com
-          "ver mais") nunca estica os vizinhos para a mesma altura — cada um
-          fica do tamanho do próprio conteúdo. */}
-      <div className="mb-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+      {/* Os três cards têm a MESMA altura, a do mais alto da linha.
+
+          Antes havia um items-start aqui, para cada card ficar do tamanho do
+          próprio conteúdo. Na prática isso deixava o "Relatório do fim do dia"
+          — que é curto — com um vão escuro embaixo, ao lado de dois cards
+          altos: três caixas desalinhadas em vez de uma linha.
+
+          A altura igual sozinha só mudaria o vão de lugar (ficaria dentro do
+          card curto); quem resolve é a lista de dentro, que agora estica para
+          ocupar a sobra — ver quadroRolagem em CentralCerebro.tsx. */}
+      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <PainelRelatorio inicial={relatorios} />
         <PainelRadar inicial={ideias} />
         <PainelMemoria inicial={memorias} />

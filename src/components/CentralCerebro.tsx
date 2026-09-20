@@ -24,7 +24,19 @@ import { SESSOES } from "@/lib/cerebro/sessoes";
 // item é alto (título, sessão, ganho, link). Cinco ideias do Radar já davam
 // mais de mil pixels de card, e a página continuava enorme. O que precisa
 // ser limitado é a ALTURA, não a quantidade.
-const quadroRolagem = "max-h-[46vh] overflow-y-auto pr-1";
+//
+// flex-1 + min-h-0: a lista também CRESCE para ocupar a sobra do card.
+//
+//   "Não gostei dos cards desta forma, sem padrão entre eles, mantenha do
+//    mesmo tamanho, ajuste para os menores ficarem maiores, para não ficar
+//    esse espaço vazio entre eles."
+//
+// Os três cards agora têm a mesma altura (a grade deixou de ser items-start),
+// e é a lista de dentro que estica — sem isso o card curto ficaria com um
+// buraco no pé, que é o mesmo defeito por outro caminho. O min-h-0 é o que
+// permite a lista encolher dentro do flex e a rolagem funcionar; sem ele o
+// conteúdo empurra o card e o max-h não segura nada.
+const quadroRolagem = "min-h-0 flex-1 max-h-[46vh] overflow-y-auto pr-1";
 
 const painel = { background: "#111a24", border: "1px solid #1e2a36" } as const;
 const campo = "w-full rounded-xl bg-[#0b1119] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600";
@@ -75,7 +87,7 @@ export function PainelRelatorio({ inicial }: { inicial: RelatorioGerado[] }) {
   const atual = relatorios.find((r) => r.id === aberto) ?? relatorios[0] ?? null;
 
   return (
-    <section className="rounded-2xl p-4" style={painel}>
+    <section className="flex h-full flex-col rounded-2xl p-4" style={painel}>
       <Cabecalho
         icone={<FileText size={18} style={{ color: "#ffcb2d" }} />}
         titulo="Relatório do fim do dia"
@@ -188,7 +200,7 @@ export function PainelRadar({ inicial }: { inicial: IdeiaRadar[] }) {
   const visiveis = ideias.filter((i) => i.status !== "descartada");
 
   return (
-    <section className="rounded-2xl p-4" style={painel}>
+    <section className="flex h-full flex-col rounded-2xl p-4" style={painel}>
       <Cabecalho
         icone={<Radar size={18} style={{ color: "#38bdf8" }} />}
         titulo="Radar de inovação"
@@ -268,7 +280,7 @@ export function PainelMemoria({ inicial }: { inicial: Memoria[] }) {
   }
 
   return (
-    <section className="rounded-2xl p-4" style={painel}>
+    <section className="flex h-full flex-col rounded-2xl p-4" style={painel}>
       <Cabecalho
         icone={<BookOpen size={18} style={{ color: "#a78bfa" }} />}
         titulo="Ensinar algo novo ao Cérebro"
