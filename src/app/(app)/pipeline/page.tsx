@@ -17,7 +17,7 @@ export default async function DemandasPage() {
     <div>
       <PageHeader
         titulo="Demandas"
-        subtitulo="Uma lista só, por prazo: o que você anota e o que o CRM cria sozinho (ligações e visitas da cadência, marcos de pós-venda, próximas ações do Orientador). Toque no círculo para concluir."
+        subtitulo="Uma lista só, por prazo: o que você anota e o que o CRM cria sozinho (marcos de pós-venda, próximas ações do Orientador). Toque no círculo para concluir."
       />
       <DemandasLista grupos={grupos} clientes={clientes} abertas={abertas} atrasadas={atrasadas} hoje={hoje} />
     </div>

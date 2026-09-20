@@ -24,6 +24,7 @@ import {
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
+import { maquinaDaNegociacao, pagamentoDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
 
 export type ConvLista = {
   id: string;
@@ -132,6 +133,29 @@ function Temperatura({ t }: { t: string }) {
   if (t === "muito_quente" || t === "quente") return <span className="inline-flex items-center gap-1 text-orange-300"><Flame size={13} /> {t === "muito_quente" ? "Muito quente" : "Quente"}</span>;
   if (t === "fria") return <span className="inline-flex items-center gap-1 text-sky-300"><Snowflake size={13} /> Fria</span>;
   return <span className="inline-flex items-center gap-1 text-amber-300"><ThermometerSun size={13} /> Morna</span>;
+}
+
+/**
+ * Uma linha do card "Negociação": máquina, valor ou pagamento. Quando o dado
+ * já foi identificado sai com "Verificado" e em verde — mesmo ✓ e mesmo verde
+ * do card "Sua condução", de propósito, para o vendedor ler os dois do mesmo
+ * jeito. O que ainda falta fica apagado, dizendo o que falta.
+ */
+function ItemVerificado({ rotulo, valor, falta }: { rotulo: string; valor: string | null; falta: string }) {
+  if (!valor) {
+    return (
+      <div className="flex gap-1.5 text-brand-500">
+        <span className="w-3 shrink-0 text-center">○</span>
+        <span>{rotulo}: {falta}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-1.5 text-emerald-200">
+      <span className="w-3 shrink-0 text-center">✓</span>
+      <span><b className="text-emerald-300">Verificado</b> · {rotulo}: <b className="text-white">{valor}</b></span>
+    </div>
+  );
 }
 
 type Anexo = { kind: "image" | "audio" | "document"; base64: string; mimeType: string; fileName: string; preview: string | null; thumb: string | null; tamanho: number };
@@ -846,7 +870,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       return (
                         <div key={m.id} className="mb-2 flex justify-end">
                           <div className="w-full max-w-[85%] rounded-2xl rounded-tr-sm border border-dashed border-agro-400/60 bg-agro-400/10 p-3 text-sm sm:max-w-[70%]">
-                            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-agro-300"><Brain size={12} /> {m.operatorDisplayName?.includes("Cadência") ? m.operatorDisplayName : "Sugestão do Orientador"} · revise antes de enviar</div>
+                            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-agro-300"><Brain size={12} /> Sugestão do Orientador · revise antes de enviar</div>
                             <p className="whitespace-pre-wrap break-words text-brand-50">{m.body}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button onClick={() => draftAction(m.id, "send")} disabled={!conexao.conectado} className="inline-flex items-center gap-1 rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black hover:bg-agro-300 disabled:opacity-40" style={{ minHeight: 30 }}><Send size={12} /> Enviar</button>
@@ -990,53 +1014,59 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     </div>
                     {contexto.cliente.aguardandoResposta && <span className="rounded-full bg-orange-400/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">aguardando</span>}
                   </div>
-                  {contexto.cliente.resumoTexto && <p className="mt-2 line-clamp-4 text-xs text-brand-300">{contexto.cliente.resumoTexto.split("\n").slice(-2).join(" ")}</p>}
+                  {/* Só o assunto da ÚLTIMA conversa. Antes eram as duas
+                      últimas linhas do resumo coladas com espaço — e como o
+                      resumo é um log de uma linha por mensagem analisada, as
+                      duas costumam ser quase iguais: era daí que vinha a
+                      sensação de card duplicado. */}
+                  {assuntoDaUltimaConversa(contexto.cliente.resumoTexto) && (
+                    <p className="mt-2 line-clamp-3 text-xs text-brand-300">{assuntoDaUltimaConversa(contexto.cliente.resumoTexto)}</p>
+                  )}
+                  {/* A leitura do momento (temperatura, estágio, chance, perfil)
+                      e a próxima ação moram aqui dentro, junto do nome e do
+                      assunto — é o cartão que o vendedor olha primeiro. */}
+                  {contexto.orientador && (
+                    <>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/5 pt-2 text-xs">
+                        <Temperatura t={contexto.orientador.temperatura} />
+                        <span className="text-brand-200">{contexto.orientador.estagioVenda}</span>
+                        {contexto.orientador.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{contexto.orientador.probabilidadeFechamento}% de fechar</span>}
+                        {contexto.orientador.coaching?.personalidade.estilo && <span className="text-brand-400">cliente {contexto.orientador.coaching.personalidade.estilo}{contexto.orientador.coaching.personalidade.papel ? ` · ${contexto.orientador.coaching.personalidade.papel}` : ""}</span>}
+                      </div>
+                      {contexto.orientador.proximaAcao && (
+                        <div className="mt-2 rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {contexto.orientador.proximaAcao}</div>
+                      )}
+                    </>
+                  )}
                 </div>
 
-                {/* O que o vendedor sabe e o WhatsApp não mostra. O Orientador
-                    só enxerga a conversa; o que foi combinado por telefone ou
-                    na visita ficava de fora e a leitura saía torta. Aqui ele
-                    escreve, e isso entra em TODA análise daí em diante. */}
-                <div className="rounded-xl border border-agro-400/30 bg-agro-400/[0.06] p-3">
-                  <label htmlFor="nota-orientador" className="flex items-center gap-1.5 text-xs font-bold text-agro-300">
-                    <Sparkles size={13} /> O que o Orientador precisa saber
-                  </label>
-                  <p className="mt-0.5 text-[11px] text-brand-300">
-                    O que ficou combinado por telefone, o que você viu na visita, o que o cliente falou fora do WhatsApp. Entra na análise como fato.
-                  </p>
-                  <textarea
-                    id="nota-orientador"
-                    value={nota}
-                    onChange={(e) => setNota(e.target.value)}
-                    disabled={salvandoNota}
-                    rows={3}
-                    maxLength={4000}
-                    placeholder="Ex.: falei por telefone, ele quer a D150 com entrada de 30% e quer fechar até o fim do mês. Já tem o banco aprovado."
-                    className="mt-2 w-full resize-y rounded-lg border border-brand-700 bg-brand-950/60 px-2.5 py-2 text-xs text-white placeholder:text-brand-500 focus:border-agro-400 focus:outline-none"
-                  />
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-brand-500">{nota.length}/4000</span>
-                    <button
-                      onClick={salvarNotaEReanalisar}
-                      disabled={salvandoNota}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition",
-                        salvandoNota ? "bg-white/5 text-brand-400" : "bg-agro-400 text-brand-950 hover:bg-agro-300",
-                      )}
-                    >
-                      {salvandoNota ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                      {salvandoNota ? "Atualizando…" : "Salvar e atualizar"}
-                    </button>
-                  </div>
-                  {notaAviso && <p className="mt-1.5 text-[11px] text-agro-300">{notaAviso}</p>}
+                {/* Negociação — o segundo card. Três informações e só três:
+                    máquina, valor e como vai pagar. A que já foi identificada
+                    ganha "Verificado" em verde (mesmo ✓ de "Sua condução");
+                    a que falta fica apagada, para o vendedor ver o buraco. */}
+                <div>
+                  <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">Negociação</div>
+                  {contexto.negociacoes.length === 0 ? (
+                    <p className="text-xs text-brand-400">Nenhuma negociação aberta. Quando houver sinal de compra o ZEUS abre uma automaticamente.</p>
+                  ) : contexto.negociacoes.map((n) => (
+                    <div key={n.id} className="mb-2 space-y-1 rounded-xl bg-white/[0.04] p-3 text-xs">
+                      <ItemVerificado rotulo="Máquina" valor={maquinaDaNegociacao(n.marca, n.maquina)} falta="modelo ainda não definido" />
+                      <ItemVerificado rotulo="Valor negociado" valor={n.valor ? formatCurrency(n.valor) : null} falta="valor ainda não negociado" />
+                      <ItemVerificado rotulo="Pagamento" valor={pagamentoDaNegociacao(n.tipoPagamento, n.condicaoPagamento)} falta="à vista, financiado, consórcio ou parcelado pela casa — ainda não definido" />
+                      {n.concorrente && <div className="flex gap-1.5 text-red-300"><span className="w-3 shrink-0 text-center">▼</span><span>Concorrente na mesa: {n.concorrente}</span></div>}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Leitura do Orientador — coach de vendas ao lado do vendedor.
-                    Ordem: primeiro o que FAZER agora (alerta, ação, perguntas,
+                    Ordem: primeiro o que FAZER agora (alerta, perguntas,
                     resposta pronta, avaliação da sua condução); depois o
                     porquê e o contexto (resumo, personalidade, roteiro,
                     combinados, objeções, sinais). Cada seção mostra algo que
-                    nenhuma outra mostra — sem repetir a mesma frase duas vezes. */}
+                    nenhuma outra mostra — sem repetir a mesma frase duas vezes.
+                    A temperatura, o estágio, a chance e a próxima ação ficam
+                    no card do cliente, lá em cima; a máquina, o valor e o
+                    pagamento ficam no card Negociação, logo abaixo dele. */}
                 {contexto.orientador ? (() => {
                   const o = contexto.orientador;
                   const c = o.coaching;
@@ -1046,29 +1076,11 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   return (
                   <div className="space-y-2.5">
                     {/* ── O que fazer agora ─────────────────────────────── */}
-                    {negociacaoAberta && (negociacaoAberta.maquina || negociacaoAberta.valor || negociacaoAberta.condicaoPagamento) && (
-                      <div className="rounded-xl bg-white/[0.06] p-2.5 text-xs">
-                        <div className="font-bold text-white">Interesse em: {negociacaoAberta.maquina ?? "máquina ainda não definida"}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                          <span className="font-semibold text-emerald-300">{negociacaoAberta.valor ? formatCurrency(negociacaoAberta.valor) : "valor ainda não definido"}</span>
-                          <span className="text-brand-300">{negociacaoAberta.condicaoPagamento ?? "condição de pagamento ainda não definida"}</span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      <Temperatura t={o.temperatura} />
-                      <span className="text-brand-200">{o.estagioVenda}</span>
-                      {o.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{o.probabilidadeFechamento}% de fechar</span>}
-                      {c?.personalidade.estilo && <span className="text-brand-400">cliente {c.personalidade.estilo}{c.personalidade.papel ? ` · ${c.personalidade.papel}` : ""}</span>}
-                    </div>
                     {c?.alertaAgora && (
                       <div className={cn("rounded-xl border p-2.5 text-xs", corAlerta[c.alertaAgora.nivel])}>
                         <div className={cn("flex items-center gap-1.5 font-bold", corTitulo[c.alertaAgora.nivel])}><AlertTriangle size={13} /> {c.alertaAgora.titulo}</div>
                         {c.alertaAgora.motivo && <p className="mt-1">{c.alertaAgora.motivo}</p>}
                       </div>
-                    )}
-                    {o.proximaAcao && (
-                      <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {o.proximaAcao}</div>
                     )}
                     {c && (c.perguntasAgora.length > 0 || c.informacoesFaltando.length > 0) && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
@@ -1156,32 +1168,8 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   <p className="text-xs text-brand-400">O Orientador analisa a conversa quando chega a próxima mensagem do cliente.</p>
                 )}
 
-                {/* Negociação */}
-                <div>
-                  <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">Negociação</div>
-                  {contexto.negociacoes.length === 0 ? (
-                    <p className="text-xs text-brand-400">Nenhuma negociação aberta. Quando houver sinal de compra o ZEUS abre uma automaticamente.</p>
-                  ) : contexto.negociacoes.map((n) => (
-                    <div key={n.id} className="mb-2 rounded-xl bg-white/[0.04] p-3 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-white">{n.maquina ?? "Máquina a definir"}</span>
-                        <span className="text-emerald-300">{n.valor ? formatCurrency(n.valor) : "sem valor"}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-2 text-brand-300">
-                        <span>{n.estagio}</span><span>· {n.papel}</span><span>· termômetro {n.termometro}</span>
-                        {n.concorrente && <span className="text-red-300">· vs {n.concorrente}</span>}
-                      </div>
-                      {n.proximaAcao && <div className="mt-1 text-brand-400">{n.proximaAcao}</div>}
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <Link href={`/negociacoes/${n.id}/proposta`} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 font-semibold text-white hover:bg-white/15"><FileText size={11} /> Proposta</Link>
-                        <Link href="/negociacoes" className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 font-semibold text-white hover:bg-white/15"><Handshake size={11} /> Funil</Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Agenda e cadência */}
-                <div className="grid grid-cols-1 gap-2 text-xs">
+                {/* Visitas */}
+                <div className="text-xs">
                   <div className="rounded-xl bg-white/[0.04] p-3">
                     <div className="mb-1 flex items-center gap-1 font-bold text-brand-200"><Calendar size={12} className="text-sky-300" /> Visitas</div>
                     {contexto.sugestaoVisita && (
@@ -1194,14 +1182,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                         {contexto.visitas.map((v) => <li key={v.id}>{new Date(v.data).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}{v.observacao ? ` · ${v.observacao}` : ""}</li>)}
                         {contexto.cliente.proximaVisita && contexto.visitas.length === 0 && <li>{new Date(contexto.cliente.proximaVisita).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}{contexto.cliente.proximaVisitaNota ? ` · ${contexto.cliente.proximaVisitaNota}` : ""}</li>}
                       </ul>
-                    )}
-                  </div>
-                  <div className="rounded-xl bg-white/[0.04] p-3">
-                    <div className="mb-1 flex items-center gap-1 font-bold text-brand-200"><Repeat size={12} className="text-amber-300" /> Cadência de 7 toques</div>
-                    {contexto.cadencia ? (
-                      <span className="text-brand-300">Ativa · toque {contexto.cadencia.toqueAtual}/7 · próximo {new Date(contexto.cadencia.proximoToqueEm).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
-                    ) : (
-                      <Link href={`/clientes/${contexto.cliente.id}`} className="text-brand-400 hover:text-agro-300">Não iniciada · iniciar no cadastro</Link>
                     )}
                   </div>
                 </div>
@@ -1221,6 +1201,44 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 <div className="flex flex-wrap gap-1.5 pt-1 text-xs">
                   <Link href={`/clientes/${contexto.cliente.id}`} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white hover:bg-white/15"><User size={12} /> Cadastro</Link>
                   {negociacaoAberta && <Link href={`/negociacoes/${negociacaoAberta.id}/proposta`} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white hover:bg-white/15"><Wallet size={12} /> Calculadora</Link>}
+                </div>
+
+                {/* O que o vendedor sabe e o WhatsApp não mostra. O Orientador
+                    só enxerga a conversa; o que foi combinado por telefone ou
+                    na visita ficava de fora e a leitura saía torta. Aqui ele
+                    escreve, e isso entra em TODA análise daí em diante. */}
+                <div className="rounded-xl border border-agro-400/30 bg-agro-400/[0.06] p-3">
+                  <label htmlFor="nota-orientador" className="flex items-center gap-1.5 text-xs font-bold text-agro-300">
+                    <Sparkles size={13} /> O que o Orientador precisa saber
+                  </label>
+                  <p className="mt-0.5 text-[11px] text-brand-300">
+                    O que ficou combinado por telefone, o que você viu na visita, o que o cliente falou fora do WhatsApp. Entra na análise como fato.
+                  </p>
+                  <textarea
+                    id="nota-orientador"
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    disabled={salvandoNota}
+                    rows={3}
+                    maxLength={4000}
+                    placeholder="Ex.: falei por telefone, ele quer a D150 com entrada de 30% e quer fechar até o fim do mês. Já tem o banco aprovado."
+                    className="mt-2 w-full resize-y rounded-lg border border-brand-700 bg-brand-950/60 px-2.5 py-2 text-xs text-white placeholder:text-brand-500 focus:border-agro-400 focus:outline-none"
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-brand-500">{nota.length}/4000</span>
+                    <button
+                      onClick={salvarNotaEReanalisar}
+                      disabled={salvandoNota}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition",
+                        salvandoNota ? "bg-white/5 text-brand-400" : "bg-agro-400 text-brand-950 hover:bg-agro-300",
+                      )}
+                    >
+                      {salvandoNota ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      {salvandoNota ? "Atualizando…" : "Salvar e atualizar"}
+                    </button>
+                  </div>
+                  {notaAviso && <p className="mt-1.5 text-[11px] text-agro-300">{notaAviso}</p>}
                 </div>
               </div>
             )}

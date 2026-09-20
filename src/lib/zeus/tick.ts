@@ -19,7 +19,6 @@ import { montarContextoCliente, gerarMensagemFollowUp } from "@/lib/zeus/cerebro
 import { iaHabilitada, llmTexto } from "@/lib/ai";
 import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
-import { processarCadenciasVencidas, type ResumoCadencias } from "@/lib/cadencias";
 import { calcularRitmoMetas } from "@/lib/metas";
 import { garantirDemandaAutomatica } from "@/lib/demandas";
 import { listarClientesPosVenda } from "@/lib/actions";
@@ -44,7 +43,6 @@ export type ResumoTick = {
   diagnostico: { gerados: number };
   leadScore: { atualizados: number };
   followUp: { preparados: number };
-  cadencias: ResumoCadencias;
 };
 
 // Evita repetir o mesmo evento a cada 5 minutos: só cria um novo se não houver
@@ -444,14 +442,7 @@ async function followUpInteligente(): Promise<number> {
   return preparados;
 }
 
-// ── 8. Cadências de 7 toques ────────────────────────────────────────────────
-// Toques vencidos viram rascunho (WhatsApp) ou alerta (ligação/visita). Ver
-// lib/cadencias.ts.
-async function cadencias(): Promise<ResumoCadencias> {
-  return processarCadenciasVencidas(20);
-}
-
-// ── 9. Diagnóstico de erros repetidos ───────────────────────────────────────
+// ── 8. Diagnóstico de erros repetidos ───────────────────────────────────────
 function assinaturaErro(titulo: string): string {
   return titulo.replace(/[0-9a-f]{20,}/gi, "<id>").replace(/\d+/g, "<n>").slice(0, 120);
 }
@@ -519,7 +510,6 @@ export async function executarZeusTick(): Promise<ResumoTick> {
       higiene: { telefonesNormalizados: 0, municipiosVinculados: 0, aguardandoRespostaCorrigido: 0, duplicadosDetectados: 0, negociacoesPropostasParaArquivar: 0 },
       alertas: { criados: 0 }, autoReparo: { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }, diagnostico: { gerados: 0 },
       leadScore: { atualizados: 0 }, followUp: { preparados: 0 },
-      cadencias: { rascunhos: 0, alertas: 0, encerradas: 0 },
     };
   }
 
@@ -533,7 +523,6 @@ export async function executarZeusTick(): Promise<ResumoTick> {
   const reparo = await autoReparo().catch((e) => { console.error("[zeus-tick] auto-reparo:", e); return { unconfirmedReconciliados: 0, rascunhosDescartados: 0 }; });
   const leadScoreAtualizados = await leadScoring().catch((e) => { console.error("[zeus-tick] lead scoring:", e); return 0; });
   const followUpPreparados = await followUpInteligente().catch((e) => { console.error("[zeus-tick] follow-up:", e); return 0; });
-  const resumoCadencias = await cadencias().catch((e) => { console.error("[zeus-tick] cadências:", e); return { rascunhos: 0, alertas: 0, encerradas: 0 }; });
   const diagnosticados = await diagnosticarErros().catch((e) => { console.error("[zeus-tick] diagnóstico:", e); return 0; });
 
   await tocarHeartbeat("zeus-tick");
@@ -555,6 +544,5 @@ export async function executarZeusTick(): Promise<ResumoTick> {
     diagnostico: { gerados: diagnosticados },
     leadScore: { atualizados: leadScoreAtualizados },
     followUp: { preparados: followUpPreparados },
-    cadencias: resumoCadencias,
   };
 }

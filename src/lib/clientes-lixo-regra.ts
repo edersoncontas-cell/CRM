@@ -16,7 +16,7 @@ export type ClienteParaLimpeza = {
   nome: string;
   telefone: string | null;
   googleContatoId: string | null;
-  vinculos: number; // negociações + visitas + frota + conversas + alertas + tarefas + pós-venda + cadências + indicados
+  vinculos: number; // negociações + visitas + frota + conversas + alertas + tarefas + pós-venda + indicados
 };
 
 export type MotivoLimpeza = "sem_nome_sem_telefone" | "id_whatsapp_no_nome" | "numero_no_nome" | "nome_vazio_com_telefone" | "contato_sem_conversa";

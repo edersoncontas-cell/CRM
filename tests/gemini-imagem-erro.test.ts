@@ -3,7 +3,37 @@
 // a tradução para português.
 
 import { describe, it, expect } from "vitest";
-import { mensagemDoErro } from "@/lib/ai/imagem";
+import { mensagemDoErro, noPlanoGratuito, esperaSugerida } from "@/lib/ai/imagem";
+
+// Corpo real de 429 da Google quando a chave está no plano gratuito: o
+// quotaMetric e o quotaId trazem "free_tier"/"FreeTier". É o que separa
+// "espere um minuto" de "nenhuma espera resolve, a chave é grátis".
+const CORPO_GRATUITO = JSON.stringify({
+  error: {
+    code: 429,
+    message: "You exceeded your current quota, please check your plan and billing details.",
+    status: "RESOURCE_EXHAUSTED",
+    details: [
+      {
+        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+        violations: [{
+          quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+        }],
+      },
+      { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "37s" },
+    ],
+  },
+});
+
+const CORPO_PAGO_POR_MINUTO = JSON.stringify({
+  error: {
+    code: 429,
+    message: "Resource has been exhausted (e.g. check quota).",
+    status: "RESOURCE_EXHAUSTED",
+    details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "21s" }],
+  },
+});
 
 describe("erro do Gemini traduzido", () => {
   it("cota do dia acabou: diz que volta amanhã e que o texto continua", () => {
@@ -37,5 +67,41 @@ describe("erro do Gemini traduzido", () => {
     const m = mensagemDoErro(418, '{"error":{"message":"algo bem estranho aqui"}}');
     expect(m).toContain("418");
     expect(m).not.toContain("estranho");
+  });
+});
+
+// O usuário paga pelo Gemini e mesmo assim levou 429. Assinar o APLICATIVO
+// Gemini (Google One / Gemini Advanced) não dá cota de API: são produtos
+// separados. Quem libera a API é o faturamento ativo no projeto do Google AI
+// Studio de onde saiu a chave. A resposta da Google diz qual dos dois casos é,
+// e a tela precisa dizer isso em vez de "espere um minuto".
+describe("429 com conta paga: plano gratuito × limite por minuto", () => {
+  it("reconhece a marca de plano gratuito no corpo da Google", () => {
+    expect(noPlanoGratuito(CORPO_GRATUITO)).toBe(true);
+    expect(noPlanoGratuito(CORPO_PAGO_POR_MINUTO)).toBe(false);
+  });
+
+  it("plano gratuito: avisa que assinar o app do Gemini não resolve", () => {
+    const m = mensagemDoErro(429, CORPO_GRATUITO);
+    expect(m).toContain("PLANO GRATUITO");
+    expect(m).toContain("faturamento");
+    expect(m).toContain("GEMINI_API_KEY");
+    expect(m).not.toContain("{");
+  });
+
+  it("plano gratuito não manda esperar, porque esperar não adianta", () => {
+    const m = mensagemDoErro(429, CORPO_GRATUITO);
+    expect(m).not.toContain("Espere um minuto");
+  });
+
+  it("limite por minuto: repete a espera que a própria Google pediu", () => {
+    expect(esperaSugerida(CORPO_PAGO_POR_MINUTO)).toBe(21);
+    const m = mensagemDoErro(429, CORPO_PAGO_POR_MINUTO);
+    expect(m).toContain("21s");
+    expect(m).toContain("não acabou");
+  });
+
+  it("sem retryDelay no corpo, não inventa número", () => {
+    expect(esperaSugerida('{"error":{"message":"Resource has been exhausted"}}')).toBe(null);
   });
 });

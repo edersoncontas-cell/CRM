@@ -53,7 +53,7 @@ export const SESSOES: SessaoCerebro[] = [
   {
     id: "alertas", nome: "Central de Alertas", href: "/alertas", cor: "#f87171", grupo: "inteligencia",
     papel: "O que não pode passar batido hoje: cliente esfriando, pós-venda, pendência.",
-    ramos: ["Aguardando resposta", "Pós-venda", "Cadências", "Sistema"],
+    ramos: ["Aguardando resposta", "Pós-venda", "Orientador", "Sistema"],
   },
   {
     id: "demandas", nome: "Demandas", href: "/pipeline", cor: "#22d3ee", grupo: "operacao",

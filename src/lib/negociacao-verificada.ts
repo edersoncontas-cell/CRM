@@ -1,0 +1,65 @@
+// O card "Negociação" do Orientador mostra três coisas e só três: qual
+// máquina, quanto está negociado e como o cliente vai pagar. Cada uma que já
+// foi identificada aparece com "Verificado" em verde; o que falta fica
+// apagado, para o vendedor ver de relance o que ainda precisa arrancar.
+//
+// A leitura fica aqui, fora do componente, porque tem regra: o campo
+// tipoPagamento da negociação guarda tanto condição de pagamento de verdade
+// (avista, financiamento, consorcio, crd_pme) quanto nível de interesse
+// (pesquisa_preco, interesse_real) — os dois saem do mesmo <select> do
+// formulário. "Pesquisa de preço" NÃO é forma de pagamento e não pode
+// aparecer como verificada.
+
+/**
+ * Condições de pagamento de verdade, no vocabulário do vendedor.
+ * CRD PME é o parcelamento em boleto da própria casa (ver Financeiro: a
+ * comissão sai quando 75% do valor está pago) — daí o rótulo.
+ */
+const ROTULO_PAGAMENTO: Record<string, string> = {
+  avista: "À vista",
+  financiamento: "Financiado",
+  consorcio: "Consórcio",
+  crd_pme: "Parcelado pela casa",
+};
+
+// Saem do mesmo <select>, mas dizem o interesse, não como ele vai pagar.
+const NAO_E_PAGAMENTO = new Set(["pesquisa_preco", "interesse_real", "outro"]);
+
+/** "New Holland B110" a partir de marca + modelo; null quando não dá nome. */
+export function maquinaDaNegociacao(marca: string | null, modelo: string | null): string | null {
+  const m = (modelo ?? "").trim();
+  const b = (marca ?? "").trim();
+  if (!m) return null;
+  // Modelo já escrito com a marca junto ("New Holland B110") não repete.
+  if (b && !m.toLowerCase().includes(b.toLowerCase())) return `${b} ${m}`;
+  return m;
+}
+
+/**
+ * Como o cliente vai pagar. Prefere o campo estruturado; cai no texto livre
+ * (condicaoPagamento, legado) quando o estruturado não é uma forma de
+ * pagamento. null = ainda não definido, e o card mostra como pendente.
+ */
+export function pagamentoDaNegociacao(
+  tipoPagamento: string | null,
+  condicaoPagamento: string | null,
+): string | null {
+  const tipo = (tipoPagamento ?? "").trim().toLowerCase();
+  if (ROTULO_PAGAMENTO[tipo]) return ROTULO_PAGAMENTO[tipo];
+  if (tipo && !NAO_E_PAGAMENTO.has(tipo)) return tipo;
+  return (condicaoPagamento ?? "").trim() || null;
+}
+
+/**
+ * Assunto da última conversa: resumoTexto do cliente é um LOG de linhas no
+ * formato "[dd/mm/aaaa] resumo", uma por mensagem analisada. O painel pegava
+ * as duas últimas e colava com espaço — e como linhas seguidas costumam ser
+ * quase iguais, o card saía com a mesma frase duas vezes. Agora é só a
+ * última, sem a data na frente.
+ */
+export function assuntoDaUltimaConversa(resumoTexto: string | null): string | null {
+  const linhas = (resumoTexto ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const ultima = linhas[linhas.length - 1];
+  if (!ultima) return null;
+  return ultima.replace(/^\[[^\]]*\]\s*/, "").trim() || null;
+}

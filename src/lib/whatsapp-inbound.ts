@@ -6,7 +6,6 @@
 
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
-import { pausarCadenciasDoCliente } from "@/lib/cadencias";
 import type { Conteudo } from "@/lib/whatsapp-routing";
 import {
   acharOuCriarConversa, inserirMensagem, existeZapiId, acharEcoRecente, curarZapiId,
@@ -167,11 +166,6 @@ export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok:
       if (!clienteIdAtual) {
         const convAtual = await db.whatsAppConversation.findUnique({ where: { id: conv.id }, select: { clienteId: true } });
         clienteIdAtual = convAtual?.clienteId ?? null;
-      }
-
-      // Cliente respondeu: sai da cadência de 7 toques (se estiver numa).
-      if (clienteIdAtual) {
-        await pausarCadenciasDoCliente(clienteIdAtual).catch((e) => console.error("[cadencias] pausar:", e));
       }
 
       // Foto ou PDF de cliente sem aniversário no cadastro: pode ser CNH,

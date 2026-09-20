@@ -723,7 +723,7 @@ const excluirNegociacao: CerebroTool = {
 const historicoCliente: CerebroTool = {
   def: {
     name: "historico_cliente",
-    description: "Linha do tempo completa de um cliente (mensagens, visitas, negociações, pós-venda, cadência, ações da IA), da mais recente para a mais antiga. Use antes de opinar sobre um cliente ou escrever uma mensagem para ele.",
+    description: "Linha do tempo completa de um cliente (mensagens, visitas, negociações, pós-venda, ações da IA), da mais recente para a mais antiga. Use antes de opinar sobre um cliente ou escrever uma mensagem para ele.",
     input_schema: { type: "object", properties: { clienteId: { type: "string" }, limite: { type: "number", description: "máximo de eventos (padrão 40)" } }, required: ["clienteId"] },
   },
   async executar(input) {
@@ -765,22 +765,6 @@ const ritmoMetas: CerebroTool = {
   },
 };
 
-const iniciarCadenciaTool: CerebroTool = {
-  def: {
-    name: "iniciar_cadencia",
-    description: "Inicia a cadência de follow-up de 7 toques para um cliente que não responde (30 dias, WhatsApp/ligação/visita). tipo: construtora | pedreira | cafe | prefeitura | locadora | geral.",
-    input_schema: { type: "object", properties: { clienteId: { type: "string" }, tipo: { type: "string" } }, required: ["clienteId"] },
-  },
-  async executar(input) {
-    const { iniciarCadencia } = await import("@/lib/cadencias");
-    const tipo = ["construtora", "pedreira", "cafe", "prefeitura", "locadora", "geral"].includes(s(input.tipo)) ? s(input.tipo) : "geral";
-    const r = await iniciarCadencia(s(input.clienteId), tipo as "geral");
-    if (!r.ok) return { erro: r.erro };
-    await registrarAudit({ acao: "tarefa_criada", origem: "cerebro", descricao: `Cérebro iniciou a cadência de 7 toques (${tipo}).`, entidade: "Cliente", entidadeId: s(input.clienteId), clienteId: s(input.clienteId) });
-    return { ok: true, cadenciaId: r.id };
-  },
-};
-
 const alertasAbertos: CerebroTool = {
   def: {
     name: "alertas_abertos",
@@ -795,7 +779,7 @@ const alertasAbertos: CerebroTool = {
 };
 
 export const CEREBRO_TOOLS: CerebroTool[] = [
-  historicoCliente, leituraOrientador, ritmoMetas, alertasAbertos, iniciarCadenciaTool,
+  historicoCliente, leituraOrientador, ritmoMetas, alertasAbertos,
   buscarCliente, detalhesCliente, listarNegociacoes, agenda, buscarMaquina, estoqueUsadas, metricasFunil, conversasAguardando,
   criarCliente, atualizarCliente, atualizarResumoCliente, atualizarEstiloFala, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
   criarTarefa, adicionarVisita, enviarResposta, excluirCliente, excluirNegociacao,
@@ -812,7 +796,6 @@ export function rotuloFerramenta(nome: string, input: Record<string, unknown>): 
     leitura_orientador: "Consultando a leitura do Orientador…",
     ritmo_metas: "Calculando o ritmo da meta…",
     alertas_abertos: "Consultando a central de alertas…",
-    iniciar_cadencia: "Iniciando cadência de 7 toques…",
     detalhes_cliente: "Consultando ficha do cliente…",
     listar_negociacoes: "Consultando negociações…",
     agenda: "Consultando agenda…",

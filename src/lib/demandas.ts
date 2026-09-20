@@ -1,5 +1,5 @@
 // Demandas: a lista única de tarefas do vendedor. Junta o que ele anota à
-// mão com o que o CRM gera sozinho (toque de ligação/visita da cadência,
+// mão com o que o CRM gera sozinho (próxima ação do Orientador,
 // marco de pós-venda vencido, próxima ação do Orientador aceita, tarefa do
 // Cérebro), tudo com prazo, prioridade, cliente e cidade. Sem colunas de
 // Kanban: a organização é por prazo (atrasadas, hoje, esta semana, depois).
@@ -9,7 +9,7 @@ import { inicioDoDiaBrasilia } from "@/lib/utils";
 
 export type ItemChecklist = { t: string; d: boolean };
 export type Prioridade = "alta" | "normal" | "baixa";
-export type OrigemDemanda = "manual" | "orientador" | "cadencia" | "posvenda" | "cerebro" | "zeus";
+export type OrigemDemanda = "manual" | "orientador" | "posvenda" | "cerebro" | "zeus";
 
 export const COLUNA_ABERTA = "demandas";
 export const COLUNA_CONCLUIDA = "demandas_concluida";
@@ -18,7 +18,6 @@ export const ROTULO_ORIGEM: Record<string, string> = {
   manual: "Você",
   audio: "Por áudio",
   orientador: "Orientador",
-  cadencia: "Cadência",
   posvenda: "Pós-venda",
   cerebro: "Cérebro",
   zeus: "ZEUS",
@@ -103,7 +102,7 @@ export async function listarDemandas(): Promise<{ grupos: GrupoDemandas[]; abert
 }
 
 // Cria uma demanda automática só se não existir uma aberta com a mesma chave
-// (ex.: "cadencia:<clienteId>:3" ou "posvenda:<clienteId>:marco_30d").
+// (ex.: "posvenda:<clienteId>:marco_30d").
 export async function garantirDemandaAutomatica(args: {
   chave: string; titulo: string; descricao?: string | null; clienteId?: string | null; cidade?: string | null;
   dueDate?: Date | null; prioridade?: Prioridade; origem: OrigemDemanda;

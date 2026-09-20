@@ -13,10 +13,39 @@ export function geracaoDeImagemHabilitada(): boolean {
 
 type Parte = { text?: string; inlineData?: { mimeType: string; data: string } };
 
+/**
+ * A Google diz, dentro do corpo do 429, QUAL cota estourou: quando a chave
+ * está no plano gratuito, o quotaMetric/quotaId vem com "free_tier"/"FreeTier"
+ * ("generate_content_free_tier_requests",
+ * "GenerateRequestsPerDayPerProjectPerModel-FreeTier"). Isso separa as duas
+ * situações que pareciam iguais na tela: cota paga apertada (espere e repita)
+ * e chave no plano gratuito (nenhuma espera resolve).
+ */
+export function noPlanoGratuito(detalhe: string): boolean {
+  return /free[_-]?tier/i.test(detalhe);
+}
+
+/** Segundos de espera que a própria Google sugere ("retryDelay":"37s"). */
+export function esperaSugerida(detalhe: string): number | null {
+  const m = /"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/i.exec(detalhe);
+  return m ? Number(m[1]) : null;
+}
+
 /** Erro da Google traduzido para o que o vendedor precisa saber e fazer. */
 export function mensagemDoErro(status: number, detalhe: string): string {
   const d = detalhe.toLowerCase();
   if (status === 429) {
+    // Chave no plano gratuito: esperar não adianta. Vale dizer isso na cara,
+    // porque assinar o app do Gemini (Google One / Gemini Advanced) NÃO
+    // libera cota da API — são produtos separados. O que libera é ativar o
+    // faturamento no projeto do Google AI Studio de onde saiu a chave.
+    if (noPlanoGratuito(detalhe)) {
+      return "A chave do Gemini está no PLANO GRATUITO e a cota de hoje acabou. Atenção: assinar o aplicativo Gemini (Google One / Gemini Advanced) não libera a API — é preciso ativar o faturamento no projeto do Google AI Studio de onde saiu esta chave, ou gerar a chave no projeto que já tem faturamento e trocar GEMINI_API_KEY na Vercel.";
+    }
+    const espera = esperaSugerida(detalhe);
+    if (espera) {
+      return `O Gemini pediu para esperar ${espera}s antes do próximo pedido (limite por minuto). Tente de novo daqui a pouco — a cota do dia não acabou.`;
+    }
     return d.includes("per day") || d.includes("daily")
       ? "A cota de imagens do Gemini acabou por hoje. A criação de arte volta sozinha amanhã — o texto do post continua funcionando normalmente."
       : "O Gemini recusou por excesso de pedidos agora. Espere um minuto e tente de novo; se insistir, a cota do dia acabou e volta amanhã.";

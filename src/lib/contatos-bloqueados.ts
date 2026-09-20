@@ -113,7 +113,7 @@ export async function limparContatosIndesejados(): Promise<ResultadoLimpeza> {
       await db.auditLog.deleteMany({ where: { clienteId: { in: ids } } });
       await db.tarefaKanban.deleteMany({ where: { clienteId: { in: ids } } });
       await db.alertaOculto.deleteMany({ where: { clienteId: { in: ids } } });
-      // Negociações, visitas, alertas, frota, análises, cadências e pós-venda caem em cascata.
+      // Negociações, visitas, alertas, frota, análises e pós-venda caem em cascata.
       r.clientes = (await db.cliente.deleteMany({ where: { id: { in: ids } } })).count;
     }
   } catch (e) {

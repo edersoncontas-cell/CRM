@@ -27,7 +27,7 @@ const CRONS_MONITORADOS = [
 export default async function ZeusPage() {
   const inicioDia = inicioDoDiaBrasilia();
 
-  const [status, ativo, , heartbeats, eventos, audits, mensagensHoje, acoesHoje, correcoes, alertasAbertos, rascunhos, cadenciasAtivas, demandasAuto, followUpsHoje, ritmo] = await Promise.all([
+  const [status, ativo, , heartbeats, eventos, audits, mensagensHoje, acoesHoje, correcoes, alertasAbertos, rascunhos, demandasAuto, followUpsHoje, ritmo] = await Promise.all([
     statusConexao().catch(() => null),
     zeusAtivo(),
     getWaSettings(),
@@ -39,7 +39,6 @@ export default async function ZeusPage() {
     db.zeusEvent.count({ where: { tipo: "fix" } }),
     db.alerta.count({ where: { resolvido: false } }),
     db.whatsAppMessage.count({ where: { isDraft: true, draftStatus: "PENDING" } }),
-    db.cadencia.count({ where: { ativa: true } }),
     db.tarefaKanban.count({ where: { coluna: "demandas", origem: { not: "manual" } } }),
     db.zeusEvent.count({ where: { tipo: "acao", criadoEm: { gte: inicioDia } } }),
     calcularRitmoMetas().catch(() => null),
@@ -70,7 +69,7 @@ export default async function ZeusPage() {
         provedorIA={provedorIANome()}
         contadores={{ mensagensHoje, acoesHoje, correcoes, alertasAbertos }}
         hoje={{
-          rascunhos, cadenciasAtivas, demandasAuto, followUpsHoje,
+          rascunhos, demandasAuto, followUpsHoje,
           meta: ritmo ? { situacao: ritmo.situacao, resumo: ritmo.resumo, vendasAno: ritmo.vendasAno, metaAnual: ritmo.metaAnual } : null,
         }}
         eventos={eventosRows}

@@ -1,7 +1,7 @@
 "use server";
 
 // Server actions da tela de WhatsApp (Atendimento): contexto lateral da
-// conversa (Orientador + cliente + negociação + agenda + cadência) e ações
+// conversa (Orientador + cliente + negociação + agenda) e ações
 // rápidas que antes ficavam espalhadas em rotas de API.
 
 import { revalidatePath } from "next/cache";
@@ -48,27 +48,25 @@ export type ContextoConversa = {
   // Dia em que o vendedor já estará mais perto da cidade deste cliente (pela
   // agenda de visitas marcadas) — ex.: "terça 22/09 — você já estará em Alegre (≈28 km)".
   sugestaoVisita: string | null;
-  negociacoes: { id: string; maquina: string | null; valor: number | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
+  negociacoes: { id: string; marca: string | null; maquina: string | null; valor: number | null; tipoPagamento: string | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
   visitas: { id: string; data: string; observacao: string | null }[];
-  cadencia: { id: string; toqueAtual: number; proximoToqueEm: string } | null;
   alertas: { id: string; tipo: string; mensagem: string }[];
 };
 
 export async function contextoConversaAction(conversationId: string): Promise<ContextoConversa> {
   const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
-  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], cadencia: null, alertas: [], estiloAprendido: false, sugestaoVisita: null };
+  const vazio: ContextoConversa = { cliente: null, orientador: null, negociacoes: [], visitas: [], alertas: [], estiloAprendido: false, sugestaoVisita: null };
   if (!conv?.clienteId) return vazio;
   const clienteId = conv.clienteId;
 
-  const [cliente, orientador, negociacoes, visitas, cadencia, alertas, colunas, estilo, agenda] = await Promise.all([
+  const [cliente, orientador, negociacoes, visitas, alertas, colunas, estilo, agenda] = await Promise.all([
     db.cliente.findUnique({
       where: { id: clienteId },
       select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
     }),
     db.orientadorAnalise.findUnique({ where: { clienteId } }),
-    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, maquinaModelo: true, valor: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
+    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, marca: true, maquinaModelo: true, valor: true, tipoPagamento: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
     db.visita.findMany({ where: { clienteId, data: { gte: new Date(Date.now() - 24 * 3600 * 1000) } }, orderBy: { data: "asc" }, take: 3, select: { id: true, data: true, observacao: true } }),
-    db.cadencia.findFirst({ where: { clienteId, ativa: true }, select: { id: true, toqueAtual: true, proximoToqueEm: true } }),
     db.alerta.findMany({ where: { clienteId, resolvido: false }, orderBy: { criadoEm: "desc" }, take: 4, select: { id: true, tipo: true, mensagem: true } }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true } }),
     db.estiloDeFala.findFirst({ select: { id: true } }),
@@ -96,11 +94,10 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
         }
       : null,
     negociacoes: negociacoes.map((n) => ({
-      id: n.id, maquina: n.maquinaModelo, valor: n.valor, condicaoPagamento: n.condicaoPagamento, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
+      id: n.id, marca: n.marca, maquina: n.maquinaModelo, valor: n.valor, tipoPagamento: n.tipoPagamento, condicaoPagamento: n.condicaoPagamento, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
       termometro: n.termometro, proximaAcao: n.proximaAcao, concorrente: n.concorrenteMencionado,
     })),
     visitas: visitas.map((v) => ({ id: v.id, data: v.data.toISOString(), observacao: v.observacao })),
-    cadencia: cadencia ? { id: cadencia.id, toqueAtual: cadencia.toqueAtual, proximoToqueEm: cadencia.proximoToqueEm.toISOString() } : null,
     alertas,
     estiloAprendido: !!estilo,
     sugestaoVisita: agenda?.sugestao?.texto ?? null,

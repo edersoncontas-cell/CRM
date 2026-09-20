@@ -69,7 +69,7 @@ export function ZeusPainel({
   iaConfigurada: boolean;
   provedorIA: string | null;
   contadores: { mensagensHoje: number; acoesHoje: number; correcoes: number; alertasAbertos: number };
-  hoje?: { rascunhos: number; cadenciasAtivas: number; demandasAuto: number; followUpsHoje: number; meta: { situacao: string; resumo: string; vendasAno: number; metaAnual: number } | null };
+  hoje?: { rascunhos: number; demandasAuto: number; followUpsHoje: number; meta: { situacao: string; resumo: string; vendasAno: number; metaAnual: number } | null };
   eventos: ZeusEventoRow[];
   audits: AuditRow[];
 }) {
@@ -160,7 +160,6 @@ export function ZeusPainel({
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             {[
               { label: "Rascunhos da IA esperando você", valor: hoje.rascunhos, href: "/atendimento", cor: "#BFDE4D" },
-              { label: "Cadências de 7 toques ativas", valor: hoje.cadenciasAtivas, href: "/pipeline", cor: "#f59e0b" },
               { label: "Demandas criadas pelo CRM em aberto", valor: hoje.demandasAuto, href: "/pipeline", cor: "#34d399" },
               { label: "Ações automáticas hoje (follow-ups, toques)", valor: hoje.followUpsHoje, href: "/auditoria", cor: "#60a5fa" },
             ].map((m) => (
@@ -200,7 +199,7 @@ export function ZeusPainel({
           <span className="text-xs text-zinc-400">
             {tickResultado.pausado
               ? "ZEUS está pausado — tick não executou ações."
-              : `Tick concluído: ${tickResultado.fila.processadas} msg processada(s), ${tickResultado.alertas.criados} alerta(s), ${tickResultado.autoReparo.unconfirmedReconciliados + tickResultado.autoReparo.rascunhosDescartados} reparo(s), ${(tickResultado.cadencias?.rascunhos ?? 0) + (tickResultado.cadencias?.alertas ?? 0)} toque(s) de cadência.`}
+              : `Tick concluído: ${tickResultado.fila.processadas} msg processada(s), ${tickResultado.alertas.criados} alerta(s), ${tickResultado.autoReparo.unconfirmedReconciliados + tickResultado.autoReparo.rascunhosDescartados} reparo(s).`}
           </span>
         )}
       </div>

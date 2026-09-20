@@ -1,13 +1,12 @@
 // Linha do tempo do cliente: uma sequência única com tudo o que aconteceu —
 // mensagens de WhatsApp, visitas, negociações (criação, faturamento, perda),
-// pós-venda, cadência de follow-up e ações da IA/ZEUS/usuário na auditoria.
+// pós-venda e ações da IA/ZEUS/usuário na auditoria.
 // Antes de ligar, o vendedor sabe tudo em 10 segundos.
 
 import { db } from "@/lib/db";
 import { rotuloMotivoPerda } from "@/lib/pipeline";
-import { rotuloTipo as rotuloTipoCadencia } from "@/lib/cadencias";
 
-export type TipoEvento = "mensagem" | "visita" | "negociacao" | "posvenda" | "cadencia" | "ia" | "sistema";
+export type TipoEvento = "mensagem" | "visita" | "negociacao" | "posvenda" | "ia" | "sistema";
 
 export type EventoLinhaTempo = {
   id: string;
@@ -40,7 +39,7 @@ export async function linhaDoTempoCliente(clienteId: string, opts?: { mensagens?
   const maxMsgs = opts?.mensagens ?? 40;
   const maxAudit = opts?.auditoria ?? 40;
 
-  const [convs, visitas, negociacoes, posVenda, cadencias, audit] = await Promise.all([
+  const [convs, visitas, negociacoes, posVenda, audit] = await Promise.all([
     db.whatsAppConversation.findMany({
       where: { clienteId },
       select: { id: true, messages: { where: { isDraft: false }, orderBy: { sentAt: "desc" }, take: maxMsgs, select: { id: true, direction: true, body: true, sentAt: true, mediaType: true, transcript: true } } },
@@ -53,7 +52,6 @@ export async function linhaDoTempoCliente(clienteId: string, opts?: { mensagens?
       select: { id: true, maquinaModelo: true, valor: true, estagio: true, status: true, criadoEm: true, faturadoEm: true, atualizadoEm: true, motivoPerda: true, usadaTroca: true, usadaModelo: true },
     }),
     db.posVendaContato.findMany({ where: { clienteId }, orderBy: { data: "desc" }, take: 30, select: { id: true, tipo: true, nota: true, data: true } }),
-    db.cadencia.findMany({ where: { clienteId }, orderBy: { iniciadaEm: "desc" }, take: 10, select: { id: true, tipo: true, toqueAtual: true, iniciadaEm: true, encerradaEm: true, motivoEncerramento: true, ativa: true } }),
     db.auditLog.findMany({
       where: { clienteId, NOT: { acao: { in: ["conversa_analisada", "conversa_classificada"] } } },
       orderBy: { criadoEm: "desc" },
@@ -105,14 +103,6 @@ export async function linhaDoTempoCliente(clienteId: string, opts?: { mensagens?
 
   for (const p of posVenda) {
     eventos.push({ id: `pv:${p.id}`, tipo: "posvenda", quando: p.data.toISOString(), titulo: ROTULO_POSVENDA[p.tipo] ?? "Pós-venda", detalhe: corta(p.nota), href: "/pos-venda" });
-  }
-
-  for (const c of cadencias) {
-    eventos.push({ id: `cad:${c.id}`, tipo: "cadencia", quando: c.iniciadaEm.toISOString(), titulo: `Cadência de 7 toques iniciada (${rotuloTipoCadencia(c.tipo)})`, detalhe: null });
-    if (c.encerradaEm) {
-      const motivo = c.motivoEncerramento === "respondeu" ? "o cliente respondeu" : c.motivoEncerramento === "concluida" ? "7 toques concluídos" : c.motivoEncerramento === "manual" ? "encerrada por você" : "sem telefone";
-      eventos.push({ id: `cad-fim:${c.id}`, tipo: "cadencia", quando: c.encerradaEm.toISOString(), titulo: `Cadência encerrada no toque ${c.toqueAtual}/7`, detalhe: motivo });
-    }
   }
 
   for (const a of audit) {

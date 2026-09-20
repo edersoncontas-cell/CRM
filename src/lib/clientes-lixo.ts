@@ -13,7 +13,7 @@ async function carregarCandidatos(): Promise<Candidato[]> {
     db.cliente.findMany({
       // `not` no Prisma exclui os NULL junto — cadastro sem origem também entra.
       where: { OR: [{ origem: null }, { origem: { not: "prospect_ia" } }] },
-      include: { _count: { select: { negociacoes: true, visitas: true, frota: true, alertas: true, tarefas: true, posVendaContatos: true, cadencias: true, indicados: true } } },
+      include: { _count: { select: { negociacoes: true, visitas: true, frota: true, alertas: true, tarefas: true, posVendaContatos: true, indicados: true } } },
     }),
     db.whatsAppConversation.groupBy({ by: ["clienteId"], where: { clienteId: { not: null } }, _count: { _all: true } }),
   ]);

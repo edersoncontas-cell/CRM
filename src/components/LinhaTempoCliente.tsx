@@ -11,7 +11,6 @@ const FILTROS: { id: TipoEvento | "todos"; label: string }[] = [
   { id: "visita", label: "Visitas" },
   { id: "negociacao", label: "Negociações" },
   { id: "posvenda", label: "Pós-venda" },
-  { id: "cadencia", label: "Cadência" },
   { id: "ia", label: "IA e ZEUS" },
 ];
 
@@ -20,7 +19,6 @@ const ICONE: Record<TipoEvento, { Icone: typeof MessageCircle; cor: string }> = 
   visita: { Icone: MapPin, cor: "bg-sky-100 text-sky-700" },
   negociacao: { Icone: Handshake, cor: "bg-violet-100 text-violet-700" },
   posvenda: { Icone: HeartHandshake, cor: "bg-rose-100 text-rose-700" },
-  cadencia: { Icone: Repeat, cor: "bg-amber-100 text-amber-700" },
   ia: { Icone: Bot, cor: "bg-fuchsia-100 text-fuchsia-700" },
   sistema: { Icone: Cog, cor: "bg-slate-100 text-slate-600" },
 };
@@ -62,7 +60,7 @@ export function LinhaTempoCliente({ eventos }: { eventos: EventoLinhaTempo[] }) 
           <div className="rounded-lg bg-slate-900 p-2 text-agro-400"><History size={18} /></div>
           <div>
             <h2 className="text-base font-bold text-slate-800">Linha do tempo</h2>
-            <p className="text-xs text-slate-500">{eventos.length} evento(s): mensagens, visitas, negociações, pós-venda, cadência e ações da IA.</p>
+            <p className="text-xs text-slate-500">{eventos.length} evento(s): mensagens, visitas, negociações, pós-venda e ações da IA.</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-1">

@@ -72,8 +72,8 @@ ${foto || "(indisponível)"}
    leitura_orientador. Para "como estou"/planejamento: ritmo_metas + alertas_abertos + metricas_funil.
 3. Cruze os dados: o que está travado, o que está esfriando, onde há dinheiro parado, o que fecha mais rápido.
 4. Responda com: diagnóstico curto → recomendação clara → próximos passos concretos (quem, o quê, quando).
-   Quando fizer sentido, ofereça executar (criar tarefa, agendar visita, abrir negociação, iniciar cadência,
-   preparar rascunho) e execute assim que o vendedor disser sim.
+   Quando fizer sentido, ofereça executar (criar tarefa, agendar visita, abrir negociação, preparar rascunho)
+   e execute assim que o vendedor disser sim.
 5. Mensagens para clientes: no estilo do vendedor, curtas, respondendo o que foi perguntado e avançando um passo,
    com uma pergunta fechada no final. Nunca invente preço, prazo ou especificação.
 
@@ -82,7 +82,7 @@ Leitura: buscar_cliente, detalhes_cliente, historico_cliente, leitura_orientador
 buscar_maquina, estoque_usadas, metricas_funil, ritmo_metas, alertas_abertos, conversas_aguardando.
 Escrita: criar_cliente, atualizar_cliente, atualizar_resumo_cliente, importar_contatos, criar_negociacao,
 mover_negociacao (pelo TÍTULO da coluna), marcar_ganha, marcar_perdida (com código do motivo), criar_tarefa,
-adicionar_visita, iniciar_cadencia.
+adicionar_visita.
 enviar_resposta NÃO manda a mensagem — cria um RASCUNHO em WhatsApp para o vendedor revisar e enviar.
 excluir_cliente e excluir_negociacao são IRREVERSÍVEIS: se a ferramenta responder requires_confirmation, PARE e
 pergunte explicitamente se confirma — só chame de novo com confirmar:true depois de um sim claro.
@@ -110,21 +110,20 @@ async function fotografiaDoNegocio(): Promise<string> {
   const { inicioDoDiaBrasilia } = await import("@/lib/utils");
   const hoje = inicioDoDiaBrasilia();
   const amanha = inicioDoDiaBrasilia(new Date(), 1);
-  const [ritmo, abertas, aguardando, visitasHoje, rascunhos, alertas, cadencias] = await Promise.all([
+  const [ritmo, abertas, aguardando, visitasHoje, rascunhos, alertas] = await Promise.all([
     calcularRitmoMetas(),
     db.negociacao.aggregate({ where: { status: "aberta" }, _count: true, _sum: { valor: true } }),
     db.cliente.count({ where: { aguardandoResposta: true } }),
     db.visita.findMany({ where: { data: { gte: hoje, lt: amanha } }, include: { cliente: { select: { nome: true, municipio: { select: { nome: true } } } } }, orderBy: { data: "asc" } }),
     db.whatsAppMessage.count({ where: { isDraft: true, draftStatus: "PENDING" } }),
     db.alerta.count({ where: { resolvido: false } }),
-    db.cadencia.count({ where: { ativa: true } }),
   ]);
   return [
     `- Meta do ano: ${ritmo.vendasAno}/${ritmo.metaAnual} máquinas (${ritmo.situacao}); esperado até hoje ${ritmo.esperadoAteHoje.toFixed(1)}; faltam ${ritmo.faltamAno}; ritmo necessário ${ritmo.vendasPorSemanaNecessarias.toFixed(1)} venda(s)/semana, ~${Math.ceil(ritmo.visitasPorSemanaNecessarias)} visitas e ~${Math.ceil(ritmo.negociacoesPorSemanaNecessarias)} negociações novas por semana.`,
     `- Funil: ${abertas._count} negociação(ões) aberta(s), R$ ${Math.round(abertas._sum.valor ?? 0).toLocaleString("pt-BR")} em aberto.`,
     `- WhatsApp: ${aguardando} cliente(s) aguardando resposta; ${rascunhos} rascunho(s) da IA para revisar.`,
     `- Hoje: ${visitasHoje.length ? visitasHoje.map((v) => `${v.cliente.nome}${v.cliente.municipio ? ` (${v.cliente.municipio.nome})` : ""} às ${v.data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`).join("; ") : "sem visitas"}.`,
-    `- ${alertas} alerta(s) comercial(is) aberto(s); ${cadencias} cadência(s) de follow-up ativa(s).`,
+    `- ${alertas} alerta(s) comercial(is) aberto(s).`,
   ].join("\n");
 }
 

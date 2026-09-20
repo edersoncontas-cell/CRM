@@ -3,7 +3,7 @@
 // Demandas: lista única, por prazo (só data, sem hora). Concluir com um toque,
 // criar em segundos (digitando ou FALANDO: a IA monta a demanda), arrastar
 // para a ordem que você quiser dentro de cada bloco. Alimentada também pelo
-// Orientador, pela cadência, pelo pós-venda e pelo Cérebro (coluna "origem").
+// Orientador, pelo pós-venda e pelo Cérebro (coluna "origem").
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -226,7 +226,7 @@ export function DemandasLista({ grupos, clientes, abertas, atrasadas, hoje }: { 
 
       {abertas === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          Nenhuma demanda aberta. Anote a próxima acima (ou fale no microfone), ou deixe o CRM criar sozinho: ligações e visitas da cadência, marcos de pós-venda e próximas ações do Orientador entram aqui.
+          Nenhuma demanda aberta. Anote a próxima acima (ou fale no microfone), ou deixe o CRM criar sozinho: marcos de pós-venda e próximas ações do Orientador entram aqui.
         </div>
       )}
 
