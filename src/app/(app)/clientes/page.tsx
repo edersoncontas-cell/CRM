@@ -1,10 +1,9 @@
 import { db } from "@/lib/db";
-import { Card, PageHeader, Badge } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { iniciais, diasDesde, semCodigoPais } from "@/lib/utils";
 import { NovoClienteForm } from "@/components/NovoClienteForm";
 import { ImportarClientes } from "@/components/ImportarClientes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
-import { ClienteAcoes } from "@/components/ClienteAcoes";
 import { BuscaClientesInstantanea } from "@/components/BuscaClientesInstantanea";
 import { BarrasHorizontais } from "@/components/charts";
 import { PopupContatoSemNome } from "@/components/PopupContatoSemNome";
@@ -12,6 +11,7 @@ import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { GoogleContatosSync } from "@/components/GoogleContatosSync";
 import { googleContatosDisponivel, lerResumoSincronizacaoGoogle } from "@/lib/google-contatos";
 import { ExcluirNaoClientes } from "@/components/ExcluirNaoClientes";
+import { ListaClientesSelecionavel } from "@/components/ListaClientesSelecionavel";
 import { STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
 import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
@@ -19,6 +19,10 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 const DIAS_ESQUECIDO = 15;
+
+/** Quantos cards por vez. O resto vem no "Mostrar mais". */
+const POR_PAGINA = 200;
+const MAX_LIMITE = 5000;
 
 /**
  * Todo cadastro MENOS os prospects sugeridos pela IA.
@@ -35,7 +39,7 @@ const SEM_PROSPECT_IA = { OR: [{ origem: null }, { origem: { not: "prospect_ia" 
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string; naoCliente?: string };
+  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string; naoCliente?: string; todos?: string; limite?: string };
 }) {
   const filtro = searchParams.municipio;
   const regiaoFiltro = searchParams.regiao;
@@ -50,6 +54,13 @@ export default async function ClientesPage({
   // excluir — o status também é posto automaticamente, por termo no nome, e
   // apagar sem olhar levaria cadastro bom junto.
   const apenasNaoCliente = searchParams.naoCliente === "1";
+  // "quando eu clicar em todos que realmente apareça toda a lista": a aba
+  // Todos não mostrava nada — a lista só aparecia com busca, município,
+  // região ou uma das outras abas. Agora ela lista mesmo.
+  const verTodos = searchParams.todos === "1";
+  // "coloque um limitador da listagem": 1.681 cards de uma vez travam o
+  // navegador no celular. Mostra um pedaço e cresce sob demanda.
+  const limite = Math.min(MAX_LIMITE, Math.max(POR_PAGINA, Number(searchParams.limite) || POR_PAGINA));
   await garantirManutencaoSeNecessario();
 
   const corteEsquecido = new Date();
@@ -58,7 +69,7 @@ export default async function ClientesPage({
   // Só carrega a lista completa quando o vendedor de fato pediu um recorte
   // (busca, município, região ou uma das abas) — evita mostrar TODOS os
   // clientes de cara, uma lista enorme sem filtro nenhum.
-  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente;
+  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente || verTodos;
 
   const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade, totalNaoCliente] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
@@ -85,6 +96,7 @@ export default async function ClientesPage({
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
+      take: limite,
     }) : Promise.resolve([]),
     db.municipio.findMany({
       include: { _count: { select: { clientes: true } } },
@@ -159,11 +171,11 @@ export default async function ClientesPage({
       {/* Abas */}
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href={filtro ? `/clientes?municipio=${filtro}` : "/clientes"}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${!apenasNaoVisitados && !apenasVisitados && !apenasSemCidade ? "bg-[#BFDE4D] text-black font-bold" : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`}
+          href={filtro ? `/clientes?municipio=${filtro}&todos=1` : "/clientes?todos=1"}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${verTodos ? "bg-[#BFDE4D] text-black font-bold" : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`}
         >
           Todos
-          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${!apenasNaoVisitados && !apenasVisitados && !apenasSemCidade ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${verTodos ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
             {totalClientes}
           </span>
         </Link>
@@ -320,84 +332,44 @@ export default async function ClientesPage({
               </p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {clientes.map((c) => {
-                const neg = c.negociacoes[0];
-                const dias = neg ? diasDesde(neg.ultimoContato) : null;
-                const statusColor = (c as { status?: string }).status === "cliente"
-                  ? "text-green-600 bg-green-50"
-                  : (c as { status?: string }).status === "nao_cliente"
-                  ? "text-red-500 bg-red-50"
-                  : "text-amber-600 bg-amber-50";
-                const statusLabel = (c as { status?: string }).status === "cliente"
-                  ? "✓ cliente"
-                  : (c as { status?: string }).status === "nao_cliente"
-                  ? "não é cliente"
-                  : "potencial";
-                return (
-                  <div key={c.id} className="relative">
-                    <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5" style={{ background: "#18181b", border: "1px solid #27272a" }}>
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold" style={{ background: "#BFDE4D22", color: "#BFDE4D" }}>
-                          {iniciais(c.nome)}
-                        </div>
-                        <div className="min-w-0 flex-1 pr-8">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-base font-bold text-white">{c.nome}</span>
-                            {/* shrink-0 + nowrap: no celular o selo "não é
-                                cliente" quebrava em duas linhas e subia por
-                                cima do ⋮, justamente na aba onde o vendedor
-                                precisa abrir o menu para excluir. */}
-                            <span className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusColor}`}>
-                              {statusLabel}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-xs text-zinc-500">
-                            {c.municipio?.nome ?? "Sem município"} · {c.telefone ?? "sem telefone"}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            {c.googleContatoId && <span title="Ligado ao Google Contatos"><Badge tom="slate">Google</Badge></span>}
-                            {neg?.maquinaModelo && <Badge tom="blue">{neg.maquinaModelo}</Badge>}
-                            {dias != null && dias >= 7 && (
-                              <Badge tom="red">{dias}d sem contato</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <Link
-                      href={`/clientes/${c.id}`}
-                      aria-label={`Abrir ${c.nome}`}
-                      className="absolute inset-0 z-10 rounded-2xl"
-                    />
-                    <div className="absolute right-3 top-3 z-20">
-                      <ClienteAcoes
-                        cliente={{
-                          id: c.id,
-                          nome: c.nome,
-                          telefone: c.telefone,
-                          email: c.email,
-                          endereco: c.endereco,
-                          municipioId: c.municipioId,
-                          observacoes: c.observacoes,
-                          jaComprou: c.jaComprou,
-                          visitado: c.visitado,
-                          interesseFuturo: c.interesseFuturo,
-                          interesseFuturoData: c.interesseFuturoData
-                            ? c.interesseFuturoData.toISOString().slice(0, 10)
-                            : null,
-                          interesseFuturoNota: c.interesseFuturoNota,
-                          dataNascimento: c.dataNascimento ? c.dataNascimento.toISOString().slice(0, 10) : null,
-                          dataNascimentoOrigem: c.dataNascimentoOrigem,
-                        }}
-                        municipios={municipios}
-                        maquinas={maquinas}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              <ListaClientesSelecionavel
+                clientes={clientes.map((c) => {
+                  const neg = c.negociacoes[0];
+                  return {
+                    id: c.id, nome: c.nome, telefone: c.telefone, email: c.email, endereco: c.endereco,
+                    municipioId: c.municipioId, municipioNome: c.municipio?.nome ?? null,
+                    observacoes: c.observacoes, jaComprou: c.jaComprou, visitado: c.visitado,
+                    interesseFuturo: c.interesseFuturo,
+                    interesseFuturoData: c.interesseFuturoData ? c.interesseFuturoData.toISOString().slice(0, 10) : null,
+                    interesseFuturoNota: c.interesseFuturoNota,
+                    dataNascimento: c.dataNascimento ? c.dataNascimento.toISOString().slice(0, 10) : null,
+                    dataNascimentoOrigem: c.dataNascimentoOrigem,
+                    googleContatoId: c.googleContatoId,
+                    status: (c as { status?: string }).status ?? "potencial",
+                    maquinaModelo: neg?.maquinaModelo ?? null,
+                    diasSemContato: neg ? diasDesde(neg.ultimoContato) : null,
+                    iniciais: iniciais(c.nome),
+                  };
+                })}
+                municipios={municipios}
+                maquinas={maquinas}
+              />
+              {/* O limitador com a saída: quando o recorte tem mais do que
+                  coube, o vendedor pede mais — em vez de a tela simplesmente
+                  esconder gente sem dizer nada. */}
+              {clientes.length >= limite && (
+                <div className="mt-4 text-center">
+                  <Link
+                    href={`?${new URLSearchParams({ ...searchParams, limite: String(Math.min(MAX_LIMITE, limite + POR_PAGINA)) } as Record<string, string>).toString()}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
+                  >
+                    Mostrar mais {POR_PAGINA}
+                  </Link>
+                  <p className="mt-1 text-[11px] text-zinc-500">mostrando {clientes.length} de cada vez</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
