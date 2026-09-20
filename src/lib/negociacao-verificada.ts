@@ -52,20 +52,6 @@ export function pagamentoDaNegociacao(
 }
 
 /**
- * Assunto da última conversa: resumoTexto do cliente é um LOG de linhas no
- * formato "[dd/mm/aaaa] resumo", uma por mensagem analisada. O painel pegava
- * as duas últimas e colava com espaço — e como linhas seguidas costumam ser
- * quase iguais, o card saía com a mesma frase duas vezes. Agora é só a
- * última, sem a data na frente.
- */
-export function assuntoDaUltimaConversa(resumoTexto: string | null): string | null {
-  const linhas = (resumoTexto ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
-  const ultima = linhas[linhas.length - 1];
-  if (!ultima) return null;
-  return ultima.replace(/^\[[^\]]*\]\s*/, "").trim() || null;
-}
-
-/**
  * A entrada, como o vendedor fala dela: em reais, em percentual, ou os dois
  * ("R$ 180.000 (30%)"). null quando nada foi definido — aí o card mostra como
  * pendente em vez de fingir que sabe.

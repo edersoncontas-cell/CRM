@@ -28,7 +28,7 @@ import {
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
-import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
+import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao } from "@/lib/negociacao-verificada";
 import { descreverPedido } from "@/lib/orientador-pedidos";
 import { soResumo } from "@/lib/cliente-status";
 
@@ -1071,13 +1071,17 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       {contexto.orientador.coaching?.personalidade.estilo && <span className="text-brand-400">cliente {contexto.orientador.coaching.personalidade.estilo}{contexto.orientador.coaching.personalidade.papel ? ` · ${contexto.orientador.coaching.personalidade.papel}` : ""}</span>}
                     </div>
                   )}
-                  {/* Só o assunto da ÚLTIMA conversa. Antes eram as duas
-                      últimas linhas do resumo coladas com espaço — e como o
-                      resumo é um log de uma linha por mensagem analisada, as
-                      duas costumam ser quase iguais: era daí que vinha a
-                      sensação de card duplicado. */}
-                  {assuntoDaUltimaConversa(contexto.cliente.resumoTexto) && (
-                    <p className="mt-2 border-t border-white/5 pt-2 line-clamp-3 text-xs text-brand-300">{assuntoDaUltimaConversa(contexto.cliente.resumoTexto)}</p>
+                  {/* O resumo do ORIENTADOR, logo abaixo do nome.
+                      Aqui ficava a última linha do resumoTexto do cliente — o
+                      log que o ZEUS escreve mensagem a mensagem. Ele dizia
+                      coisas como "cliente enviou documentos" enquanto o
+                      Orientador, lendo a conversa inteira e com as regras
+                      contra invenção, dizia o contrário: que a documentação
+                      ainda estava para chegar. Duas frases sobre o mesmo
+                      cliente, uma delas errada, e a errada em cima. Agora é
+                      uma só, e é a que passa pela conferência. */}
+                  {!naoCliente && contexto.orientador?.resumoNegociacao?.trim() && (
+                    <p className="mt-2 border-t border-white/5 pt-2 text-xs leading-relaxed text-brand-300">{contexto.orientador.resumoNegociacao}</p>
                   )}
                 </div>
 
@@ -1206,8 +1210,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     )}
                     </div>
 
-                    {/* ── Contexto e porquê ─────────────────────────────── */}
-                    {o.resumoNegociacao && <p className="text-xs text-brand-200">{o.resumoNegociacao}</p>}
+                    {/* ── Contexto e porquê ───────────────────────────────
+                        O resumo da negociação NÃO se repete aqui: ele agora
+                        abre o card do cliente, logo abaixo do nome. */}
                     {c?.personalidade.estilo && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
                         <b className="text-brand-100">Como conduzir este cliente</b> <span className="text-brand-400">· perfil {c.personalidade.estilo}</span>

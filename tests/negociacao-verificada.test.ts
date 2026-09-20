@@ -8,7 +8,9 @@
 // de pagamento e não pode sair marcada como verificada.
 
 import { describe, it, expect } from "vitest";
-import { maquinaDaNegociacao, pagamentoDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { maquinaDaNegociacao, pagamentoDaNegociacao } from "@/lib/negociacao-verificada";
 
 describe("máquina da negociação", () => {
   it("junta marca e modelo", () => {
@@ -73,41 +75,37 @@ describe("condição de pagamento", () => {
   });
 });
 
-describe("assunto da última conversa", () => {
-  // resumoTexto é um log: uma linha "[dd/mm/aaaa] resumo" por mensagem
-  // analisada. O painel pegava as DUAS últimas e colava com espaço — e como
-  // linhas seguidas costumam ser quase iguais, o card saía repetido.
-  const log = [
-    "[10/09/2026] Pediu preço de retroescavadeira.",
-    "[15/09/2026] Interesse na B110; pagamento: financiamento.",
-    "[18/09/2026] Aguardando contato do cliente sobre nova necessidade de máquina.",
-  ].join("\n");
+// ── UM RESUMO SÓ, E O QUE PASSA PELA CONFERÊNCIA ────────────────────────────
+//
+// "esse resumo da primeira imagem ficou muito melhor que o que está abaixo do
+//  nome do cliente, remova o que fica embaixo do nome"
+//
+// Eram dois resumos do mesmo cliente na mesma tela, de origens diferentes:
+//
+//   embaixo do nome — a última linha do resumoTexto, o LOG que o ZEUS escreve
+//     mensagem a mensagem, sem releitura e sem conferência. Dizia "cliente
+//     enviou documentos".
+//   no Orientador  — resumoNegociacao, lido da conversa inteira, com as regras
+//     contra invenção e passando por conferirResumo. Dizia o contrário: que a
+//     documentação ainda estava para chegar.
+//
+// Uma das duas estava errada, e a errada vinha primeiro. Ficou a conferida, e
+// no lugar de cima. Este teste guarda o lugar dela.
+describe("o painel mostra UM resumo, e é o do Orientador", () => {
+  const painel = readFileSync(resolve(__dirname, "../src/components/AtendimentoClient.tsx"), "utf8");
 
-  it("devolve só a última linha, sem a data", () => {
-    expect(assuntoDaUltimaConversa(log)).toBe("Aguardando contato do cliente sobre nova necessidade de máquina.");
+  it("o log do cliente não é mais impresso no card", () => {
+    expect(painel).not.toContain("contexto.cliente.resumoTexto");
+    expect(painel).not.toContain("assuntoDaUltimaConversa");
   });
 
-  it("não cola duas linhas — era esse o duplicado", () => {
-    const r = assuntoDaUltimaConversa(log)!;
-    expect(r).not.toContain("B110");
-    expect(r.split(".").filter((x) => x.trim()).length).toBe(1);
+  it("o resumo do Orientador abre o card do cliente", () => {
+    expect(painel).toContain("{contexto.orientador.resumoNegociacao}");
   });
 
-  it("linha sem data também funciona", () => {
-    expect(assuntoDaUltimaConversa("Conversa registrada.")).toBe("Conversa registrada.");
-  });
-
-  it("vazio, nulo e só espaços não viram texto", () => {
-    expect(assuntoDaUltimaConversa(null)).toBe(null);
-    expect(assuntoDaUltimaConversa("")).toBe(null);
-    expect(assuntoDaUltimaConversa("\n  \n")).toBe(null);
-  });
-
-  it("linha em branco no fim não apaga o assunto", () => {
-    expect(assuntoDaUltimaConversa(`${log}\n\n`)).toContain("Aguardando contato");
-  });
-
-  it("linha só com a data não devolve string vazia", () => {
-    expect(assuntoDaUltimaConversa("[18/09/2026]")).toBe(null);
+  it("e não se repete lá embaixo, no card do Orientador", () => {
+    // A linha solta "{o.resumoNegociacao && <p …>}" era a segunda impressão
+    // do mesmo texto na mesma tela.
+    expect(painel).not.toContain("o.resumoNegociacao");
   });
 });
