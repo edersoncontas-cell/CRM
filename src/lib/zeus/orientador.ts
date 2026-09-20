@@ -23,7 +23,7 @@ import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, coachingEstaVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
-import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, montarPromptCompacto } from "@/lib/zeus/orientador-prompt";
+import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, montarPromptCompacto, montarPromptCoaching } from "@/lib/zeus/orientador-prompt";
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
@@ -384,10 +384,83 @@ export async function gerarAnaliseOrientador(args: {
     // manter o que está preenchido, isto GARANTE. Um campo esvaziado à toa
     // sumiria do estado e nunca mais voltaria, porque a próxima análise parte
     // deste estado já empobrecido — degradação silenciosa e cumulativa.
-    return inc ? mesclarIncremental(inc.anterior, analiseNova) : analiseNova;
+    const analise = inc ? mesclarIncremental(inc.anterior, analiseNova) : analiseNova;
+
+    // SEGUNDO PEDIDO: o coaching, quando ele não veio no primeiro.
+    //
+    // "Quero que o orientador da conversa do wadson fico no mesmo padrão dos
+    //  outros"
+    //
+    // Nem o contrato compacto nem o incremental produzem coaching — foi o que
+    // se cortou para caber nos 6.000 tokens por minuto do Groq. Quando o
+    // Gemini falha e o Groq atende, aquela conversa nasce sem personalidade,
+    // sem roteiro e sem nota de condução: ao lado das outras, parece quebrada.
+    //
+    // Inflar o pedido não resolve (aí nada passa). Partir em dois resolve: o
+    // coaching vai num pedido próprio, menor, sem o histórico inteiro. E cada
+    // modelo do Groq tem o seu teto por minuto, então o segundo pedido cai em
+    // outro modelo da fila em vez de disputar o mesmo balde.
+    if (coachingEstaVazio(analise.coaching)) {
+      const c = await coachingSeparado({
+        analise,
+        ultimasMensagens: args.ultimasMensagens,
+        contextoCliente: args.contextoCliente,
+        notaVendedor: args.notaVendedor,
+      });
+      if (c) return { ...analise, coaching: comVisitaMarcada(c, analise.fatos) };
+    }
+    return analise;
   } catch (e) {
     console.error("[orientador] falha na análise:", e);
     throw e;
+  }
+}
+
+/**
+ * Busca SÓ o coaching, num pedido próprio e pequeno.
+ *
+ * Tolerante a falha de propósito: se este segundo pedido não passar, o painel
+ * fica como já estava — sem coaching, mas com a análise. Nunca derruba a
+ * análise inteira por causa dele, e a próxima leitura tenta de novo (o
+ * coaching vazio proíbe o incremental, então sempre haverá nova tentativa).
+ */
+async function coachingSeparado(args: {
+  analise: AnaliseOrientador;
+  ultimasMensagens: string;
+  contextoCliente: string;
+  notaVendedor?: string | null;
+}): Promise<Coaching | null> {
+  const a = args.analise;
+  const estado = {
+    resumo: a.resumoNegociacao,
+    estagio: a.estagioVenda,
+    temperatura: a.temperatura,
+    probabilidade: a.probabilidadeFechamento,
+    proximaAcao: a.proximaAcao,
+    objecoes: a.objecoes,
+    combinados: a.combinados,
+    pendencias: a.pendencias,
+    maquina: [a.fatos.marca, a.fatos.maquinaModelo].filter(Boolean).join(" ") || null,
+    valor: a.fatos.valor,
+    pagamento: a.fatos.condicaoPagamento,
+    entradaPercentual: a.fatos.entradaPercentual,
+    visitaRealizada: a.fatos.visitaRealizada,
+  };
+  try {
+    const { system, user } = montarPromptCoaching({
+      estado,
+      ultimasMensagens: args.ultimasMensagens,
+      contextoCliente: args.contextoCliente,
+      notaVendedor: args.notaVendedor,
+    });
+    const raw = await llmTexto(system, user, { maxTokens: 1200, json: true, apertado: true });
+    const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+    const c = normalizarCoaching(JSON.parse(json));
+    // Voltou vazio: não adianta gravar por cima e fingir que melhorou.
+    return coachingEstaVazio(c) ? null : c;
+  } catch (e) {
+    console.error("[orientador] coaching em pedido separado falhou:", e);
+    return null;
   }
 }
 

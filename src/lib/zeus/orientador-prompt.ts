@@ -360,3 +360,79 @@ ${args.contextoCliente}`;
 
   return { system, user };
 }
+
+// ── O COACHING EM PEDIDO SEPARADO ───────────────────────────────────────────
+//
+// "Quero que o orientador da conversa do wadson fico no mesmo padrão dos
+//  outros"
+//
+// O contrato compacto não produz coaching — é a maior parte do JSON, e foi o
+// que se cortou para caber nos 6.000 tokens por minuto da camada gratuita.
+// Resultado: quando o Gemini falha e o Groq atende, o painel daquela conversa
+// nasce sem personalidade, sem roteiro, sem nota de condução. Ao lado dos
+// outros, parece quebrado — e é, do ponto de vista de quem usa.
+//
+// A saída não é inflar o pedido (aí nada passa), é PARTIR EM DOIS. A análise
+// vem num pedido; o coaching, em outro, menor e sem o histórico inteiro —
+// basta o estado da negociação e as últimas mensagens. Cada modelo do Groq
+// tem o seu próprio teto por minuto, então o segundo pedido cai naturalmente
+// em outro modelo da fila em vez de disputar o mesmo balde.
+const SYSTEM_COACHING = `Você é um gerente de vendas de máquinas pesadas (New Holland Construction e Dynapac)
+orientando um vendedor de campo no Espírito Santo. Você recebe o ESTADO da negociação e as últimas
+mensagens, e devolve SÓ a orientação — não reescreva o resumo nem a próxima ação.
+
+${METODO_VENDA}
+
+REGRAS QUE NÃO SE NEGOCIAM
+- NUNCA invente dado que não esteja no estado ou nas mensagens.
+- Nome de empresa é rótulo, NÃO diz o ramo dela.
+- Português do Brasil: ESCAVADEIRA (nunca "excavadora"), retroescavadeira, pá carregadeira, rolo compactador.
+- A nota de condução avalia O VENDEDOR, não o cliente. Seja honesto: nota alta sem motivo não ensina nada.
+
+RESPONDA SÓ COM ESTE JSON, sem texto em volta:
+{
+  "personalidade": {
+    "estilo": "Dominante"|"Influente"|"Estável"|"Analítico"|null,
+    "descricao": string,
+    "comoFalar": string[],
+    "evitar": string[],
+    "papel": "decisor"|"influenciador"|"pesquisador"|null
+  },
+  "alertaAgora": {"nivel":"vermelho"|"amarelo"|"verde","titulo":string,"motivo":string}|null,
+  "conducao": {"nota": number, "acertos": string[], "correcoes": string[]},
+  "perguntasAgora": string[],
+  "informacoesFaltando": string[],
+  "roteiro": [{"etapa":string,"status":"feito"|"agora"|"depois","dica":string}],
+  "sinaisCompra": string[],
+  "sinaisRisco": string[],
+  "tratamentoObjecoes": [{"objecao":string,"comoTratar":string}],
+  "tecnicaAcademia": {"nome":string,"porque":string}|null
+}`;
+
+/**
+ * Pedido só do coaching, a partir do estado já apurado. Sem o histórico
+ * inteiro de propósito: é o que mantém este segundo pedido pequeno.
+ */
+export function montarPromptCoaching(args: {
+  estado: unknown;
+  ultimasMensagens: string;
+  contextoCliente: string;
+  notaVendedor?: string | null;
+}): { system: string; user: string } {
+  const nota = args.notaVendedor?.trim() ?? "";
+  const system = `${SYSTEM_COACHING}
+
+## Etapas válidas do roteiro
+${ETAPAS_ROTEIRO.join(" · ")}
+
+## Cliente
+${args.contextoCliente}`;
+
+  const user = [
+    nota ? `${CABECALHO_NOTA_VENDEDOR}\n${nota}\n` : "",
+    `=== ESTADO DA NEGOCIAÇÃO ===\n${JSON.stringify(args.estado, null, 1)}`,
+    `=== ÚLTIMAS MENSAGENS ===\n${args.ultimasMensagens}`,
+  ].filter(Boolean).join("\n\n");
+
+  return { system, user };
+}

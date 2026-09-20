@@ -13,7 +13,7 @@
 // histórico, e o system a nomeia entre as fontes e nas regras críticas.
 
 import { describe, it, expect } from "vitest";
-import { montarPromptOrientador, CABECALHO_NOTA_VENDEDOR } from "@/lib/zeus/orientador-prompt";
+import { montarPromptOrientador, montarPromptCoaching, CABECALHO_NOTA_VENDEDOR } from "@/lib/zeus/orientador-prompt";
 
 const base = {
   historico: "[01/09 10:00] Cliente: bom dia, quanto custa uma retro?",
@@ -91,5 +91,68 @@ describe("nota do vendedor no prompt do Orientador", () => {
     const com = montarPromptOrientador({ ...base, estilo: "fala curto e direto", licoes: ["fecha mais em visita"] }).system;
     expect(com).toContain("fala curto e direto");
     expect(com).toContain("fecha mais em visita");
+  });
+});
+
+// ── O COACHING EM PEDIDO SEPARADO ───────────────────────────────────────────
+//
+// "Quero que o orientador da conversa do wadson fico no mesmo padrão dos
+//  outros"
+//
+// O contrato compacto não produz coaching — é a maior parte do JSON, e foi o
+// que se cortou para caber nos 6.000 tokens por minuto da camada gratuita.
+// Quando o Gemini falha e o Groq atende, aquela conversa nasce sem
+// personalidade, sem roteiro e sem nota de condução: ao lado das outras,
+// parece quebrada. E é, para quem usa.
+//
+// Inflar o pedido não resolve — aí nada passa. Partir em DOIS resolve, e é o
+// que estes testes travam: o segundo pedido tem de ser pequeno o bastante
+// para caber sozinho no provedor apertado.
+describe("o pedido só do coaching", () => {
+  const { system, user } = montarPromptCoaching({
+    estado: {
+      resumo: "Quer a E145C por R$ 610.000 financiada.",
+      estagio: "Proposta",
+      maquina: "New Holland E145C",
+      valor: 610000,
+      pagamento: "financiamento",
+      entradaPercentual: 10,
+    },
+    ultimasMensagens: "CLIENTE: consegue 600?",
+    contextoCliente: "Wadson Pires Ratinho — Guaçuí",
+    notaVendedor: "Entrada 10%",
+  });
+
+  it("pede o contrato do coaching, e só ele", () => {
+    expect(system).toContain('"personalidade"');
+    expect(system).toContain('"conducao"');
+    expect(system).toContain('"roteiro"');
+    expect(system).toContain('"tratamentoObjecoes"');
+    // Não é para reescrever o que a primeira chamada já apurou.
+    expect(system).toMatch(/não reescreva o resumo/i);
+  });
+
+  it("leva o ESTADO, não a conversa inteira — é daí que vem o tamanho", () => {
+    expect(user).toContain("ESTADO DA NEGOCIAÇÃO");
+    expect(user).toContain("New Holland E145C");
+    expect(user).toContain("consegue 600?");
+  });
+
+  it("a nota do vendedor abre a mensagem, antes do estado", () => {
+    expect(user.indexOf("Entrada 10%")).toBeLessThan(user.indexOf("ESTADO DA NEGOCIAÇÃO"));
+  });
+
+  it("as regras contra invenção continuam valendo", () => {
+    expect(system).toMatch(/NUNCA invente/);
+    expect(system).toMatch(/ESCAVADEIRA/);
+    expect(system).toMatch(/Nome de empresa é rótulo/);
+  });
+
+  it("CABE sozinho no menor modelo gratuito do Groq", () => {
+    // 6.000 tokens por minuto é o teto, e a saída reserva 1.200. O pedido
+    // inteiro tem de caber no que sobra — senão este segundo pedido nasceria
+    // com o mesmo defeito que ele existe para corrigir.
+    const tokensEntrada = (system.length + user.length) / 4;
+    expect(tokensEntrada + 1_200).toBeLessThanOrEqual(6_000);
   });
 });
