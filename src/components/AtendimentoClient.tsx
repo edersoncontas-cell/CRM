@@ -189,6 +189,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [sincNomes, setSincNomes] = useState(false);
   const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [excluindoSelecao, setExcluindoSelecao] = useState(false);
@@ -447,6 +448,28 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     }
   }
 
+  // Puxa do celular o nome dos contatos como estão na SUA agenda. O nome que
+  // vem junto da mensagem é o que o contato escolheu no WhatsApp dele, então
+  // renomear na agenda não chega por ali — tem que vir da lista de conversas.
+  async function atualizarNomesDaAgenda() {
+    if (sincNomes) return;
+    setSincNomes(true);
+    setImportMsg("Buscando os nomes no seu celular…");
+    try {
+      const r = await fetch("/api/whatsapp/sincronizar-nomes", { method: "POST" }).then((x) => x.json());
+      if (r?.erro) setImportMsg(`Não deu para atualizar: ${r.erro}`);
+      else if (r?.nomesAtualizados > 0) setImportMsg(`${r.nomesAtualizados} nome(s) atualizado(s).`);
+      else setImportMsg(`Nenhum nome mudou (${r?.contatosLidos ?? 0} contato(s) conferido(s)).`);
+    } catch (err) {
+      console.error(err);
+      setImportMsg("Não deu para falar com o servidor.");
+    } finally {
+      setSincNomes(false);
+      setTimeout(() => setImportMsg(null), 8000);
+      router.refresh();
+    }
+  }
+
   // Lista atualiza a cada 30s; as mensagens da conversa aberta chegam por SSE.
   useEffect(() => {
     const iv = setInterval(() => router.refresh(), 30000);
@@ -608,6 +631,14 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 <>
                   <button onClick={() => !importando && fileRef.current?.click()} disabled={importando} title="Importar conversas exportadas do WhatsApp (.zip/.txt)" className={botaoIcone}>
                     {importando ? <Loader2 size={17} className="animate-spin" /> : <DownloadCloud size={17} />}
+                  </button>
+                  <button
+                    onClick={atualizarNomesDaAgenda}
+                    disabled={sincNomes}
+                    title="Atualizar os nomes como estão salvos na agenda do seu celular"
+                    className={botaoIcone}
+                  >
+                    {sincNomes ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
                   </button>
                   <button onClick={() => setModoSelecao(true)} title="Selecionar conversas para excluir" className={botaoIcone}><ListChecks size={17} /></button>
                   <Link href="/atendimento/relatorio" title="Relatório em PDF das conversas" className={botaoIcone}><FileText size={17} /></Link>

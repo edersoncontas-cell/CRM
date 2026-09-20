@@ -63,6 +63,41 @@ export function chavesDeIdentidade(args: { phone: string; lid?: string | null; i
   return [...new Set(chaves)].sort();
 }
 
+// ── Nome do contato ────────────────────────────────────────────────────────
+
+export function pareceNome(s: string | null | undefined): boolean {
+  if (!s || !s.trim()) return false;
+  // Só dígitos e pontuação de telefone não é nome, é o número.
+  return !/^[\d\s+\-().]+$/.test(s.trim());
+}
+
+/**
+ * Qual nome deve valer para a conversa, ou null para não mexer.
+ *
+ * O ponto todo: o nome da AGENDA manda. Ele é o que você escreveu no seu
+ * celular, então quando você renomeia o contato lá, tem que chegar aqui — era
+ * exatamente isto que não acontecia, porque o CRM só via o nome de perfil que
+ * vem junto da mensagem (pushName), e esse é escolhido pelo contato, não por
+ * você: mexer na sua agenda não muda o pushName de ninguém.
+ *
+ * O nome de perfil continua servindo, mas só para preencher vazio: ele nunca
+ * derruba um nome que já está bom, senão toda mensagem recebida trocaria o
+ * nome da sua agenda pelo apelido que o contato pôs no WhatsApp dele.
+ */
+export function nomeQueDeveValer(
+  atualNoCrm: string | null,
+  nomeAgenda: string | null | undefined,
+  nomePerfil: string | null | undefined,
+): string | null {
+  const atual = atualNoCrm?.trim() ?? "";
+  const agenda = nomeAgenda?.trim() ?? "";
+  const perfil = nomePerfil?.trim() ?? "";
+
+  if (pareceNome(agenda)) return agenda === atual ? null : agenda;
+  if (!pareceNome(atual) && pareceNome(perfil)) return perfil === atual ? null : perfil;
+  return null;
+}
+
 // FNV-1a de 32 bits, devolvido como inteiro COM SINAL — é o que o
 // pg_advisory_xact_lock(int, int) aceita.
 export function hash32(s: string): number {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cronAutorizado } from "@/lib/whatsapp-settings";
 import { vigiarConexao } from "@/lib/whatsapp-vigia";
 import { unificarConversasDuplicadas } from "@/lib/whatsapp-dedupe";
+import { sincronizarNomesDosContatos } from "@/lib/whatsapp-nomes";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -25,5 +26,18 @@ export async function GET(req: NextRequest) {
     console.error("[whatsapp-vigia] unificação de conversas:", e);
   }
 
-  return NextResponse.json({ ...conexao, ...(unificacao ? { unificacao } : {}) });
+  // Também de carona: o nome dos contatos como estão na agenda do celular.
+  // Só faz sentido com a conexão de pé — desconectado, a lista do provedor
+  // vem vazia e seria uma chamada à toa.
+  let nomes = null;
+  if (conexao.conectado) {
+    try {
+      const r = await sincronizarNomesDosContatos();
+      nomes = r.nomesAtualizados ? r : null;
+    } catch (e) {
+      console.error("[whatsapp-vigia] nomes dos contatos:", e);
+    }
+  }
+
+  return NextResponse.json({ ...conexao, ...(unificacao ? { unificacao } : {}), ...(nomes ? { nomes } : {}) });
 }

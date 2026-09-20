@@ -335,7 +335,17 @@ export function expectedZApiInstanceId(): string | null {
 
 // ---------- Histórico / contato ----------
 
-type ChatResumo = { phone: string; name?: string; isGroup?: boolean; photo?: string | null };
+// nomeAgenda x nomePerfil: são coisas DIFERENTES e a diferença importa.
+//   nomeAgenda  = como o contato está salvo na agenda do SEU celular. É o que
+//                 muda quando você renomeia o contato no telefone.
+//   nomePerfil  = o nome que o PRÓPRIO contato escolheu no WhatsApp dele
+//                 (o "pushName" que vem junto de cada mensagem).
+// O CRM só conhecia o nomePerfil, por isso renomear no celular não aparecia
+// aqui: o pushName não muda quando você mexe na sua agenda.
+type ChatResumo = {
+  phone: string; name?: string; nomeAgenda?: string; nomePerfil?: string;
+  isGroup?: boolean; photo?: string | null;
+};
 
 async function listarChatsEvolution(page: number, pageSize: number): Promise<ChatResumo[]> {
   const data = await evoFetch("POST", `/chat/findChats/${evoInstancia()}`, {}).catch(() => null);
@@ -356,13 +366,17 @@ async function listarChatsEvolution(page: number, pageSize: number): Promise<Cha
     chats.push({
       phone: isGroup ? jid : jid.split("@")[0],
       name: (c.name as string) ?? (c.pushName as string) ?? undefined,
+      nomeAgenda: (c.name as string) ?? undefined,
+      nomePerfil: (c.pushName as string) ?? undefined,
       isGroup,
       photo: (c.profilePicUrl as string) ?? null,
       ts: Number.isFinite(ts) ? ts : 0,
     });
   }
   chats.sort((a, b) => b.ts - a.ts);
-  return chats.slice((page - 1) * pageSize, page * pageSize).map(({ phone, name, isGroup, photo }) => ({ phone, name, isGroup, photo }));
+  return chats
+    .slice((page - 1) * pageSize, page * pageSize)
+    .map(({ phone, name, nomeAgenda, nomePerfil, isGroup, photo }) => ({ phone, name, nomeAgenda, nomePerfil, isGroup, photo }));
 }
 
 export async function listarChats(page = 1, pageSize = 5): Promise<ChatResumo[]> {
@@ -372,6 +386,8 @@ export async function listarChats(page = 1, pageSize = 5): Promise<ChatResumo[]>
   return data.map((c: Record<string, unknown>) => ({
     phone: String(c.phone ?? c.id ?? ""),
     name: (c.name as string) ?? (c.chatName as string) ?? undefined,
+    nomeAgenda: (c.name as string) ?? (c.chatName as string) ?? undefined,
+    nomePerfil: undefined,
     isGroup: c.isGroup === true || String(c.phone ?? "").includes("@g.us"),
     photo: (c.imagePreview as string) ?? (c.profileThumbnail as string) ?? (c.image as string) ?? null,
   })).filter((c) => c.phone);
