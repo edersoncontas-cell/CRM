@@ -102,20 +102,21 @@ function quandoCurto(iso: string) {
 function diaChave(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" });
 }
-// Ordem de quem manda no nome:
-//   1. o cliente cadastrado no CRM — que é a SUA agenda, trazida do celular
-//      pelo Google Contatos. É este o nome que você escreveu. Vem do servidor
-//      já filtrado: só está preenchido quando o cadastro é ESTA pessoa e o
-//      vínculo não foi feito à mão (ver lib/conversa-identidade.ts). Ligar a
-//      conversa a uma negociação de outro nome não renomeia mais nada.
-//   2. o nome que veio do WhatsApp (perfil do contato).
-//   3. o número.
+// Ordem de quem manda no nome (a mesma de lib/conversa-identidade.ts):
+//   1. o nome recém-digitado nesta tela.
+//   2. o nome do CONTATO — que é a SUA agenda: a sincronização de contatos
+//      grava aqui o nome da agenda do celular, preferindo-o ao apelido de
+//      perfil do WhatsApp. Ligar a conversa a uma negociação de outro nome não
+//      encosta nisto.
+//   3. o cadastro ligado, só quando a conversa não tem nome nenhum — melhor que
+//      mostrar um número cru. Vem do servidor já filtrado.
+//   4. o número.
 function nomeConv(
   c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string; nomeCliente?: string | null },
   overlayName?: string | null,
 ) {
   if (c.isGroup) return c.groupName || c.contactName || c.externalPhone;
-  return c.nomeCliente || overlayName || c.contactName || c.externalPhone;
+  return overlayName || c.contactName || c.nomeCliente || c.externalPhone;
 }
 function telefoneBonito(p: string) {
   const d = p.replace(/\D/g, "");

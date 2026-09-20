@@ -8,6 +8,8 @@ import { nacionalDoTelefone } from "@/lib/telefone-valido";
 //    pra modificar o nome ou cadastro do cliente quando eu vincular uma
 //    conversa a uma negociação."
 //
+//   "BWB continua ainda no lugar do Wadson, quero que volte ao que era antes."
+//
 // O que acontecia: vincular grava o clienteId da negociação na conversa, e a
 // lista do Atendimento dava a palavra final ao nome do CADASTRO. Então a
 // conversa do Wadson passava a se chamar "Bwb Terraplanagem Ltda" — o cadastro
@@ -15,20 +17,32 @@ import { nacionalDoTelefone } from "@/lib/telefone-valido";
 // também o cadastro", que este caminho nunca marca), mas na tela o efeito era o
 // mesmo: o Wadson desaparecia.
 //
-// Só que a regra que dá a palavra ao cadastro existe por um pedido anterior, e
-// continua certa: o nome que vale é o da SUA agenda (Google Contatos →
-// Clientes), não o apelido que o contato escolheu no perfil do WhatsApp. As
-// duas coisas convivem se a pergunta for a certa:
+// A PRIMEIRA TENTATIVA ERROU A MIRA. Eu deixei o cadastro continuar mandando no
+// nome quando não desse para PROVAR que era outra pessoa — a prova era o
+// telefone do cadastro ser diferente do número da conversa. Só que cadastro de
+// empresa costuma entrar sem telefone, e sem telefone não há prova: a Bwb
+// seguia por cima do Wadson. Regra que só funciona quando o dado está
+// preenchido não é regra, é sorte.
 //
-//   o cadastro ligado é ESTA MESMA PESSOA, ou é OUTRO cadastro?
+// A REGRA AGORA É DIRETA: manda o nome do CONTATO. O cadastro ligado nunca toma
+// esse lugar — aparece ao lado.
 //
-// Mesma pessoa (o telefone do cadastro é o número da conversa, ou o vínculo
-// nasceu do próprio número): manda o nome do cadastro, como antes.
-// Cadastro diferente (uma empresa, um sócio, a proposta que está em outro
-// nome): a conversa continua sendo de quem conversa, e o cadastro ligado vira
-// informação ao lado — não substituto.
+// E isso não desfaz o pedido antigo ("usar o nome da agenda do celular, não o
+// apelido do perfil do WhatsApp"), porque o nome da agenda não vem do cadastro:
+// a sincronização de contatos (lib/whatsapp-nomes.ts) grava o nome da agenda no
+// PRÓPRIO contactName da conversa, preferindo-o ao nome de perfil. O nome certo
+// já chega pelo caminho certo; o cadastro nunca precisou passar por cima.
+//
+// Sobra um caso para o cadastro: conversa sem nome nenhum. Aí emprestar o nome
+// do cadastro é melhor do que mostrar um número cru na lista.
 
-/** Dois números são o mesmo telefone? Compara só a parte nacional. */
+/**
+ * Dois números são o mesmo telefone? Compara só a parte nacional.
+ *
+ * Não decide mais nome nenhum — quem usa é a marcação dos vínculos antigos em
+ * lib/migrations.ts, para registrar quais conversas foram ligadas a outro
+ * cadastro.
+ */
 export function mesmoTelefone(a: string | null | undefined, b: string | null | undefined): boolean {
   const x = nacionalDoTelefone(a);
   const y = nacionalDoTelefone(b);
@@ -36,82 +50,53 @@ export function mesmoTelefone(a: string | null | undefined, b: string | null | u
   return x === y;
 }
 
-export type VinculoConversa = {
-  /** O número da conversa no WhatsApp. */
+export type NomeConversa = {
+  isGroup: boolean;
+  groupName: string | null;
+  /** O nome do contato: o da sua agenda quando a sincronização já o trouxe. */
+  contactName: string | null;
   externalPhone: string;
   /** Nome do cadastro ligado à conversa (null quando não há vínculo). */
   clienteNome: string | null;
-  /** Telefone do cadastro ligado, como está no CRM. */
-  clienteTelefone: string | null;
-  /** O vendedor ligou esta conversa à mão (pelo pop-up "Vincular")? */
-  vinculoManual: boolean;
 };
-
-/**
- * O nome do cadastro pode substituir o nome do contato nesta conversa?
- *
- * Duas travas, e basta uma para NÃO substituir:
- *
- *  1. vínculo feito à mão. É o pedido, literal: vincular não mexe no nome.
- *     Mesmo que por acaso seja a mesma pessoa, quem ligou foi o vendedor, e
- *     ele não pediu para renomear nada.
- *  2. telefone do cadastro diferente do número da conversa. Aqui a prova é
- *     objetiva: são duas pessoas. Serve para consertar os vínculos que já
- *     existem, feitos antes desta regra, sem precisar adivinhar quais foram
- *     manuais.
- *
- * Cadastro SEM telefone não conta como prova de nada: muito cadastro de
- * empresa entra só com o nome, e a limpeza dos identificadores do WhatsApp
- * zerou o telefone de outros. Nesse caso decide a trava 1.
- */
-export function cadastroPodeDarONome(v: VinculoConversa): boolean {
-  if (!v.clienteNome) return false;
-  if (v.vinculoManual) return false;
-  if (v.clienteTelefone && !mesmoTelefone(v.clienteTelefone, v.externalPhone)) return false;
-  return true;
-}
 
 /**
  * O nome que aparece na lista e no cabeçalho da conversa.
  *
- * Ordem: cadastro (quando pode dar o nome) → nome vindo do WhatsApp → número.
- * Grupo é outro assunto: vale o nome do grupo.
+ * Ordem: o nome recém-digitado na tela → o nome do contato → o cadastro ligado,
+ * só como último recurso antes do número cru. Grupo é outro assunto: vale o
+ * nome do grupo.
  */
-export function nomeDaConversa(
-  c: {
-    isGroup: boolean;
-    groupName: string | null;
-    contactName: string | null;
-    externalPhone: string;
-    clienteNome: string | null;
-    clienteTelefone: string | null;
-    vinculoManual: boolean;
-  },
-  nomeLocal?: string | null,
-): string {
+export function nomeDaConversa(c: NomeConversa, nomeLocal?: string | null): string {
   if (c.isGroup) return c.groupName || c.contactName || c.externalPhone;
-  const doCadastro = cadastroPodeDarONome(c) ? c.clienteNome : null;
-  return doCadastro || nomeLocal || c.contactName || c.externalPhone;
+  return nomeLocal || c.contactName || c.clienteNome || c.externalPhone;
 }
 
 /**
- * O cadastro ligado, quando ele é OUTRO e por isso não aparece como nome.
+ * O cadastro ligado pode emprestar o nome a esta conversa?
+ *
+ * Só quando a conversa não tem nome próprio — e aí ele não está "por cima" de
+ * ninguém, está preenchendo um vazio.
+ */
+export function cadastroPodeDarONome(c: NomeConversa): boolean {
+  if (!c.clienteNome) return false;
+  if (c.isGroup) return !c.groupName && !c.contactName;
+  return !c.contactName;
+}
+
+/**
+ * O cadastro ligado, quando ele NÃO é o nome exibido.
  *
  * É o "as informações ficam nos dois" que o vendedor pediu: ele precisa ver na
  * conversa do Wadson que ela responde pela negociação da Bwb — sem que uma
  * apague a outra.
  */
-export function cadastroAoLado(c: {
-  isGroup: boolean;
-  clienteNome: string | null;
-  clienteTelefone: string | null;
-  externalPhone: string;
-  vinculoManual: boolean;
-}): string | null {
+export function cadastroAoLado(c: NomeConversa): string | null {
   if (!c.clienteNome) return null;
-  // Em grupo o nome exibido é sempre o do grupo, então o cadastro ligado nunca
-  // está no título — aparece ao lado.
-  if (c.isGroup) return c.clienteNome;
-  if (cadastroPodeDarONome({ ...c, clienteNome: c.clienteNome })) return null;
-  return c.clienteNome;
+  // Some quando seria repetição do que já está escrito: o cadastro que virou o
+  // nome exibido, e também o cadastro de mesmo nome do contato (o caso comum,
+  // em que a conversa e o cadastro são a mesma pessoa). Etiqueta repetindo o
+  // título ao lado não informa nada.
+  const igual = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return igual(nomeDaConversa(c), c.clienteNome) ? null : c.clienteNome;
 }
