@@ -4,6 +4,7 @@ import { AuthPersist } from "@/components/AuthPersist";
 import { SplashBoot } from "@/components/SplashBoot";
 import { CurvasDeNivel } from "@/components/CurvasDeNivel";
 import { RodapeMercado } from "@/components/RodapeMercado";
+import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
@@ -44,6 +45,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <SplashBoot />
       {/* Letreiro do mercado: fixo no rodapé de TODAS as telas do CRM. */}
       <RodapeMercado />
+      {/* Lembrete das visitas do dia: aparece em QUALQUER tela, porque a ideia
+          é justamente aproveitar a entrada no CRM — o vendedor volta aqui para
+          ver um preço, não para registrar visita. Ele se esconde sozinho fora
+          de segunda a sexta, antes da primeira visita do dia e quando todas já
+          foram sinalizadas (ver lib/visitas-do-dia.ts). */}
+      <LembreteVisitasDoDia />
     </div>
   );
 }
