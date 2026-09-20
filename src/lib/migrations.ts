@@ -2,6 +2,7 @@ import { db } from "./db";
 import { RENOMEAR_DYNAPAC, DYNAPAC_FORA_DE_LINHA } from "./dynapac-catalogo";
 import { NOMES_MUNICIPIOS_ES } from "./municipios-es";
 import { ehLidWhatsApp } from "./telefone-valido";
+import { mesmoTelefone } from "./conversa-identidade";
 
 let applied = false;
 
@@ -603,6 +604,24 @@ export async function aplicarMigracoes(): Promise<void> {
     await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_chaveNome_key" ON "ContatoBloqueado" ("chaveNome")`);
     await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_googleContatoId_key" ON "ContatoBloqueado" ("googleContatoId")`);
 
+    // ── v37: vínculo manual da conversa ────────────────────────────────────
+    //
+    // "não é pra modificar o nome ou cadastro do cliente quando eu vincular
+    //  uma conversa a uma negociação"
+    //
+    // Vincular à mão liga a conversa a OUTRO cadastro de propósito (a proposta
+    // que está no nome da empresa, o sócio que negocia pela firma). Sem saber
+    // COMO o vínculo nasceu, a lista tratava esse caso igual ao vínculo
+    // automático do ZEUS pelo número — e dava o nome do cadastro à conversa,
+    // fazendo o contato desaparecer da própria conversa.
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "WhatsAppConversation" ADD COLUMN IF NOT EXISTS "clienteVinculoManual" BOOLEAN NOT NULL DEFAULT false`,
+    );
+    // O conserto dos vínculos que JÁ existem é em TypeScript, logo abaixo, em
+    // marcarVinculosManuaisAntigos(): comparar telefone com telefone exige a
+    // mesma régua do resto do CRM (o 55 só é código do país quando o que sobra
+    // ainda tem tamanho de telefone), e ela mora em lib/telefone-valido.ts.
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 
@@ -746,4 +765,54 @@ export async function limparTelefonesFalsos(): Promise<{ apagados: number; limpo
     console.error("[migracoes] limparTelefonesFalsos:", e);
   }
   return r;
+}
+
+/**
+ * Marca como MANUAIS os vínculos de conversa que ligam a OUTRO cadastro.
+ *
+ *   "não é pra modificar o nome ou cadastro do cliente quando eu vincular uma
+ *    conversa a uma negociação"
+ *
+ * A coluna clienteVinculoManual (v37) resolve os vínculos daqui para frente,
+ * porque o pop-up passa a gravá-la. Os que já existem não dizem como nasceram —
+ * mas o telefone diz quem é quem: cadastro ligado cujo número NÃO é o número da
+ * conversa é, por definição, outro cadastro, e é exatamente o caso que não pode
+ * emprestar o nome.
+ *
+ * Fica em TypeScript, e não no SQL das migrações, porque a comparação precisa
+ * da mesma régua do resto do CRM (o 55 só é código do país quando o que sobra
+ * ainda tem tamanho de telefone) — ver lib/telefone-valido.ts.
+ *
+ * Cadastro sem telefone não é marcado: não há prova de que seja outra pessoa, e
+ * a limpeza dos identificadores do WhatsApp zerou o número de cadastros
+ * legítimos. Idempotente: só toca em quem ainda está como automático.
+ */
+export async function marcarVinculosManuaisAntigos(): Promise<{ marcados: number }> {
+  try {
+    const convs = await db.whatsAppConversation.findMany({
+      where: { clienteId: { not: null }, isGroup: false, clienteVinculoManual: false },
+      select: { id: true, externalPhone: true, clienteId: true },
+    });
+    if (!convs.length) return { marcados: 0 };
+
+    const ids = [...new Set(convs.map((c) => c.clienteId!))];
+    const clientes = await db.cliente.findMany({ where: { id: { in: ids } }, select: { id: true, telefone: true } });
+    const telPorCliente = new Map(clientes.map((c) => [c.id, c.telefone]));
+
+    const alvos = convs.filter((c) => {
+      const tel = telPorCliente.get(c.clienteId!);
+      return !!tel && !mesmoTelefone(tel, c.externalPhone);
+    });
+    if (!alvos.length) return { marcados: 0 };
+
+    const { count } = await db.whatsAppConversation.updateMany({
+      where: { id: { in: alvos.map((a) => a.id) } },
+      data: { clienteVinculoManual: true },
+    });
+    if (count) console.warn(`[migracoes] ${count} conversa(s) ligadas a outro cadastro: o nome do contato volta a ser o dele.`);
+    return { marcados: count };
+  } catch (e) {
+    console.error("[migracoes] marcarVinculosManuaisAntigos:", e);
+    return { marcados: 0 };
+  }
 }

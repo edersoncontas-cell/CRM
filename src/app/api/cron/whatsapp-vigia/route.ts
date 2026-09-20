@@ -3,6 +3,7 @@ import { cronAutorizado } from "@/lib/whatsapp-settings";
 import { vigiarConexao } from "@/lib/whatsapp-vigia";
 import { unificarConversasDuplicadas } from "@/lib/whatsapp-dedupe";
 import { sincronizarNomesDosContatos } from "@/lib/whatsapp-nomes";
+import { sincronizarFotosDosContatos } from "@/lib/whatsapp-fotos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,5 +40,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...conexao, ...(unificacao ? { unificacao } : {}), ...(nomes ? { nomes } : {}) });
+  // E a foto de perfil, pelo mesmo motivo e na mesma condição: a lista de
+  // conversas do provedor já traz a foto de cada contato, então aproveitar a
+  // carona aqui não custa chamada nenhuma a mais. Desconectado, não há lista.
+  let fotos = null;
+  if (conexao.conectado) {
+    try {
+      const r = await sincronizarFotosDosContatos();
+      fotos = r.atualizadas ? r : null;
+    } catch (e) {
+      console.error("[whatsapp-vigia] fotos dos contatos:", e);
+    }
+  }
+
+  return NextResponse.json({ ...conexao, ...(unificacao ? { unificacao } : {}), ...(nomes ? { nomes } : {}), ...(fotos ? { fotos } : {}) });
 }

@@ -10,6 +10,7 @@
 import { jsPDF } from "jspdf";
 import { db } from "@/lib/db";
 import { resumirConversaIA } from "@/lib/ai";
+import { cadastroPodeDarONome } from "@/lib/conversa-identidade";
 import { telefonesApagadosPeloVendedor, foiApagadoPeloVendedor } from "@/lib/whatsapp-corte";
 
 export type LinhaRelatorio = {
@@ -64,6 +65,7 @@ async function carregarConversas(f: FiltroRelatorio) {
     take: 200,
     select: {
       id: true, externalPhone: true, contactName: true, clienteId: true, lastMessageAt: true,
+      clienteVinculoManual: true,
       resumoRelatorio: true, resumoRelatorioEm: true,
       messages: { where: periodo, orderBy: { sentAt: "asc" }, select: { sentAt: true } },
     },
@@ -71,9 +73,9 @@ async function carregarConversas(f: FiltroRelatorio) {
 
   const clienteIds = Array.from(new Set(convs.map((c) => c.clienteId).filter((id): id is string => !!id)));
   const clientes = clienteIds.length
-    ? await db.cliente.findMany({ where: { id: { in: clienteIds } }, select: { id: true, nome: true } })
+    ? await db.cliente.findMany({ where: { id: { in: clienteIds } }, select: { id: true, nome: true, telefone: true } })
     : [];
-  const nomePorId = new Map(clientes.map((c) => [c.id, c.nome]));
+  const cadastroPorId = new Map(clientes.map((c) => [c.id, c] as const));
 
   // Conversa que o vendedor APAGOU à mão não volta para o relatório só porque
   // o contato mandou um "bom dia" depois. Ele apagou porque não era negócio.
@@ -97,7 +99,20 @@ async function carregarConversas(f: FiltroRelatorio) {
     .filter((c) => !!f.conversaId
       || !foiApagadoPeloVendedor(c.externalPhone, apagados)
       || (!!c.clienteId && comNegociacao.has(c.clienteId)))
-    .map((c) => ({ ...c, nomeCliente: c.clienteId ? nomePorId.get(c.clienteId) ?? null : null }));
+    // O relatório usa a MESMA regra da tela do Atendimento: o nome do cadastro
+    // só fala pelo contato quando é a mesma pessoa e o vínculo não foi feito à
+    // mão. Sem isto, o PDF da conversa do Wadson sairia com o título do
+    // cadastro da empresa a que a conversa foi ligada.
+    .map((c) => {
+      const cad = c.clienteId ? cadastroPorId.get(c.clienteId) ?? null : null;
+      const podeDarONome = cadastroPodeDarONome({
+        externalPhone: c.externalPhone,
+        clienteNome: cad?.nome ?? null,
+        clienteTelefone: cad?.telefone ?? null,
+        vinculoManual: c.clienteVinculoManual,
+      });
+      return { ...c, nomeCliente: podeDarONome ? cad!.nome : null };
+    });
 }
 
 type ConvCarregada = Awaited<ReturnType<typeof carregarConversas>>[number];

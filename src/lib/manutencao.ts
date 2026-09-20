@@ -8,7 +8,7 @@
 // barato (memoizado por request com React.cache) para checar a chave.
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos } from "@/lib/migrations";
+import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { aplicarCorteInicialWhatsApp } from "@/lib/whatsapp-corte";
@@ -64,12 +64,18 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v32: OrientadorAnalise.notaVendedor — o que o vendedor escreve na tela para
 // o Orientador levar em conta.
 //
+// v37/v38: WhatsAppConversation.clienteVinculoManual — conversa que o vendedor
+// ligou à mão a OUTRO cadastro (a negociação no nome da empresa) para de
+// emprestar o nome desse cadastro ao contato. Junto vem a marcação dos vínculos
+// antigos pelo telefone (marcarVinculosManuaisAntigos), que devolve o nome de
+// quem conversa nas conversas já vinculadas.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v37";
+export const CHAVE_MANUTENCAO = "manutencao.v38";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -85,6 +91,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
     ["Cidades inventadas pela IA (fora do ES)", async () => { await limparMunicipiosInventados(); }],
     ["Identificador do WhatsApp no lugar do telefone", async () => { await limparTelefonesFalsos(); }],
+    ["Conversas ligadas a outro cadastro (nome do contato de volta)", async () => { await marcarVinculosManuaisAntigos(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
   ];

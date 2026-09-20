@@ -43,10 +43,15 @@ export type ConvLista = {
   category: string | null;
   contactPhotoUrl: string | null;
   clienteId: string | null;
-  // Nome do cliente no CRM. É o nome da SUA agenda: o Google Contatos traz a
-  // lista de contatos do celular para cá. Tem prioridade sobre o nome que vem
-  // do WhatsApp, que é o que o próprio contato escolheu no perfil dele.
+  // Nome do cliente no CRM, JÁ FILTRADO no servidor: só vem preenchido quando o
+  // cadastro pode falar por este contato (é a mesma pessoa e o vínculo não foi
+  // feito à mão). É o nome da SUA agenda — o Google Contatos traz a lista do
+  // celular para cá — e nesse caso ele vence o nome de perfil do WhatsApp.
   nomeCliente: string | null;
+  // O cadastro ligado quando ele é OUTRO: a negociação no nome da empresa, o
+  // sócio que negocia pela firma. Fica AO LADO do nome, nunca no lugar dele.
+  // Ver lib/conversa-identidade.ts.
+  cadastroLigado: string | null;
   lastMessageAt: string;
   naoLida: boolean;
   previa: string;
@@ -99,10 +104,11 @@ function diaChave(iso: string) {
 }
 // Ordem de quem manda no nome:
 //   1. o cliente cadastrado no CRM — que é a SUA agenda, trazida do celular
-//      pelo Google Contatos. É este o nome que você escreveu.
-//   2. o nome que veio do WhatsApp (perfil do contato) — só quando não tem
-//      cliente vinculado, senão o apelido que ele pôs no WhatsApp dele
-//      apareceria no lugar do nome que você deu.
+//      pelo Google Contatos. É este o nome que você escreveu. Vem do servidor
+//      já filtrado: só está preenchido quando o cadastro é ESTA pessoa e o
+//      vínculo não foi feito à mão (ver lib/conversa-identidade.ts). Ligar a
+//      conversa a uma negociação de outro nome não renomeia mais nada.
+//   2. o nome que veio do WhatsApp (perfil do contato).
 //   3. o número.
 function nomeConv(
   c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string; nomeCliente?: string | null },
@@ -564,18 +570,22 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     }
   }
 
-  // Puxa do celular o nome dos contatos como estão na SUA agenda. O nome que
-  // vem junto da mensagem é o que o contato escolheu no WhatsApp dele, então
-  // renomear na agenda não chega por ali — tem que vir da lista de conversas.
+  // Puxa do celular o nome dos contatos como estão na SUA agenda — e a FOTO de
+  // perfil de cada um ("Consegue por a foto de perfil igual está no whatsapp?").
+  // O nome que vem junto da mensagem é o que o contato escolheu no WhatsApp
+  // dele, então renomear na agenda não chega por ali; tem que vir da lista de
+  // conversas do provedor, que é a mesma lista que traz as fotos.
   async function atualizarNomesDaAgenda() {
     if (sincNomes) return;
     setSincNomes(true);
-    setImportMsg("Buscando os nomes no seu celular…");
+    setImportMsg("Buscando nomes e fotos no seu celular…");
     try {
       const r = await fetch("/api/whatsapp/sincronizar-nomes", { method: "POST" }).then((x) => x.json());
+      const fotos = r?.fotosAtualizadas > 0 ? `, ${r.fotosAtualizadas} foto(s)` : "";
       if (r?.erro) setImportMsg(`Não deu para atualizar: ${r.erro}`);
-      else if (r?.nomesAtualizados > 0) setImportMsg(`${r.nomesAtualizados} nome(s) atualizado(s).`);
-      else setImportMsg(`Nenhum nome mudou (${r?.contatosLidos ?? 0} contato(s) conferido(s)).`);
+      else if (r?.nomesAtualizados > 0) setImportMsg(`${r.nomesAtualizados} nome(s) atualizado(s)${fotos}.`);
+      else if (r?.fotosAtualizadas > 0) setImportMsg(`${r.fotosAtualizadas} foto(s) de perfil atualizada(s).`);
+      else setImportMsg(`Nada mudou (${r?.contatosLidos ?? 0} contato(s) conferido(s)).`);
     } catch (err) {
       console.error(err);
       setImportMsg("Não deu para falar com o servidor.");
@@ -780,7 +790,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   <button
                     onClick={atualizarNomesDaAgenda}
                     disabled={sincNomes}
-                    title="Atualizar os nomes como estão salvos na agenda do seu celular"
+                    title="Atualizar nomes e fotos de perfil como estão no seu celular"
                     className={botaoIcone}
                   >
                     {sincNomes ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
@@ -826,6 +836,15 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   <span className={cn("shrink-0 text-[11px]", c.naoLida ? "font-bold text-agro-400" : "text-brand-400")}>{quandoCurto(c.lastMessageAt)}</span>
                 </div>
                 <div className="mt-0.5 flex items-center justify-between gap-2">
+                  {/* O cadastro ligado APARECE, sem tomar o lugar do nome: a
+                      conversa continua sendo de quem conversa, e o vendedor vê
+                      que ela responde pela negociação daquele cadastro. */}
+                  {c.cadastroLigado && (
+                    <span title={`Vinculada ao cadastro de ${c.cadastroLigado}`}
+                      className="max-w-[45%] shrink-0 truncate rounded bg-agro-400/15 px-1 text-[10px] font-bold text-agro-300">
+                      {c.cadastroLigado}
+                    </span>
+                  )}
                   <span className="truncate text-[12px] text-brand-400">{c.previa || "—"}</span>
                   <span className="flex shrink-0 items-center gap-1">
                     {c.temRascunho && <span title="Rascunho da IA aguardando" className="rounded-full bg-agro-400/20 px-1.5 text-[10px] font-bold text-agro-300">IA</span>}
@@ -859,7 +878,13 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-brand-300">
                   <span className="truncate">{sel.isGroup ? "Grupo" : telefoneBonito(sel.externalPhone)}</span>
                   {selAtual.clienteId ? (
-                    <Link href={`/clientes/${selAtual.clienteId}`} className="inline-flex items-center gap-1 text-agro-300 hover:underline"><User size={11} /> cadastro</Link>
+                    // Quando o cadastro é OUTRO, o link diz QUAL é: "Bwb
+                    // Terraplanagem Ltda" no cabeçalho da conversa do Wadson.
+                    // É a informação nos dois lugares, sem uma apagar a outra.
+                    <Link href={`/clientes/${selAtual.clienteId}`} className="inline-flex max-w-[16rem] items-center gap-1 text-agro-300 hover:underline">
+                      <User size={11} className="shrink-0" />
+                      <span className="truncate">{sel.cadastroLigado ?? "cadastro"}</span>
+                    </Link>
                   ) : !sel.isGroup ? (
                     <button onClick={() => setVincularConv(sel)} className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 text-amber-300 hover:bg-amber-400/25"><Link2 size={11} /> vincular ao CRM</button>
                   ) : null}

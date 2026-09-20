@@ -4,6 +4,7 @@ import { AtendimentoClient, type ConvLista } from "@/components/AtendimentoClien
 import * as zapi from "@/lib/zapi";
 import { lerParametros } from "@/lib/parametros";
 import { acharOuCriarConversa } from "@/lib/whatsapp-store";
+import { cadastroPodeDarONome, cadastroAoLado } from "@/lib/conversa-identidade";
 
 export const dynamic = "force-dynamic";
 
@@ -45,18 +46,30 @@ export default async function AtendimentoPage({
   const comRascunho = new Set(rascunhos.map((r) => r.conversationId));
   const clientesAguardando = new Set(aguardando.map((c) => c.id));
 
-  // Nome do cliente para cada conversa vinculada. A conversa guarda só o id
-  // (não há relação no schema), então é uma busca à parte — uma só, com todos
-  // os ids de uma vez.
+  // Nome E TELEFONE do cliente de cada conversa vinculada. A conversa guarda só
+  // o id (não há relação no schema), então é uma busca à parte — uma só, com
+  // todos os ids de uma vez.
+  //
+  // O telefone vem junto porque é ele que responde a pergunta que decide o nome
+  // da conversa: o cadastro ligado é esta mesma pessoa, ou é outro cadastro?
+  // Ver lib/conversa-identidade.ts.
   const idsClientes = [...new Set(conversas.map((c) => c.clienteId).filter((id): id is string => !!id))];
-  const nomePorCliente = new Map<string, string>();
+  const cadastroPorId = new Map<string, { nome: string; telefone: string | null }>();
   if (idsClientes.length) {
-    const cs = await db.cliente.findMany({ where: { id: { in: idsClientes } }, select: { id: true, nome: true } });
-    for (const c of cs) nomePorCliente.set(c.id, c.nome);
+    const cs = await db.cliente.findMany({ where: { id: { in: idsClientes } }, select: { id: true, nome: true, telefone: true } });
+    for (const c of cs) cadastroPorId.set(c.id, { nome: c.nome, telefone: c.telefone });
   }
 
   const lista: ConvLista[] = conversas.map((c) => {
     const ult = c.messages[0];
+    const cadastro = c.clienteId ? cadastroPorId.get(c.clienteId) ?? null : null;
+    const vinculo = {
+      isGroup: c.isGroup,
+      externalPhone: c.externalPhone,
+      clienteNome: cadastro?.nome ?? null,
+      clienteTelefone: cadastro?.telefone ?? null,
+      vinculoManual: c.clienteVinculoManual,
+    };
     return {
       id: c.id,
       externalPhone: c.externalPhone,
@@ -68,9 +81,14 @@ export default async function AtendimentoPage({
       category: c.category,
       contactPhotoUrl: c.contactPhotoUrl,
       clienteId: c.clienteId,
-      // O nome do cliente vem da SUA agenda (Google Contatos → Clientes) e é
-      // ele que deve aparecer, não o nome de perfil que o contato escolheu.
-      nomeCliente: c.clienteId ? nomePorCliente.get(c.clienteId) ?? null : null,
+      // nomeCliente: o nome do cadastro SÓ quando ele pode falar por este
+      // contato — a agenda do celular (Google Contatos → Clientes) no lugar do
+      // apelido de perfil do WhatsApp, que foi o pedido original.
+      //
+      // cadastroLigado: o cadastro quando ele é OUTRO (a negociação no nome da
+      // empresa). Aparece ao lado do nome, nunca no lugar dele.
+      nomeCliente: cadastroPodeDarONome(vinculo) ? vinculo.clienteNome : null,
+      cadastroLigado: cadastroAoLado(vinculo),
       lastMessageAt: c.lastMessageAt.toISOString(),
       naoLida: !!(c.lastAccessedAt ? c.lastMessageAt > c.lastAccessedAt : true),
       previa: ult ? `${ult.direction === "OUT" ? "Você: " : ""}${ult.mediaType && !ult.body ? `[${ult.mediaType}]` : ult.body}` : "",

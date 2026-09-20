@@ -22,7 +22,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (typeof body.contactName === "string" && body.contactName.trim()) {
     data.contactName = body.contactName.trim();
   }
-  if (typeof body.clienteId === "string" && body.clienteId) data.clienteId = body.clienteId;
+  // Vincular a conversa a um cadastro. Quem faz isto é SEMPRE o vendedor, pelo
+  // pop-up "Vincular esta conversa" — o vínculo automático do ZEUS pelo número
+  // não passa por aqui. Fica marcado como manual, e é essa marca que impede o
+  // cadastro ligado de tomar o nome do contato na lista:
+  //
+  //   "não é pra modificar o nome ou cadastro do cliente quando eu vincular
+  //    uma conversa a uma negociação"
+  //
+  // A conversa do Wadson ligada à negociação da empresa continua sendo do
+  // Wadson; a empresa aparece ao lado, como o que ela é.
+  if (typeof body.clienteId === "string" && body.clienteId) {
+    data.clienteId = body.clienteId;
+    data.clienteVinculoManual = true;
+  }
 
   // "Atendimento encerrado": o cliente vinculado deixa de contar como
   // aguardando resposta (some das listas/contadores de pendência do CRM).
@@ -41,6 +54,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Sincroniza o nome no cadastro do cliente vinculado — só quando o front
   // manda a flag explícita (checkbox "Atualizar também o cadastro"), para não
   // sobrescrever o nome do Cliente sem confirmação a cada rename de contato.
+  //
+  // Note o que NÃO está aqui: vincular (body.clienteId) não renomeia nada.
+  // Renomear o cadastro exige as duas coisas juntas — um nome novo digitado E a
+  // caixinha marcada — e o pop-up de vincular não manda nenhuma das duas.
   if (data.contactName && conv.clienteId && body.syncCliente === true) {
     await db.cliente.update({ where: { id: conv.clienteId }, data: { nome: data.contactName as string } }).catch(() => {});
   }

@@ -530,6 +530,11 @@ model WhatsAppConversation {
   resumoRelatorio   String?
   resumoRelatorioEm DateTime?
   clienteId        String?
+  // O vendedor ligou esta conversa ao cadastro À MÃO (pop-up "Vincular esta
+  // conversa"), e não o ZEUS pelo número. Vínculo manual liga a conversa a
+  // OUTRO cadastro de propósito — a negociação que está no nome da empresa, por
+  // exemplo — e por isso nunca troca o nome de quem conversa.
+  clienteVinculoManual Boolean @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   messages         WhatsAppMessage[]
