@@ -13,7 +13,7 @@
 // inteira terminar de ser GERADA (token a token) antes de receber a
 // resposta, que era a causa raiz da lentidão reportada.
 
-import { llmTexto, iaHabilitada, janelaHistoricoAtual } from "@/lib/ai";
+import { llmTexto, iaHabilitada, janelaHistoricoAtual, modoCompactoAtual } from "@/lib/ai";
 import { mensagemErroIA } from "@/lib/ai/erros";
 import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
@@ -21,7 +21,7 @@ import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
-import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador } from "@/lib/zeus/orientador-prompt";
+import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, montarPromptCompacto } from "@/lib/zeus/orientador-prompt";
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
@@ -245,20 +245,38 @@ export async function gerarAnaliseOrientador(args: {
   // A nota do vendedor abre a mensagem do usuário (ver orientador-prompt.ts):
   // no fim do system ela ficava atrás de ~12 mil caracteres e o modelo seguia
   // só a conversa, que é o "não atualiza com o campo preenchido" reportado.
-  const { system, user } = montarPromptOrientador({
-    historico: args.historico,
-    ultimasMensagens: args.ultimasMensagens,
-    contextoCliente: args.contextoCliente,
-    contextoAcademia: args.contextoAcademia,
-    resumoEtapas: resumoDasEtapas(),
-    regras,
-    estilo: args.estilo,
-    licoes: args.licoes,
-    notaVendedor: args.notaVendedor,
-  });
+  // MODO COMPACTO num provedor apertado. Ver lib/ai/orcamento-prompt.ts: com
+  // o Groq gratuito, as instruções completas (5.438 tokens) mais a resposta
+  // inflada (6.400) estouram o teto POR MINUTO antes de entrar uma linha de
+  // conversa — e a análise falhava SEMPRE, não às vezes. O compacto gasta 640
+  // tokens de instrução e cabe. Análise mais simples que roda todo dia vale
+  // mais que análise completa que nunca roda; com Gemini, o completo volta.
+  const compacto = modoCompactoAtual();
+  const { system, user } = compacto
+    ? montarPromptCompacto({
+        historico: args.historico,
+        ultimasMensagens: args.ultimasMensagens,
+        contextoCliente: args.contextoCliente,
+        notaVendedor: args.notaVendedor,
+      })
+    : montarPromptOrientador({
+        historico: args.historico,
+        ultimasMensagens: args.ultimasMensagens,
+        contextoCliente: args.contextoCliente,
+        contextoAcademia: args.contextoAcademia,
+        resumoEtapas: resumoDasEtapas(),
+        regras,
+        estilo: args.estilo,
+        licoes: args.licoes,
+        notaVendedor: args.notaVendedor,
+      });
 
   try {
-    const raw = await llmTexto(system, user, { maxTokens: 2400, json: true, raciocinio: true });
+    // `apertado` impede os +4.000 tokens de reserva do raciocínio, que eram o
+    // maior desperdício do pedido no limite por minuto.
+    const raw = compacto
+      ? await llmTexto(system, user, { maxTokens: 1400, json: true, apertado: true })
+      : await llmTexto(system, user, { maxTokens: 2400, json: true, raciocinio: true });
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
 

@@ -74,11 +74,16 @@ export function modeloComRaciocinio(modelo: string): boolean {
   return /gpt-oss|qwen3|deepseek-r1|reasoning/i.test(modelo);
 }
 
-export function parametrosGroq(modelo: string, maxTokens: number, json: boolean, semFormato = false): Record<string, unknown> {
+export function parametrosGroq(modelo: string, maxTokens: number, json: boolean, semFormato = false, semInflar = false): Record<string, unknown> {
   const raciocinio = modeloComRaciocinio(modelo);
+  // `semInflar` existe por causa do limite POR MINUTO da camada gratuita: o
+  // max_tokens é RESERVADO no orçamento do minuto, e os +4.000 do raciocínio
+  // sozinhos consumiam quase todo o teto (2.400 + 4.000 = 6.400 contra um TPM
+  // de 6.000 a 12.000) antes de entrar uma linha de conversa. Era o maior
+  // desperdício do pedido, e o que sobrou depois de encolher o histórico.
   return {
     model: modelo,
-    max_tokens: raciocinio ? maxTokens + 4000 : maxTokens,
+    max_tokens: raciocinio && !semInflar ? maxTokens + 4000 : maxTokens,
     ...(raciocinio && /gpt-oss/i.test(modelo) ? { reasoning_effort: "low" } : {}),
     ...(raciocinio && !/gpt-oss/i.test(modelo) ? { reasoning_format: "hidden" } : {}),
     ...(json && !semFormato ? { response_format: { type: "json_object" } } : {}),

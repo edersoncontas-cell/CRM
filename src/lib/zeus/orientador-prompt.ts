@@ -262,3 +262,101 @@ ${nota}
 
   return { system, user };
 }
+
+// ── MODO COMPACTO ────────────────────────────────────────────────────────────
+//
+// "Ainda está dando erro, já te pedi pra resolver."
+//
+// Estava certo em cobrar. A correção anterior — encolher a janela do histórico
+// — foi insuficiente, e a conta mostra por quê. Para o Groq gratuito, com a
+// janela já reduzida, o pedido ainda reservava:
+//
+//   instruções   5.438 tokens   (o contrato JSON tem 15 campos e o coaching
+//                                inteiro, com sete listas)
+//   histórico    6.500
+//   SAÍDA        6.400          (parametrosGroq soma +4.000 nos modelos com
+//                                raciocínio: 2.400 + 4.000)
+//   ------------------------
+//   TOTAL       18.338 tokens
+//
+// Contra um teto por minuto de 6.000 a 12.000. Ainda não cabia em modelo
+// nenhum — e o campeão do desperdício era a SAÍDA, que sozinha consumia quase
+// todo o orçamento antes de entrar uma linha de conversa.
+//
+// Este modo existe para o Orientador FUNCIONAR num provedor apertado, em vez
+// de falhar com elegância. Ele corta o que é caro e mantém o que o painel
+// mostra: resumo, estágio, temperatura, chance, próxima ação, os fatos da
+// negociação e os pedidos. Sai o coaching completo — personalidade, roteiro,
+// tratamento de objeções, sinais —, que é a maior parte do contrato e da
+// resposta.
+//
+// É uma troca honesta e explícita: análise mais simples que roda todo dia
+// vale mais que análise completa que nunca roda. Com um provedor de fôlego
+// (Gemini), o modo completo volta sozinho.
+
+/** Instruções enxutas: o contrato mínimo que o painel precisa. */
+const SYSTEM_COMPACTO = `Você é um gerente de vendas de máquinas pesadas (New Holland Construction e Dynapac)
+acompanhando conversas de WhatsApp de um vendedor de campo no Espírito Santo.
+
+MÉTODO
+1. LEIA A CONVERSA INTEIRA, da primeira mensagem à última — o começo tem a qualificação.
+2. Classifique o estágio pelo que ACONTECEU, não pelo que se gostaria.
+3. Próxima ação: UMA só, específica, com o que fazer e quando. Nunca "fazer follow-up".
+
+REGRAS QUE NÃO SE NEGOCIAM
+- NUNCA invente dado que não esteja na conversa ou na nota do vendedor.
+- Cada afirmação do resumo tem de estar escrita em alguma mensagem. Se não souber apontar onde, não escreva.
+- ANEXO só existe quando a linha do histórico traz "[enviou um documento/uma foto/um áudio]",
+  e vale para o lado que aparece na linha. Anexo do vendedor NUNCA vira "o cliente mandou".
+- Nome de empresa é rótulo, NÃO diz o ramo dela. Só diga o ramo ou o cargo de alguém se a
+  conversa ou a nota disserem com todas as letras.
+- Português do Brasil, vocabulário do setor: ESCAVADEIRA (nunca "excavadora"), retroescavadeira,
+  pá carregadeira, rolo compactador, entrada, parcelas, financiamento.
+
+RESPONDA SÓ COM ESTE JSON, sem texto em volta:
+{
+  "resumoNegociacao": string,              // 2-3 frases: quem é, o que quer, onde está, o que falta
+  "estagioVenda": "Lead"|"Qualificação"|"Proposta"|"Negociação"|"Fechamento"|"Pós-venda"|"Perdido",
+  "temperatura": "muito_quente"|"quente"|"morna"|"fria",
+  "probabilidadeFechamento": number,       // 0-100, honesto
+  "proximaAcao": string,                   // uma só, específica, com prazo
+  "conversaEncerrada": boolean,            // true quando não há pendência nenhuma
+  "alertas": string[],                     // quase sempre VAZIO; só negociação viva com algo novo e concreto
+  "fatos": {
+    "marca": "New Holland"|"Dynapac"|null,
+    "maquinaModelo": string|null,          // código do modelo ("B110", "E145C"); categoria solta é null
+    "valor": number|null,                  // preço da máquina em reais
+    "condicaoPagamento": "avista"|"financiamento"|"consorcio"|"crd_pme"|null,
+    "municipio": string|null,              // SÓ município do Espírito Santo; qualquer outro é null
+    "visitaRealizada": boolean|null,       // true só se já foi feita; "vou visitar" é null
+    "entradaValor": number|null,
+    "entradaPercentual": number|null,
+    "observacao": string|null              // braço da escavadeira, Inscrição Estadual
+  },
+  "pedidos": [{"tipo":"vincular_cliente","alvo":string,"motivo":string}]  // ordens do vendedor na nota; normalmente []
+}`;
+
+/**
+ * O prompt do modo compacto. Mesma ordem do completo — a nota do vendedor
+ * abre a mensagem, antes do histórico —, porque é isso que faz a nota valer.
+ */
+export function montarPromptCompacto(args: {
+  historico: string;
+  ultimasMensagens: string;
+  contextoCliente: string;
+  notaVendedor?: string | null;
+}): { system: string; user: string } {
+  const nota = args.notaVendedor?.trim() ?? "";
+  const system = `${SYSTEM_COMPACTO}
+
+## Cliente
+${args.contextoCliente}`;
+
+  const user = [
+    nota ? `${CABECALHO_NOTA_VENDEDOR}\n${nota}\n` : "",
+    `=== CONVERSA (mais antiga primeiro) ===\n${args.historico}`,
+    `=== ÚLTIMAS MENSAGENS ===\n${args.ultimasMensagens}`,
+  ].filter(Boolean).join("\n\n");
+
+  return { system, user };
+}

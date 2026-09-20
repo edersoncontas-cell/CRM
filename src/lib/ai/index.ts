@@ -8,7 +8,7 @@ import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
 import { esperaDoLimite } from "./cota";
 import { diagnosticoIA, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
-import { janelaDeCaracteres, janelaApertada } from "./orcamento-prompt";
+import { janelaDeCaracteres, janelaApertada, modoCompacto } from "./orcamento-prompt";
 import { carregarChavesIA } from "./chaves";
 export type { SinaisProximaAcao };
 
@@ -69,6 +69,13 @@ export function janelaHistoricoAtual(janelaCheia: number): number {
   return janelaDeCaracteres(provedoresDisponiveis() as ProvedorId[], janelaCheia);
 }
 
+/**
+ * O provedor exige o modo compacto do Orientador? Ver orcamento-prompt.ts.
+ */
+export function modoCompactoAtual(): boolean {
+  return modoCompacto(provedoresDisponiveis() as ProvedorId[]);
+}
+
 /** A janela teve de encolher por causa do provedor? Para a tela explicar. */
 export function janelaFoiApertada(janelaCheia: number): boolean {
   return janelaApertada(provedoresDisponiveis() as ProvedorId[], janelaCheia);
@@ -100,7 +107,7 @@ function deepseekClient() {
 }
 
 // Gemini usa um formato de API próprio (REST, sem SDK) — chamada direta via fetch.
-async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }): Promise<string> {
+async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean }): Promise<string> {
   const res = await fetch(
     `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
@@ -135,7 +142,7 @@ async function chamarProvedorTexto(
   prov: ProvedorTexto,
   system: string,
   user: string,
-  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }
+  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean }
 ): Promise<string> {
   const maxTokens = opts?.maxTokens ?? 1024;
 
@@ -202,7 +209,7 @@ async function chamarProvedorTexto(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ...parametrosGroq(modelo, maxTokens, !!opts?.json, semFormato),
+        ...parametrosGroq(modelo, maxTokens, !!opts?.json, semFormato, !!opts?.apertado),
         messages: [
           { role: "system", content: sistema },
           { role: "user", content: user },
@@ -239,7 +246,7 @@ async function chamarProvedorTexto(
 export async function llmTexto(
   system: string,
   user: string,
-  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }
+  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean }
 ): Promise<string> {
   // Funil único de toda chamada de texto: é aqui que as chaves salvas na tela
   // do CRM entram no ambiente, sem sobrescrever as da hospedagem. Ver

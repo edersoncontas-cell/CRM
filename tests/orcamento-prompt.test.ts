@@ -19,7 +19,9 @@ import { describe, it, expect } from "vitest";
 import {
   janelaDeCaracteres, janelaApertada, TETO_ENTRADA, CHARS_POR_TOKEN,
   JANELA_MINIMA_CHARS, RESERVA_RESPOSTA_TOKENS, RESERVA_PROMPT_CHARS, cabeNoProvedor,
+  modoCompacto, RESERVA_PROMPT_COMPACTO_CHARS, RESERVA_RESPOSTA_COMPACTA_TOKENS,
 } from "@/lib/ai/orcamento-prompt";
+import { parametrosGroq } from "@/lib/ai/groq";
 
 const CHEIA = 120_000;
 
@@ -31,9 +33,12 @@ describe("o tamanho que cabe em cada provedor", () => {
   });
 
   it("e o pedido inteiro passa a caber no teto por minuto do Groq", () => {
+    // As reservas do MODO COMPACTO, que é o que roda num provedor apertado.
+    // Medir a janela do compacto contra as reservas do completo seria somar
+    // laranja com maçã — e foi mais ou menos esse o erro da primeira correção.
     const janela = janelaDeCaracteres(["groq"], CHEIA);
-    const tokensEntrada = (janela + RESERVA_PROMPT_CHARS) / CHARS_POR_TOKEN;
-    const tokensTotais = tokensEntrada + RESERVA_RESPOSTA_TOKENS;
+    const tokensEntrada = (janela + RESERVA_PROMPT_COMPACTO_CHARS) / CHARS_POR_TOKEN;
+    const tokensTotais = tokensEntrada + RESERVA_RESPOSTA_COMPACTA_TOKENS;
     // Esta é a asserção que resolve o defeito: o total tem de caber no TPM.
     expect(tokensTotais).toBeLessThanOrEqual(TETO_ENTRADA.groq);
   });
@@ -110,5 +115,52 @@ describe("quando o pedido NÃO cabe de jeito nenhum", () => {
     for (const p of ["gemini", "deepseek", "openai", "anthropic"] as const) {
       expect(cabeNoProvedor(p)).toBe(true);
     }
+  });
+});
+
+// ── O TESTE QUE FALTOU NA PRIMEIRA CORREÇÃO ─────────────────────────────────
+//
+// "Ainda está dando erro, já te pedi pra resolver."
+//
+// Estava certo em cobrar. A primeira correção encolheu o histórico e parou
+// por aí — e eu disse que estava resolvido sem somar o pedido inteiro. Faltava
+// a SAÍDA, que sozinha reservava 6.400 tokens (parametrosGroq soma +4.000 nos
+// modelos com raciocínio), e faltavam as instruções de 5.438 tokens.
+//
+// Este teste soma TUDO o que é reservado no minuto e exige que caiba no MENOR
+// modelo gratuito. É a asserção que teria pegado a falha antes de eu dizer
+// que estava pronto.
+describe("o pedido inteiro cabe no menor modelo gratuito", () => {
+  const CHEIA = 120_000;
+  // Medidos com montarPromptCompacto: 2.561 caracteres de instrução.
+  const INSTRUCAO_COMPACTA_CHARS = 2_561;
+  const SAIDA_COMPACTA_TOKENS = 1_400;
+
+  it("soma instruções + contexto + histórico + SAÍDA e cabe nos 6.000 TPM", () => {
+    const janela = janelaDeCaracteres(["groq"], CHEIA);
+    const entrada = (INSTRUCAO_COMPACTA_CHARS + janela) / CHARS_POR_TOKEN;
+    const total = entrada + SAIDA_COMPACTA_TOKENS;
+    expect(total).toBeLessThanOrEqual(TETO_ENTRADA.groq);
+    expect(TETO_ENTRADA.groq).toBe(6_000);
+  });
+
+  it("o modo compacto liga sozinho no Groq e fica desligado no Gemini", () => {
+    expect(modoCompacto(["groq"])).toBe(true);
+    expect(modoCompacto(["gemini"])).toBe(false);
+    expect(modoCompacto(["gemini", "groq"])).toBe(false); // quem atende é o 1º
+    expect(modoCompacto([])).toBe(false);
+  });
+
+  it("a saída NÃO é inflada quando o orçamento é apertado", () => {
+    // Era o maior desperdício: 2.400 + 4.000 = 6.400 tokens reservados para a
+    // resposta, contra um teto de 6.000 para o pedido inteiro.
+    expect(parametrosGroq("openai/gpt-oss-120b", 1400, true, false, true).max_tokens).toBe(1400);
+    // Sem aperto, o comportamento antigo continua (o raciocínio precisa do espaço).
+    expect(parametrosGroq("openai/gpt-oss-120b", 2400, true, false, false).max_tokens).toBe(6400);
+  });
+
+  it("modelo sem raciocínio nunca foi inflado, com ou sem aperto", () => {
+    expect(parametrosGroq("llama-3.1-8b-instant", 1400, true, false, true).max_tokens).toBe(1400);
+    expect(parametrosGroq("llama-3.1-8b-instant", 1400, true, false, false).max_tokens).toBe(1400);
   });
 });

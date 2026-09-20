@@ -49,11 +49,32 @@ export const CHARS_POR_TOKEN = 4;
  */
 export const TETO_ENTRADA: Record<ProvedorId, number> = {
   gemini: 120_000,   // janela de 1M; o limite gratuito é por pedidos, não por tokens
-  groq: 12_000,      // TPM do melhor modelo gratuito que ainda comporta o pedido
+  // O MENOR TPM gratuito entre os modelos candidatos, não o maior. O rodízio
+  // pode cair em qualquer um deles, e dimensionar pelo melhor fazia o pedido
+  // não caber justamente quando a vez era de um modelo menor — que foi o
+  // defeito que sobrou depois da primeira correção.
+  groq: 6_000,
   deepseek: 60_000,
   openai: 100_000,
   anthropic: 150_000,
 };
+
+/**
+ * O provedor é apertado a ponto de exigir o MODO COMPACTO do Orientador?
+ *
+ * Ver montarPromptCompacto em zeus/orientador-prompt.ts: instruções de 640
+ * tokens no lugar de 5.438, e resposta menor. É o que faz a análise caber —
+ * e, portanto, acontecer — num provedor gratuito.
+ */
+export function modoCompacto(configurados: ProvedorId[]): boolean {
+  const primeiro = configurados[0];
+  return !!primeiro && TETO_ENTRADA[primeiro] <= 20_000;
+}
+
+/** Instruções + contexto no modo compacto (medido: 2.561 chars de instrução). */
+export const RESERVA_PROMPT_COMPACTO_CHARS = 4_500;
+/** Resposta no modo compacto: o JSON reduzido cabe com folga nisto. */
+export const RESERVA_RESPOSTA_COMPACTA_TOKENS = 1_400;
 
 /**
  * O que o pedido ocupa ALÉM do histórico: o prompt de instruções mais o
@@ -85,8 +106,15 @@ export function janelaDeCaracteres(configurados: ProvedorId[], janelaCheia: numb
   const primeiro = configurados[0];
   if (!primeiro) return janelaCheia;
 
-  const tetoTokens = TETO_ENTRADA[primeiro] - RESERVA_RESPOSTA_TOKENS;
-  const tetoChars = tetoTokens * CHARS_POR_TOKEN - RESERVA_PROMPT_CHARS;
+  // Num provedor apertado o pedido vai no modo compacto, que gasta muito
+  // menos em instrução e em resposta — e é justamente isso que abre espaço
+  // para o histórico caber.
+  const compacto = modoCompacto(configurados);
+  const reservaResposta = compacto ? RESERVA_RESPOSTA_COMPACTA_TOKENS : RESERVA_RESPOSTA_TOKENS;
+  const reservaPrompt = compacto ? RESERVA_PROMPT_COMPACTO_CHARS : RESERVA_PROMPT_CHARS;
+
+  const tetoTokens = TETO_ENTRADA[primeiro] - reservaResposta;
+  const tetoChars = tetoTokens * CHARS_POR_TOKEN - reservaPrompt;
 
   if (tetoChars >= janelaCheia) return janelaCheia;
   return Math.max(JANELA_MINIMA_CHARS, tetoChars);
@@ -114,9 +142,10 @@ export function janelaApertada(configurados: ProvedorId[], janelaCheia: number):
  * dizer a verdade ao vendedor em vez de "tente de novo em 1 minuto".
  */
 export function cabeNoProvedor(provedor: ProvedorId): boolean {
+  const compacto = modoCompacto([provedor]);
   const necessarioTokens =
-    RESERVA_PROMPT_CHARS / CHARS_POR_TOKEN +
-    RESERVA_RESPOSTA_TOKENS +
+    (compacto ? RESERVA_PROMPT_COMPACTO_CHARS : RESERVA_PROMPT_CHARS) / CHARS_POR_TOKEN +
+    (compacto ? RESERVA_RESPOSTA_COMPACTA_TOKENS : RESERVA_RESPOSTA_TOKENS) +
     JANELA_MINIMA_CHARS / CHARS_POR_TOKEN;
   return TETO_ENTRADA[provedor] >= necessarioTokens;
 }
