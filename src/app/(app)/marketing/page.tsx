@@ -1,43 +1,38 @@
 import { PageHeader } from "@/components/ui";
-import { MarketingClient } from "@/components/MarketingClient";
-import { listarPostsAction } from "@/lib/marketing-actions";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
-import { iaHabilitada } from "@/lib/ai";
-import { geracaoDeImagemHabilitada } from "@/lib/ai/imagem";
 import { db } from "@/lib/db";
-import { MarketingAbas } from "@/components/MarketingAbas";
 import { MensagemClientes } from "@/components/MensagemClientes";
 
 export const dynamic = "force-dynamic";
 
-export default async function MarketingPage({ searchParams }: { searchParams: { aba?: string } }) {
+// MARKETING = mensagem para a carteira. Só isso.
+//
+//   "Como a geração de imagem é limitada, remove essa parte de post para as
+//    redes e deixa só mensagens para clientes."
+//
+// A aba "Post para as redes" saiu junto com o componente que a desenhava. Ela
+// dependia da geração de imagem do Gemini, que tem cota apertada no plano que
+// o vendedor paga — uma tela que só funciona de vez em quando ensina a não
+// confiar nela. A arte continua existindo onde tem uso garantido: como anexo
+// da mensagem, feita sob demanda, uma por vez.
+export default async function MarketingPage() {
   await garantirManutencaoSeNecessario();
 
-  const [posts, maquinas, municipios] = await Promise.all([
-    listarPostsAction(40).catch(() => []),
-    db.maquina.findMany({
-      where: { proprio: true },
-      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
-      select: { marca: true, modelo: true },
-    }).catch(() => []),
-    db.municipio.findMany({
-      select: { id: true, nome: true, _count: { select: { clientes: { where: { origem: { not: "prospect_ia" } } } } } },
-      orderBy: { nome: "asc" },
-    }).catch(() => []),
-  ]);
-  const cidadesComClientes = municipios.filter((m) => m._count.clientes > 0).map((m) => ({ id: m.id, nome: m.nome, total: m._count.clientes }));
+  const municipios = await db.municipio.findMany({
+    select: { id: true, nome: true, _count: { select: { clientes: { where: { origem: { not: "prospect_ia" } } } } } },
+    orderBy: { nome: "asc" },
+  }).catch(() => []);
+  const cidadesComClientes = municipios
+    .filter((m) => m._count.clientes > 0)
+    .map((m) => ({ id: m.id, nome: m.nome, total: m._count.clientes }));
 
   return (
     <div>
       <PageHeader
         titulo="Marketing"
-        subtitulo="Dois caminhos no mesmo lugar: o Cérebro escreve o post e cria a arte com o Gemini para as redes, e a mensagem em massa avisa a carteira sobre visita, promoção, data comemorativa ou aniversário."
+        subtitulo="Mensagem em massa para a carteira: visita na cidade, promoção, data comemorativa ou aniversário. Dá para mandar na hora ou programar dia e horário (fuso de Brasília)."
       />
-      <MarketingAbas
-        inicial={searchParams.aba === "mensagem" ? "mensagem" : "posts"}
-        posts={<MarketingClient posts={posts} maquinas={maquinas} temIA={iaHabilitada()} temImagem={geracaoDeImagemHabilitada()} />}
-        mensagem={<MensagemClientes cidades={cidadesComClientes} />}
-      />
+      <MensagemClientes cidades={cidadesComClientes} />
     </div>
   );
 }

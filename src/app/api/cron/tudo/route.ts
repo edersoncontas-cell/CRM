@@ -37,6 +37,9 @@ const JOBS: Job[] = [
   { path: "/api/cron/agnes-dispatch", minutos: 1 },
   { path: "/api/cron/zeus-pipeline", minutos: 1 },
   { path: "/api/cron/whatsapp-retry", minutos: 5 },
+  // Mensagens em massa marcadas para sair mais tarde. Roda a cada passada:
+  // é o que faz a mensagem sair logo depois do horário escolhido.
+  { path: "/api/cron/mensagens-programadas", minutos: 1 },
   // Vigia da conexão: religa o WhatsApp sozinho antes de incomodar com o QR.
   { path: "/api/cron/whatsapp-vigia", minutos: 5 },
   { path: "/api/cron/zeus-tick", minutos: 5 },

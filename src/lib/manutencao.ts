@@ -75,12 +75,15 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // lib/utils.ts. Com a regra corrigida, a varredura precisa rodar de novo para
 // apagar quem vinha escapando, e não esperar a próxima hora do cron.
 //
+// v40: tabela EnvioProgramado — mensagem em massa marcada para sair mais
+// tarde, com data e hora de Brasília.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v39";
+export const CHAVE_MANUTENCAO = "manutencao.v40";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

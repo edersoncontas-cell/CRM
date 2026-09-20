@@ -12,7 +12,7 @@ import { GoogleContatosSync } from "@/components/GoogleContatosSync";
 import { googleContatosDisponivel, lerResumoSincronizacaoGoogle } from "@/lib/google-contatos";
 import { ExcluirNaoClientes } from "@/components/ExcluirNaoClientes";
 import { ListaClientesSelecionavel } from "@/components/ListaClientesSelecionavel";
-import { STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
+import { STATUS_NAO_CLIENTE, STATUS_CLIENTE, STATUS_POTENCIAL } from "@/lib/cliente-status";
 import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
@@ -39,7 +39,7 @@ const SEM_PROSPECT_IA = { OR: [{ origem: null }, { origem: { not: "prospect_ia" 
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string; naoCliente?: string; todos?: string; limite?: string };
+  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string; naoCliente?: string; semTelefone?: string; ehCliente?: string; potencial?: string; todos?: string; limite?: string };
 }) {
   const filtro = searchParams.municipio;
   const regiaoFiltro = searchParams.regiao;
@@ -54,6 +54,20 @@ export default async function ClientesPage({
   // excluir — o status também é posto automaticamente, por termo no nome, e
   // apagar sem olhar levaria cadastro bom junto.
   const apenasNaoCliente = searchParams.naoCliente === "1";
+  // Três filtros novos, a pedido do vendedor.
+  //
+  // Sem telefone: cadastro que veio da agenda só com o nome (empresa costuma
+  // vir assim) ou que perdeu o número na limpeza dos identificadores do
+  // WhatsApp. Sem número não dá para mandar mensagem nem ligar — a aba existe
+  // para ele completar o que falta, do mesmo jeito que a "Sem cidade".
+  //
+  // Cliente e Potencial: o status já existia e já era editável em lote, mas
+  // não tinha como VER cada grupo. Sem isso, marcar em lote era trabalhar no
+  // escuro. (status é NOT NULL no banco, com "potencial" de padrão — não há
+  // caso nulo a tratar.)
+  const apenasSemTelefone = searchParams.semTelefone === "1";
+  const apenasCliente = searchParams.ehCliente === "1";
+  const apenasPotencial = searchParams.potencial === "1";
   // "quando eu clicar em todos que realmente apareça toda a lista": a aba
   // Todos não mostrava nada — a lista só aparecia com busca, município,
   // região ou uma das outras abas. Agora ela lista mesmo.
@@ -69,16 +83,23 @@ export default async function ClientesPage({
   // Só carrega a lista completa quando o vendedor de fato pediu um recorte
   // (busca, município, região ou uma das abas) — evita mostrar TODOS os
   // clientes de cara, uma lista enorme sem filtro nenhum.
-  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente || verTodos;
+  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente || apenasSemTelefone || apenasCliente || apenasPotencial || verTodos;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade, totalNaoCliente] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade, totalNaoCliente, totalSemTelefone, totalEhCliente, totalPotencial] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
         // ficam só na tela de Roteiro/Prospecção até serem confirmados. Vai
         // dentro de AND porque a busca por nome/telefone usa o OR de cima —
         // os dois soltos no mesmo objeto, um apagaria o outro.
-        AND: [SEM_PROSPECT_IA],
+        // Cada filtro que precisa de OR entra como um item do AND. Dois "OR"
+        // soltos no mesmo objeto se apagam — o último vence — e o filtro
+        // perdido some sem erro nenhum na tela. Já aconteceu aqui com o
+        // SEM_PROSPECT_IA.
+        AND: [
+          SEM_PROSPECT_IA,
+          ...(apenasSemTelefone ? [{ OR: [{ telefone: null }, { telefone: "" }] }] : []),
+        ],
         ...(filtro ? { municipioId: filtro } : {}),
         ...(regiaoFiltro ? { municipio: { regiao: regiaoFiltro } } : {}),
         ...(busca
@@ -93,6 +114,8 @@ export default async function ClientesPage({
         ...(apenasVisitados ? { visitado: true } : {}),
         ...(apenasSemCidade ? { municipioId: null } : {}),
         ...(apenasNaoCliente ? { status: STATUS_NAO_CLIENTE } : {}),
+        ...(apenasCliente ? { status: STATUS_CLIENTE } : {}),
+        ...(apenasPotencial ? { status: STATUS_POTENCIAL } : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
@@ -128,6 +151,10 @@ export default async function ClientesPage({
     db.cliente.count({ where: { googleContatoId: { not: null } } }),
     db.cliente.count({ where: { municipioId: null, ...SEM_PROSPECT_IA } }),
     db.cliente.count({ where: { status: STATUS_NAO_CLIENTE } }),
+    // Telefone vazio é NULL ou string em branco — os dois existem no banco.
+    db.cliente.count({ where: { AND: [SEM_PROSPECT_IA, { OR: [{ telefone: null }, { telefone: "" }] }] } }),
+    db.cliente.count({ where: { status: STATUS_CLIENTE, ...SEM_PROSPECT_IA } }),
+    db.cliente.count({ where: { status: STATUS_POTENCIAL, ...SEM_PROSPECT_IA } }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -210,6 +237,48 @@ export default async function ClientesPage({
           {totalSemCidade > 0 && (
             <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasSemCidade ? "bg-white/20 text-white" : "bg-sky-100 text-sky-700"}`}>
               {totalSemCidade}
+            </span>
+          )}
+        </Link>
+        {/* Cliente · Potencial · Sem telefone — os três pedidos.
+            
+            Os dois primeiros mostram cada grupo do status, que já dava para
+            EDITAR em lote mas não dava para ver; o terceiro junta quem não tem
+            número, que é quem não recebe mensagem nem ligação — a mesma ideia
+            da aba "Sem cidade". */}
+        <Link
+          href="/clientes?ehCliente=1"
+          title="Cadastros marcados como cliente"
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasCliente ? "bg-emerald-600 text-white" : "border border-emerald-800/50 text-emerald-400 hover:bg-emerald-900/20"}`}
+        >
+          ✓ Clientes
+          {totalEhCliente > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasCliente ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"}`}>
+              {totalEhCliente}
+            </span>
+          )}
+        </Link>
+        <Link
+          href="/clientes?potencial=1"
+          title="Cadastros marcados como potencial — ainda não compraram"
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasPotencial ? "bg-yellow-500 text-black" : "border border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/20"}`}
+        >
+          ◐ Potenciais
+          {totalPotencial > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasPotencial ? "bg-black/20 text-black" : "bg-yellow-100 text-yellow-700"}`}>
+              {totalPotencial}
+            </span>
+          )}
+        </Link>
+        <Link
+          href="/clientes?semTelefone=1"
+          title="Sem telefone no cadastro — não dá para mandar mensagem nem ligar"
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasSemTelefone ? "bg-violet-600 text-white" : "border border-violet-800/50 text-violet-400 hover:bg-violet-900/20"}`}
+        >
+          ☎ Sem telefone
+          {totalSemTelefone > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasSemTelefone ? "bg-white/20 text-white" : "bg-violet-100 text-violet-700"}`}>
+              {totalSemTelefone}
             </span>
           )}
         </Link>

@@ -622,6 +622,33 @@ export async function aplicarMigracoes(): Promise<void> {
     // mesma régua do resto do CRM (o 55 só é código do país quando o que sobra
     // ainda tem tamanho de telefone), e ela mora em lib/telefone-valido.ts.
 
+    // ── v40: mensagem em massa programada ──────────────────────────────────
+    //
+    // "deixa a opção de programar a postagem, com a data e a hora padrão
+    //  horário de brasilia."
+    //
+    // Guarda a LISTA de clientes escolhida no agendamento, e não o filtro: o
+    // vendedor escolheu aquelas pessoas. Refazer a regra na hora do envio
+    // faria um cliente cadastrado no meio do caminho receber uma mensagem que
+    // ninguém mandou para ele.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "EnvioProgramado" (
+        "id"           TEXT NOT NULL,
+        "quando"       TIMESTAMP WITH TIME ZONE NOT NULL,
+        "texto"        TEXT NOT NULL,
+        "clienteIds"   TEXT[] NOT NULL DEFAULT '{}',
+        "midiaId"      TEXT,
+        "status"       TEXT NOT NULL DEFAULT 'pendente',
+        "criadoEm"     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "processadoEm" TIMESTAMP WITH TIME ZONE,
+        "enviados"     INTEGER NOT NULL DEFAULT 0,
+        "falhas"       INTEGER NOT NULL DEFAULT 0,
+        "erro"         TEXT,
+        CONSTRAINT "EnvioProgramado_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "EnvioProgramado_status_quando_idx" ON "EnvioProgramado" ("status", "quando")`);
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 

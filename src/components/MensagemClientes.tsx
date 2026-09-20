@@ -3,8 +3,14 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
-  Sparkles, Send, X, Undo2, Loader2, CheckCircle2, AlertTriangle, Phone, Paperclip, Wand2, Cake, Megaphone, CalendarHeart, MapPin, Trash2, FileText, Film,
+  Sparkles, Send, X, Undo2, Loader2, CheckCircle2, AlertTriangle, Phone, Paperclip, Wand2, Cake, Megaphone, CalendarHeart, MapPin, Trash2, FileText, Film, CalendarClock,
 } from "lucide-react";
+import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
+import {
+  programarEnvioAction, listarEnviosProgramadosAction, cancelarEnvioProgramadoAction,
+  type EnvioProgramadoLista,
+} from "@/lib/envio-programado-actions";
+import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia } from "@/lib/envio-programado";
 import {
   listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
   type ClienteAlvo,
@@ -82,6 +88,14 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [baseArte, setBaseArte] = useState<BaseArte>("escavadeira");
   const [gerandoArte, setGerandoArte] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // Programar o envio. O padrão é "agora": agendar é a exceção.
+  const [quando, setQuando] = useState<"agora" | "depois">("agora");
+  const [diaEnvio, setDiaEnvio] = useState(hojeEmBrasilia());
+  const [horaEnvio, setHoraEnvio] = useState("09:00");
+  const [pickerEnvio, setPickerEnvio] = useState<"data" | "hora" | null>(null);
+  const [erroAgenda, setErroAgenda] = useState<string | null>(null);
+  const [agendado, setAgendado] = useState<string | null>(null);
+  const [programados, setProgramados] = useState<EnvioProgramadoLista[]>([]);
   const [progresso, setProgresso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ enviados: number; falhas: { nome: string; erro: string }[] } | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -89,6 +103,16 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [automatico, setAutomatico] = useState<ConfigAniversario | null>(null);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
   const [avisoAuto, setAvisoAuto] = useState<string | null>(null);
+  // A lista de programados é carregada ao abrir: ele precisa VER o que já
+  // marcou antes de marcar mais um.
+  useEffect(() => {
+    let vivo = true;
+    listarEnviosProgramadosAction()
+      .then((r) => { if (vivo) setProgramados(r); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
   useEffect(() => {
     if (tipo !== "aniversario" || automatico) return;
     lerAutomaticoAniversarioAction().then(setAutomatico).catch(() => null);
@@ -178,6 +202,31 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const semTelefone = naLista.filter((c) => !c.telefone);
   const exemplo = comTelefone[0] ?? naLista[0];
   const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && (texto.trim() !== "" || !!anexo);
+
+  // "deixa a opção de programar a postagem, com a data e a hora padrão horário
+  // de brasilia." Os seletores já são os do CRM (roda de dia/hora), e a regra
+  // do fuso mora em lib/envio-programado.ts.
+  async function programar() {
+    if (!podeEnviar) return;
+    const check = checarAgendamento(diaEnvio, horaEnvio);
+    if (!check.ok) { setErroAgenda(check.erro); return; }
+    const ok = confirm(`Programar para ${quandoPorExtenso(check.quando)} (horário de Brasília), para ${comTelefone.length} cliente(s)?`);
+    if (!ok) return;
+    setErroAgenda(null);
+    setEnviando(true);
+    const r = await programarEnvioAction(comTelefone.map((c) => c.id), texto, anexo?.id ?? null, diaEnvio, horaEnvio)
+      .catch(() => ({ ok: false, erro: "Falha ao programar." }));
+    setEnviando(false);
+    if (!r.ok) { setErroAgenda(r.erro ?? "Não deu para programar."); return; }
+    setAgendado(("quandoTexto" in r && r.quandoTexto) || quandoPorExtenso(check.quando));
+    setProgramados(await listarEnviosProgramadosAction().catch(() => []));
+  }
+
+  async function cancelarProgramado(id: string) {
+    if (!confirm("Cancelar este envio programado?")) return;
+    await cancelarEnvioProgramadoAction(id).catch(() => null);
+    setProgramados(await listarEnviosProgramadosAction().catch(() => []));
+  }
 
   async function enviar() {
     if (!podeEnviar) return;
@@ -438,15 +487,88 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
             </div>
           )}
 
+          {/* Agora ou depois. O padrão é AGORA: programar é a exceção, e uma
+              tela que já abre no modo programado faria o vendedor agendar sem
+              querer uma mensagem que ele queria mandar na hora. */}
+          <div className="mt-4 flex gap-1 rounded-xl bg-slate-100 p-1">
+            {([["agora", "Enviar agora"], ["depois", "Programar"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setQuando(id); setErroAgenda(null); }}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition ${quando === id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {quando === "depois" && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setPickerEnvio("data")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700">
+                  <span className="block text-[11px] font-semibold text-slate-400">Dia</span>
+                  {new Date(`${diaEnvio}T12:00:00`).toLocaleDateString("pt-BR")}
+                </button>
+                <button type="button" onClick={() => setPickerEnvio("hora")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700">
+                  <span className="block text-[11px] font-semibold text-slate-400">Hora (Brasília)</span>
+                  {horaEnvio}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                A mensagem sai <b>a partir</b> do horário escolhido — o robô confere de 15 em 15 minutos, então pode
+                sair alguns minutos depois. Nunca antes.
+              </p>
+              {erroAgenda && <p className="mt-1 text-xs text-red-600">{erroAgenda}</p>}
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={enviar}
+            onClick={quando === "depois" ? programar : enviar}
             disabled={!podeEnviar}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50"
           >
-            {enviando ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            {progresso ?? (comTelefone.length ? `Enviar para ${comTelefone.length} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp")}
+            {enviando ? <Loader2 size={15} className="animate-spin" /> : quando === "depois" ? <CalendarClock size={15} /> : <Send size={15} />}
+            {progresso ?? (quando === "depois"
+              ? (comTelefone.length ? `Programar para ${comTelefone.length} cliente(s)` : "Programar envio")
+              : (comTelefone.length ? `Enviar para ${comTelefone.length} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp"))}
           </button>
+
+          {agendado && (
+            <div className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-800">
+              <div className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={15} /> Programado para {agendado}</div>
+              <p className="mt-1 text-xs opacity-80">Você pode cancelar na lista abaixo enquanto não sair.</p>
+            </div>
+          )}
+
+          {programados.length > 0 && (
+            <div className="mt-4">
+              <div className={rotulo}>Envios programados</div>
+              <ul className="space-y-1.5">
+                {programados.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                    <CalendarClock size={13} className="shrink-0 text-slate-400" />
+                    <b className="text-slate-700">{p.quandoTexto}</b>
+                    <span className="text-slate-500">{p.total} cliente(s)</span>
+                    {p.temAnexo && <span className="text-slate-400">· com anexo</span>}
+                    <span className={`rounded-full px-1.5 py-0.5 font-bold ${
+                      p.status === "pendente" ? "bg-amber-100 text-amber-700" :
+                      p.status === "enviado" ? "bg-green-100 text-green-700" :
+                      p.status === "cancelado" ? "bg-slate-200 text-slate-600" : "bg-red-100 text-red-700"}`}>
+                      {p.status === "pendente" ? "aguardando" : p.status}
+                    </span>
+                    {p.status === "enviado" && <span className="text-slate-500">{p.enviados} enviada(s){p.falhas ? ` · ${p.falhas} falhou(aram)` : ""}</span>}
+                    {p.status === "pendente" && (
+                      <button type="button" onClick={() => cancelarProgramado(p.id)} className="ml-auto font-semibold text-red-600 hover:underline">
+                        cancelar
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {resultado && (
             <div className={`mt-3 rounded-xl p-3 text-sm ${resultado.falhas.length === 0 ? "bg-green-50 text-green-800" : resultado.enviados === 0 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
@@ -464,6 +586,13 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
           )}
         </div>
       </div>
+
+      {pickerEnvio === "data" && (
+        <WheelDatePicker title="Dia do envio" valueISO={diaEnvio} onClose={() => setPickerEnvio(null)} onConfirm={(v) => { setDiaEnvio(v); setPickerEnvio(null); setErroAgenda(null); }} />
+      )}
+      {pickerEnvio === "hora" && (
+        <WheelTimePicker title="Hora do envio (Brasília)" valueHM={horaEnvio} onClose={() => setPickerEnvio(null)} onConfirm={(v) => { setHoraEnvio(v); setPickerEnvio(null); setErroAgenda(null); }} />
+      )}
     </div>
   );
 }

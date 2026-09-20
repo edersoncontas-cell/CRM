@@ -400,6 +400,33 @@ model LimpezaClientes {
 
 // Anexo ou arte de uma mensagem em massa (promoção, data comemorativa),
 // guardado uma vez e reaproveitado em cada lote de envio. Vive poucos dias.
+// Mensagem em massa marcada para sair mais tarde.
+//
+//   "deixa a opção de programar a postagem, com a data e a hora padrão
+//    horário de brasilia."
+//
+// Guarda a lista de clientes escolhida no momento do agendamento — e não o
+// filtro — de propósito: o vendedor escolheu AQUELAS pessoas. Se a regra
+// fosse refeita na hora do envio, um cliente cadastrado no meio do caminho
+// receberia uma mensagem que ninguém mandou para ele.
+model EnvioProgramado {
+  id           String    @id @default(cuid())
+  // Instante do envio, em UTC. A tela monta a partir do fuso de Brasília.
+  quando       DateTime
+  texto        String
+  clienteIds   String[]
+  // Anexo em MidiaEnvio; a limpeza dos 3 dias não apaga o que está pendente.
+  midiaId      String?
+  // pendente | enviando | enviado | cancelado | erro
+  status       String    @default("pendente")
+  criadoEm     DateTime  @default(now())
+  processadoEm DateTime?
+  enviados     Int       @default(0)
+  falhas       Int       @default(0)
+  erro         String?
+  @@index([status, quando])
+}
+
 model MidiaEnvio {
   id        String   @id @default(cuid())
   criadoEm  DateTime @default(now())
