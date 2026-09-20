@@ -586,9 +586,28 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     }
   }
 
-  // Lista atualiza a cada 30s; as mensagens da conversa aberta chegam por SSE.
+  // Lista atualiza sozinha; as mensagens da conversa aberta chegam por SSE.
+  //
+  // "a página do crm tem atualizado sozinha, ou é um bug?" — não é bug, é
+  // esta linha: ela recarrega a lista de conversas para novas mensagens
+  // aparecerem sem o vendedor apertar nada. Mas era de 30 em 30 segundos, sem
+  // olhar o que ele estava fazendo, e aí atrapalhava mais do que ajudava.
+  //
+  // Agora ela SEGURA em duas situações:
+  //   • com a aba em segundo plano — ninguém está olhando, e atualizar ali só
+  //     gasta banco e bateria;
+  //   • com texto na caixa de mensagem — é quando a piscada incomoda de
+  //     verdade, no meio de uma resposta ao cliente.
+  // E o intervalo subiu para 60 s: as mensagens da conversa ABERTA continuam
+  // chegando na hora, por SSE. Estes 60 s são só para a lista ao lado.
+  const textoRef = useRef(texto);
+  textoRef.current = texto;
   useEffect(() => {
-    const iv = setInterval(() => router.refresh(), 30000);
+    const iv = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (textoRef.current.trim()) return;
+      router.refresh();
+    }, 60000);
     return () => clearInterval(iv);
   }, [router]);
 

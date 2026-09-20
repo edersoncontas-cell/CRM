@@ -35,15 +35,16 @@ function quando(iso: string | null | undefined, agora: number): string {
   return `há ${Math.floor(h / 24)}d`;
 }
 
-// Painel de mercado: cotações em cartões fixos (arábica e conilon do Painel do
-// Café, dólar) e um LETREIRO estilo bolsa de valores, correndo para a esquerda
-// com as notícias do setor. Os dados são atualizados pela rota
+// Painel de mercado do Dashboard: só os CARTÕES de cotação (arábica e conilon
+// do Painel do Café, dólar). O letreiro de notícias saiu daqui quando ganhou
+// o rodapé fixo de todas as telas — ver RodapeMercado.tsx. Mantê-lo nos dois
+// lugares deixava a mesma manchete passando duas vezes na mesma tela. Os
+// dados são atualizados pela rota
 // /api/mercado/ticker toda vez que a tela abre, volta ao foco, a cada 60 s e
 // quando o botão "Atualizar" é clicado.
 export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const [dados, setDados] = useState<DadosTicker>(inicial);
   const [atualizando, setAtualizando] = useState(false);
-  const [pausado, setPausado] = useState(false);
   // Relógio para o "lido há X min" andar mesmo sem dado novo.
   const [agora, setAgora] = useState(() => Date.now());
 
@@ -92,24 +93,11 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const dolar = es?.dolar ?? c.dolar;
   if (dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct, sub: es?.dolar != null ? `${fonte}${ref}` : quando(c.cafeAtualizadoEm, agora) ? `atualizado ${quando(c.cafeAtualizadoEm, agora)}` : undefined });
 
-  const manchetes = useMemo(() => dados.noticias.slice(0, 20), [dados.noticias]);
-  // Duração proporcional ao tamanho do texto (~ 55 px/s), para a leitura ser
-  // confortável em qualquer quantidade de notícias.
-  const duracao = Math.max(30, Math.round(manchetes.reduce((s, n) => s + n.titulo.length + 30, 0) * 8.5 / 55));
+  if (!cartoes.length) return null;
 
-  if (!cartoes.length && !manchetes.length) return null;
-
-  const faixa = (chave: string) => manchetes.map((n, i) => (
-    <a key={`${chave}-${i}`} href={n.link} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 pr-10 text-sm font-semibold hover:underline" style={{ color: T.texto }} title={n.titulo}>
-      <span className="rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${COR_TEMA[n.tema] ?? T.violeta}22`, color: COR_TEMA[n.tema] ?? T.violeta }}>{n.tema}</span>
-      {n.titulo}
-      {n.fonte && <span className="text-[11px] font-normal" style={{ color: T.mudo }}>— {n.fonte}{n.publicadoEm ? ` · ${quando(n.publicadoEm, agora)}` : ""}</span>}
-      <span style={{ color: T.rosa }}>◆</span>
-    </a>
-  ));
 
   return (
-    <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[auto_1fr]">
+    <div className="mb-4">
       <div className="flex flex-wrap gap-2">
         {cartoes.map((k) => (
           <div key={k.label} className="flex min-w-[150px] items-center gap-2.5 rounded-xl px-3 py-2" style={{ background: k.destaque ? T.card2 : T.card, border: `1px solid ${k.destaque ? T.amarelo + "66" : T.borda}` }}>
@@ -122,24 +110,6 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
           </div>
         ))}
       </div>
-      {manchetes.length > 0 && (
-        <div
-          className="letreiro flex min-w-0 items-center gap-2 overflow-hidden rounded-xl px-3 py-2"
-          style={{ background: T.card, border: `1px solid ${T.borda}` }}
-          onMouseEnter={() => setPausado(true)} onMouseLeave={() => setPausado(false)}
-          onTouchStart={() => setPausado(true)} onTouchEnd={() => setPausado(false)}
-        >
-          <span className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest" style={{ background: T.sobre2, color: T.ciano }}>
-            <Newspaper size={13} /> Notícias {atualizando && <RefreshCw size={11} className="animate-spin" style={{ color: T.mudo }} />}
-          </span>
-          <div className="relative min-w-0 flex-1 overflow-hidden">
-            <div className="letreiro-faixa flex w-max items-center whitespace-nowrap" style={{ animationDuration: `${duracao}s`, animationPlayState: pausado ? "paused" : "running" }}>
-              {faixa("a")}
-              {faixa("b")}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

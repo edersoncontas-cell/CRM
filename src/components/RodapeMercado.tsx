@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
-import { T } from "@/lib/dash-tema";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import { montarFita, duracaoDaFita, type CotacaoFita, type ItemFita } from "@/lib/ticker-fita";
 
@@ -24,7 +23,15 @@ import { montarFita, duracaoDaFita, type CotacaoFita, type ItemFita } from "@/li
 const fmtBRL = (v: number | null, casas = 2) =>
   v == null ? "—" : `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}`;
 
-const COR_TEMA: Record<string, string> = { Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde };
+// AMARELO NEW HOLLAND (agro-400) na faixa inteira, texto preto — letreiro de
+// bolsa de verdade, e a cor da marca. Sobre amarelo, verde e vermelho claros
+// somem: a alta e a baixa usam tons escuros para continuarem legíveis.
+const NH_AMARELO = "#ffcb2d";
+const NH_BORDA = "#e09e00";
+const NH_TEXTO = "#141416";
+const NH_SUAVE = "rgba(20,20,22,0.62)";
+const NH_ALTA = "#14532d";
+const NH_BAIXA = "#7f1d1d";
 
 /** As cotações que o CRM tem hoje, na ordem em que passam. */
 function cotacoesDaFita(c: CotacoesMercado): CotacaoFita[] {
@@ -45,12 +52,12 @@ function cotacoesDaFita(c: CotacoesMercado): CotacaoFita[] {
 
 function Peca({ item }: { item: ItemFita }) {
   if (item.tipo === "cotacao") {
-    const cor = item.pct == null ? T.texto2 : item.pct > 0 ? T.verde : item.pct < 0 ? T.vermelho : T.texto2;
+    const cor = item.pct == null ? NH_SUAVE : item.pct > 0 ? NH_ALTA : item.pct < 0 ? NH_BAIXA : NH_SUAVE;
     const seta = item.pct == null ? "" : item.pct > 0 ? "▲" : item.pct < 0 ? "▼" : "•";
     return (
       <span className="inline-flex shrink-0 items-baseline gap-1.5 pr-8 text-[12px]">
-        <span className="font-black uppercase tracking-wider" style={{ color: T.mudo }}>{item.rotulo}</span>
-        <span className="font-bold" style={{ color: T.texto }}>{item.valor}</span>
+        <span className="font-black uppercase tracking-wider" style={{ color: NH_SUAVE }}>{item.rotulo}</span>
+        <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>
         {item.pct != null && (
           <span className="text-[11px] font-bold" style={{ color: cor }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
         )}
@@ -64,14 +71,14 @@ function Peca({ item }: { item: ItemFita }) {
       rel="noreferrer"
       title={item.titulo}
       className="inline-flex shrink-0 items-center gap-2 pr-8 text-[12px] font-semibold hover:underline"
-      style={{ color: T.texto }}
+      style={{ color: NH_TEXTO }}
     >
-      <span className="rounded-full px-1.5 py-[1px] text-[9px] font-black uppercase tracking-wide" style={{ background: `${COR_TEMA[item.tema] ?? T.violeta}22`, color: COR_TEMA[item.tema] ?? T.violeta }}>
+      <span className="rounded-full px-1.5 py-[1px] text-[9px] font-black uppercase tracking-wide" style={{ background: NH_TEXTO, color: NH_AMARELO }}>
         {item.tema}
       </span>
       {item.titulo}
-      {item.fonte && <span className="text-[10px] font-normal" style={{ color: T.mudo }}>— {item.fonte}</span>}
-      <span style={{ color: T.rosa }}>◆</span>
+      {item.fonte && <span className="text-[10px] font-normal" style={{ color: NH_SUAVE }}>— {item.fonte}</span>}
+      <span style={{ color: NH_SUAVE }}>◆</span>
     </a>
   );
 }
@@ -125,7 +132,7 @@ export function RodapeMercado() {
     // print:hidden — letreiro não vai para o PDF de proposta.
     <div
       className="fixed inset-x-0 bottom-0 z-40 flex items-center overflow-hidden border-t print:hidden"
-      style={{ height: "var(--rodape-mercado)", background: T.card, borderColor: T.borda }}
+      style={{ height: "var(--rodape-mercado)", background: NH_AMARELO, borderColor: NH_BORDA }}
       onMouseEnter={() => setPausado(true)}
       onMouseLeave={() => setPausado(false)}
     >
