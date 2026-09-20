@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Brain } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { CosmosFundo } from "@/components/CerebroCosmos";
 import {
   LIGACOES,
@@ -45,6 +45,23 @@ const CENTRO = { x: 500, y: 500 };
 // Raio que as ligações entre sessões precisam contornar para não passar por
 // cima do núcleo e do brilho do Cérebro.
 const RAIO_LIVRE = 180;
+
+// ── Luz correndo nas sinapses do fundo ──────────────────────────────────────
+// TRACO + VAO = de quanto em quanto a luz se repete dentro do fio.
+// O filamento MEDIANO tem 41 unidades de comprimento (medido). Com um vão
+// grande, a luz simplesmente não cabe na maioria deles: passava uma luz a
+// cada 300 unidades, então quase todo fio ficava apagado quase o tempo todo
+// e só alguns acendiam por vez. Com o período abaixo do comprimento mediano,
+// o fio mediano está SEMPRE com luz, e o fio comprido leva três ou quatro
+// correndo em fila — que é o fluxo de verdade.
+const TRACO_LUZ = 8;
+const VAO_LUZ = 32;
+const PERIODO_LUZ = TRACO_LUZ + VAO_LUZ;
+// Unidades por segundo. Mesma faixa das ligações Cérebro<->sessão, onde o
+// pulso é um animateMotion que percorre o caminho inteiro: medido no
+// navegador, 52 a 87 u/s (média 69).
+const VEL_LUZ_MIN = 60;
+const VEL_LUZ_MAX = 85;
 
 type Ponto = { x: number; y: number };
 
@@ -113,7 +130,7 @@ function arred(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; titulo?: string }) {
+export function CerebroGrafo({ nos }: { nos: NoGrafo[] }) {
   const [ativo, setAtivo] = useState<string | null>(null);
   const [animar, setAnimar] = useState(true);
   // Celular anda com menos pulso: o desenho inteiro passa de ~40 animações
@@ -263,19 +280,28 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     // correndo nas caudas dela, cada uma com o seu tempo — é o que faz o
     // tecido ficar intercalado em vez de ligar e desligar junto.
     const qtdFaixas = leve ? 6 : 11;
-    const faixas = Array.from({ length: qtdFaixas }, (_, f) => ({
-      fios: filamentos.filter((_, n) => n % qtdFaixas === f),
-      // Bem devagar: a ida e volta inteira passa de 20 segundos.
-      durRespiro: arred(21 + pseudoAleatorio(f * 5.3 + 81) * 13),
-      // NEGATIVO de propósito: atraso positivo faria a faixa ficar invisível
-      // até chegar a vez dela, e nos primeiros 20 e poucos segundos o fundo
-      // apareceria quase vazio. Negativo já começa cada faixa num ponto
-      // diferente do ciclo — todas vivas desde o primeiro quadro, e ainda
-      // assim defasadas.
-      atrasoRespiro: arred(-(f / qtdFaixas) * (21 + pseudoAleatorio(f * 5.3 + 81) * 13)),
-      durPulso: arred(6.5 + pseudoAleatorio(f * 9.7 + 83) * 5),
-      atrasoPulso: arred(-(f / qtdFaixas) * 9 - pseudoAleatorio(f * 11.3 + 84) * 4),
-    }));
+    const faixas = Array.from({ length: qtdFaixas }, (_, f) => {
+      // Velocidade da luz em unidades por segundo. É a MESMA das ligações
+      // Cérebro<->sessão: lá o pulso é um animateMotion que percorre o
+      // caminho inteiro, então a velocidade é comprimento/duração — medido no
+      // navegador, dá 52 a 87 (média 69). O fundo andava a 26–46, quase
+      // metade; por isso a luz do tecido parecia arrastada perto do grafo.
+      const vel = VEL_LUZ_MIN + pseudoAleatorio(f * 9.7 + 83) * (VEL_LUZ_MAX - VEL_LUZ_MIN);
+      return {
+        fios: filamentos.filter((_, n) => n % qtdFaixas === f),
+        // Bem devagar: a ida e volta inteira passa de 20 segundos.
+        durRespiro: arred(21 + pseudoAleatorio(f * 5.3 + 81) * 13),
+        // NEGATIVO de propósito: atraso positivo faria a faixa ficar invisível
+        // até chegar a vez dela, e nos primeiros 20 e poucos segundos o fundo
+        // apareceria quase vazio. Negativo já começa cada faixa num ponto
+        // diferente do ciclo — todas vivas desde o primeiro quadro, e ainda
+        // assim defasadas.
+        atrasoRespiro: arred(-(f / qtdFaixas) * (21 + pseudoAleatorio(f * 5.3 + 81) * 13)),
+        // O tracejado anda PERIODO_LUZ unidades em durPulso segundos.
+        durPulso: arred(PERIODO_LUZ / vel),
+        atrasoPulso: arred(-(f / qtdFaixas) * (PERIODO_LUZ / vel)),
+      };
+    });
 
     const neuronios = pontos.map(({ x, y }, i) => {
       const quantos = 2 + Math.floor(pseudoAleatorio(i * 3.31 + 13) * 2);
@@ -404,7 +430,8 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
             O truque do custo: stroke-dasharray e stroke-dashoffset são
             herdáveis em SVG, então o tracejado vai no GRUPO e UMA animação
             move a luz de todos os fios daquela faixa. São ~22 animações no
-            total em vez de uma por fio. */}
+            total em vez de uma por fio — e é por isso que dá para deixar o
+            período curto (muitas luzes por fio) sem pesar nada a mais. */}
         <g opacity={0.62} style={{ display: FUNDO === "sinapses" ? undefined : "none" }}>
           {tecido.faixas.map((faixa, f) => (
             <g
@@ -421,11 +448,10 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
                 <g
                   className="cerebro-pulso"
                   style={{
-                    // período igual para todos: o laço fecha sem salto, e
-                    // como o vão é maior que qualquer fio, nunca aparece
-                    // mais de uma luz por cauda
-                    strokeDasharray: "7 293",
-                    ["--periodo" as string]: 300,
+                    // O deslocamento animado é exatamente UM período, então o
+                    // laço fecha sem salto: o quadro final é igual ao inicial.
+                    strokeDasharray: `${TRACO_LUZ} ${VAO_LUZ}`,
+                    ["--periodo" as string]: PERIODO_LUZ,
                     animationDuration: `${faixa.durPulso}s`,
                     animationDelay: `${faixa.atrasoPulso}s`,
                   }}
@@ -599,23 +625,10 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
           </circle>
           <circle cx={CENTRO.x} cy={CENTRO.y} r={46} fill="#0b1e2b" stroke="#38bdf8" strokeWidth={2} filter="url(#glow)" />
           <text x={CENTRO.x} y={CENTRO.y + 8} textAnchor="middle" fill="#e2f6ff" fontSize={26} fontWeight={800}>IA</text>
-          {/* Contorno escuro grosso por baixo (paintOrder) para o nome não
-              ficar riscado pelas sinapses que passam atrás dele. */}
-          <text
-            x={CENTRO.x}
-            y={CENTRO.y + 152}
-            textAnchor="middle"
-            fill="#7dd3fc"
-            fontSize={24}
-            fontWeight={800}
-            letterSpacing="4"
-            stroke="#0a1119"
-            strokeWidth={6}
-            strokeLinejoin="round"
-            paintOrder="stroke"
-          >
-            {titulo.toUpperCase()}
-          </text>
+          {/* O nome "CÉREBRO" ficava aqui embaixo do núcleo. Saiu: o núcleo
+              com o "IA" no meio, as sessões em volta e os pulsos indo para o
+              centro já dizem o que é, sem precisar escrever. O título segue
+              no cabeçalho da página. */}
         </g>
 
         {/* Nós das sessões */}
@@ -687,61 +700,58 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
       </svg>
 
       {/* Ficha da sessão acesa */}
-      <div className="p-3 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:bottom-0 sm:p-4">
-        {/* sm:pointer-events-none é OBRIGATÓRIO, não é enfeite: no desktop a
-            ficha flutua POR CIMA do grafo e cresce quando uma sessão é
-            escolhida. Se ela capturasse o mouse, ao acender um nó da parte
-            de baixo ela cobriria o próprio nó → o mouse "saía" do nó → a
-            ficha encolhia → o mouse "entrava" de novo, num pisca-pisca sem
-            fim que fazia o grafo parecer que não respondia a nada. Só o
-            botão Abrir volta a receber clique. */}
-        <div
-          className="pointer-events-auto mx-auto max-w-2xl rounded-2xl px-4 py-3 backdrop-blur sm:pointer-events-none"
-          style={{ background: "rgba(8,16,24,0.88)", border: `1px solid ${selecionado ? selecionado.cor : "#1e2a36"}` }}
-        >
-          {selecionado ? (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: selecionado.cor }} />
-                <span className="text-sm font-black text-white">{selecionado.nome}</span>
-                <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  {ROTULO_GRUPO[selecionado.grupo]}
-                </span>
-                <Link href={selecionado.href} className="pointer-events-auto ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold" style={{ background: selecionado.cor, color: "#0b1520" }}>
-                  Abrir <ArrowUpRight size={13} />
-                </Link>
-              </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{selecionado.papel}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {selecionado.ramos.map((r) => (
-                  <span key={r} className="rounded-lg px-2 py-0.5 text-[11px] text-slate-300" style={{ background: "rgba(255,255,255,0.06)" }}>{r}</span>
-                ))}
-              </div>
-              {/* O que as sinapses acesas estão dizendo: por onde o dado desta
-                  sessão entra e sai. */}
-              {ligacoesDaSessao(selecionado.id).length > 0 && (
-                <div className="mt-2.5 space-y-1 border-t pt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-                  {ligacoesDaSessao(selecionado.id).map((l) => {
-                    const outro = SESSOES_POR_ID.get(l.outro);
-                    return (
-                      <div key={l.outro} className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: outro?.cor ?? "#64748b" }} />
-                        <span className="font-bold text-slate-300">{outro?.nome ?? l.outro}</span>
-                        <span className="truncate">— {l.fluxo}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Brain size={15} style={{ color: "#38bdf8" }} />
-              <span>Toque em uma sessão para ver o que ela faz e entrar. Os pulsos são os dados correndo entre as sessões e chegando ao Cérebro.</span>
+      {/* A ficha só existe com uma sessão escolhida. Parada, ela era só um
+          quadro com instrução ("toque em uma sessão...") ocupando o rodapé —
+          o grafo já se explica sozinho. Agora o fundo fica limpo e a ficha
+          aparece quando tem o que dizer. */}
+      {selecionado && (
+        <div className="p-3 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:bottom-0 sm:p-4">
+          {/* sm:pointer-events-none é OBRIGATÓRIO, não é enfeite: no desktop a
+              ficha flutua POR CIMA do grafo e cresce quando uma sessão é
+              escolhida. Se ela capturasse o mouse, ao acender um nó da parte
+              de baixo ela cobriria o próprio nó → o mouse "saía" do nó → a
+              ficha encolhia → o mouse "entrava" de novo, num pisca-pisca sem
+              fim que fazia o grafo parecer que não respondia a nada. Só o
+              botão Abrir volta a receber clique. */}
+          <div
+            className="pointer-events-auto mx-auto max-w-2xl rounded-2xl px-4 py-3 backdrop-blur sm:pointer-events-none"
+            style={{ background: "rgba(8,16,24,0.88)", border: `1px solid ${selecionado.cor}` }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: selecionado.cor }} />
+              <span className="text-sm font-black text-white">{selecionado.nome}</span>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300" style={{ background: "rgba(255,255,255,0.08)" }}>
+                {ROTULO_GRUPO[selecionado.grupo]}
+              </span>
+              <Link href={selecionado.href} className="pointer-events-auto ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold" style={{ background: selecionado.cor, color: "#0b1520" }}>
+                Abrir <ArrowUpRight size={13} />
+              </Link>
             </div>
-          )}
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-300">{selecionado.papel}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {selecionado.ramos.map((r) => (
+                <span key={r} className="rounded-lg px-2 py-0.5 text-[11px] text-slate-300" style={{ background: "rgba(255,255,255,0.06)" }}>{r}</span>
+              ))}
+            </div>
+            {/* O que as sinapses acesas estão dizendo: por onde o dado desta
+                sessão entra e sai. */}
+            {ligacoesDaSessao(selecionado.id).length > 0 && (
+              <div className="mt-2.5 space-y-1 border-t pt-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                {ligacoesDaSessao(selecionado.id).map((l) => {
+                  const outro = SESSOES_POR_ID.get(l.outro);
+                  return (
+                    <div key={l.outro} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: outro?.cor ?? "#64748b" }} />
+                      <span className="font-bold text-slate-300">{outro?.nome ?? l.outro}</span>
+                      <span className="truncate">— {l.fluxo}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

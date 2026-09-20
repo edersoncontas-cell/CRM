@@ -87,7 +87,7 @@ export default async function CerebroPage() {
       </div>
 
       <div className="mb-5">
-        <CerebroGrafo nos={nos} titulo="Cérebro" />
+        <CerebroGrafo nos={nos} />
       </div>
 
       {/* items-start: um card com lista mais longa (mesmo já limitada, com
