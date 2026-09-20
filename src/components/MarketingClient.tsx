@@ -318,7 +318,7 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
             )}
           </div>
           {!temIA && <p className="mt-2 text-[11px] text-amber-600">Falta a chave GEMINI_API_KEY para o Cérebro escrever e desenhar.</p>}
-          {temIA && !temImagem && <p className="mt-2 text-[11px] text-amber-600">A arte precisa da GEMINI_API_KEY; a legenda funciona com qualquer provedor.</p>}
+          {temIA && !temImagem && <p className="mt-2 text-[11px] text-amber-600">A arte precisa de GEMINI_API_KEY (grátis) ou OPENAI_API_KEY; a legenda funciona com qualquer provedor.</p>}
           {erro && <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</p>}
           {aviso && <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{aviso}</p>}
         </div>

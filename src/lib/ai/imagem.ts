@@ -1,14 +1,33 @@
-// Geração de IMAGEM com o Gemini: a arte que vai junto da mensagem de
-// promoção ou de data comemorativa. Só o Gemini entra aqui (é o único dos
-// provedores configurados com geração de imagem na camada gratuita).
+// Criação da ARTE que vai junto da mensagem de promoção ou data comemorativa.
+//
+// Dois provedores, integrados: quando um não dá, o outro faz.
+//   1. Gemini  — camada GRATUITA. É sempre o primeiro, e o motivo é dinheiro.
+//   2. OpenAI  — pré-paga, cobrada por imagem. Só entra quando o Gemini não
+//                pode: cota do dia estourada, fora do ar, chave recusada.
+//
+// No uso normal a conta fica em zero, e nos dias em que a cota grátis acaba a
+// arte continua saindo por alguns centavos em vez de simplesmente falhar.
+// A ordem pode ser trocada em IMAGEM_PROVEDORES, mas inverter significa pagar
+// por toda arte.
+//
+// Este arquivo guarda o lado Gemini e a orquestração; o lado OpenAI está em
+// imagem-openai.ts e a regra de quando vale tentar o próximo, em
+// imagem-escolha.ts (puro, testado).
 
 import { GEMINI_API_BASE, GEMINI_IMAGE_MODELS } from "./config";
 import { marcarEsgotado, modelosDisponiveis, primeiraLiberacao, proximaViradaDiariaGoogle, quandoVolta } from "./imagem-cota";
+import { ordemDosProvedores, vaiTentarOProximo } from "./imagem-escolha";
+import { gerarImagemOpenAI, openaiImagemHabilitada } from "./imagem-openai";
+import type { ImagemGerada, Referencia } from "./imagem-tipos";
 
-export type ImagemGerada = { base64: string; mimeType: string; modelo: string };
-export type Referencia = { base64: string; mimeType: string };
+export type { ImagemGerada, Referencia } from "./imagem-tipos";
 
+/** Dá para criar arte? Basta UM dos dois provedores estar configurado. */
 export function geracaoDeImagemHabilitada(): boolean {
+  return !!process.env.GEMINI_API_KEY || openaiImagemHabilitada();
+}
+
+export function geminiImagemHabilitada(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
 
@@ -109,7 +128,7 @@ async function gerarComModelo(modelo: string, prompt: string, referencias: Refer
 // a vez — a cota do Gemini é por modelo, então o seguinte da lista pode estar
 // livre. Outros erros param a fila.
 export async function gerarImagemGemini(prompt: string, referencias: Referencia[] = []): Promise<ImagemGerada> {
-  if (!geracaoDeImagemHabilitada()) throw new Error("Geração de imagem exige GEMINI_API_KEY.");
+  if (!geminiImagemHabilitada()) throw new Error("Criar arte pelo Gemini exige GEMINI_API_KEY.");
 
   // A arte roda na camada GRATUITA do Gemini, que tem teto por minuto e por
   // dia — e cada modelo tem o SEU teto. Modelo que já avisou que acabou não é
@@ -142,6 +161,42 @@ export async function gerarImagemGemini(prompt: string, referencias: Referencia[
       }
       console.error(`[gemini-imagem] ${modelo} falhou:`, e instanceof Error ? e.message : e);
       if (status !== 404 && status !== 400 && status !== 429) break;
+    }
+  }
+  throw ultimo instanceof Error ? ultimo : new Error(String(ultimo));
+}
+
+/**
+ * Cria a arte usando os provedores configurados, em ordem: Gemini (grátis)
+ * e, quando ele não puder, OpenAI (paga).
+ *
+ * É esta a função que as telas chamam. A troca só acontece quando o problema
+ * é do PROVEDOR (cota, instabilidade, chave). Se o pedido é que foi recusado
+ * por conteúdo, para aqui: o segundo recusaria igual, e na OpenAI essa
+ * tentativa inútil viria na fatura (ver imagem-escolha.ts).
+ */
+export async function gerarImagem(prompt: string, referencias: Referencia[] = []): Promise<ImagemGerada> {
+  const ordem = ordemDosProvedores(process.env.IMAGEM_PROVEDORES, {
+    gemini: geminiImagemHabilitada(),
+    openai: openaiImagemHabilitada(),
+  });
+  if (!ordem.length) {
+    throw new Error("Criar arte precisa de GEMINI_API_KEY (grátis) ou OPENAI_API_KEY nas variáveis da Vercel.");
+  }
+
+  let ultimo: unknown = null;
+  for (let i = 0; i < ordem.length; i++) {
+    const prov = ordem[i];
+    try {
+      return prov === "gemini"
+        ? await gerarImagemGemini(prompt, referencias)
+        : await gerarImagemOpenAI(prompt, referencias);
+    } catch (e) {
+      ultimo = e;
+      const { status, detalhe } = e as { status?: number; detalhe?: string };
+      const temProximo = i < ordem.length - 1;
+      if (!temProximo || !vaiTentarOProximo(status, detalhe ?? "")) break;
+      console.warn(`[imagem] ${prov} não deu (${status ?? "sem status"}); tentando ${ordem[i + 1]}.`);
     }
   }
   throw ultimo instanceof Error ? ultimo : new Error(String(ultimo));

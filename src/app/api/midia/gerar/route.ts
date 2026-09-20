@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { gerarImagemGemini, geracaoDeImagemHabilitada, type Referencia } from "@/lib/ai/imagem";
+import { gerarImagem, geracaoDeImagemHabilitada, type Referencia } from "@/lib/ai/imagem";
 import { guardarMidiaEnvio } from "@/lib/midia-envio";
 import { lerParametros } from "@/lib/parametros";
 import { registrarAudit } from "@/lib/audit";
@@ -14,7 +14,7 @@ export const maxDuration = 60;
 // vendedor e (opcional) de uma foto das máquinas como referência.
 export async function POST(req: NextRequest) {
   if (!geracaoDeImagemHabilitada()) {
-    return NextResponse.json({ ok: false, erro: "Criar arte com IA precisa de GEMINI_API_KEY nas variáveis da Vercel." });
+    return NextResponse.json({ ok: false, erro: "Criar arte com IA precisa de GEMINI_API_KEY (grátis) ou OPENAI_API_KEY nas variáveis da Vercel." });
   }
   const b = (await req.json().catch(() => ({}))) as { tipo?: TipoMensagem; instrucoes?: string; dataId?: string; promocao?: string; base?: BaseArte };
   const tipo: TipoMensagem = b.tipo ?? "promocao";
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const img = await gerarImagemGemini(prompt, referencias);
+    const img = await gerarImagem(prompt, referencias);
     const ext = img.mimeType.includes("jpeg") ? "jpg" : "png";
     const nome = `arte-${tipo}.${ext}`;
     const { id } = await guardarMidiaEnvio({ base64: img.base64, mimeType: img.mimeType, nome, tipo: "image", origem: "gemini" });
