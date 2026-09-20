@@ -5,6 +5,7 @@ import { SplashBoot } from "@/components/SplashBoot";
 import { CurvasDeNivel } from "@/components/CurvasDeNivel";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
+import { carregarChavesIA } from "@/lib/ai/chaves";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // faziam essa checagem, e uma coluna nova no banco derrubava as demais (o
   // WhatsApp quebrou assim) até alguém abrir uma das páginas "certas".
   await garantirManutencaoSeNecessario().catch(() => {});
+  // As chaves de IA que o vendedor salvou pela tela do CRM entram no ambiente
+  // aqui, uma vez por render de página, para que TODA tela enxergue os mesmos
+  // provedores que as chamadas de IA enxergam. Sem isto, o card do ZEUS lia o
+  // ambiente cru e dizia "nenhum provedor configurado" logo depois de o
+  // vendedor salvar uma chave — que é exatamente o contrário do que aconteceu.
+  // (llmTexto também chama, para as rotas de API e os crons, que não passam
+  // por este layout.) Ver lib/ai/chaves.ts.
+  await carregarChavesIA().catch(() => {});
   const parametros = await lerParametros().catch(() => null);
 
   return (

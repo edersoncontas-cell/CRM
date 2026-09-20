@@ -16,7 +16,10 @@ export type AcaoAudit =
   | "perfil_atualizado"
   | "modo_fim_de_semana"
   | "tarefa_criada"
-  | "zeus_ativo_alterado";
+  | "zeus_ativo_alterado"
+  // Chave de provedor de IA ligada/trocada/apagada pela tela do CRM. O
+  // registro guarda o FATO e o provedor, nunca o valor da chave.
+  | "chave_ia_alterada";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

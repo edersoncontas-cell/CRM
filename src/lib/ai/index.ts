@@ -9,6 +9,7 @@ import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, err
 import { esperaDoLimite } from "./cota";
 import { diagnosticoIA, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
 import { janelaDeCaracteres, janelaApertada } from "./orcamento-prompt";
+import { carregarChavesIA } from "./chaves";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -240,6 +241,10 @@ export async function llmTexto(
   user: string,
   opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean }
 ): Promise<string> {
+  // Funil único de toda chamada de texto: é aqui que as chaves salvas na tela
+  // do CRM entram no ambiente, sem sobrescrever as da hospedagem. Ver
+  // lib/ai/chaves.ts — serve para trocar de provedor sem mexer na Vercel.
+  await carregarChavesIA().catch(() => {});
   const provs = provedoresDisponiveis();
   if (!provs.length) throw new Error("Nenhum provedor de IA configurado.");
 

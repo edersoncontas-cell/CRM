@@ -37,6 +37,15 @@ export const GRATUITO: Record<ProvedorId, boolean> = {
   gemini: true, groq: true, deepseek: false, openai: false, anthropic: false,
 };
 
+/** Onde pegar a chave — para quem vai ligar o provedor pela tela do CRM. */
+export const ONDE_PEGAR: Record<ProvedorId, string> = {
+  gemini: "aistudio.google.com/apikey",
+  groq: "console.groq.com/keys",
+  deepseek: "platform.deepseek.com/api_keys",
+  openai: "platform.openai.com/api-keys",
+  anthropic: "console.anthropic.com/settings/keys",
+};
+
 export type LinhaProvedor = {
   id: ProvedorId;
   nome: string;

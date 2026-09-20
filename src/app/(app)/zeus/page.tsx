@@ -3,6 +3,9 @@ import { statusConexao } from "@/lib/zapi";
 import { ultimoHeartbeat, zeusAtivo } from "@/lib/zeus/estado";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { iaHabilitada, provedorIANome, diagnosticoDaIA } from "@/lib/ai";
+import { ChavesIACard } from "@/components/ChavesIACard";
+import { lerChavesGravadas, origemDasChaves, mascarar, carregarChavesIA } from "@/lib/ai/chaves";
+import { ONDE_PEGAR } from "@/lib/ai/provedores-status";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
@@ -44,6 +47,18 @@ export default async function ZeusPage() {
     calcularRitmoMetas().catch(() => null),
   ]);
 
+  // Chaves de IA: o que está gravado no CRM e de onde cada uma veio.
+  //
+  // O carregarChavesIA() é chamado AQUI, e não só no layout, porque no App
+  // Router o layout e a página renderizam EM PARALELO — a página lia o
+  // ambiente antes de o layout terminar de povoá-lo, e o card dizia "nenhum
+  // provedor configurado" logo depois de o vendedor salvar a chave. É barato:
+  // a leitura é cacheada por 30s.
+  await carregarChavesIA().catch(() => {});
+  const chavesGravadas = await lerChavesGravadas();
+  const origens = await origemDasChaves();
+  const diag = diagnosticoDaIA();
+
   const eventosRows: ZeusEventoRow[] = eventos.map((e) => ({
     id: e.id, tipo: e.tipo, severidade: e.severidade, titulo: e.titulo, detalhe: e.detalhe, resolvido: e.resolvido, criadoEm: e.criadoEm.toISOString(),
   }));
@@ -61,42 +76,23 @@ export default async function ZeusPage() {
         </div>
       </div>
 
-      {/* Provedores de IA, na ordem em que o CRM tenta.
-          A tela mostrava só o nome do PRIMEIRO, o que não responde a pergunta
-          que importa: e se ele cair? Com um provedor só, qualquer limite por
-          minuto derruba o Orientador e o painel congela na leitura anterior —
-          foi o que aconteceu, e não havia como ver isso em lugar nenhum. */}
-      {(() => {
-        const d = diagnosticoDaIA();
-        return (
-          <div className="rounded-2xl border p-4" style={{ borderColor: d.risco ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-bold text-white">Provedores de IA</h2>
-              <span className="text-xs" style={{ color: d.risco ? "#f87171" : "#a1a1aa" }}>{d.resumo}</span>
-            </div>
-            <ul className="mt-3 space-y-1.5">
-              {d.linhas.map((l) => (
-                <li key={l.id} className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="w-4 text-center font-bold" style={{ color: l.configurado ? "#4ade80" : "#52525b" }}>
-                    {l.configurado ? "✓" : "○"}
-                  </span>
-                  <span style={{ color: l.configurado ? "#e4e4e7" : "#71717a" }}>
-                    {l.posicao ? `${l.posicao}º · ` : ""}{l.nome}
-                  </span>
-                  {l.gratuito && <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>tem camada grátis</span>}
-                  {!l.configurado && <code className="text-[10px] text-zinc-600">{l.chave}</code>}
-                </li>
-              ))}
-            </ul>
-            {d.risco && (
-              <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "rgba(248,113,113,0.08)" }}>
-                <p style={{ color: "#fca5a5" }}>{d.risco}</p>
-                {d.solucao && <p className="mt-1" style={{ color: "#e4e4e7" }}>{d.solucao}</p>}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {/* Provedores de IA: a fila, e o botão de ligar um novo.
+          Fica aqui porque é onde o vendedor vem quando algo parou. Ligar um
+          segundo provedor é o que faz o Orientador não parar quando o
+          primeiro bate no limite — e agora dá para fazer isso do celular,
+          sem abrir a Vercel. Ver lib/ai/chaves.ts. */}
+      <ChavesIACard
+        linhas={diag.linhas.map((l) => ({
+          id: l.id, nome: l.nome, chave: l.chave, configurado: l.configurado,
+          gratuito: l.gratuito, posicao: l.posicao,
+          origem: origens[l.id],
+          mascarada: origens[l.id] === "crm" ? mascarar(chavesGravadas[l.id]) : null,
+          onde: ONDE_PEGAR[l.id],
+        }))}
+        resumo={diag.resumo}
+        risco={diag.risco}
+        solucao={diag.solucao}
+      />
 
       <ZeusPainel
         ativo={ativo}
