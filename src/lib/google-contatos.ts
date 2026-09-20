@@ -16,7 +16,7 @@ import { getConfig, setConfig } from "@/lib/config";
 import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle } from "@/lib/integrations/google";
 import { planejarSincronizacao, clientesParaEnviar, nomeGenerico, type ClienteResumo } from "@/lib/google-contatos-util";
 import { deveDescartarContato, listarFiltroContatos } from "@/lib/filtro-contatos";
-import { listarTelefonesBloqueados, limparContatosIndesejados, bloquearContato, apagarContatoPorTelefone, desbloquearContato } from "@/lib/contatos-bloqueados";
+import { listarLapides, limparContatosIndesejados, bloquearContato, apagarContatoPorTelefone, desbloquearContato } from "@/lib/contatos-bloqueados";
 import { nomeMarcadoComAsterisco, MOTIVO_ASTERISCO } from "@/lib/utils";
 
 const CHAVE_ULTIMA = "google.contatos.ultima";
@@ -84,7 +84,8 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
     // que já existia dele; e quem perdeu o asterisco volta a ser aceito.
     const { asteriscoBloqueados, asteriscoLiberados } = await aplicarMarcaAsterisco(contatos);
 
-    const plano = planejarSincronizacao(contatos, clientes, municipios, await listarTelefonesBloqueados(), filtro);
+    // As lápides: quem o vendedor excluiu não volta, tenha número ou não.
+    const plano = planejarSincronizacao(contatos, clientes, municipios, await listarLapides(), filtro);
 
     // Google → CRM
     for (const c of plano.criar) {

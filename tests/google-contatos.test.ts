@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acharMunicipio, clientesParaEnviar, planejarSincronizacao, telefoneNacional, type ClienteResumo, type ContatoGoogle } from "../src/lib/google-contatos-util";
+import { acharMunicipio, clientesParaEnviar, planejarSincronizacao, telefoneNacional, temLapide, lapidesVazias, chaveNome, type ClienteResumo, type ContatoGoogle } from "../src/lib/google-contatos-util";
 
 const municipios = [{ id: "m1", nome: "Cachoeiro de Itapemirim" }, { id: "m2", nome: "Itapemirim" }, { id: "m3", nome: "Alegre" }];
 const g = (p: Partial<ContatoGoogle> & { id: string; nome: string }): ContatoGoogle => ({ telefones: [], emails: [], enderecos: [], empresa: null, ...p });
@@ -64,8 +64,8 @@ describe("planejarSincronizacao", () => {
   });
 
   it("não traz de volta telefone bloqueado", () => {
-    const bloqueados = new Set(["28999990009", "5528999990009"]);
-    const plano = planejarSincronizacao([g({ id: "people/9", nome: "Fulano", telefones: ["5528999990009"] })], [], municipios, bloqueados);
+    const l = { ...lapidesVazias(), telefones: new Set(["28999990009", "5528999990009"]) };
+    const plano = planejarSincronizacao([g({ id: "people/9", nome: "Fulano", telefones: ["5528999990009"] })], [], municipios, l);
     expect(plano.criar).toEqual([]);
     expect(plano.ignorados).toBe(1);
   });
@@ -88,5 +88,90 @@ describe("clientesParaEnviar", () => {
     ];
     expect(clientesParaEnviar(lista, 10).map((x) => x.id)).toEqual(["b"]);
     expect(clientesParaEnviar(lista, 0)).toEqual([]);
+  });
+});
+
+// ── A LÁPIDE: O CONTATO EXCLUÍDO NÃO VOLTA ──────────────────────────────────
+//
+// "eu vou excluir do crm o contato ac maquinas novas pme, nesse novo filtro,
+//  ao google contatos realizar novamente a sincronização, ele não pode voltar"
+//
+// A lista de bloqueio só sabia guardar TELEFONE. E "AC MÁQUINAS NOVAS PME" é
+// um contato de empresa SEM NÚMERO: não tinha como entrar nela. O vendedor
+// excluía, a rodada seguinte do Google reencontrava o contato na agenda do
+// celular e o recriava — excluir virava tarefa recorrente, sem nada no CRM
+// capaz de impedir.
+//
+// Agora são três chaves, e basta uma bater. Cada teste abaixo fecha um
+// caminho de volta.
+describe("a lápide do contato excluído", () => {
+  it("pelo id do Google: o mesmo contato não volta, nem sem telefone", () => {
+    const l = { ...lapidesVazias(), googleIds: new Set(["people/77"]) };
+    const plano = planejarSincronizacao([g({ id: "people/77", nome: "AC MÁQUINAS NOVAS PME" })], [], municipios, l);
+    expect(plano.criar).toEqual([]);
+    expect(plano.ignorados).toBe(1);
+    // E conta como BARRADO, não como "sem telefone": o resumo da rodada tem
+    // de dizer a verdade sobre por que ele não entrou.
+    expect(plano.semTelefone).toBe(0);
+  });
+
+  it("pelo nome: recriado no celular do zero (id novo) continua barrado", () => {
+    // O caso que o bloqueio por id sozinho não pega — apagar e cadastrar de
+    // novo na agenda gera outro resourceName.
+    const l = { ...lapidesVazias(), nomes: new Set([chaveNome("AC MÁQUINAS NOVAS PME")!]) };
+    const plano = planejarSincronizacao([g({ id: "people/OUTRO", nome: "ac máquinas novas pme" })], [], municipios, l);
+    expect(plano.criar).toEqual([]);
+    expect(plano.ignorados).toBe(1);
+  });
+
+  it("pelo nome, mesmo que agora tenha ganhado um telefone", () => {
+    const l = { ...lapidesVazias(), nomes: new Set([chaveNome("AC Máquinas Novas PME")!]) };
+    const plano = planejarSincronizacao([g({ id: "people/78", nome: "AC MÁQUINAS NOVAS PME", telefones: ["5528999990088"] })], [], municipios, l);
+    expect(plano.criar).toEqual([]);
+  });
+
+  it("pelo telefone: mesmo número, ainda que o nome tenha mudado", () => {
+    const l = { ...lapidesVazias(), telefones: new Set(["28999990009", "5528999990009"]) };
+    const plano = planejarSincronizacao([g({ id: "people/novo", nome: "Outro Nome", telefones: ["5528999990009"] })], [], municipios, l);
+    expect(plano.criar).toEqual([]);
+  });
+
+  it("sem lápide, o contato entra normalmente — a trava não pega geral", () => {
+    const l = { ...lapidesVazias(), nomes: new Set(["ac maquinas novas pme"]) };
+    const plano = planejarSincronizacao([g({ id: "people/5", nome: "Wadson Pires Ratinho", telefones: ["5528999990005"] })], [], municipios, l);
+    expect(plano.criar.map((x) => x.nome)).toEqual(["Wadson Pires Ratinho"]);
+  });
+});
+
+describe("temLapide", () => {
+  it("acha por qualquer uma das três chaves", () => {
+    const l = { telefones: new Set(["28999990009"]), nomes: new Set(["ac maquinas novas pme"]), googleIds: new Set(["people/77"]) };
+    expect(temLapide({ googleContatoId: "people/77" }, l)).toBe(true);
+    expect(temLapide({ telefones: ["28999990009"] }, l)).toBe(true);
+    expect(temLapide({ nome: "AC Máquinas Novas PME" }, l)).toBe(true);
+  });
+
+  it("o telefone casa em qualquer variante (com ou sem o 55)", () => {
+    const l = { ...lapidesVazias(), telefones: new Set(["5528999990009"]) };
+    expect(temLapide({ telefones: ["28999990009"] }, l)).toBe(true);
+  });
+
+  it("nome genérico NUNCA vira chave — derrubaria contato inocente", () => {
+    // chaveNome() devolve null para "Contato 5528…" e para nome curto demais.
+    // Sem esta regra, uma lápide de nome genérico barraria todo contato que o
+    // WhatsApp ainda não nomeou.
+    expect(chaveNome("Contato 5528999990009")).toBe(null);
+    const l = { ...lapidesVazias(), nomes: new Set(["contato 5528999990009"]) };
+    expect(temLapide({ nome: "Contato 5528999990009" }, l)).toBe(false);
+  });
+
+  it("alvo sem nenhuma chave não tem lápide", () => {
+    const l = { telefones: new Set(["28999990009"]), nomes: new Set(["ana maria"]), googleIds: new Set(["people/1"]) };
+    expect(temLapide({}, l)).toBe(false);
+    expect(temLapide({ telefones: [null], nome: null, googleContatoId: null }, l)).toBe(false);
+  });
+
+  it("lista vazia de lápides nunca barra ninguém", () => {
+    expect(temLapide({ googleContatoId: "people/1", telefones: ["28999990009"], nome: "Ana Maria" }, lapidesVazias())).toBe(false);
   });
 });

@@ -163,6 +163,13 @@ const TAMANHO_MINIMO_TERMO = 3;
 // bloqueio na sincronização seguinte.
 export const MOTIVO_ASTERISCO = "asterisco no nome (*)";
 
+// Motivo gravado quando é o vendedor que manda excluir, pela lista de
+// Clientes. Separado dos motivos automáticos porque a regra é outra: aqui não
+// há termo nem asterisco a reavaliar — alguém decidiu, e a decisão vale até
+// ser desfeita à mão, em Configurações. Mora aqui (e não no módulo que grava)
+// para a tela poder mostrar o rótulo sem arrastar o banco para o navegador.
+export const MOTIVO_EXCLUIDO_MANUAL = "excluído por você";
+
 export function nomeMarcadoComAsterisco(nome: string | null | undefined): boolean {
   return /\*+\s*$/.test((nome ?? "").trim());
 }

@@ -18,7 +18,8 @@ import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
 import { registrarAudit } from "./audit";
 import { mesAnoAtualBrasilia, inicioDoDiaBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
-import { soResumo } from "@/lib/cliente-status";
+import { soResumo, STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
+import { excluirClienteDefinitivo } from "@/lib/contatos-bloqueados";
 import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
@@ -211,12 +212,54 @@ export async function atualizarResumoCliente(
   revalidatePath(`/clientes/${clienteId}`);
 }
 
+/**
+ * Exclui o cadastro — e grava a lápide, para ele não voltar.
+ *
+ * "eu vou excluir do crm o contato ac maquinas novas pme, ao google contatos
+ *  realizar novamente a sincronização, ele não pode voltar"
+ *
+ * Antes isto era um delete e nada mais: a próxima rodada do Google (de hora
+ * em hora) reencontrava o contato na agenda do celular e o recriava. Excluir
+ * virava uma tarefa recorrente. Agora a exclusão registra telefone, nome e id
+ * do Google numa lápide que a sincronização consulta — e o contato só volta
+ * se o vendedor liberar, em Configurações.
+ */
 export async function excluirCliente(id: string): Promise<{ ok: boolean }> {
-  await db.cliente.delete({ where: { id } });
+  const r = await excluirClienteDefinitivo(id);
+  await registrarAudit({
+    acao: "cliente_atualizado", origem: "usuario",
+    descricao: `Cadastro "${r.nome ?? id}" excluído. Não volta pela sincronização do Google (liberação em Configurações).`,
+  }).catch(() => {});
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   revalidatePath("/atendimento");
-  return { ok: true };
+  revalidatePath("/configuracoes");
+  return { ok: r.ok };
+}
+
+/**
+ * Exclui de uma vez todos os cadastros marcados como "Não é cliente".
+ *
+ * Em lote, e só quando o vendedor manda: o status "nao_cliente" também é
+ * atribuído sozinho, por termo no nome (ver regioes.ts — "pme", "hotel",
+ * "contador"…), e apagar por conta própria em cima de um palpite desses
+ * destruiria cadastro bom. Cada um leva a sua lápide.
+ */
+export async function excluirNaoClientes(): Promise<{ excluidos: number; nomes: string[] }> {
+  const alvos = await db.cliente.findMany({ where: { status: STATUS_NAO_CLIENTE }, select: { id: true, nome: true } });
+  const nomes: string[] = [];
+  for (const a of alvos) {
+    const r = await excluirClienteDefinitivo(a.id);
+    if (r.ok) nomes.push(r.nome ?? a.nome);
+  }
+  if (nomes.length) {
+    await registrarAudit({
+      acao: "cliente_atualizado", origem: "usuario",
+      descricao: `${nomes.length} cadastro(s) marcados como "não é cliente" excluídos: ${nomes.slice(0, 20).join(", ")}${nomes.length > 20 ? "…" : ""}. Nenhum volta pela sincronização do Google.`,
+    }).catch(() => {});
+  }
+  for (const p of ["/clientes", "/dashboard", "/atendimento", "/orientador", "/configuracoes"]) revalidatePath(p);
+  return { excluidos: nomes.length, nomes };
 }
 
 // Mescla um ou mais clientes duplicados dentro de um "principal": move todo o

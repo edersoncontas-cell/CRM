@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { limparContatosIndesejados, type ResultadoLimpeza } from "@/lib/contatos-bloqueados";
+import { limparContatosIndesejados, liberarLapide, type ResultadoLimpeza } from "@/lib/contatos-bloqueados";
 import { listarFiltroContatos, adicionarTermoFiltro, removerTermoFiltro, definirFiltroContatos, type TipoTermoBloqueio } from "@/lib/filtro-contatos";
 import { interpretarComandoFiltro, type MudancaFiltro } from "@/lib/filtro-contatos-ia";
 import { motivoBloqueioComListas } from "@/lib/utils";
@@ -20,6 +20,23 @@ export async function limparContatosIndesejadosAction(): Promise<ResultadoLimpez
   }).catch(() => {});
   for (const p of PAGINAS) revalidatePath(p);
   return r;
+}
+
+/**
+ * Libera um contato excluído: tira a lápide e ele volta a poder entrar.
+ *
+ * A exclusão é definitiva de propósito — é o que o vendedor pediu. Mas
+ * definitiva não pode querer dizer sem volta: excluir o cadastro errado é
+ * um clique, e sem esta saída o contato ficaria barrado para sempre sem
+ * nenhum lugar onde desfazer.
+ */
+export async function liberarLapideAction(id: string): Promise<{ ok: boolean }> {
+  const r = await liberarLapide(id);
+  if (r.ok) {
+    await registrarAudit({ acao: "cliente_atualizado", origem: "usuario", descricao: `Contato "${r.nome ?? "(sem nome)"}" liberado: volta a entrar pela sincronização do Google.` }).catch(() => {});
+    for (const p of PAGINAS) revalidatePath(p);
+  }
+  return { ok: r.ok };
 }
 
 export async function adicionarTermoFiltroAction(tipo: TipoTermoBloqueio, valor: string): Promise<ListasFiltro> {

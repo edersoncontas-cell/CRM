@@ -582,6 +582,26 @@ export async function aplicarMigracoes(): Promise<void> {
     // para o estado acumulado não se afastar da verdade sem limite.
     await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "incrementaisSeguidas" INTEGER NOT NULL DEFAULT 0`);
 
+    // ── v36: a lápide do contato excluído ──────────────────────────────────
+    //
+    // "eu vou excluir do crm o contato ac maquinas novas pme, ao google
+    //  contatos realizar novamente a sincronização, ele não pode voltar"
+    //
+    // A lista de bloqueio só sabia guardar TELEFONE. Contato sem número —
+    // como esse — não tinha como entrar nela: era excluído e voltava na
+    // rodada seguinte, sem nada no CRM capaz de impedir. E mesmo com número,
+    // um contato recriado no celular com outro telefone também voltava.
+    //
+    // Agora a lápide tem três chaves, e basta UMA bater: o telefone, o id do
+    // contato no Google, e o nome normalizado (sem acento, caixa ou
+    // pontuação). O telefone deixa de ser obrigatório justamente para caber
+    // o contato que não tem nenhum.
+    await db.$executeRawUnsafe(`ALTER TABLE "ContatoBloqueado" ALTER COLUMN "telefone" DROP NOT NULL`);
+    await db.$executeRawUnsafe(`ALTER TABLE "ContatoBloqueado" ADD COLUMN IF NOT EXISTS "chaveNome" TEXT`);
+    await db.$executeRawUnsafe(`ALTER TABLE "ContatoBloqueado" ADD COLUMN IF NOT EXISTS "googleContatoId" TEXT`);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_chaveNome_key" ON "ContatoBloqueado" ("chaveNome")`);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ContatoBloqueado_googleContatoId_key" ON "ContatoBloqueado" ("googleContatoId")`);
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 

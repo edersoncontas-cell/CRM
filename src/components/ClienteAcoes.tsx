@@ -211,6 +211,14 @@ export function ClienteAcoes({
             <p className="mt-2 text-sm text-slate-600">
               Tem certeza que deseja excluir <b>{cliente.nome}</b>? Esta ação não pode ser desfeita.
             </p>
+            {/* O vendedor precisa saber disto AQUI, e não descobrir depois:
+                a exclusão agora também barra o contato na sincronização do
+                Google — era esse o pedido — e o único lugar de desfazer fica
+                em Configurações. */}
+            <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Ele também <b>não volta</b> na próxima sincronização do Google Contatos. Para liberar depois:
+              Configurações › Contatos que não são clientes.
+            </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={(e) => { parar(e); setConfirmando(false); }}

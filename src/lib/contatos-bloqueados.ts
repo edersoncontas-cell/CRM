@@ -9,8 +9,9 @@
 
 import { db } from "@/lib/db";
 import { listarFiltroContatos } from "@/lib/filtro-contatos";
-import { motivoBloqueioComListas } from "@/lib/utils";
+import { motivoBloqueioComListas, MOTIVO_EXCLUIDO_MANUAL } from "@/lib/utils";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
+import { chaveNome, lapidesVazias, type Lapides } from "@/lib/google-contatos-util";
 
 export type ResultadoLimpeza = { clientes: number; conversas: number; mensagens: number; bloqueados: number };
 
@@ -24,9 +25,81 @@ export async function telefoneBloqueado(telefone: string): Promise<boolean> {
 }
 
 export async function bloquearContato(telefone: string, nome: string | null, motivo: string | null): Promise<void> {
-  const t = digitos(telefone);
-  if (!t) return;
-  await db.contatoBloqueado.upsert({ where: { telefone: t }, update: { nome: nome ?? undefined, motivo: motivo ?? undefined }, create: { telefone: t, nome, motivo } });
+  await gravarLapide({ telefone, nome, motivo });
+}
+
+/**
+ * Grava a lápide do contato: o registro de que ele NÃO pode voltar.
+ *
+ * Três chaves, e cada uma fecha um caminho de volta — o telefone, o id no
+ * Google e o nome normalizado. Grava todas as que existirem: o contato sem
+ * número só tem o nome (e talvez o id), e é justamente ele que a lista
+ * antiga, só de telefone, não conseguia segurar.
+ *
+ * Procura por qualquer uma das chaves antes de criar, porque as três são
+ * únicas no banco: criar sem olhar quebraria com violação de unicidade
+ * quando o mesmo contato já tivesse sido barrado por outro caminho.
+ */
+export async function gravarLapide(dados: {
+  telefone?: string | null;
+  nome?: string | null;
+  googleContatoId?: string | null;
+  motivo?: string | null;
+}): Promise<void> {
+  const t = digitos(dados.telefone) || null;
+  const chave = dados.nome ? chaveNome(dados.nome) : null;
+  const gid = dados.googleContatoId?.trim() || null;
+  // Sem nenhuma chave não há lápide possível — e uma linha em branco só
+  // sujaria a lista que o vendedor vê em Configurações.
+  if (!t && !chave && !gid) return;
+
+  const ou = [
+    ...(t ? [{ telefone: { in: phoneLookupVariants(t) } }] : []),
+    ...(chave ? [{ chaveNome: chave }] : []),
+    ...(gid ? [{ googleContatoId: gid }] : []),
+  ];
+  const existente = await db.contatoBloqueado.findFirst({ where: { OR: ou }, select: { id: true } });
+
+  const campos = {
+    nome: dados.nome ?? undefined,
+    motivo: dados.motivo ?? undefined,
+    // As chaves só são preenchidas, nunca apagadas: uma lápide que já sabe o
+    // telefone não pode perdê-lo porque desta vez veio só o nome.
+    ...(t ? { telefone: t } : {}),
+    ...(chave ? { chaveNome: chave } : {}),
+    ...(gid ? { googleContatoId: gid } : {}),
+  };
+
+  try {
+    if (existente) await db.contatoBloqueado.update({ where: { id: existente.id }, data: campos });
+    else await db.contatoBloqueado.create({ data: { nome: dados.nome ?? null, motivo: dados.motivo ?? null, telefone: t, chaveNome: chave, googleContatoId: gid } });
+  } catch (e) {
+    // Corrida entre duas rodadas gravando o mesmo contato: a segunda perde a
+    // unicidade e não tem o que fazer — a lápide já existe, que é o que
+    // importa.
+    console.error("[contatos-bloqueados] gravarLapide:", e);
+  }
+}
+
+/**
+ * Exclui um cadastro do CRM E grava a lápide, numa coisa só.
+ *
+ * É a diferença entre "apagar" e "excluir para sempre": apagar só tira da
+ * tela, e a sincronização seguinte traz de volta. Devolve o nome para a tela
+ * poder dizer o que saiu.
+ */
+export async function excluirClienteDefinitivo(clienteId: string, motivo = MOTIVO_EXCLUIDO_MANUAL): Promise<{ ok: boolean; nome?: string }> {
+  const c = await db.cliente.findUnique({ where: { id: clienteId }, select: { id: true, nome: true, telefone: true, googleContatoId: true } });
+  if (!c) return { ok: false };
+  await gravarLapide({ telefone: c.telefone, nome: c.nome, googleContatoId: c.googleContatoId, motivo });
+  // A conversa do WhatsApp vai junto: deixar a conversa órfã faria o contato
+  // reaparecer na lista de Atendimento como se nada tivesse acontecido.
+  if (c.telefone) await apagarContatoPorTelefone(c.telefone);
+  await db.auditLog.deleteMany({ where: { clienteId } });
+  await db.tarefaKanban.deleteMany({ where: { clienteId } });
+  await db.alertaOculto.deleteMany({ where: { clienteId } });
+  await db.cliente.delete({ where: { id: clienteId } }).catch(() => {});
+  return { ok: true, nome: c.nome };
 }
 
 // Desfaz o bloqueio de um telefone — só quando o motivo bate com o informado
@@ -57,10 +130,24 @@ export async function apagarContatoPorTelefone(telefone: string): Promise<void> 
 }
 
 export async function listarTelefonesBloqueados(): Promise<Set<string>> {
-  const rows = await db.contatoBloqueado.findMany({ select: { telefone: true } });
-  const set = new Set<string>();
-  for (const r of rows) for (const v of phoneLookupVariants(r.telefone)) set.add(v);
-  return set;
+  return (await listarLapides()).telefones;
+}
+
+/**
+ * As lápides, prontas para a sincronização consultar: telefones (em todas as
+ * variantes), nomes normalizados e ids do Google. Uma leitura só, porque a
+ * sincronização precisa disto uma vez por rodada e compara contra centenas
+ * de contatos.
+ */
+export async function listarLapides(): Promise<Lapides> {
+  const rows = await db.contatoBloqueado.findMany({ select: { telefone: true, chaveNome: true, googleContatoId: true } });
+  const l = lapidesVazias();
+  for (const r of rows) {
+    if (r.telefone) for (const v of phoneLookupVariants(r.telefone)) l.telefones.add(v);
+    if (r.chaveNome) l.nomes.add(r.chaveNome);
+    if (r.googleContatoId) l.googleIds.add(r.googleContatoId);
+  }
+  return l;
 }
 
 // Apaga do CRM todo cliente/conversa cujo nome bate com a regra de bloqueio
@@ -79,11 +166,20 @@ export async function limparContatosIndesejados(): Promise<ResultadoLimpeza> {
     const motivo = (nome: string) => motivoBloqueioComListas(nome, listas.termos, listas.palavras);
 
     const telefonesAlvo = new Set<string>(bloqueadosAntes);
+    // O MESMO buraco do telefone aparecia aqui: sem número, o contato era
+    // apagado e NÃO entrava na lista — então a sincronização seguinte o
+    // recriava, e a limpeza o apagava de novo, para sempre. Agora a lápide
+    // aceita o nome sozinho, e contato de empresa sem número também fica
+    // barrado de verdade.
+    const nomesAlvo = new Set<string>();
     const marcar = async (telefone: string | null, nome: string | null) => {
       const t = digitos(telefone);
-      if (!t || telefonesAlvo.has(t)) return;
-      for (const v of phoneLookupVariants(t)) telefonesAlvo.add(v);
-      await bloquearContato(t, nome, nome ? motivo(nome) : null);
+      const chave = nome ? chaveNome(nome) : null;
+      if (t && telefonesAlvo.has(t)) return;
+      if (!t && (!chave || nomesAlvo.has(chave))) return;
+      if (t) for (const v of phoneLookupVariants(t)) telefonesAlvo.add(v);
+      if (chave) nomesAlvo.add(chave);
+      await gravarLapide({ telefone: t || null, nome, motivo: nome ? motivo(nome) : null });
       r.bloqueados++;
     };
 
@@ -122,10 +218,24 @@ export async function limparContatosIndesejados(): Promise<ResultadoLimpeza> {
   return r;
 }
 
-export async function resumoBloqueio(): Promise<{ total: number; recentes: { nome: string | null; telefone: string; motivo: string | null; criadoEm: Date }[] }> {
+export async function resumoBloqueio(): Promise<{ total: number; recentes: { id: string; nome: string | null; telefone: string | null; motivo: string | null; criadoEm: Date }[] }> {
   const [total, recentes] = await Promise.all([
     db.contatoBloqueado.count(),
-    db.contatoBloqueado.findMany({ orderBy: { criadoEm: "desc" }, take: 8, select: { nome: true, telefone: true, motivo: true, criadoEm: true } }),
+    db.contatoBloqueado.findMany({ orderBy: { criadoEm: "desc" }, take: 8, select: { id: true, nome: true, telefone: true, motivo: true, criadoEm: true } }),
   ]);
   return { total, recentes };
+}
+
+/**
+ * Tira a lápide: o contato volta a poder entrar no CRM.
+ *
+ * É a saída para o engano — excluir o cadastro errado, ou mudar de ideia. Sem
+ * isto a exclusão seria uma porta de mão única, e a regra "nunca mais volta"
+ * viraria uma armadilha em vez de uma comodidade.
+ */
+export async function liberarLapide(id: string): Promise<{ ok: boolean; nome?: string | null }> {
+  const r = await db.contatoBloqueado.findUnique({ where: { id }, select: { nome: true } });
+  if (!r) return { ok: false };
+  await db.contatoBloqueado.delete({ where: { id } });
+  return { ok: true, nome: r.nome };
 }

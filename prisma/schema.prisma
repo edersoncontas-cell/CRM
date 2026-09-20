@@ -335,12 +335,19 @@ model TarefaKanban {
 // Telefones de contatos que não são clientes (contabilidade, banco, hotel…):
 // mensagens deles são descartadas na chegada e a sincronização com o Google
 // os ignora. Preenchido pela limpeza automática (lib/contatos-bloqueados.ts).
+// A lápide do contato que não pode voltar. Três chaves, e basta uma bater
+// para a sincronização do Google pular o contato: o telefone, o id dele no
+// Google e o nome normalizado. O telefone é opcional de propósito — contato
+// de empresa costuma vir sem número, e era exatamente esse que voltava a
+// cada rodada por não caber na lista. Ver lib/contatos-bloqueados.ts.
 model ContatoBloqueado {
-  id       String   @id @default(cuid())
-  telefone String   @unique
-  nome     String?
-  motivo   String?
-  criadoEm DateTime @default(now())
+  id              String   @id @default(cuid())
+  telefone        String?  @unique
+  chaveNome       String?  @unique
+  googleContatoId String?  @unique
+  nome            String?
+  motivo          String?
+  criadoEm        DateTime @default(now())
 }
 
 // Compromisso que não é visita a cliente: feira, convenção, treinamento,

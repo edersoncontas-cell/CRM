@@ -4,13 +4,15 @@ import { useRef, useState, useTransition } from "react";
 import { Card } from "@/components/ui";
 import {
   limparContatosIndesejadosAction, adicionarTermoFiltroAction, removerTermoFiltroAction, assistenteFiltroAction,
+  liberarLapideAction,
   type ListasFiltro, type RespostaAssistenteFiltro,
 } from "@/lib/bloqueio-actions";
 import type { ResultadoLimpeza } from "@/lib/contatos-bloqueados";
+import { MOTIVO_EXCLUIDO_MANUAL } from "@/lib/utils";
 import type { TipoTermoBloqueio } from "@/lib/filtro-contatos";
 import { Ban, Loader2, Plus, X, Sparkles, Send } from "lucide-react";
 
-type Recente = { nome: string | null; telefone: string; motivo: string | null; criadoEm: string };
+type Recente = { id: string; nome: string | null; telefone: string | null; motivo: string | null; criadoEm: string };
 
 // Espaço de configuração de Clientes/WhatsApp: o filtro de contatos que não
 // são clientes. Dá para editar na mão (caixinhas) ou pedir em português para
@@ -22,6 +24,18 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
   const [comando, setComando] = useState("");
   const [pensando, setPensando] = useState(false);
   const [historico, setHistorico] = useState<{ pedido: string; r: RespostaAssistenteFiltro }[]>([]);
+  const [liberados, setLiberados] = useState<string[]>([]);
+  const [liberando, setLiberando] = useState<string | null>(null);
+
+  async function liberar(id: string) {
+    setLiberando(id);
+    try {
+      const r = await liberarLapideAction(id);
+      if (r.ok) setLiberados((v) => [...v, id]);
+    } finally {
+      setLiberando(null);
+    }
+  }
 
   function limpar() {
     start(async () => { setResultado(await limparContatosIndesejadosAction()); });
@@ -58,8 +72,9 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
       </div>
       <p className="text-sm text-slate-600">
         Contatos cujo nome bate com uma destas regras nunca entram no CRM (WhatsApp, importação ou Google Contatos) e, se já
-        existirem, são apagados com todo o histórico: conversas, mensagens, negociações e visitas. O telefone fica bloqueado
-        para não voltar, e nada deles conta nos relatórios. A limpeza roda sozinha a cada hora.
+        existirem, são apagados com todo o histórico: conversas, mensagens, negociações e visitas. Cada um fica barrado por
+        telefone, nome e id no Google — então contato de empresa, que costuma vir sem número, também não volta. Nada deles
+        conta nos relatórios, e a limpeza roda sozinha a cada hora.
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -111,22 +126,43 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
         <button onClick={limpar} disabled={rodando} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
           {rodando ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />} Limpar agora
         </button>
-        <span className="text-xs text-slate-500">{total} telefone(s) bloqueado(s)</span>
+        <span className="text-xs text-slate-500">{total} contato(s) barrado(s)</span>
       </div>
       {resultado && (
         <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          Apagados: {resultado.clientes} cliente(s), {resultado.conversas} conversa(s) e {resultado.mensagens} mensagem(ns) · {resultado.bloqueados} telefone(s) bloqueado(s) agora.
+          Apagados: {resultado.clientes} cliente(s), {resultado.conversas} conversa(s) e {resultado.mensagens} mensagem(ns) · {resultado.bloqueados} contato(s) barrado(s) agora.
           {resultado.clientes + resultado.conversas === 0 && " Nada a apagar: o CRM já estava limpo."}
         </p>
       )}
+      {/* Os últimos contatos barrados — e a saída para o engano. Excluir um
+          cadastro é um clique; sem um lugar onde desfazer, o contato errado
+          ficaria barrado para sempre e o vendedor não teria como saber por
+          que ele nunca mais apareceu. */}
       {recentes.length > 0 && (
-        <ul className="mt-3 space-y-1 text-xs text-slate-500">
-          {recentes.map((r) => (
-            <li key={r.telefone}>
-              <span className="font-semibold text-slate-700">{r.nome ?? "(sem nome)"}</span> · {r.telefone}{r.motivo ? ` · termo "${r.motivo}"` : ""} · {new Date(r.criadoEm).toLocaleDateString("pt-BR")}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Últimos barrados</div>
+          <ul className="max-h-48 space-y-1 overflow-y-auto pr-1 text-xs text-slate-500">
+            {recentes.filter((r) => !liberados.includes(r.id)).map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  <span className="font-semibold text-slate-700">{r.nome ?? "(sem nome)"}</span>
+                  {r.telefone ? ` · ${r.telefone}` : " · sem telefone"}
+                  {r.motivo ? ` · ${r.motivo === MOTIVO_EXCLUIDO_MANUAL ? "excluído por você" : `termo "${r.motivo}"`}` : ""}
+                  {` · ${new Date(r.criadoEm).toLocaleDateString("pt-BR")}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => liberar(r.id)}
+                  disabled={liberando === r.id}
+                  title="Liberar: este contato volta a poder entrar no CRM"
+                  className="shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+                >
+                  {liberando === r.id ? "…" : "Liberar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Card>
   );

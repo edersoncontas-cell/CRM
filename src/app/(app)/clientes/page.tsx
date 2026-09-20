@@ -11,6 +11,8 @@ import { PopupContatoSemNome } from "@/components/PopupContatoSemNome";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { GoogleContatosSync } from "@/components/GoogleContatosSync";
 import { googleContatosDisponivel, lerResumoSincronizacaoGoogle } from "@/lib/google-contatos";
+import { ExcluirNaoClientes } from "@/components/ExcluirNaoClientes";
+import { STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
 import { MapPin, Compass, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
@@ -18,10 +20,22 @@ export const dynamic = "force-dynamic";
 
 const DIAS_ESQUECIDO = 15;
 
+/**
+ * Todo cadastro MENOS os prospects sugeridos pela IA.
+ *
+ * O OR com `origem: null` não é firula: `origem` é opcional, e em SQL
+ * `origem <> 'prospect_ia'` é NULO — logo falso — quando a origem está
+ * vazia. Escrito só como `{ not: "prospect_ia" }`, o filtro descartava em
+ * silêncio todo cadastro sem origem: ele não aparecia na lista nem entrava
+ * nas contas, e não havia nada na tela que explicasse o sumiço. É a mesma
+ * forma já usada em lib/mensagem-clientes-actions.ts.
+ */
+const SEM_PROSPECT_IA = { OR: [{ origem: null }, { origem: { not: "prospect_ia" } }] };
+
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string };
+  searchParams: { municipio?: string; regiao?: string; q?: string; naoVisitado?: string; visitado?: string; semCidade?: string; naoCliente?: string };
 }) {
   const filtro = searchParams.municipio;
   const regiaoFiltro = searchParams.regiao;
@@ -31,6 +45,11 @@ export default async function ClientesPage({
   // Cadastros sem cidade: não entram em nenhuma rota nem na abordagem por
   // cidade — a aba existe para o vendedor completar esses cadastros.
   const apenasSemCidade = searchParams.semCidade === "1";
+  // Marcados como "Não é cliente": contabilidade, banco, hotel, a própria
+  // concessionária… A aba existe para o vendedor VER quem são antes de mandar
+  // excluir — o status também é posto automaticamente, por termo no nome, e
+  // apagar sem olhar levaria cadastro bom junto.
+  const apenasNaoCliente = searchParams.naoCliente === "1";
   await garantirManutencaoSeNecessario();
 
   const corteEsquecido = new Date();
@@ -39,14 +58,16 @@ export default async function ClientesPage({
   // Só carrega a lista completa quando o vendedor de fato pediu um recorte
   // (busca, município, região ou uma das abas) — evita mostrar TODOS os
   // clientes de cara, uma lista enorme sem filtro nenhum.
-  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade;
+  const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade, totalNaoCliente] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
-        // ficam só na tela de Roteiro/Prospecção até serem confirmados.
-        origem: { not: "prospect_ia" },
+        // ficam só na tela de Roteiro/Prospecção até serem confirmados. Vai
+        // dentro de AND porque a busca por nome/telefone usa o OR de cima —
+        // os dois soltos no mesmo objeto, um apagaria o outro.
+        AND: [SEM_PROSPECT_IA],
         ...(filtro ? { municipioId: filtro } : {}),
         ...(regiaoFiltro ? { municipio: { regiao: regiaoFiltro } } : {}),
         ...(busca
@@ -60,6 +81,7 @@ export default async function ClientesPage({
         ...(apenasNaoVisitados ? { visitado: false } : {}),
         ...(apenasVisitados ? { visitado: true } : {}),
         ...(apenasSemCidade ? { municipioId: null } : {}),
+        ...(apenasNaoCliente ? { status: STATUS_NAO_CLIENTE } : {}),
       },
       include: { municipio: true, negociacoes: { where: { status: "aberta" } } },
       orderBy: { nome: "asc" },
@@ -72,9 +94,9 @@ export default async function ClientesPage({
       select: { id: true, marca: true, modelo: true, categoria: true },
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
-    db.cliente.count({ where: { visitado: false, origem: { not: "prospect_ia" } } }),
-    db.cliente.count({ where: { visitado: true, origem: { not: "prospect_ia" } } }),
-    db.cliente.count({ where: { origem: { not: "prospect_ia" } } }),
+    db.cliente.count({ where: { visitado: false, ...SEM_PROSPECT_IA } }),
+    db.cliente.count({ where: { visitado: true, ...SEM_PROSPECT_IA } }),
+    db.cliente.count({ where: SEM_PROSPECT_IA }),
     // Município -> quantidade de visitas (para o gráfico de mais/menos visitados)
     db.municipio.findMany({
       where: { foraDeArea: false },
@@ -92,7 +114,8 @@ export default async function ClientesPage({
     googleContatosDisponivel().catch(() => false),
     lerResumoSincronizacaoGoogle(),
     db.cliente.count({ where: { googleContatoId: { not: null } } }),
-    db.cliente.count({ where: { municipioId: null, origem: { not: "prospect_ia" } } }),
+    db.cliente.count({ where: { municipioId: null, ...SEM_PROSPECT_IA } }),
+    db.cliente.count({ where: { status: STATUS_NAO_CLIENTE } }),
   ]);
 
   const maxClientes = Math.max(1, ...municipios.map((m) => m._count.clientes));
@@ -178,6 +201,18 @@ export default async function ClientesPage({
             </span>
           )}
         </Link>
+        {totalNaoCliente > 0 && (
+          <Link
+            href="/clientes?naoCliente=1"
+            title="Cadastros marcados como 'Não é cliente' — contabilidade, banco, hotel, a própria concessionária"
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${apenasNaoCliente ? "bg-red-600 text-white" : "border border-red-800/50 text-red-400 hover:bg-red-900/20"}`}
+          >
+            🚫 Não é cliente
+            <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${apenasNaoCliente ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>
+              {totalNaoCliente}
+            </span>
+          </Link>
+        )}
       </div>
 
       {apenasSemCidade && (
@@ -186,6 +221,12 @@ export default async function ClientesPage({
           abra o cadastro pelo ⋯ e escolha o município.
         </p>
       )}
+
+      {/* Sem o `totalNaoCliente > 0` aqui de propósito: depois de excluir, o
+          total vira 0 e o componente sumiria da tela levando junto a própria
+          confirmação do que acabou de acontecer. Quem decide não aparecer é
+          ele, que sabe se já excluiu nesta visita. */}
+      {apenasNaoCliente && <ExcluirNaoClientes total={totalNaoCliente} />}
 
       <GoogleContatosSync conectado={googleConectado} resumo={resumoGoogle} totalGoogle={totalGoogle} />
 
@@ -300,10 +341,14 @@ export default async function ClientesPage({
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold" style={{ background: "#BFDE4D22", color: "#BFDE4D" }}>
                           {iniciais(c.nome)}
                         </div>
-                        <div className="min-w-0 flex-1 pr-6">
+                        <div className="min-w-0 flex-1 pr-8">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-base font-bold text-white">{c.nome}</span>
-                            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusColor}`}>
+                            {/* shrink-0 + nowrap: no celular o selo "não é
+                                cliente" quebrava em duas linhas e subia por
+                                cima do ⋮, justamente na aba onde o vendedor
+                                precisa abrir o menu para excluir. */}
+                            <span className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusColor}`}>
                               {statusLabel}
                             </span>
                           </div>

@@ -66,6 +66,39 @@ export function telefoneNacional(raw: string): string | null {
   return d;
 }
 
+// ── A LÁPIDE DO CONTATO EXCLUÍDO ────────────────────────────────────────────
+//
+// "eu vou excluir do crm o contato ac maquinas novas pme, ao google contatos
+//  realizar novamente a sincronização, ele não pode voltar"
+//
+// A lista de bloqueio só conhecia TELEFONE, e contato de empresa costuma não
+// ter nenhum — era esse o buraco: excluía, e a rodada seguinte trazia de
+// volta. Agora a lápide tem três chaves e basta UMA bater:
+//
+//   googleContatoId — o mesmo contato do celular, ainda que renomeado;
+//   telefone        — o mesmo número, em qualquer variante (com ou sem 55);
+//   nome            — o mesmo nome, ainda que recriado no celular do zero
+//                     (id novo) ou sem número nenhum.
+//
+// A chave de nome usa chaveNome(), que devolve null para nome genérico ou
+// curto demais: bloquear por "Contato 5528…" derrubaria contato inocente.
+export type Lapides = { telefones: Set<string>; nomes: Set<string>; googleIds: Set<string> };
+
+export const lapidesVazias = (): Lapides => ({ telefones: new Set(), nomes: new Set(), googleIds: new Set() });
+
+export function temLapide(
+  alvo: { googleContatoId?: string | null; telefones?: (string | null)[]; nome?: string | null },
+  l: Lapides,
+): boolean {
+  if (alvo.googleContatoId && l.googleIds.has(alvo.googleContatoId)) return true;
+  for (const t of alvo.telefones ?? []) {
+    if (!t) continue;
+    if (phoneLookupVariants(t).some((v) => l.telefones.has(v))) return true;
+  }
+  const n = alvo.nome ? chaveNome(alvo.nome) : null;
+  return !!n && l.nomes.has(n);
+}
+
 // Município a partir da cidade do endereço (ou do texto do endereço).
 export function acharMunicipio(municipios: MunicipioResumo[], enderecos: ContatoGoogle["enderecos"]): string | null {
   const porNome = municipios.map((m) => ({ id: m.id, chave: normalizarTexto(m.nome) })).filter((m) => m.chave);
@@ -89,7 +122,7 @@ export function acharMunicipio(municipios: MunicipioResumo[], enderecos: Contato
 }
 
 // Monta o plano: o que criar e o que atualizar no CRM a partir dos contatos.
-export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], telefonesBloqueados: Set<string> = new Set(), filtro: FiltroContatos = FILTRO_PADRAO): PlanoSincronizacao {
+export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: ClienteResumo[], municipios: MunicipioResumo[], lapides: Lapides = lapidesVazias(), filtro: FiltroContatos = FILTRO_PADRAO): PlanoSincronizacao {
   const porGoogleId = new Map<string, ClienteResumo>();
   const porTelefone = new Map<string, ClienteResumo>();
   const porNome = new Map<string, ClienteResumo>();
@@ -110,9 +143,12 @@ export function planejarSincronizacao(contatos: ContatoGoogle[], clientes: Clien
     const nome = g.nome.trim();
     if (!nome || descartar(nome, filtro)) { plano.ignorados++; continue; }
     const telefones = g.telefones.map(telefoneNacional).filter((t): t is string => !!t);
+    // Contato excluído no CRM: não volta. A consulta vem ANTES do descarte
+    // por falta de telefone de propósito — é justamente o contato sem número
+    // que precisa ser reconhecido pelo id do Google ou pelo nome, e contá-lo
+    // como "sem telefone" esconderia do resumo que ele foi barrado.
+    if (temLapide({ googleContatoId: g.id, telefones, nome }, lapides)) { plano.ignorados++; continue; }
     if (!telefones.length) { plano.semTelefone++; continue; }
-    // Telefone já bloqueado no CRM (contato apagado por não ser cliente): não volta.
-    if (telefones.some((t) => phoneLookupVariants(t).some((v) => telefonesBloqueados.has(v)))) { plano.ignorados++; continue; }
 
     let cliente = porGoogleId.get(g.id) ?? null;
     if (!cliente) for (const t of telefones) { for (const v of phoneLookupVariants(t)) { const c = porTelefone.get(v); if (c) { cliente = c; break; } } if (cliente) break; }
