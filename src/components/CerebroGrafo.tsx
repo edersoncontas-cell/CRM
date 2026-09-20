@@ -151,6 +151,45 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
   // anel de sessões, onde antes só sobrava preto. É o tecido em que o
   // Cérebro está mergulhado — fica bem apagado de propósito, para dar
   // profundidade sem disputar atenção com o grafo de verdade.
+  // Onde o tecido NÃO pode entrar: a caixa de cada rótulo de sessão (nome +
+  // linha de baixo), com folga. Sem isto, os filamentos passam por trás das
+  // palavras e encostam nelas — fica sujo e atrapalha a leitura. As contas
+  // aqui repetem as do desenho do rótulo mais abaixo, de propósito, para a
+  // caixa cair exatamente onde o texto cai.
+  const caixasRotulo = useMemo(() => {
+    const FOLGA = 18;
+    return nos.map((n) => {
+      const p = posicoes.get(n.id);
+      if (!p) return null;
+      const dx = p.x - CENTRO.x;
+      const dy = p.y - CENTRO.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const ancora = ux > 0.35 ? "start" : ux < -0.35 ? "end" : "middle";
+      const xr = Math.min(985, Math.max(15, p.x + ux * 40 + (ancora === "start" ? 4 : ancora === "end" ? -4 : 0)));
+      const yr = p.y + uy * 42 + (uy < -0.35 ? -14 : uy > 0.35 ? 22 : 6);
+      // Largura estimada. Cada linha tem a SUA fonte, então cada uma tem o
+      // seu peso por letra — medido no navegador: "Orientador de Vendas",
+      // 20 letras na fonte 22 em negrito, ocupa 271 (13,6 por letra).
+      // Antes isto era um 11,5 único para as duas linhas: subestimava o nome
+      // em mais de 40 unidades, sobrava uma faixa de texto fora da caixa e
+      // era exatamente ali que o filamento entrava na palavra.
+      // O 1,08 é margem para o nome de letra larga (M, W) sair do meio da
+      // média. Errar para mais aqui custa dois ou três filamentos de fundo;
+      // errar para menos risca o texto.
+      const larg = 1.08 * Math.max(n.nome.length * 13.6, n.rotuloTotal.length * 10.5);
+      const x1 = ancora === "start" ? xr : ancora === "end" ? xr - larg : xr - larg / 2;
+      return {
+        x1: x1 - FOLGA,
+        x2: x1 + larg + FOLGA,
+        // -24 pega a altura da primeira linha; +20 é a segunda linha.
+        y1: yr - 24 - FOLGA,
+        y2: yr + 26 + FOLGA,
+      };
+    }).filter((c): c is NonNullable<typeof c> => c !== null);
+  }, [nos, posicoes]);
+
   const tecido = useMemo(() => {
     // Espalha pelo RETÂNGULO do quadro (não por um círculo), senão os cantos
     // ficam vazios e o tecido não fecha. Descarta quem cair perto do miolo,
@@ -158,21 +197,25 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
     // Muitos de propósito: com poucos pontos, o "vizinho mais próximo" ainda
     // é longe e o fio vira uma linha atravessando a tela. Densidade alta é o
     // que encurta os filamentos e faz virar tecido.
-    const alvo = leve ? 34 : 130;
+    const dentroDeRotulo = (x: number, y: number, margem = 0) =>
+      caixasRotulo.some(
+        (c) => x >= c.x1 - margem && x <= c.x2 + margem && y >= c.y1 - margem && y <= c.y2 + margem,
+      );
+
+    const alvo = leve ? 54 : 130;
     const pontos: { x: number; y: number }[] = [];
-    for (let k = 0; k < 1400 && pontos.length < alvo; k++) {
+    for (let k = 0; k < 2200 && pontos.length < alvo; k++) {
       const x = arred(-100 + pseudoAleatorio(k * 1.37 + 31) * 1200);
       const y = arred(130 + pseudoAleatorio(k * 2.53 + 32) * 870);
       if (Math.hypot(x - CENTRO.x, y - CENTRO.y) < 368) continue;
+      if (dentroDeRotulo(x, y)) continue;
       pontos.push({ x, y });
     }
 
     // Cada neurônio se liga aos dois vizinhos mais próximos: é a ligação
     // entre eles que faz o fundo virar TECIDO, e não pontos soltos.
     const vistos = new Set<string>();
-    const filamentos: {
-      d: string; comprimento: number; calda: number; dur: number; atraso: number; cor: string; comPulso: boolean;
-    }[] = [];
+    const filamentos: { d: string; cor: string }[] = [];
     pontos.forEach((p, i) => {
       const perto = pontos
         .map((q, j) => ({ j, dist: Math.hypot(q.x - p.x, q.y - p.y) }))
@@ -183,7 +226,6 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
         const chave = i < j ? `${i}-${j}` : `${j}-${i}`;
         // Fio comprido não é sinapse, é risco atravessando o quadro.
         if (vistos.has(chave) || dist > 125) continue;
-        vistos.add(chave);
         const q = pontos[j];
         // Arco de leve, para o fio não ficar com cara de régua.
         const mx = (p.x + q.x) / 2;
@@ -191,29 +233,49 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
         const desvio = (pseudoAleatorio(i * 3.7 + j * 1.9 + 51) - 0.5) * 26;
         const nx = -(q.y - p.y) / (dist || 1);
         const ny = (q.x - p.x) / (dist || 1);
+        const cx = mx + nx * desvio;
+        const cy = my + ny * desvio;
+
+        // O fio não pode CRUZAR um rótulo, mesmo com as duas pontas fora dele.
+        // Testa a CURVA que vai ser desenhada, não a reta entre as pontas: o
+        // fio é um Q (quadrática) com barriga de até 13 unidades, então a reta
+        // podia passar raspando por fora da caixa enquanto a curva entrava.
+        // E varre t de 0 a 1 inteiro — recortar as pontas deixava passar o fio
+        // que nasce na beirada da caixa e entra na palavra.
+        let cruza = false;
+        for (let t = 0; t <= 1.0001; t += 0.05) {
+          const u = 1 - t;
+          const bx = u * u * p.x + 2 * u * t * cx + t * t * q.x;
+          const by = u * u * p.y + 2 * u * t * cy + t * t * q.y;
+          if (dentroDeRotulo(bx, by)) { cruza = true; break; }
+        }
+        if (cruza) continue;
+        vistos.add(chave);
         const n = filamentos.length;
         filamentos.push({
-          d: `M ${p.x} ${p.y} Q ${arred(mx + nx * desvio)} ${arred(my + ny * desvio)} ${q.x} ${q.y}`,
-          comprimento: arred(dist),
-          // Cauda curta: um risco de luz passando, não um rastro comprido.
-          calda: arred(5 + pseudoAleatorio(n * 2.1 + 52) * 5),
-          dur: arred(2.6 + pseudoAleatorio(n * 4.3 + 53) * 4.4),
-          // Curto: atraso longo deixava o tecido parado nos primeiros segundos.
-          atraso: arred(pseudoAleatorio(n * 6.7 + 54) * 2.8),
+          d: `M ${p.x} ${p.y} Q ${arred(cx)} ${arred(cy)} ${q.x} ${q.y}`,
           cor: n % 4 === 0 ? "#a78bfa" : n % 7 === 0 ? "#34d399" : "#38bdf8",
-          comPulso: false, // definido abaixo, por contagem
         });
       }
     });
 
-    // Quem pulsa: escolhido por CONTAGEM, não por sorteio. Fio parado é
-    // praticamente de graça (pinta uma vez); fio com pulso repinta a cada
-    // quadro. Assim o fundo fica denso de fios e o custo do movimento
-    // continua fixo — e o celular não fica com dois pulsos perdidos, como
-    // acontecia quando isso era sorteado.
-    const alvoPulsos = leve ? 16 : 46;
-    const passo = Math.max(1, Math.round(filamentos.length / alvoPulsos));
-    filamentos.forEach((f, n) => { f.comPulso = n % passo === 0; });
+    // Divide em FAIXAS. Cada faixa respira (aparece e some) e tem a luz
+    // correndo nas caudas dela, cada uma com o seu tempo — é o que faz o
+    // tecido ficar intercalado em vez de ligar e desligar junto.
+    const qtdFaixas = leve ? 6 : 11;
+    const faixas = Array.from({ length: qtdFaixas }, (_, f) => ({
+      fios: filamentos.filter((_, n) => n % qtdFaixas === f),
+      // Bem devagar: a ida e volta inteira passa de 20 segundos.
+      durRespiro: arred(21 + pseudoAleatorio(f * 5.3 + 81) * 13),
+      // NEGATIVO de propósito: atraso positivo faria a faixa ficar invisível
+      // até chegar a vez dela, e nos primeiros 20 e poucos segundos o fundo
+      // apareceria quase vazio. Negativo já começa cada faixa num ponto
+      // diferente do ciclo — todas vivas desde o primeiro quadro, e ainda
+      // assim defasadas.
+      atrasoRespiro: arred(-(f / qtdFaixas) * (21 + pseudoAleatorio(f * 5.3 + 81) * 13)),
+      durPulso: arred(6.5 + pseudoAleatorio(f * 9.7 + 83) * 5),
+      atrasoPulso: arred(-(f / qtdFaixas) * 9 - pseudoAleatorio(f * 11.3 + 84) * 4),
+    }));
 
     const neuronios = pontos.map(({ x, y }, i) => {
       const quantos = 2 + Math.floor(pseudoAleatorio(i * 3.31 + 13) * 2);
@@ -224,10 +286,28 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
         // os neurônios, não espetos saindo de cada um.
         const comp = 12 + pseudoAleatorio(i * 4.41 + j * 2.3) * 20;
         const curvatura = (pseudoAleatorio(i * 6.1 + j * 3.1) - 0.5) * 0.9;
+        const cxd = x + Math.cos(a + curvatura) * comp * 0.6;
+        const cyd = y + Math.sin(a + curvatura) * comp * 0.6;
+        const fx = x + Math.cos(a) * comp;
+        const fy = y + Math.sin(a) * comp;
+        // O corpo do neurônio já nasce fora dos rótulos, mas o dendrito sai
+        // dele em até 32 unidades e o neurônio ainda deriva ±8 — mais que a
+        // folga da caixa. Sem isto, um corpo que passou raspando ainda enfia
+        // uma ponta dentro da palavra. Descarta só o dendrito que entra: o
+        // corpo fica, e o tecido não perde densidade.
+        let entra = false;
+        for (let t = 0; t <= 1.0001; t += 0.1) {
+          const u = 1 - t;
+          const bx = u * u * x + 2 * u * t * cxd + t * t * fx;
+          const by = u * u * y + 2 * u * t * cyd + t * t * fy;
+          // margem 9 = a amplitude da deriva do neurônio
+          if (dentroDeRotulo(bx, by, 9)) { entra = true; break; }
+        }
+        if (entra) return null;
         return {
-          d: `M ${x} ${y} Q ${arred(x + Math.cos(a + curvatura) * comp * 0.6)} ${arred(y + Math.sin(a + curvatura) * comp * 0.6)} ${arred(x + Math.cos(a) * comp)} ${arred(y + Math.sin(a) * comp)}`,
+          d: `M ${x} ${y} Q ${arred(cxd)} ${arred(cyd)} ${arred(fx)} ${arred(fy)}`,
         };
-      });
+      }).filter((d): d is { d: string } => d !== null);
       return {
         x, y, dendritos,
         corpo: arred(1.8 + pseudoAleatorio(i * 8.3 + 15) * 2),
@@ -239,8 +319,8 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
       };
     });
 
-    return { neuronios, filamentos };
-  }, [leve]);
+    return { neuronios, faixas };
+  }, [leve, caixasRotulo]);
 
   // Poeira neural de fundo: pontinhos que flutuam devagar, só para o painel
   // parecer um tecido vivo (puramente decorativo, sem interação).
@@ -318,35 +398,42 @@ export function CerebroGrafo({ nos, titulo = "Cérebro" }: { nos: NoGrafo[]; tit
 
         {FUNDO === "universo" && <CosmosFundo leve={leve} animar={animar} />}
 
-        {/* Tecido neural do fundo: neurônios inteiros (corpo + dendritos)
-            preenchendo o vazio em volta do anel. Primeiro no DOM = pintado
-            primeiro = fica atrás de tudo. Cada um deriva devagar e uma ponta
-            dispara de vez em quando, tudo em CSS (nada de SMIL aqui, senão
-            o custo explodiria). */}
+        {/* Tecido neural do fundo, animado POR FAIXAS. Cada faixa respira
+            (aparece e some bem devagar, cada uma na sua vez) e leva a luz
+            correndo em TODAS as caudas dela.
+            O truque do custo: stroke-dasharray e stroke-dashoffset são
+            herdáveis em SVG, então o tracejado vai no GRUPO e UMA animação
+            move a luz de todos os fios daquela faixa. São ~22 animações no
+            total em vez de uma por fio. */}
         <g opacity={0.62} style={{ display: FUNDO === "sinapses" ? undefined : "none" }}>
-          {/* Filamentos entre os neurônios: o fio apagado sempre visível e,
-              por cima, o pulso correndo. O pulso NÃO acende nem apaga — ele
-              atravessa o fio e recomeça, então de longe o fundo nunca dá a
-              impressão de ter parado. */}
-          {tecido.filamentos.map((f, i) => (
-            <g key={`fil-${i}`}>
-              <path d={f.d} fill="none" stroke="#2d5a78" strokeWidth={0.8} strokeLinecap="round" />
-              {animar && f.comPulso && (
-                <path
-                  d={f.d}
-                  fill="none"
-                  stroke={f.cor}
-                  strokeWidth={1.7}
-                  strokeLinecap="round"
+          {tecido.faixas.map((faixa, f) => (
+            <g
+              key={`faixa-${f}`}
+              className={animar ? "cerebro-respiro" : undefined}
+              style={animar ? { animationDuration: `${faixa.durRespiro}s`, animationDelay: `${faixa.atrasoRespiro}s` } : undefined}
+            >
+              {/* o fio apagado */}
+              {faixa.fios.map((fio, i) => (
+                <path key={`b-${i}`} d={fio.d} fill="none" stroke="#2d5a78" strokeWidth={0.8} strokeLinecap="round" />
+              ))}
+              {/* a luz por cima, em todos eles */}
+              {animar && (
+                <g
                   className="cerebro-pulso"
                   style={{
-                    // vão = comprimento do fio: nunca mais de um pulso por vez
-                    strokeDasharray: `${f.calda} ${f.comprimento}`,
-                    ["--traco" as string]: f.calda + f.comprimento,
-                    animationDuration: `${f.dur}s`,
-                    animationDelay: `${f.atraso}s`,
+                    // período igual para todos: o laço fecha sem salto, e
+                    // como o vão é maior que qualquer fio, nunca aparece
+                    // mais de uma luz por cauda
+                    strokeDasharray: "7 293",
+                    ["--periodo" as string]: 300,
+                    animationDuration: `${faixa.durPulso}s`,
+                    animationDelay: `${faixa.atrasoPulso}s`,
                   }}
-                />
+                >
+                  {faixa.fios.map((fio, i) => (
+                    <path key={`p-${i}`} d={fio.d} fill="none" stroke={fio.cor} strokeWidth={1.7} strokeLinecap="round" />
+                  ))}
+                </g>
               )}
             </g>
           ))}

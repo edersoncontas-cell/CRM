@@ -262,25 +262,43 @@ img, video, iframe {
    Tudo aqui é decoração, em CSS puro, para aguentar muitos elementos sem
    pesar. Respeita prefers-reduced-motion.
 
-   REGRA: nada de acender e apagar. Antes o fundo tinha faísca (opacidade
-   indo a zero) e os neurônios oscilavam de opacidade — de longe isso vira
-   um pisca-pisca, a animação parece PARAR entre um lampejo e outro. O
-   movimento agora é só o pulso correndo dentro do fio, sem interrupção. */
+   O tecido é animado POR FAIXAS, não fio a fio. Animar cada um dos ~300
+   filamentos custaria caro e ainda ficaria mecânico; em faixas, cada uma
+   com o seu atraso, o custo cai para duas dezenas de animações e o desenho
+   fica intercalado — enquanto uma faixa apaga, outra acende.
 
-/* O pulso: um traço curto que percorre o filamento sem parar. A "cauda" é o
-   tamanho do traço (--calda) e o vão é o comprimento do fio, para nunca
-   aparecer mais de um pulso por filamento. */
+   A diferença entre isto e o pisca-pisca que havia antes é o TEMPO: lá era
+   um lampejo rápido indo a zero (parecia defeito); aqui a faixa leva mais
+   de vinte segundos para ir e voltar, e sempre tem faixa acesa. */
+
+/* Respiro da faixa: aparece devagar, fica bastante tempo acesa, some
+   devagar e descansa. Com as faixas defasadas, o tecido nunca some inteiro. */
+@keyframes cerebro-respiro {
+  0% { opacity: 0; }
+  14% { opacity: 1; }
+  58% { opacity: 1; }
+  78% { opacity: 0; }
+  100% { opacity: 0; }
+}
+.cerebro-respiro {
+  animation-name: cerebro-respiro;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards;
+}
+
+/* A luz correndo nas caudas. O tracejado fica no GRUPO e é herdado por
+   todos os fios dele (stroke-dasharray e stroke-dashoffset são herdáveis
+   em SVG), então UMA animação move a luz de uma faixa inteira. Como o
+   período é o mesmo para todos, o laço fecha sem salto. */
 @keyframes cerebro-pulso {
-  from { stroke-dashoffset: var(--traco, 100); }
+  from { stroke-dashoffset: var(--periodo, 300); }
   to { stroke-dashoffset: 0; }
 }
 .cerebro-pulso {
   animation-name: cerebro-pulso;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  /* backwards: durante o atraso inicial o traço já fica na posição de
-     partida (fora do fio). Sem isto, ele aparecia parado na ponta do
-     filamento até a vez dele chegar. */
   animation-fill-mode: backwards;
 }
 
@@ -352,7 +370,7 @@ img, video, iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cerebro-neuronio, .cerebro-pulso, .cerebro-no,
+  .cerebro-neuronio, .cerebro-pulso, .cerebro-respiro, .cerebro-no,
   .cosmos-cintila, .cosmos-cadente, .cosmos-meteoro {
     animation: none !important;
   }
