@@ -102,13 +102,35 @@ export async function lerChavesGravadas(): Promise<Partial<Record<ProvedorId, st
  * lê process.env, enxerga as duas origens sem precisar virar assíncrona — o
  * que obrigaria a mexer em dezenas de pontos do CRM.
  */
+// As variáveis que ESTE processo preencheu a partir do banco. Sem esta
+// memória não há como distinguir "veio da hospedagem" de "veio do CRM" na
+// hora de limpar — e limpar uma variável da hospedagem seria desligar um
+// provedor que alguém configurou de propósito.
+const postasPorNos = new Set<string>();
+
 export async function carregarChavesIA(): Promise<void> {
+  // A trava de gasto viaja pelo ambiente junto com as chaves, para que
+  // provedoresDisponiveis() — que é síncrona — possa respeitá-la sem virar
+  // assíncrona e obrigar a mexer em dezenas de pontos do CRM.
+  process.env[VAR_SOMENTE_GRATUITOS] = (await lerSomenteGratuitos()) ? "on" : "off";
+
   const gravadas = await lerChavesGravadas();
   for (const id of ORDEM_PROVEDORES) {
     const nomeVar = CHAVE_PROVEDOR[id];
-    if (process.env[nomeVar]) continue; // a hospedagem manda
     const valor = gravadas[id];
-    if (valor) process.env[nomeVar] = valor;
+
+    // Chave apagada do banco: some do ambiente também, mas SÓ se foi este
+    // processo que a pôs lá. Sem isto, apagar a chave numa aba deixava o
+    // provedor vivo neste processo até o próximo start — e o CRM seguiria
+    // usando (e, num provedor pago, cobrando) uma chave que o vendedor
+    // acabou de remover.
+    if (!valor) {
+      if (postasPorNos.has(nomeVar)) { delete process.env[nomeVar]; postasPorNos.delete(nomeVar); }
+      continue;
+    }
+    if (process.env[nomeVar] && !postasPorNos.has(nomeVar)) continue; // a hospedagem manda
+    process.env[nomeVar] = valor;
+    postasPorNos.add(nomeVar);
   }
 }
 
@@ -129,4 +151,36 @@ export async function origemDasChaves(): Promise<Record<ProvedorId, OrigemChave>
     else saida[id] = "hospedagem";
   }
   return saida;
+}
+
+// ── TRAVA DE GASTO ───────────────────────────────────────────────────────────
+//
+// "Pronto, vai continuar gratuito né?"
+//
+// Não automaticamente, e por isso esta trava existe. Das cinco chaves, só duas
+// são gratuitas de verdade na API: Gemini e Groq. DeepSeek, OpenAI e Anthropic
+// são PRÉ-PAGAS — cobram por uso, sem camada grátis.
+//
+// Como a cascata tenta em ordem, o risco é preciso: nos dias em que Gemini e
+// Groq batem no limite — que é justamente o que vinha acontecendo — o CRM
+// cairia no terceiro da fila e passaria a gastar, sem ninguém pedir e sem
+// ninguém ver. Uma análise não custa quase nada; centenas delas, todo dia, no
+// automático, custam.
+//
+// O padrão é LIGADO: sem escolha explícita, o CRM não gasta dinheiro. Quem
+// quiser o socorro pago desliga a trava em uma tela — sabendo o que está
+// fazendo, que é a única forma aceitável de começar a pagar por algo.
+
+export const CHAVE_SOMENTE_GRATUITOS = "ia.somente_gratuitos";
+/** Nome da variável de ambiente que espelha a trava para o código síncrono. */
+export const VAR_SOMENTE_GRATUITOS = "IA_SOMENTE_GRATUITOS";
+
+/** Lê a trava do banco. Ausente = LIGADA (não gastar é o padrão seguro). */
+export async function lerSomenteGratuitos(): Promise<boolean> {
+  try {
+    const c = await db.configuracao.findUnique({ where: { chave: CHAVE_SOMENTE_GRATUITOS } });
+    return c?.valor !== "off";
+  } catch {
+    return true; // na dúvida, não gasta
+  }
 }

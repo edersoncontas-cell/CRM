@@ -7,9 +7,9 @@ import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus
 import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
 import { esperaDoLimite } from "./cota";
-import { diagnosticoIA, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
+import { diagnosticoIA, GRATUITO, CHAVE_PROVEDOR, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
 import { janelaDeCaracteres, janelaApertada, modoCompacto } from "./orcamento-prompt";
-import { carregarChavesIA } from "./chaves";
+import { carregarChavesIA, VAR_SOMENTE_GRATUITOS } from "./chaves";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -31,6 +31,15 @@ function provedoresDisponiveis(): ProvedorTexto[] {
   if (process.env.DEEPSEEK_API_KEY) lista.push("deepseek");
   if (process.env.OPENAI_API_KEY) lista.push("openai");
   if (process.env.ANTHROPIC_API_KEY) lista.push("anthropic");
+
+  // TRAVA DE GASTO (ver lib/ai/chaves.ts). Só Gemini e Groq têm camada
+  // gratuita na API; DeepSeek, OpenAI e Anthropic são pré-pagos. Como a
+  // cascata tenta em ordem, sem esta trava o CRM cairia num provedor pago
+  // exatamente nos dias em que os gratuitos batem no limite — gastando sem
+  // ninguém pedir. Ligada por padrão: ausência de escolha nunca vira fatura.
+  if (process.env[VAR_SOMENTE_GRATUITOS] !== "off") {
+    return lista.filter((p) => GRATUITO[p as ProvedorId]);
+  }
   return lista;
 }
 
@@ -55,7 +64,12 @@ export function visaoHabilitada() {
  * fato de estar ou não configurada.
  */
 export function diagnosticoDaIA(): DiagnosticoIA {
-  return diagnosticoIA(provedoresDisponiveis() as ProvedorId[]);
+  // A lista SEM o filtro da trava, para a tela poder mostrar "configurado,
+  // mas bloqueado" — e não "não configurado", que faria quem acabou de colar
+  // a chave achar que ela não salvou.
+  const configurados = (["gemini", "groq", "deepseek", "openai", "anthropic"] as ProvedorId[])
+    .filter((p) => !!process.env[CHAVE_PROVEDOR[p]]);
+  return diagnosticoIA(configurados, process.env[VAR_SOMENTE_GRATUITOS] !== "off");
 }
 
 /**

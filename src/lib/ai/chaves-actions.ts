@@ -10,7 +10,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { registrarAudit } from "@/lib/audit";
 import { ORDEM_PROVEDORES, NOME_PROVEDOR, type ProvedorId } from "@/lib/ai/provedores-status";
-import { chaveConfig, chaveParece, limparChave, esquecerCacheDeChaves } from "@/lib/ai/chaves";
+import { chaveConfig, chaveParece, limparChave, esquecerCacheDeChaves,
+         CHAVE_SOMENTE_GRATUITOS, VAR_SOMENTE_GRATUITOS } from "@/lib/ai/chaves";
 
 function provedorValido(p: string): p is ProvedorId {
   return (ORDEM_PROVEDORES as string[]).includes(p);
@@ -70,5 +71,35 @@ export async function apagarChaveIAAction(provedor: string): Promise<{ ok: boole
     entidade: "Configuracao", entidadeId: chaveConfig(provedor),
   }).catch(() => {});
   try { revalidatePath("/zeus"); revalidatePath("/configuracoes"); } catch { /* fora do request */ }
+  return { ok: true };
+}
+
+/**
+ * Liga/desliga a trava de gasto. Ver lib/ai/chaves.ts.
+ *
+ * Desligar significa autorizar o CRM a usar provedor PAGO quando os gratuitos
+ * recusarem. É uma decisão de dinheiro, então é explícita, tem registro na
+ * auditoria e nunca acontece por omissão.
+ */
+export async function definirSomenteGratuitosAction(somenteGratuitos: boolean): Promise<{ ok: boolean }> {
+  const valor = somenteGratuitos ? "on" : "off";
+  try {
+    await db.configuracao.upsert({
+      where: { chave: CHAVE_SOMENTE_GRATUITOS },
+      update: { valor },
+      create: { chave: CHAVE_SOMENTE_GRATUITOS, valor },
+    });
+    process.env[VAR_SOMENTE_GRATUITOS] = valor;
+  } catch {
+    return { ok: false };
+  }
+  await registrarAudit({
+    acao: "chave_ia_alterada", origem: "usuario",
+    descricao: somenteGratuitos
+      ? "Trava de gasto LIGADA: o CRM só usa provedores de IA gratuitos."
+      : "Trava de gasto DESLIGADA: o CRM passa a usar provedor pago quando os gratuitos recusarem.",
+    entidade: "Configuracao", entidadeId: CHAVE_SOMENTE_GRATUITOS,
+  }).catch(() => {});
+  try { revalidatePath("/zeus"); } catch { /* fora do request */ }
   return { ok: true };
 }

@@ -4,7 +4,7 @@ import { ultimoHeartbeat, zeusAtivo } from "@/lib/zeus/estado";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { iaHabilitada, provedorIANome, diagnosticoDaIA } from "@/lib/ai";
 import { ChavesIACard } from "@/components/ChavesIACard";
-import { lerChavesGravadas, origemDasChaves, mascarar, carregarChavesIA } from "@/lib/ai/chaves";
+import { lerChavesGravadas, origemDasChaves, mascarar, carregarChavesIA, lerSomenteGratuitos } from "@/lib/ai/chaves";
 import { ONDE_PEGAR } from "@/lib/ai/provedores-status";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
@@ -57,6 +57,7 @@ export default async function ZeusPage() {
   await carregarChavesIA().catch(() => {});
   const chavesGravadas = await lerChavesGravadas();
   const origens = await origemDasChaves();
+  const soGratuitos = await lerSomenteGratuitos();
   const diag = diagnosticoDaIA();
 
   const eventosRows: ZeusEventoRow[] = eventos.map((e) => ({
@@ -87,11 +88,12 @@ export default async function ZeusPage() {
           gratuito: l.gratuito, posicao: l.posicao,
           origem: origens[l.id],
           mascarada: origens[l.id] === "crm" ? mascarar(chavesGravadas[l.id]) : null,
-          onde: ONDE_PEGAR[l.id],
+          onde: ONDE_PEGAR[l.id], bloqueado: l.bloqueado,
         }))}
         resumo={diag.resumo}
         risco={diag.risco}
         solucao={diag.solucao}
+        somenteGratuitos={soGratuitos}
       />
 
       <ZeusPainel

@@ -9,7 +9,7 @@
 
 import { useState, useTransition } from "react";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
-import { salvarChaveIAAction, apagarChaveIAAction } from "@/lib/ai/chaves-actions";
+import { salvarChaveIAAction, apagarChaveIAAction, definirSomenteGratuitosAction } from "@/lib/ai/chaves-actions";
 
 export type LinhaChave = {
   id: string;
@@ -24,14 +24,19 @@ export type LinhaChave = {
   mascarada: string | null;
   /** Onde pegar a chave, para quem ainda não tem. */
   onde: string | null;
+  /** Configurado, mas barrado pela trava de gasto por ser pago. */
+  bloqueado: boolean;
 };
 
-export function ChavesIACard({ linhas, resumo, risco, solucao }: {
+export function ChavesIACard({ linhas, resumo, risco, solucao, somenteGratuitos }: {
   linhas: LinhaChave[];
   resumo: string;
   risco: string | null;
   solucao: string | null;
+  /** Trava de gasto: o CRM só usa provedor gratuito. Ver lib/ai/chaves.ts. */
+  somenteGratuitos: boolean;
 }) {
+  const [soGratis, setSoGratis] = useState(somenteGratuitos);
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const [valor, setValor] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
@@ -44,6 +49,24 @@ export function ChavesIACard({ linhas, resumo, risco, solucao }: {
       if (!r.ok) { setAviso(r.erro ?? "Não deu para salvar."); return; }
       setAbrindo(null); setValor("");
       setAviso("Chave salva. O CRM já vai usar este provedor na próxima análise.");
+    });
+  }
+
+  function alternarTrava() {
+    const novo = !soGratis;
+    if (!novo && !window.confirm(
+      "Desligar a trava de gasto?\n\nO CRM passa a usar DeepSeek, OpenAI ou Anthropic quando " +
+      "o Gemini e o Groq recusarem. Esses três COBRAM POR USO — não têm camada gratuita.\n\n" +
+      "O Orientador para de falhar nos dias de limite, mas começa a gerar custo."
+    )) return;
+    setSoGratis(novo);
+    setAviso(null);
+    startTransition(async () => {
+      const r = await definirSomenteGratuitosAction(novo).catch(() => ({ ok: false }));
+      if (!r.ok) { setSoGratis(!novo); setAviso("Não deu para mudar a trava."); return; }
+      setAviso(novo
+        ? "Trava ligada: o CRM só usa provedor gratuito."
+        : "Trava desligada: o CRM pode usar provedor pago quando os gratuitos recusarem.");
     });
   }
 
@@ -66,6 +89,28 @@ export function ChavesIACard({ linhas, resumo, risco, solucao }: {
         O CRM tenta nesta ordem. Quando um recusa (limite, instabilidade), o próximo assume sozinho — por isso ter mais de um é o que faz o Orientador nunca parar.
       </p>
 
+      {/* A trava de gasto. Fica no topo, antes da lista, porque é a coisa
+          que decide se o CRM pode ou não tirar dinheiro do bolso de alguém —
+          e porque três das cinco chaves são pré-pagas. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl p-2.5"
+        style={{ background: soGratis ? "rgba(74,222,128,0.07)" : "rgba(248,113,113,0.08)" }}>
+        <button onClick={alternarTrava} disabled={salvando} role="switch" aria-checked={soGratis}
+          aria-label="Usar somente provedores gratuitos"
+          className="relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50"
+          style={{ background: soGratis ? "#4ade80" : "#52525b" }}>
+          <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+            style={{ left: soGratis ? 18 : 2 }} />
+        </button>
+        <span className="text-xs font-bold" style={{ color: soGratis ? "#4ade80" : "#fca5a5" }}>
+          {soGratis ? "Só provedores gratuitos" : "Pode usar provedor pago"}
+        </span>
+        <span className="text-[11px] text-zinc-400">
+          {soGratis
+            ? "O CRM nunca gasta. Se os gratuitos recusarem, o Orientador espera a cota voltar."
+            : "Quando os gratuitos recusarem, o CRM usa um pago — e isso gera custo."}
+        </span>
+      </div>
+
       <ul className="mt-3 space-y-2">
         {linhas.map((l) => (
           <li key={l.id} className="rounded-xl p-2.5" style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -76,10 +121,17 @@ export function ChavesIACard({ linhas, resumo, risco, solucao }: {
               <span className="font-semibold" style={{ color: l.configurado ? "#e4e4e7" : "#a1a1aa" }}>
                 {l.posicao ? `${l.posicao}º · ` : ""}{l.nome}
               </span>
-              {l.gratuito && (
+              {l.gratuito ? (
                 <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>
-                  tem camada grátis
+                  grátis
                 </span>
+              ) : (
+                <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: "rgba(248,113,113,0.15)", color: "#fca5a5" }}>
+                  PAGO · cobra por uso
+                </span>
+              )}
+              {l.bloqueado && (
+                <span className="text-[10px] text-zinc-500">configurado · bloqueado pela trava</span>
               )}
               {l.origem === "hospedagem" && <span className="text-[10px] text-zinc-500">definida na hospedagem</span>}
               {l.mascarada && <code className="text-[10px] text-zinc-500">{l.mascarada}</code>}

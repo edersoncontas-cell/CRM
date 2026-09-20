@@ -52,8 +52,15 @@ export type LinhaProvedor = {
   chave: string;
   configurado: boolean;
   gratuito: boolean;
-  /** 1 = primeiro a ser tentado. null quando não está configurado. */
+  /** 1 = primeiro a ser tentado. null quando não entra na fila efetiva. */
   posicao: number | null;
+  /**
+   * Configurado, mas fora da fila porque é PAGO e a trava de gasto está
+   * ligada. Precisa existir separado de `configurado`: sem isso a tela
+   * mostrava a chave paga como "não configurada" e quem acabou de colá-la
+   * concluiria, com razão, que ela não salvou.
+   */
+  bloqueado: boolean;
 };
 
 export type DiagnosticoIA = {
@@ -77,24 +84,30 @@ export type DiagnosticoIA = {
  * para onde cair. Dois já bastam, desde que o segundo não dependa do mesmo
  * limite do primeiro.
  */
-export function diagnosticoIA(configurados: ProvedorId[]): DiagnosticoIA {
+export function diagnosticoIA(configurados: ProvedorId[], somenteGratuitos = false): DiagnosticoIA {
   const tem = new Set(configurados);
   let pos = 0;
   const linhas: LinhaProvedor[] = ORDEM_PROVEDORES.map((id) => {
     const configurado = tem.has(id);
-    if (configurado) pos += 1;
+    // Pago com a trava ligada: configurado, porém fora da fila.
+    const bloqueado = configurado && somenteGratuitos && !GRATUITO[id];
+    const naFila = configurado && !bloqueado;
+    if (naFila) pos += 1;
     return {
       id,
       nome: NOME_PROVEDOR[id],
       chave: CHAVE_PROVEDOR[id],
       configurado,
       gratuito: GRATUITO[id],
-      posicao: configurado ? pos : null,
+      posicao: naFila ? pos : null,
+      bloqueado,
     };
   });
 
-  const quantos = linhas.filter((l) => l.configurado).length;
-  const ativos = linhas.filter((l) => l.configurado);
+  // O diagnóstico é sobre a fila EFETIVA: de nada adianta contar cinco
+  // provedores se três estão barrados pela trava e só dois atendem.
+  const ativos = linhas.filter((l) => l.configurado && !l.bloqueado);
+  const quantos = ativos.length;
 
   if (quantos === 0) {
     return {

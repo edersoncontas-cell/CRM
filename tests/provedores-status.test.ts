@@ -78,3 +78,51 @@ describe("o diagnóstico", () => {
     expect(diagnosticoIA(["groq"]).resumo).toMatch(/sem reserva/i);
   });
 });
+
+// ── A TRAVA DE GASTO NO DIAGNÓSTICO ─────────────────────────────────────────
+//
+// "Pronto, vai continuar gratuito né?"
+//
+// Com a trava ligada, o pago fica FORA da fila — mas continua configurado. A
+// distinção não é cosmética: a primeira versão mostrava a chave paga como
+// "não configurada", e quem tinha acabado de colá-la concluiria, com razão,
+// que ela não salvou, e colaria de novo.
+describe("a trava de gasto no diagnóstico", () => {
+  const TODOS = ["gemini", "groq", "deepseek", "openai", "anthropic"] as const;
+
+  it("o pago fica bloqueado, NÃO 'não configurado'", () => {
+    const d = diagnosticoIA([...TODOS], true);
+    const openai = d.linhas.find((l) => l.id === "openai")!;
+    expect(openai.configurado).toBe(true);   // a chave está lá
+    expect(openai.bloqueado).toBe(true);     // e a trava está segurando
+    expect(openai.posicao).toBe(null);       // fora da fila
+  });
+
+  it("a numeração é da fila EFETIVA", () => {
+    const d = diagnosticoIA([...TODOS], true);
+    expect(d.linhas.find((l) => l.id === "gemini")?.posicao).toBe(1);
+    expect(d.linhas.find((l) => l.id === "groq")?.posicao).toBe(2);
+    expect(d.linhas.find((l) => l.id === "deepseek")?.posicao).toBe(null);
+  });
+
+  it("o resumo conta só quem atende de verdade, não as cinco chaves", () => {
+    const d = diagnosticoIA([...TODOS], true);
+    expect(d.quantos).toBe(2);
+    expect(d.resumo).toContain("Google Gemini → Groq");
+    expect(d.resumo).not.toContain("OpenAI");
+  });
+
+  it("com a trava desligada, os cinco entram na ordem", () => {
+    const d = diagnosticoIA([...TODOS], false);
+    expect(d.quantos).toBe(5);
+    expect(d.linhas.every((l) => !l.bloqueado)).toBe(true);
+    expect(d.linhas.find((l) => l.id === "anthropic")?.posicao).toBe(5);
+  });
+
+  it("só chave paga + trava ligada = nenhum provedor efetivo", () => {
+    // O caso que a trava existe para criar: o CRM PARA em vez de gastar.
+    const d = diagnosticoIA(["deepseek", "openai"], true);
+    expect(d.quantos).toBe(0);
+    expect(d.risco).toMatch(/não consegue analisar/i);
+  });
+});
