@@ -9,7 +9,7 @@ import { CalendarioMensalVisitas, type DiaCalendario, type ItemCalendario } from
 import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users } from "lucide-react";
 import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
 import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
-import type { VisitaMapa } from "@/components/MapaVisitasES";
+import type { VisitaMapa, AgendaProxima } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
 import Link from "next/link";
 
@@ -116,6 +116,44 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
   const diasMapa = dias.map((d) => ({ iso: d.iso, nome: d.nome, label: d.label, ehHoje: d.ehHoje }));
   const diaInicial = dias.find((d) => d.ehHoje)?.iso ?? dias[0].iso;
 
+  // ── O QUE VEM PELA FRENTE: 7 DIAS ──────────────────────────────────────
+  //
+  // "eu quero que mostre os compromissos ou visitas dos próximos 7 dias"
+  //
+  // O card ao lado do mapa mostrava só o dia aberto — e num domingo, ou num
+  // dia sem nada, ele não dizia nada. As abas do mapa são de segunda a sexta
+  // DESTA semana; a semana que vem ficava invisível, justamente a que o
+  // vendedor precisa para se organizar. Esta lista atravessa a virada da
+  // semana, do mês e do ano, e junta visita, evento e a reunião fixa.
+  const fim7 = new Date(hojeInicio); fim7.setDate(fim7.getDate() + 7);
+  const eventos7 = await listarEventos(dataIsoBrasilia(hojeInicio), dataIsoBrasilia(new Date(fim7.getTime() - 86400000))).catch(() => []);
+  const proximos7: AgendaProxima[] = [];
+  for (let i = 0; i < 7; i++) {
+    const data = new Date(hojeInicio); data.setDate(hojeInicio.getDate() + i);
+    const iso = dataIsoBrasilia(data);
+    const fimDia = new Date(data); fimDia.setDate(data.getDate() + 1);
+    const itens: AgendaProxima["itens"] = [];
+    // Reunião fixa da PME: toda segunda, inclusive a da semana que vem.
+    if (diaSemanaBrasilia(data) === 1) {
+      itens.push({ id: `reuniao:${iso}`, titulo: REUNIAO_SEGUNDA.nome, hora: REUNIAO_SEGUNDA.hora, cidade: REUNIAO_SEGUNDA.cidade, tipo: "reuniao", clienteId: null, status: null });
+    }
+    for (const v of visitas) {
+      if (v.data < data || v.data >= fimDia || v.status === "nao_realizada") continue;
+      itens.push({ id: v.id, titulo: v.cliente.nome, hora: horaLocal(v.data), cidade: v.cidade ?? v.cliente.municipio?.nome ?? null, tipo: "visita", clienteId: v.clienteId, status: v.status });
+    }
+    for (const ev of eventos7) {
+      if (!diasDoEvento(ev.inicioIso, ev.fimIso).includes(iso)) continue;
+      itens.push({ id: `evento:${ev.id}:${iso}`, titulo: ev.titulo, hora: "", cidade: ev.cidade ?? ev.uf ?? null, tipo: "evento", clienteId: null, status: null });
+    }
+    itens.sort((a, b) => Number(b.tipo === "reuniao") - Number(a.tipo === "reuniao") || a.hora.localeCompare(b.hora));
+    proximos7.push({
+      iso,
+      rotulo: data.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit" }),
+      ehHoje: i === 0,
+      itens,
+    });
+  }
+
   // Calendário mensal: visitas do mês + reunião de toda segunda + eventos
   // (feira, convenção, viagem), que podem ocupar vários dias seguidos.
   const doMes = visitas.filter((v) => v.data >= inicioMes && v.data < fimMes);
@@ -187,7 +225,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
-        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} />
+        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} proximos7={proximos7} />
       </section>
 
       <section className="mb-6">

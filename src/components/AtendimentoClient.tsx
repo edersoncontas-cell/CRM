@@ -723,8 +723,10 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     if (g && g.dia === dia) g.itens.push(m); else grupos.push({ dia, itens: [m] });
   }
 
+  // A base sobe a altura do letreiro do rodapé (--rodape-mercado, posta no
+  // layout). Sem isso o letreiro fixo cobriria a caixa de mensagem.
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 flex bg-brand-950 text-brand-100 md:left-64" style={{ top: topo }}>
+    <div className="fixed inset-x-0 z-20 flex bg-brand-950 text-brand-100 md:left-64" style={{ top: topo, bottom: "var(--rodape-mercado, 0px)" }}>
       {/* ── Coluna 1: conversas ── */}
       <aside className={cn("w-full shrink-0 flex-col border-r border-brand-800 bg-brand-900 lg:flex lg:w-[340px]", sel ? "hidden" : "flex")}>
         <div className="shrink-0 border-b border-brand-800 px-4 pt-4 pb-3">

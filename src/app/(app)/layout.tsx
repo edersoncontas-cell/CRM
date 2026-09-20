@@ -3,6 +3,7 @@ import { InstalarIOS } from "@/components/InstalarIOS";
 import { AuthPersist } from "@/components/AuthPersist";
 import { SplashBoot } from "@/components/SplashBoot";
 import { CurvasDeNivel } from "@/components/CurvasDeNivel";
+import { RodapeMercado } from "@/components/RodapeMercado";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
@@ -26,16 +27,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const parametros = await lerParametros().catch(() => null);
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    // --rodape-mercado: a altura do letreiro fixo. Vira variável CSS porque
+    // mais de uma tela precisa dela — o conteúdo afasta o rodapé com um
+    // padding, e o Atendimento (que se ancora em bottom-0 para ocupar a tela
+    // inteira) sobe a sua base pela mesma medida. Sem isso o letreiro ficaria
+    // por cima da caixa de mensagem do WhatsApp.
+    <div className="flex min-h-screen flex-col md:flex-row" style={{ "--rodape-mercado": "30px" } as React.CSSProperties}>
       {/* Mesma textura da tela de abertura, agora no CRM inteiro: fica presa
           na viewport (não rola junto) e atrás de tudo. Sai na impressão para
           não sujar relatório em PDF. */}
       <CurvasDeNivel className="fixed inset-0 -z-10 h-full w-full text-white opacity-[0.07] print:hidden" />
       <Sidebar nome={parametros?.nomeCrm} sub={parametros?.nomeEmpresa} />
-      <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8">{children}</main>
+      <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8" style={{ paddingBottom: "calc(var(--rodape-mercado) + 1rem)" }}>{children}</main>
       <InstalarIOS />
       <AuthPersist modo="guardar" />
       <SplashBoot />
+      {/* Letreiro do mercado: fixo no rodapé de TODAS as telas do CRM. */}
+      <RodapeMercado />
     </div>
   );
 }

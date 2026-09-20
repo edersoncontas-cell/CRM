@@ -39,7 +39,14 @@ function iconeNumero(n: number, hoje: boolean): L.DivIcon {
   });
 }
 
-export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string }) {
+export type AgendaProxima = {
+  iso: string;
+  rotulo: string;
+  ehHoje: boolean;
+  itens: { id: string; titulo: string; hora: string; cidade: string | null; tipo: "visita" | "evento" | "reuniao"; clienteId: string | null; status: string | null }[];
+};
+
+export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [] }: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[] }) {
   const [dia, setDia] = useState(diaInicial);
   const [contorno, setContorno] = useState<GeoJsonObject | null>(null);
 
@@ -88,30 +95,45 @@ export default function MapaVisitasES({ visitas, dias, diaInicial }: { visitas: 
             </Marker>
           ))}
         </MapContainer>
+        {/* OS PRÓXIMOS 7 DIAS, e não só o dia aberto.
+            "eu quero que mostre os compromissos ou visitas dos próximos 7
+            dias". As abas do mapa cobrem segunda a sexta DESTA semana; a
+            semana que vem — justamente a que serve para se organizar —
+            ficava invisível, e num dia vazio o card não dizia nada. Aqui
+            entram visita, evento e a reunião fixa da PME, atravessando a
+            virada da semana e do mês. A lista rola por dentro: o card não
+            estica a página. */}
         <div className="rounded-2xl border border-slate-200 bg-white p-3">
-          <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{diaSel ? `${diaSel.nome}, ${diaSel.label}` : "Dia"} · {doDia.length} visita(s)</div>
-          {doDia.length === 0 ? (
-            <p className="text-sm text-slate-400">Nada agendado neste dia.</p>
+          <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Próximos 7 dias</div>
+          {proximos7.every((d) => d.itens.length === 0) ? (
+            <p className="text-sm text-slate-400">Nada agendado nos próximos 7 dias.</p>
           ) : (
-            <ol className="space-y-1.5">
-              {doDia.map((v, i) => {
-                const idx = comCoord.indexOf(v);
-                return (
-                  <li key={v.id} className={`flex items-start gap-2 rounded-xl p-2 text-xs ${v.fixo ? "bg-agro-400/20 ring-1 ring-agro-400/60" : v.status === "realizada" ? "bg-emerald-50" : v.status === "nao_realizada" ? "bg-red-50" : "bg-slate-50"}`}>
-                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${idx >= 0 ? "bg-slate-900 text-agro-400" : "bg-slate-200 text-slate-500"}`}>{idx >= 0 ? idx + 1 : "?"}</span>
-                    <div className="min-w-0 flex-1">
-                      {v.fixo
-                        ? <span className="font-black uppercase tracking-wide text-slate-900">{v.clienteNome}</span>
-                        : <Link href={`/clientes/${v.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{v.clienteNome}</Link>}
-                      <div className="text-slate-500">{v.hora}{v.cidade ? ` · ${v.cidade}` : " · sem cidade"}{v.status === "realizada" ? " · ✓ realizada" : v.status === "nao_realizada" ? " · ✗ não realizada" : ""}</div>
-                      {v.observacao && <div className="line-clamp-2 text-slate-500">{v.observacao}</div>}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+            <div className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
+              {proximos7.filter((d) => d.itens.length > 0).map((d) => (
+                <div key={d.iso}>
+                  <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                    {d.ehHoje ? "Hoje" : d.rotulo}
+                    {d.ehHoje && <span className="ml-1 font-normal text-slate-300">· {d.rotulo}</span>}
+                  </div>
+                  <ol className="space-y-1.5">
+                    {d.itens.map((it) => (
+                      <li key={it.id} className={`rounded-xl p-2 text-xs ${it.tipo === "evento" ? "bg-sky-50 ring-1 ring-sky-200" : it.tipo === "reuniao" ? "bg-agro-400/20 ring-1 ring-agro-400/60" : it.status === "realizada" ? "bg-emerald-50" : "bg-slate-50"}`}>
+                        {it.clienteId
+                          ? <Link href={`/clientes/${it.clienteId}`} className="font-semibold text-slate-800 hover:text-brand-600">{it.titulo}</Link>
+                          : <span className={`font-black uppercase tracking-wide ${it.tipo === "evento" ? "text-sky-900" : "text-slate-900"}`}>{it.titulo}</span>}
+                        <div className="text-slate-500">
+                          {it.hora ? it.hora : "dia inteiro"}
+                          {it.cidade ? ` · ${it.cidade}` : ""}
+                          {it.status === "realizada" ? " · ✓ realizada" : ""}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
           )}
-          {semCoord.length > 0 && <p className="mt-2 text-[11px] text-amber-700">{semCoord.length} visita(s) sem cidade reconhecida não aparecem no mapa. Informe a cidade ao cadastrar.</p>}
+          {semCoord.length > 0 && <p className="mt-2 text-[11px] text-amber-700">{semCoord.length} visita(s) do dia aberto sem cidade reconhecida não aparecem no mapa. Informe a cidade ao cadastrar.</p>}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { Card, PageHeader } from "@/components/ui";
 import { formatCurrency, formatDate, apos5DiaUtilBrasilia, mesAnoAtualBrasilia } from "@/lib/utils";
 import Link from "next/link";
@@ -48,7 +49,11 @@ export default async function FinanceiroPage({
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth(); // 0-indexed
-  const anoSelecionado: number | "todos" = searchParams.ano === "todos" ? "todos" : Number(searchParams.ano) || anoAtual;
+  // Ano vindo da URL também passa pela peneira: um link antigo com ?ano=20
+  // filtraria por um ano que não existe e a tela viria vazia sem explicação.
+  const anoSelecionado: number | "todos" = searchParams.ano === "todos"
+    ? "todos"
+    : (() => { const a = Number(searchParams.ano); return anoPlausivel(a, anoAtual) ? a : anoAtual; })();
   const { taxaComissao: TAXA_COMISSAO } = await lerParametros();
   const calcComissao = (valor: number | null) => (valor ?? 0) * TAXA_COMISSAO;
 
@@ -81,9 +86,8 @@ export default async function FinanceiroPage({
   // Ano selecionado — restringe os KPIs de "relatório" (Negociações Faturadas,
   // Valor Máquinas Vendidas, Comissões a Receber) à data de faturamento do ano
   // corrente por padrão; "Todos" ou outro ano ficam disponíveis no seletor.
-  const anosDisponiveis = Array.from(
-    new Set([anoAtual, ...todasGanhas.map((n: any) => (n.faturadoEm ?? n.atualizadoEm).getFullYear())])
-  ).sort((a, b) => b - a);
+  // Mesmo cuidado de Negociações: data quebrada não vira opção de filtro.
+  const anosDisponiveis = anosParaSeletor(anoAtual, todasGanhas.map((n: any) => n.faturadoEm ?? n.atualizadoEm));
   const todasGanhasAno = anoSelecionado === "todos"
     ? todasGanhas
     : todasGanhas.filter((n: any) => (n.faturadoEm ?? n.atualizadoEm).getFullYear() === anoSelecionado);

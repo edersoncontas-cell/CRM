@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { normalizarEstagio } from "@/lib/pipeline";
 import { FunilNegociacoes } from "@/components/FunilNegociacoes";
 import { PageHeader } from "@/components/ui";
@@ -15,7 +16,11 @@ export default async function NegociacoesPage({
   await garantirManutencaoSeNecessario();
 
   const anoAtual = new Date().getFullYear();
-  const anoSelecionado: number | "todos" = searchParams.ano === "todos" ? "todos" : Number(searchParams.ano) || anoAtual;
+  // Ano vindo da URL também passa pela peneira: um link antigo com ?ano=20
+  // filtraria por um ano que não existe e a tela viria vazia sem explicação.
+  const anoSelecionado: number | "todos" = searchParams.ano === "todos"
+    ? "todos"
+    : (() => { const a = Number(searchParams.ano); return anoPlausivel(a, anoAtual) ? a : anoAtual; })();
 
   // Ganhas/perdidas (histórico) respeitam o ano selecionado — sempre pela
   // data de faturamento (faturadoEm), com atualizadoEm como base só para
@@ -48,9 +53,9 @@ export default async function NegociacoesPage({
     db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
   ]);
 
-  const anosDisponiveis = Array.from(
-    new Set([anoAtual, ...anosComDados.map((n) => (n.faturadoEm ?? n.atualizadoEm).getFullYear())])
-  ).sort((a, b) => b - a);
+  // Só anos possíveis. Um registro com data digitada errada ("20/09/20" vira
+  // o ano 20) fazia o seletor oferecer "20" ao lado de 2026 e 2025.
+  const anosDisponiveis = anosParaSeletor(anoAtual, anosComDados.map((n) => n.faturadoEm ?? n.atualizadoEm));
 
   const cards = negociacoes.map((n) => ({
     id: n.id,
