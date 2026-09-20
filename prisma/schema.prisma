@@ -156,6 +156,9 @@ model OrientadorAnalise {
   // tela e mandado junto no próximo "Reanalisar" — a IA nunca sobrescreve
   // este campo, só lê.
   notaVendedor            String?
+  // Ordens que o vendedor deu na nota ("vincular à empresa X") que o
+  // Orientador entendeu e AINDA NÃO foram confirmadas por ele. JSON.
+  pedidosPendentes        String?
   atualizadoEm            DateTime @updatedAt
 }
 
@@ -199,6 +202,9 @@ model Negociacao {
   valor                 Float?
   tipoPagamento         String?   // avista | financiamento | consorcio | crd_pme | outro
   condicaoPagamento     String?   // legado / texto livre
+  // Detalhes que mudam a proposta e não cabem nos outros campos: tamanho do
+  // braço quando é escavadeira, e se a venda é com Inscrição Estadual (I.E.).
+  observacao            String?
   // Campos financiamento
   bancoFinanciamento    String?
   entradaValor          Float?

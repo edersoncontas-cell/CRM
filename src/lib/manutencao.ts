@@ -54,6 +54,10 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // PostMarketing, MemoriaCerebro).
 // v31: NotaContextoCliente — o que o vendedor ensina sobre um cliente e que
 // nunca apareceria na conversa do WhatsApp.
+// v34: OrientadorAnalise.pedidosPendentes (ordens escritas na caixa de
+// contexto, esperando confirmação) e Negociacao.observacao (tamanho do braço
+// da escavadeira e se a venda é com Inscrição Estadual).
+//
 // v33: limpeza das cidades que a IA inventou (um cliente de Guaçuí gravado
 // como sendo de Recife). Ver limparMunicipiosInventados em migrations.ts.
 //
@@ -65,7 +69,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v33";
+export const CHAVE_MANUTENCAO = "manutencao.v34";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

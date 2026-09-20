@@ -11,6 +11,7 @@ import { rotuloPapel, papelDaColuna } from "@/lib/pipeline";
 import { registrarAudit } from "@/lib/audit";
 import { montarContextoAgenda } from "@/lib/zeus/agenda-contexto";
 import { lerNotas, acrescentarNota, removerNota, LIMITE_ENTRADA, type NotaVendedor } from "@/lib/orientador-notas";
+import { lerPedidos, escolherAlvo, type PedidoOrientador } from "@/lib/orientador-pedidos";
 
 export type ContextoConversa = {
   cliente: {
@@ -42,6 +43,8 @@ export type ContextoConversa = {
     // Tudo o que o vendedor já contou ao Orientador, em ordem — a caixa
     // limpa a cada salvamento e os contextos se somam.
     notasVendedor: NotaVendedor[];
+    // Ordens entendidas na nota e ainda não confirmadas pelo vendedor.
+    pedidos: PedidoOrientador[];
     atualizadoEm: string;
   } | null;
   // Se já existe um guia de estilo de fala aprendido do vendedor — a "melhor
@@ -50,7 +53,7 @@ export type ContextoConversa = {
   // Dia em que o vendedor já estará mais perto da cidade deste cliente (pela
   // agenda de visitas marcadas) — ex.: "terça 22/09 — você já estará em Alegre (≈28 km)".
   sugestaoVisita: string | null;
-  negociacoes: { id: string; marca: string | null; maquina: string | null; valor: number | null; tipoPagamento: string | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
+  negociacoes: { id: string; marca: string | null; maquina: string | null; valor: number | null; entradaValor: number | null; entradaPercentual: number | null; observacao: string | null; tipoPagamento: string | null; condicaoPagamento: string | null; estagio: string; papel: string; termometro: number; proximaAcao: string | null; concorrente: string | null }[];
   visitas: { id: string; data: string; observacao: string | null }[];
   alertas: { id: string; tipo: string; mensagem: string }[];
 };
@@ -67,7 +70,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
       select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
     }),
     db.orientadorAnalise.findUnique({ where: { clienteId } }),
-    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, marca: true, maquinaModelo: true, valor: true, tipoPagamento: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
+    db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, marca: true, maquinaModelo: true, valor: true, entradaValor: true, entradaPercentual: true, observacao: true, tipoPagamento: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
     db.visita.findMany({ where: { clienteId, data: { gte: new Date(Date.now() - 24 * 3600 * 1000) } }, orderBy: { data: "asc" }, take: 3, select: { id: true, data: true, observacao: true } }),
     db.alerta.findMany({ where: { clienteId, resolvido: false }, orderBy: { criadoEm: "desc" }, take: 4, select: { id: true, tipo: true, mensagem: true } }),
     db.colunaFunil.findMany({ select: { titulo: true, papel: true } }),
@@ -92,11 +95,12 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
           combinados: orientador.combinados ?? [], pendencias: orientador.pendencias ?? [],
           coaching: orientador.coaching ? normalizarCoaching(orientador.coaching) : null,
           notasVendedor: lerNotas(orientador.notaVendedor),
+          pedidos: lerPedidos(orientador.pedidosPendentes),
           atualizadoEm: orientador.atualizadoEm.toISOString(),
         }
       : null,
     negociacoes: negociacoes.map((n) => ({
-      id: n.id, marca: n.marca, maquina: n.maquinaModelo, valor: n.valor, tipoPagamento: n.tipoPagamento, condicaoPagamento: n.condicaoPagamento, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
+      id: n.id, marca: n.marca, maquina: n.maquinaModelo, valor: n.valor, entradaValor: n.entradaValor, entradaPercentual: n.entradaPercentual, observacao: n.observacao, tipoPagamento: n.tipoPagamento, condicaoPagamento: n.condicaoPagamento, estagio: n.estagio, papel: papelPorTitulo.get(n.estagio) ?? "Em negociação",
       termometro: n.termometro, proximaAcao: n.proximaAcao, concorrente: n.concorrenteMencionado,
     })),
     visitas: visitas.map((v) => ({ id: v.id, data: v.data.toISOString(), observacao: v.observacao })),
@@ -254,5 +258,90 @@ export async function removerNotaOrientadorAction(
     return { ok: false, erro: "Não deu para apagar." };
   }
   try { revalidatePath("/orientador"); } catch { /* cache não é motivo para falhar */ }
+  return { ok: true };
+}
+
+/**
+ * Executa um pedido que o vendedor escreveu na caixa de contexto.
+ *
+ * Só roda quando ele CLICA para confirmar. O Orientador entende e propõe; unir
+ * dois cadastros arrasta negociação, visita, alerta e histórico de um cliente
+ * de verdade, e um nome entendido errado faria um estrago grande e silencioso.
+ *
+ * Quando o nome não existe no CRM, ou quando há mais de um cadastro parecido,
+ * NÃO escolhe por conta própria: devolve a lista para o vendedor decidir.
+ */
+export async function executarPedidoOrientadorAction(
+  conversationId: string,
+  pedido: PedidoOrientador,
+  clienteEscolhidoId?: string,
+): Promise<{ ok: boolean; erro?: string; ambiguos?: { id: string; nome: string }[]; resumo?: string }> {
+  // WhatsAppConversation guarda só o clienteId (sem relação declarada), então
+  // o cadastro vem numa consulta própria.
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
+  if (pedido.tipo !== "vincular_cliente") return { ok: false, erro: "Este pedido ainda não é executável." };
+
+  const atual = await db.cliente.findUnique({ where: { id: conv.clienteId }, select: { id: true, nome: true } });
+  if (!atual) return { ok: false, erro: "Cliente desta conversa não encontrado." };
+  let alvo: { id: string; nome: string } | null = null;
+
+  if (clienteEscolhidoId) {
+    alvo = await db.cliente.findUnique({ where: { id: clienteEscolhidoId }, select: { id: true, nome: true } });
+    if (!alvo) return { ok: false, erro: "Cliente escolhido não encontrado." };
+  } else {
+    // Busca larga e decisão estreita: traz quem parece, mas só segue com um
+    // nome sem dúvida (ver escolherAlvo).
+    const candidatos = await db.cliente.findMany({
+      where: { nome: { contains: pedido.alvo, mode: "insensitive" } },
+      select: { id: true, nome: true },
+      take: 25,
+    });
+    const r = escolherAlvo(pedido.alvo, candidatos, atual.id);
+    if (!r.escolhido) {
+      if (r.ambiguos.length) {
+        return { ok: false, erro: `Achei mais de um cliente parecido com "${pedido.alvo}". Escolha qual é.`, ambiguos: r.ambiguos };
+      }
+      return { ok: false, erro: `Não achei nenhum cliente chamado "${pedido.alvo}" no CRM. Confira o nome no cadastro.` };
+    }
+    alvo = r.escolhido;
+  }
+  if (alvo.id === atual.id) return { ok: false, erro: "A conversa já está neste cliente." };
+
+  // O cadastro da PESSOA passa a fazer parte do cadastro da EMPRESA: é o
+  // sentido de "ele é o proprietário da BWB". Quem fica é o alvo.
+  const { unificarEscolhidos } = await import("@/lib/clientes-duplicados");
+  const r = await unificarEscolhidos(alvo.id, atual.id, "orientador");
+  if (!r.ok) return { ok: false, erro: r.erro ?? "Não deu para unir os cadastros." };
+
+  await registrarAudit({
+    acao: "cliente_atualizado", origem: "usuario",
+    descricao: `Pedido no Orientador: "${atual.nome}" passou a fazer parte de "${alvo.nome}" (${r.movidos ?? 0} registro(s) movido(s)).`,
+    entidade: "Cliente", entidadeId: alvo.id, clienteId: alvo.id,
+  }).catch(() => {});
+
+  // Pedido cumprido: sai da lista de pendentes para não voltar a aparecer.
+  await db.orientadorAnalise.updateMany({ where: { clienteId: alvo.id }, data: { pedidosPendentes: null } }).catch(() => {});
+
+  // Dentro do try próprio de propósito: a fusão JÁ aconteceu. Se o revalidate
+  // estourasse, a tela diria que falhou, o vendedor tentaria de novo, e a
+  // segunda tentativa bateria num cadastro que já não existe — tudo por causa
+  // de um cache que não atualizou.
+  try {
+    revalidatePath("/atendimento");
+    revalidatePath("/orientador");
+    revalidatePath("/negociacoes");
+  } catch (e) {
+    console.error("[executarPedidoOrientador] revalidate:", e);
+  }
+  return { ok: true, resumo: `Pronto: esta conversa agora é de "${alvo.nome}", com ${r.movidos ?? 0} registro(s) trazidos junto.` };
+}
+
+/** Descarta um pedido que o vendedor não quer executar. */
+export async function descartarPedidoOrientadorAction(conversationId: string): Promise<{ ok: boolean }> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  if (conv?.clienteId) {
+    await db.orientadorAnalise.updateMany({ where: { clienteId: conv.clienteId }, data: { pedidosPendentes: null } }).catch(() => {});
+  }
   return { ok: true };
 }

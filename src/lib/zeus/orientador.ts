@@ -22,8 +22,9 @@ import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador } from "@/lib/zeus/orientador-prompt";
-import { normalizarFatos, mudancasDaNegociacao, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
+import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
+import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
 import { recortarHistorico, MAX_MENSAGENS } from "@/lib/zeus/historico-janela";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
@@ -55,6 +56,9 @@ export type AnaliseOrientador = {
   // Os dados duros (máquina, valor, pagamento, cidade) lidos da conversa E da
   // nota do vendedor. Viram a ficha da negociação — ver aplicarFatos abaixo.
   fatos: FatosNegociacao;
+  // Ordens que o vendedor deu na nota ("vincular à empresa X"). Nunca são
+  // executadas sozinhas: viram proposta com botão de confirmar no painel.
+  pedidos: PedidoOrientador[];
 };
 
 
@@ -75,6 +79,7 @@ function fallback(motivo: string): AnaliseOrientador {
     alertas: [],
     conversaEncerrada: false,
     fatos: { ...FATOS_VAZIOS },
+    pedidos: [],
   };
 }
 
@@ -121,6 +126,16 @@ ${args.estilo ? `\n## Estilo de comunicação do vendedor — COPIE FIELMENTE (g
     await zeusReport(e, "gerarRespostaRapida (auto-resposta do WhatsApp)");
     return "";
   }
+}
+
+/**
+ * O roteiro reflete o que o vendedor contou ter feito.
+ *
+ * Fica aqui, e não só no prompt, porque "já visitei" tem de marcar a etapa
+ * "Visita" SEMPRE — não só quando a IA lembra de mexer no roteiro.
+ */
+function comVisitaMarcada(coaching: Coaching, fatos: FatosNegociacao): Coaching {
+  return { ...coaching, roteiro: marcarVisitaNoRoteiro(coaching.roteiro, fatos.visitaRealizada) };
 }
 
 /**
@@ -181,7 +196,7 @@ async function aplicarFatos(clienteId: string, fatos: FatosNegociacao, temNota: 
     const aberta = await db.negociacao.findFirst({
       where: { clienteId, status: "aberta" },
       orderBy: { atualizadoEm: "desc" },
-      select: { id: true, marca: true, maquinaModelo: true, valor: true, tipoPagamento: true },
+      select: { id: true, marca: true, maquinaModelo: true, valor: true, tipoPagamento: true, entradaValor: true, entradaPercentual: true, observacao: true },
     });
     if (!aberta) return;
 
@@ -260,10 +275,11 @@ export async function gerarAnaliseOrientador(args: {
       oportunidadesPerdidas,
       combinados: soTextos(parsed.combinados),
       pendencias: soTextos(parsed.pendencias),
-      coaching: normalizarCoaching(parsed),
+      coaching: comVisitaMarcada(normalizarCoaching(parsed), normalizarFatos(parsed.fatos)),
       alertas,
       conversaEncerrada: parsed.conversaEncerrada === true,
       fatos: normalizarFatos(parsed.fatos),
+      pedidos: normalizarPedidos(parsed.pedidos),
     };
   } catch (e) {
     console.error("[orientador] falha na análise:", e);
@@ -355,12 +371,12 @@ export async function processarOrientador(args: {
 
   // "fatos" NÃO é coluna de OrientadorAnalise: sai do spread e vai para a
   // ficha da negociação logo abaixo. Deixá-lo aqui derrubaria o upsert inteiro.
-  const { alertas, conversaEncerrada, coaching, fatos, ...campos } = analise;
+  const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = analise;
   const coachingJson = coaching as unknown as Prisma.InputJsonValue;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
-    create: { clienteId: args.conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: reply || null },
-    update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined },
+    create: { clienteId: args.conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: reply || null, pedidosPendentes: guardarPedidos(pedidos) },
+    update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined, pedidosPendentes: guardarPedidos(pedidos) },
   });
 
   await aplicarFatos(args.conv.clienteId, fatos, !!notaVendedor);
@@ -412,12 +428,12 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
       : "";
     await consumirOrcamentoIA();
     // "fatos" não é coluna de OrientadorAnalise (ver processarOrientador).
-    const { alertas, conversaEncerrada, coaching, fatos, ...campos } = analise;
+    const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = analise;
     const coachingJson = coaching as unknown as Prisma.InputJsonValue;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
-      create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null },
-      update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}) },
+      create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null, pedidosPendentes: guardarPedidos(pedidos) },
+      update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}), pedidosPendentes: guardarPedidos(pedidos) },
     });
     await aplicarFatos(conv.clienteId, fatos, !!notaVendedor);
     await atualizarAlertaOrientador(conv.clienteId, alertas).catch(() => {});

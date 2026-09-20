@@ -28,10 +28,28 @@ export type FatosNegociacao = {
   valor: number | null;
   condicaoPagamento: CondicaoPagamento | null;
   municipio: string | null;
+  /**
+   * O vendedor já esteve com o cliente presencialmente.
+   *
+   * Vira dado, e não só texto, porque o roteiro até o fechamento precisa
+   * marcar a etapa "Visita" como feita. Contar com a IA lembrar de mexer no
+   * roteiro toda vez é frágil; com o booleano, a marcação é garantida.
+   * null = a conversa não disse nada a respeito.
+   */
+  visitaRealizada: boolean | null;
+  /** Entrada da negociação, em reais e/ou em percentual do valor. */
+  entradaValor: number | null;
+  entradaPercentual: number | null;
+  /**
+   * O que muda a proposta e não cabe nos outros campos: tamanho do braço
+   * quando é escavadeira, e se a venda é com Inscrição Estadual (I.E.).
+   */
+  observacao: string | null;
 };
 
 export const FATOS_VAZIOS: FatosNegociacao = {
   marca: null, maquinaModelo: null, valor: null, condicaoPagamento: null, municipio: null,
+  visitaRealizada: null, entradaValor: null, entradaPercentual: null, observacao: null,
 };
 
 const semAcento = (s: string) =>
@@ -161,6 +179,11 @@ export function normalizarFatos(bruto: unknown): FatosNegociacao {
     valor: normalizarValor(f.valor ?? f.valorNegociado),
     condicaoPagamento: normalizarPagamento(f.condicaoPagamento ?? f.pagamento),
     municipio: municipioDoES(f.municipio ?? f.cidade),
+    // Só true/false explícito conta; qualquer outra coisa é "não disse".
+    visitaRealizada: typeof f.visitaRealizada === "boolean" ? f.visitaRealizada : null,
+    entradaValor: normalizarValor(f.entradaValor ?? f.entrada),
+    entradaPercentual: normalizarPercentual(f.entradaPercentual),
+    observacao: normalizarObservacao(f.observacao ?? f.obs),
   };
 }
 
@@ -175,10 +198,10 @@ export function normalizarFatos(bruto: unknown): FatosNegociacao {
  * apagar um dado que uma pessoa digitou.
  */
 export function mudancasDaNegociacao(
-  atual: { marca: string | null; maquinaModelo: string | null; valor: number | null; tipoPagamento: string | null },
+  atual: { marca: string | null; maquinaModelo: string | null; valor: number | null; tipoPagamento: string | null; entradaValor?: number | null; entradaPercentual?: number | null; observacao?: string | null },
   fatos: FatosNegociacao,
   temNota: boolean,
-): Partial<{ marca: string; maquinaModelo: string; valor: number; tipoPagamento: string; condicaoPagamento: string }> {
+): Partial<{ marca: string; maquinaModelo: string; valor: number; tipoPagamento: string; condicaoPagamento: string; entradaValor: number; entradaPercentual: number; observacao: string }> {
   const mud: Record<string, string | number> = {};
   const poeTexto = (campo: string, novo: string | null, velho: string | null) => {
     if (!novo) return;
@@ -194,6 +217,16 @@ export function mudancasDaNegociacao(
     if (vazio || (temNota && fatos.valor !== atual.valor)) mud.valor = fatos.valor;
   }
 
+  if (fatos.entradaValor != null) {
+    const vazio = atual.entradaValor == null || atual.entradaValor <= 0;
+    if (vazio || (temNota && fatos.entradaValor !== atual.entradaValor)) mud.entradaValor = fatos.entradaValor;
+  }
+  if (fatos.entradaPercentual != null) {
+    const vazio = atual.entradaPercentual == null || atual.entradaPercentual <= 0;
+    if (vazio || (temNota && fatos.entradaPercentual !== atual.entradaPercentual)) mud.entradaPercentual = fatos.entradaPercentual;
+  }
+  poeTexto("observacao", fatos.observacao, atual.observacao ?? null);
+
   if (fatos.condicaoPagamento) {
     // "outro" no banco conta como vazio: não é forma de pagamento nenhuma.
     const atualValido = normalizarPagamento(atual.tipoPagamento);
@@ -203,5 +236,55 @@ export function mudancasDaNegociacao(
       mud.condicaoPagamento = "";
     }
   }
-  return mud as Partial<{ marca: string; maquinaModelo: string; valor: number; tipoPagamento: string; condicaoPagamento: string }>;
+  return mud as Partial<{ marca: string; maquinaModelo: string; valor: number; tipoPagamento: string; condicaoPagamento: string; entradaValor: number; entradaPercentual: number; observacao: string }>;
+}
+
+/**
+ * Marca a etapa "Visita" do roteiro como feita quando o vendedor disse que já
+ * esteve com o cliente.
+ *
+ * Por que não deixar só a IA fazer: o roteiro sai da mesma resposta, e depender
+ * de ela lembrar de mexer nele TODA vez é frágil — basta um descuido e o painel
+ * diz ao vendedor que falta fazer o que ele já fez. Com o booleano, a marcação
+ * é garantida. O caminho contrário não existe de propósito: o Orientador não
+ * DESMARCA uma etapa que a conversa mostrou cumprida.
+ */
+export function marcarVisitaNoRoteiro<T extends { etapa: string; status: string }>(
+  roteiro: T[],
+  visitaRealizada: boolean | null,
+): T[] {
+  if (visitaRealizada !== true) return roteiro;
+  let mexeu = false;
+  const novo = roteiro.map((e) => {
+    if (e.status === "feito" || !/visita/i.test(semAcento(e.etapa))) return e;
+    mexeu = true;
+    return { ...e, status: "feito" };
+  });
+  if (!mexeu) return roteiro;
+
+  // A etapa "agora" some junto com a visita: quem estava em "Visita" avança
+  // para a primeira etapa seguinte que ainda não foi feita.
+  if (!novo.some((e) => e.status === "agora")) {
+    const i = novo.findIndex((e) => e.status !== "feito");
+    if (i >= 0) novo[i] = { ...novo[i], status: "agora" };
+  }
+  return novo as T[];
+}
+
+/** Percentual de entrada: 0 a 100. Fora disso é erro de leitura. */
+export function normalizarPercentual(valor: unknown): number | null {
+  const n = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor.replace("%", "").replace(",", ".").trim()) : NaN;
+  if (!Number.isFinite(n) || n <= 0 || n > 100) return null;
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Observação da negociação. Curta de propósito: é uma linha no card, não um
+ * campo de texto livre — o que não couber aqui vai na caixa de contexto.
+ */
+export function normalizarObservacao(valor: unknown): string | null {
+  if (typeof valor !== "string") return null;
+  const v = valor.trim().replace(/\s+/g, " ");
+  if (!v || GENERICO.test(semAcento(v))) return null;
+  return v.slice(0, 240);
 }

@@ -11,6 +11,7 @@
 // aparecer como verificada.
 
 import { normalizarPagamento } from "@/lib/orientador-fatos";
+import { formatCurrency } from "@/lib/utils";
 
 /**
  * Condições de pagamento de verdade, no vocabulário do vendedor.
@@ -62,4 +63,16 @@ export function assuntoDaUltimaConversa(resumoTexto: string | null): string | nu
   const ultima = linhas[linhas.length - 1];
   if (!ultima) return null;
   return ultima.replace(/^\[[^\]]*\]\s*/, "").trim() || null;
+}
+
+/**
+ * A entrada, como o vendedor fala dela: em reais, em percentual, ou os dois
+ * ("R$ 180.000 (30%)"). null quando nada foi definido — aí o card mostra como
+ * pendente em vez de fingir que sabe.
+ */
+export function entradaDaNegociacao(valor: number | null, percentual: number | null): string | null {
+  const emReais = valor != null && valor > 0 ? formatCurrency(valor) : null;
+  const emPct = percentual != null && percentual > 0 ? `${Number(percentual.toFixed(1))}%` : null;
+  if (emReais && emPct) return `${emReais} (${emPct})`;
+  return emReais ?? emPct;
 }

@@ -217,3 +217,50 @@ export async function clienteRedirecionado(deId: string): Promise<string | null>
   const seguinte = await db.clienteRedirecionamento.findUnique({ where: { deId: r.paraId } }).catch(() => null);
   return seguinte?.paraId ?? r.paraId;
 }
+
+/**
+ * Une DOIS cadastros escolhidos a dedo, em vez dos duplicados que a regra
+ * detecta sozinha.
+ *
+ * Existe para o pedido que o vendedor escreve no Orientador: "Wadson não é
+ * construtora, ele é o proprietário da BWB, que já está no nosso funil". A
+ * regra automática não pega isso — os nomes não se parecem e os telefones são
+ * diferentes; só quem conhece o cliente sabe que são a mesma coisa.
+ *
+ * Reusa a MESMA mesclagem dos duplicados automáticos, de propósito: assim as
+ * negociações, visitas, conversas, alertas e o histórico migram pelo caminho
+ * já testado, e a operação entra no mesmo registro de desfazer — nada aqui é
+ * um atalho paralelo que ninguém consegue reverter.
+ */
+export async function unificarEscolhidos(
+  ficaId: string,
+  someId: string,
+  origem = "orientador",
+): Promise<{ ok: boolean; erro?: string; unificacaoId?: string; movidos?: number }> {
+  if (ficaId === someId) return { ok: false, erro: "São o mesmo cadastro." };
+  const [fica, some] = await Promise.all([
+    db.cliente.findUnique({ where: { id: ficaId }, select: SELECAO_DEDUP }),
+    db.cliente.findUnique({ where: { id: someId }, select: SELECAO_DEDUP }),
+  ]);
+  if (!fica) return { ok: false, erro: "O cliente que deve ficar não foi encontrado." };
+  if (!some) return { ok: false, erro: "O cadastro a unir não foi encontrado." };
+
+  const grupo: GrupoDuplicados<ClienteParaDedup> = { fica, somem: [some], motivo: "nome" };
+  const r = await db.$transaction((tx) => mesclarGrupo(tx, grupo), { timeout: 20_000 });
+  if (!r) return { ok: false, erro: "Não deu para unir os cadastros." };
+
+  const recibo: ReciboUnificacao = { grupos: [r] };
+  const unificacao = await db.unificacaoClientes.create({
+    data: {
+      origem,
+      resumo: `"${some.nome}" passou a fazer parte de "${fica.nome}" (pedido no Orientador).`,
+      dados: JSON.stringify(recibo),
+    },
+  });
+  await db.clienteRedirecionamento.createMany({
+    data: [{ deId: some.id, paraId: fica.id, unificacaoId: unificacao.id }],
+    skipDuplicates: true,
+  });
+  const movidos = Object.values(r.somem[0]?.movidos ?? {}).reduce((s, ids) => s + (ids?.length ?? 0), 0);
+  return { ok: true, unificacaoId: unificacao.id, movidos };
+}

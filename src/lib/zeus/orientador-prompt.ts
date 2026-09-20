@@ -116,8 +116,19 @@ Devolva SOMENTE um JSON válido, sem texto antes ou depois:
     "maquinaModelo": string|null,          // o modelo EXATO citado ("B110", "E145C EVO", "CA25 D"). Categoria solta ("retroescavadeira", "um rolo") NÃO é modelo: nesse caso null.
     "valor": number|null,                  // o valor da NOSSA negociação em reais, número puro (610 mil => 610000). Se o vendedor deu mais de um número, use o que está FECHADO/ACERTADO, não o que o cliente está pedindo de desconto. Preço de concorrente NUNCA entra aqui.
     "condicaoPagamento": "avista"|"financiamento"|"consorcio"|"crd_pme"|null,  // financiamento = banco/Finame/BNDES/crédito bancário; crd_pme = parcelado pela própria casa/boleto nosso. Se não estiver dito, null — NUNCA use "outro".
-    "municipio": string|null               // a cidade do cliente, SOMENTE se ela aparecer de verdade. É uma cidade do Espírito Santo; se a que você tem não é do ES, é erro de leitura: devolva null.
-  }
+    "municipio": string|null,              // a cidade do cliente, SOMENTE se ela aparecer de verdade. É uma cidade do Espírito Santo; se a que você tem não é do ES, é erro de leitura: devolva null.
+    "visitaRealizada": true|false|null,    // true SÓ quando o vendedor já esteve COM O CLIENTE presencialmente (ele conta na nota "já fui lá", "visitei a obra", "estive na fazenda", ou a conversa mostra a visita tendo acontecido). Visita apenas MARCADA para o futuro é false. Nada dito a respeito = null. Isto marca a etapa "Visita" do roteiro como feita.
+    "entradaValor": number|null,          // ENTRADA da negociação em reais, número puro ("entrada de 180 mil" => 180000). Não confunda com o valor da máquina.
+    "entradaPercentual": number|null,     // entrada em percentual, 0 a 100 ("entrada de 30%" => 30). Pode vir junto com entradaValor; preencha os dois quando os dois forem ditos.
+    "observacao": string|null             // SÓ duas coisas, e só quando ditas: (1) o TAMANHO DO BRAÇO quando a máquina é escavadeira ("braço 2,9 m", "braço longo", "long reach"); (2) se a venda é com INSCRIÇÃO ESTADUAL — escreva "com I.E." ou "sem I.E.". Junte com " · " quando houver as duas. Nada dito sobre isso = null. Não use este campo para resumo, comentário ou qualquer outro assunto.
+  },
+  "pedidos": [                             // ORDENS que o vendedor deu na nota dele — coisas a FAZER no CRM, não fatos a registrar. Quase sempre VAZIO: só preencha quando ele pedir explicitamente. Nada aqui é executado sozinho; vira um botão para ele confirmar.
+    {
+      "tipo": "vincular_cliente",          // ÚNICO tipo aceito hoje. Use quando ele disser que este contato na verdade é de OUTRO cliente/empresa que já está no CRM ("ele é o proprietário da BWB, que já está no funil", "esse contato é da Construtora Litoral", "vincular à empresa X"). NÃO use quando ele só informa a profissão, o cargo ou o nome da firma sem pedir para ligar nada.
+      "alvo": string,                      // o nome do cliente/empresa COMO ELE ESCREVEU ("BWB"). Nunca invente, nunca complete, nunca use palavra genérica ("a empresa", "o cliente") — sem um nome de verdade, não devolva o pedido.
+      "motivo": string                     // 1 frase citando o trecho dele que levou a isso
+    }
+  ]
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto.
@@ -170,7 +181,16 @@ REGRAS CRÍTICAS:
   está escrito valor 610000 e condicaoPagamento "financiamento". Ao mesmo tempo, o que não estiver
   dito fica null — campo vazio é honesto, campo inventado estraga a ficha do cliente. Não confunda
   horas de uso, número de parcelas, percentual de entrada ou preço do concorrente com o valor da
-  máquina, e não chame de modelo o que é só categoria ("uma retro", "um rolo").`;
+  máquina, e não chame de modelo o que é só categoria ("uma retro", "um rolo").
+- "roteiro" tem de refletir o que JÁ ACONTECEU na conversa inteira e na nota do vendedor. Etapa que ele conta
+  ter cumprido é "feito", não "depois": se ele escreveu que já visitou, "Visita" está feita; se já mandou a
+  proposta, "Proposta" está feita. Marcar como pendente o que ele já fez faz o painel mentir para ele.
+- "pedidos" é o que o vendedor mandou FAZER, e o padrão é VAZIO. Ele escreve nessa caixa quase sempre para
+  informar, não para ordenar; só devolva um pedido quando a ordem estiver clara no texto dele. Um pedido
+  entendido errado une o cadastro do cliente com o de outro, arrastando negociação, visita e histórico —
+  por isso, na menor dúvida, deixe "pedidos" vazio e trate o texto como fato. O vendedor ainda vai
+  confirmar na tela antes de qualquer coisa acontecer, mas propor besteira faz ele perder a confiança no
+  botão, e aí ele confirma no automático — que é justamente o risco.`;
 
 
 /** Cabeçalho do bloco da nota. Constante porque o teste procura por ele. */

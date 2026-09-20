@@ -16,7 +16,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizarPagamento, municipioDoES, municipioForaDoES, normalizarModelo,
-  normalizarMarca, normalizarValor, normalizarFatos, mudancasDaNegociacao, FATOS_VAZIOS,
+  normalizarMarca, normalizarValor, normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS,
 } from "@/lib/orientador-fatos";
 
 describe("forma de pagamento", () => {
@@ -122,6 +122,7 @@ describe("bloco de fatos devolvido pelo Orientador", () => {
     expect(f).toEqual({
       marca: "New Holland", maquinaModelo: "B110", valor: 610000,
       condicaoPagamento: "financiamento", municipio: "Guaçuí",
+      visitaRealizada: null, entradaValor: null, entradaPercentual: null, observacao: null,
     });
   });
 
@@ -138,7 +139,7 @@ describe("bloco de fatos devolvido pelo Orientador", () => {
 
 describe("o que gravar na negociação", () => {
   const vazia = { marca: null, maquinaModelo: null, valor: null, tipoPagamento: null };
-  const fatos = { marca: "New Holland", maquinaModelo: "B110", valor: 610000, condicaoPagamento: "financiamento" as const, municipio: null };
+  const fatos = { marca: "New Holland", maquinaModelo: "B110", valor: 610000, condicaoPagamento: "financiamento" as const, municipio: null, visitaRealizada: null, entradaValor: null, entradaPercentual: null, observacao: null };
 
   it("campo vazio é sempre preenchido, com ou sem nota", () => {
     expect(mudancasDaNegociacao(vazia, fatos, false)).toEqual({
@@ -178,5 +179,62 @@ describe("o que gravar na negociação", () => {
   it("valor igual ao que já está não gera escrita à toa", () => {
     const igual = { marca: "New Holland", maquinaModelo: "B110", valor: 610000, tipoPagamento: "financiamento" };
     expect(mudancasDaNegociacao(igual, fatos, true)).toEqual({});
+  });
+});
+
+// "Se eu disser ao Orientador que já realizei visita no cliente, a opção tem
+// que estar marcada."
+//
+// Depender de a IA lembrar de mexer no roteiro toda vez é frágil: basta um
+// descuido e o painel diz ao vendedor que falta fazer o que ele já fez. Por
+// isso "já visitei" virou um campo (fatos.visitaRealizada) e a marcação é
+// aplicada por código.
+describe("visita já realizada marca o roteiro", () => {
+  const roteiro = [
+    { etapa: "Abertura e rapport", status: "feito" },
+    { etapa: "Qualificação", status: "feito" },
+    { etapa: "Visita", status: "agora" },
+    { etapa: "Proposta", status: "depois" },
+    { etapa: "Fechamento", status: "depois" },
+  ];
+
+  it("a etapa Visita fica feita", () => {
+    const r = marcarVisitaNoRoteiro(roteiro, true);
+    expect(r.find((e) => e.etapa === "Visita")?.status).toBe("feito");
+  });
+
+  it("o cursor anda para a próxima etapa pendente", () => {
+    const r = marcarVisitaNoRoteiro(roteiro, true);
+    expect(r.find((e) => e.status === "agora")?.etapa).toBe("Proposta");
+  });
+
+  it("acha a etapa mesmo escrita de outro jeito", () => {
+    const r = marcarVisitaNoRoteiro([{ etapa: "Visita tecnica na obra", status: "depois" }], true);
+    expect(r[0].status).toBe("feito");
+  });
+
+  it("sem dizer nada, o roteiro não é tocado", () => {
+    expect(marcarVisitaNoRoteiro(roteiro, null)).toBe(roteiro);
+    expect(marcarVisitaNoRoteiro(roteiro, false)).toBe(roteiro);
+  });
+
+  it("NÃO desmarca o que a conversa já mostrou cumprido", () => {
+    const feito = [{ etapa: "Visita", status: "feito" }, { etapa: "Proposta", status: "agora" }];
+    const r = marcarVisitaNoRoteiro(feito, true);
+    expect(r[0].status).toBe("feito");
+    expect(r[1].status).toBe("agora");
+  });
+
+  it("roteiro sem etapa de visita não quebra", () => {
+    const sem = [{ etapa: "Proposta", status: "agora" }];
+    expect(marcarVisitaNoRoteiro(sem, true)).toBe(sem);
+    expect(marcarVisitaNoRoteiro([], true)).toEqual([]);
+  });
+
+  it("visitaRealizada só aceita booleano de verdade", () => {
+    expect(normalizarFatos({ visitaRealizada: true }).visitaRealizada).toBe(true);
+    expect(normalizarFatos({ visitaRealizada: false }).visitaRealizada).toBe(false);
+    expect(normalizarFatos({ visitaRealizada: "sim" }).visitaRealizada).toBe(null);
+    expect(normalizarFatos({}).visitaRealizada).toBe(null);
   });
 });

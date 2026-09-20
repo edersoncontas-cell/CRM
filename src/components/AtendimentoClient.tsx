@@ -22,10 +22,13 @@ import {
   listarRespostasProntasAction, salvarRespostaProntaAction, excluirRespostaProntaAction, reanalisarConversaAction,
   salvarNotaOrientadorAction,
   removerNotaOrientadorAction,
+  executarPedidoOrientadorAction,
+  descartarPedidoOrientadorAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
-import { maquinaDaNegociacao, pagamentoDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
+import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
+import { descreverPedido } from "@/lib/orientador-pedidos";
 
 export type ConvLista = {
   id: string;
@@ -251,6 +254,10 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   // "O que você sabe": o que o vendedor digita para o Orientador levar em conta.
   const [nota, setNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
+  // Pedido que o Orientador entendeu na nota e está esperando confirmação.
+  const [executandoPedido, setExecutandoPedido] = useState(false);
+  const [pedidoAviso, setPedidoAviso] = useState<string | null>(null);
+  const [pedidoAmbiguos, setPedidoAmbiguos] = useState<{ id: string; nome: string }[]>([]);
   const [notaAviso, setNotaAviso] = useState<string | null>(null);
   const anexoRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -453,6 +460,36 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
       setSalvandoNota(false);
       setTimeout(() => setNotaAviso(null), 8000);
     }
+  }
+
+  // Executa o pedido que o Orientador entendeu — só depois do clique. Nada
+  // aqui roda sozinho: unir cadastros arrasta negociação, visita e histórico.
+  async function confirmarPedido(clienteEscolhidoId?: string) {
+    const pedido = contexto?.orientador?.pedidos[0];
+    if (!selId || !pedido || executandoPedido) return;
+    setExecutandoPedido(true); setPedidoAviso(null);
+    try {
+      const r = await executarPedidoOrientadorAction(selId, pedido, clienteEscolhidoId);
+      if (r.ok) {
+        setPedidoAmbiguos([]);
+        setPedidoAviso(r.resumo ?? "Pronto.");
+        await carregarContexto(selId);
+      } else {
+        setPedidoAmbiguos(r.ambiguos ?? []);
+        setPedidoAviso(r.erro ?? "Não deu para executar.");
+      }
+    } catch {
+      setPedidoAviso("Não deu para falar com o servidor.");
+    } finally {
+      setExecutandoPedido(false);
+    }
+  }
+
+  async function descartarPedido() {
+    if (!selId) return;
+    setPedidoAmbiguos([]); setPedidoAviso(null);
+    await descartarPedidoOrientadorAction(selId).catch(() => {});
+    await carregarContexto(selId);
   }
 
   // Apaga um contexto já guardado. Precisa existir: um fato errado entra na
@@ -1015,32 +1052,26 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       <Link href={`/clientes/${contexto.cliente.id}`} className="font-bold text-white hover:text-agro-300">{contexto.cliente.nome}</Link>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-brand-300">
                         {contexto.cliente.municipio && <span className="inline-flex items-center gap-1"><MapPin size={11} /> {contexto.cliente.municipio}</span>}
-                        <span>{contexto.cliente.jaComprou ? "já é cliente" : "potencial"}</span>
-                        <span title="Lead score">score {contexto.cliente.leadScore}</span>
                       </div>
                     </div>
                     {contexto.cliente.aguardandoResposta && <span className="rounded-full bg-orange-400/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">aguardando</span>}
                   </div>
+                  {/* Logo abaixo do nome: como o cliente está agora. */}
+                  {contexto.orientador && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <Temperatura t={contexto.orientador.temperatura} />
+                      <span className="text-brand-200">{contexto.orientador.estagioVenda}</span>
+                      {contexto.orientador.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{contexto.orientador.probabilidadeFechamento}% de fechar</span>}
+                      {contexto.orientador.coaching?.personalidade.estilo && <span className="text-brand-400">cliente {contexto.orientador.coaching.personalidade.estilo}{contexto.orientador.coaching.personalidade.papel ? ` · ${contexto.orientador.coaching.personalidade.papel}` : ""}</span>}
+                    </div>
+                  )}
                   {/* Só o assunto da ÚLTIMA conversa. Antes eram as duas
                       últimas linhas do resumo coladas com espaço — e como o
                       resumo é um log de uma linha por mensagem analisada, as
                       duas costumam ser quase iguais: era daí que vinha a
                       sensação de card duplicado. */}
                   {assuntoDaUltimaConversa(contexto.cliente.resumoTexto) && (
-                    <p className="mt-2 line-clamp-3 text-xs text-brand-300">{assuntoDaUltimaConversa(contexto.cliente.resumoTexto)}</p>
-                  )}
-                  {/* A leitura do momento (temperatura, estágio, chance, perfil)
-                      e a próxima ação moram aqui dentro, junto do nome e do
-                      assunto — é o cartão que o vendedor olha primeiro. */}
-                  {contexto.orientador && (
-                    <>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/5 pt-2 text-xs">
-                        <Temperatura t={contexto.orientador.temperatura} />
-                        <span className="text-brand-200">{contexto.orientador.estagioVenda}</span>
-                        {contexto.orientador.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{contexto.orientador.probabilidadeFechamento}% de fechar</span>}
-                        {contexto.orientador.coaching?.personalidade.estilo && <span className="text-brand-400">cliente {contexto.orientador.coaching.personalidade.estilo}{contexto.orientador.coaching.personalidade.papel ? ` · ${contexto.orientador.coaching.personalidade.papel}` : ""}</span>}
-                      </div>
-                    </>
+                    <p className="mt-2 border-t border-white/5 pt-2 line-clamp-3 text-xs text-brand-300">{assuntoDaUltimaConversa(contexto.cliente.resumoTexto)}</p>
                   )}
                 </div>
 
@@ -1056,7 +1087,27 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     <div key={n.id} className="mb-2 space-y-1 rounded-xl bg-white/[0.04] p-3 text-xs">
                       <ItemVerificado rotulo="Máquina" valor={maquinaDaNegociacao(n.marca, n.maquina)} falta="modelo ainda não definido" />
                       <ItemVerificado rotulo="Valor negociado" valor={n.valor ? formatCurrency(n.valor) : null} falta="valor ainda não negociado" />
+                      <ItemVerificado rotulo="Entrada" valor={entradaDaNegociacao(n.entradaValor, n.entradaPercentual)} falta="entrada ainda não definida" />
                       <ItemVerificado rotulo="Pagamento" valor={pagamentoDaNegociacao(n.tipoPagamento, n.condicaoPagamento)} falta="à vista, financiado, consórcio ou parcelado pela casa — ainda não definido" />
+                      <ItemVerificado rotulo="Obs" valor={n.observacao?.trim() || null} falta="braço da escavadeira e I.E. ainda não informados" />
+                      {/* A qual proposta esta conversa está vinculada. Importa
+                          justamente no caso do pedido de vínculo: a proposta
+                          está no nome da EMPRESA e a conversa é com a PESSOA.
+                          Sem esta linha o vendedor não teria como ver, no
+                          WhatsApp, que está falando dentro da proposta certa. */}
+                      <div className="flex gap-1.5 text-emerald-200">
+                        <span className="w-3 shrink-0 text-center font-bold text-emerald-400" title="Vinculado">✓</span>
+                        <span>
+                          Proposta de{" "}
+                          <Link href={`/negociacoes/${n.id}/proposta`} className="font-bold text-white underline-offset-2 hover:underline">
+                            {contexto.cliente!.nome}
+                          </Link>
+                          {sel.contactName && sel.contactName.trim().toLowerCase() !== contexto.cliente!.nome.trim().toLowerCase() && (
+                            <span className="text-brand-400"> · quem conduz: {sel.contactName}</span>
+                          )}
+                          <span className="text-brand-400"> · {n.estagio}</span>
+                        </span>
+                      </div>
                       {n.concorrente && <div className="flex gap-1.5 text-red-300"><span className="w-3 shrink-0 text-center">▼</span><span>Concorrente na mesa: {n.concorrente}</span></div>}
                     </div>
                   ))}
@@ -1074,8 +1125,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 {contexto.orientador ? (() => {
                   const o = contexto.orientador;
                   const c = o.coaching;
-                  const corAlerta = { vermelho: "border-red-400/40 bg-red-400/10 text-red-50", amarelo: "border-amber-400/40 bg-amber-400/10 text-amber-50", verde: "border-emerald-400/40 bg-emerald-400/10 text-emerald-50" } as const;
-                  const corTitulo = { vermelho: "text-red-300", amarelo: "text-amber-300", verde: "text-emerald-300" } as const;
                   const corNota = c ? (c.conducao.nota >= 8 ? "text-emerald-300" : c.conducao.nota >= 6 ? "text-amber-300" : "text-red-300") : "text-brand-300";
                   return (
                   <div className="space-y-2.5">
@@ -1088,27 +1137,46 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-agro-300">
                         <Compass size={12} /> Orientador
                       </div>
-                    {c?.alertaAgora && (
-                      <div className={cn("rounded-xl border p-2.5 text-xs", corAlerta[c.alertaAgora.nivel])}>
-                        <div className={cn("flex items-center gap-1.5 font-bold", corTitulo[c.alertaAgora.nivel])}><AlertTriangle size={13} /> {c.alertaAgora.titulo}</div>
-                        {c.alertaAgora.motivo && <p className="mt-1">{c.alertaAgora.motivo}</p>}
+                    {/* Pedido entendido na caixa de contexto. Fica no topo, e
+                        com botão: nada é executado sozinho, porque unir dois
+                        cadastros arrasta negociação, visita e histórico de um
+                        cliente de verdade. */}
+                    {o.pedidos.length > 0 && (
+                      <div className="rounded-xl border border-sky-400/40 bg-sky-400/10 p-2.5 text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-sky-300">
+                          <Link2 size={13} /> Você pediu — confirma?
+                        </div>
+                        <p className="mt-1 text-sky-50">{descreverPedido(o.pedidos[0], contexto.cliente.nome)}</p>
+                        {o.pedidos[0].motivo && <p className="mt-1 text-[11px] text-sky-200/70">{o.pedidos[0].motivo}</p>}
+                        {pedidoAmbiguos.length > 0 && (
+                          <div className="mt-2">
+                            <div className="mb-1 text-[11px] text-sky-200">Qual deles?</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {pedidoAmbiguos.map((cl) => (
+                                <button key={cl.id} onClick={() => confirmarPedido(cl.id)} disabled={executandoPedido}
+                                  className="rounded-lg bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20 disabled:opacity-50">
+                                  {cl.nome}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {pedidoAviso && <p className="mt-1.5 text-[11px] text-sky-200">{pedidoAviso}</p>}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <button onClick={() => confirmarPedido()} disabled={executandoPedido}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-400 px-3 py-1.5 text-[11px] font-bold text-brand-950 hover:bg-sky-300 disabled:opacity-50">
+                            {executandoPedido ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                            {executandoPedido ? "Fazendo…" : "Sim, pode fazer"}
+                          </button>
+                          <button onClick={descartarPedido} disabled={executandoPedido}
+                            className="rounded-lg bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-brand-300 hover:bg-white/10 disabled:opacity-50">
+                            Não era isso
+                          </button>
+                        </div>
                       </div>
                     )}
                     {o.proximaAcao && (
                       <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {o.proximaAcao}</div>
-                    )}
-                    {c && (c.perguntasAgora.length > 0 || c.informacoesFaltando.length > 0) && (
-                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
-                        {c.perguntasAgora.length > 0 && (
-                          <>
-                            <b className="text-agro-300">Pergunte agora (nesta ordem):</b>
-                            <ol className="mt-1 list-decimal space-y-0.5 pl-4">{c.perguntasAgora.map((q) => <li key={q}>{q}</li>)}</ol>
-                          </>
-                        )}
-                        {c.informacoesFaltando.length > 0 && (
-                          <p className={cn("text-[11px] text-brand-400", c.perguntasAgora.length > 0 && "mt-1.5")}><b className="text-brand-300">Falta saber:</b> {c.informacoesFaltando.join(" · ")}</p>
-                        )}
-                      </div>
                     )}
                     {o.melhorResposta && (
                       <button onClick={() => usarResposta(o.melhorResposta!)} className="w-full rounded-xl bg-white/[0.04] p-2.5 text-left text-xs text-brand-200 hover:bg-white/[0.08]">
@@ -1119,7 +1187,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     {c && (c.conducao.acertos.length > 0 || c.conducao.correcoes.length > 0) && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
                         <div className="flex items-center justify-between"><b className="text-brand-100">Sua condução</b><span className={cn("font-bold", corNota)}>nota {c.conducao.nota}/10</span></div>
-                        {c.conducao.acertos.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.acertos.map((a) => <li key={a} className="flex gap-1.5 text-emerald-200"><span>✓</span><span>{a}</span></li>)}</ul>}
+                        {c.conducao.acertos.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.acertos.map((a) => <li key={a} className="flex gap-1.5 text-emerald-200"><span className="w-3 shrink-0 text-center font-bold text-emerald-400">✓</span><span>{a}</span></li>)}</ul>}
                         {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.correcoes.map((a) => <li key={a} className="flex gap-1.5 text-amber-100"><span>→</span><span>{a}</span></li>)}</ul>}
                       </div>
                     )}
@@ -1140,18 +1208,14 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                         <b className="text-brand-100">Roteiro até o fechamento</b>
                         <ol className="mt-1 space-y-1">
                           {c.roteiro.map((e) => (
-                            <li key={e.etapa} className={cn("flex gap-2", e.status === "feito" ? "text-brand-500" : e.status === "agora" ? "text-agro-200" : "text-brand-300")}>
-                              <span className="w-4 shrink-0 text-center">{e.status === "feito" ? "✓" : e.status === "agora" ? "▶" : "○"}</span>
+                            <li key={e.etapa} className={cn("flex gap-2", e.status === "feito" ? "text-emerald-200" : e.status === "agora" ? "text-agro-200" : "text-brand-300")}>
+                              <span className={cn("w-4 shrink-0 text-center", e.status === "feito" && "font-bold text-emerald-400")} title={e.status === "feito" ? "Feito" : undefined}>
+                                {e.status === "feito" ? "✓" : e.status === "agora" ? "▶" : "○"}
+                              </span>
                               <span><b className={e.status === "agora" ? "text-agro-300" : ""}>{e.etapa}</b>{e.dica ? ` — ${e.dica}` : ""}</span>
                             </li>
                           ))}
                         </ol>
-                      </div>
-                    )}
-                    {o.combinados.length > 0 && (
-                      <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-2.5 text-xs text-emerald-50">
-                        <b className="text-emerald-300">Já combinado:</b>
-                        <ul className="mt-1 list-disc space-y-0.5 pl-4">{o.combinados.map((x) => <li key={x}>{x}</li>)}</ul>
                       </div>
                     )}
                     {o.pendencias.length > 0 && (
@@ -1214,10 +1278,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-1.5 pt-1 text-xs">
-                  <Link href={`/clientes/${contexto.cliente.id}`} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white hover:bg-white/15"><User size={12} /> Cadastro</Link>
-                  {negociacaoAberta && <Link href={`/negociacoes/${negociacaoAberta.id}/proposta`} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white hover:bg-white/15"><Wallet size={12} /> Calculadora</Link>}
-                </div>
 
                 {/* O que o vendedor sabe e o WhatsApp não mostra. O Orientador
                     só enxerga a conversa; o que foi combinado por telefone ou
