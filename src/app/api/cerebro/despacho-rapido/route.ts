@@ -4,6 +4,7 @@ import { getWaSettings } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
 import { deveReanalisar } from "@/lib/zeus/orientador-gatilho";
+import { montarHistorico, montarUltimas } from "@/lib/zeus/historico-linha";
 import { iaHabilitada } from "@/lib/ai";
 import { lerParametros } from "@/lib/parametros";
 
@@ -61,20 +62,12 @@ export async function POST(req: NextRequest) {
   const decisao = deveReanalisar({ ultimaAnaliseEm: analiseAnterior?.atualizadoEm ?? null, novas: novas.map((m) => ({ texto: m.body, mediaType: m.mediaType })) });
   if (!decisao.reanalisar) return NextResponse.json({ ok: true, ignorado: decisao.motivo });
 
-  // Monta histórico completo (não invertido — ordem cronológica para a IA ler)
-  const historicoCompleto = msgs
-    .map((m) => {
-      const quem = m.direction === "OUT" ? p.nomeVendedor : "Cliente";
-      const hora = m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      return `[${hora}] ${quem}: ${m.body}`;
-    })
-    .join("\n");
-
+  // Histórico em ordem cronológica, com autor e anexo explícitos — ver
+  // lib/zeus/historico-linha.ts (é o que impede o "Cliente enviou documentos"
+  // quando quem anexou foi o vendedor, ou quando não houve anexo nenhum).
+  const historicoCompleto = montarHistorico(msgs);
   // Últimas 5 mensagens para foco imediato
-  const ultimasMensagens = msgs
-    .slice(-5)
-    .map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`)
-    .join("\n");
+  const ultimasMensagens = montarUltimas(msgs);
 
   const contextoCliente = await montarContextoCliente({
     id: conv.id,

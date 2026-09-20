@@ -24,11 +24,13 @@ import {
   removerNotaOrientadorAction,
   executarPedidoOrientadorAction,
   descartarPedidoOrientadorAction,
+  negociacoesDoFunilAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao, assuntoDaUltimaConversa } from "@/lib/negociacao-verificada";
 import { descreverPedido } from "@/lib/orientador-pedidos";
+import { soResumo } from "@/lib/cliente-status";
 
 export type ConvLista = {
   id: string;
@@ -241,6 +243,9 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   const [painelAberto, setPainelAberto] = useState(false);
   const [contexto, setContexto] = useState<ContextoConversa | null>(null);
   const [carregandoContexto, setCarregandoContexto] = useState(false);
+  // Contato marcado como "Não é cliente" no cadastro: o painel mostra só o
+  // resumo da conversa — ver lib/cliente-status.ts.
+  const naoCliente = soResumo(contexto?.cliente?.status);
   const [topo, setTopo] = useState(0);
   const [anexo, setAnexo] = useState<Anexo | null>(null);
   const [legenda, setLegenda] = useState("");
@@ -853,13 +858,15 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMenuAberto(false)} />
                     <div className="absolute right-0 top-11 z-20 w-64 rounded-2xl border border-brand-700 bg-brand-900 p-1.5 text-sm shadow-2xl">
+                      {/* Duas opções e só duas. "Marcar como respondido" e o
+                          relatório em PDF saíram a pedido do vendedor; no
+                          lugar entrou o que ele de fato usa aqui — abrir o
+                          mesmo pop-up de vincular a conversa a uma negociação
+                          do funil que já existe no painel do Orientador. */}
                       {[
-                        { icone: <CheckCircle2 size={15} className="text-emerald-300" />, rotulo: "Marcar como respondido", acao: () => { setMenuAberto(false); startTransition(async () => { await marcarRespondidoAction(sel.id); carregarContexto(sel.id); router.refresh(); }); } },
-                        { icone: <FileText size={15} className="text-amber-300" />, rotulo: "Relatório em PDF desta conversa", href: `/atendimento/relatorio?conversa=${sel.id}` },
+                        { icone: <Link2 size={15} className="text-agro-300" />, rotulo: "Vincular a uma negociação", acao: () => { setMenuAberto(false); setVincularConv(sel); } },
                         { icone: <Trash2 size={15} className="text-red-400" />, rotulo: "Excluir conversa", acao: () => excluirConversa(sel), perigo: true },
-                      ].map((item) => item.href ? (
-                        <Link key={item.rotulo} href={item.href} onClick={() => setMenuAberto(false)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-brand-100 hover:bg-white/10">{item.icone} {item.rotulo}</Link>
-                      ) : (
+                      ].map((item) => (
                         <button key={item.rotulo} onClick={item.acao} className={cn("flex w-full items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-white/10", item.perigo ? "text-red-300" : "text-brand-100")} style={{ minHeight: 36 }}>{item.icone} {item.rotulo}</button>
                       ))}
                     </div>
@@ -1040,8 +1047,8 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
               <div className="flex items-center gap-2 text-brand-400"><Loader2 size={14} className="animate-spin" /> Carregando…</div>
             ) : !contexto?.cliente ? (
               <div className="space-y-3 text-brand-300">
-                <p>Esta conversa ainda não está ligada a um cliente. Vincule para o Orientador analisar e para a negociação entrar no funil.</p>
-                {!sel.isGroup && <button onClick={() => setVincularConv(sel)} className="inline-flex items-center gap-1 rounded-lg bg-agro-400 px-3 py-1.5 text-xs font-bold text-black"><Link2 size={13} /> Vincular a um cliente</button>}
+                <p>Esta conversa ainda não está ligada a nada. Ligue a uma negociação que já está no funil — ou a um cliente — para o Orientador analisar.</p>
+                {!sel.isGroup && <button onClick={() => setVincularConv(sel)} className="inline-flex items-center gap-1 rounded-lg bg-agro-400 px-3 py-1.5 text-xs font-bold text-black"><Link2 size={13} /> Vincular a uma negociação</button>}
               </div>
             ) : (
               <div className="space-y-4">
@@ -1056,8 +1063,11 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     </div>
                     {contexto.cliente.aguardandoResposta && <span className="rounded-full bg-orange-400/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">aguardando</span>}
                   </div>
-                  {/* Logo abaixo do nome: como o cliente está agora. */}
-                  {contexto.orientador && (
+                  {/* Logo abaixo do nome: como o cliente está agora. Num
+                      contato marcado como "não é cliente" isso some junto com
+                      o resto da leitura de venda — temperatura e chance de
+                      fechar não dizem nada sobre o contador ou o mecânico. */}
+                  {!naoCliente && contexto.orientador && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <Temperatura t={contexto.orientador.temperatura} />
                       <span className="text-brand-200">{contexto.orientador.estagioVenda}</span>
@@ -1075,6 +1085,31 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   )}
                 </div>
 
+                {/* Contato marcado como "Não é cliente": acaba aqui. Um card
+                    só, com o resumo de tudo o que já foi conversado — que é
+                    o que o vendedor precisa quando volta nessa conversa meses
+                    depois. Coaching de venda com o contador, o mecânico ou o
+                    fornecedor seria o painel mentindo. */}
+                {naoCliente ? (
+                  <div className="rounded-xl bg-white/[0.04] p-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">
+                      <Compass size={12} /> Resumo da conversa
+                    </div>
+                    {contexto.orientador?.resumoNegociacao?.trim() ? (
+                      <p className="max-h-80 overflow-y-auto whitespace-pre-line text-xs leading-relaxed text-brand-200">
+                        {contexto.orientador.resumoNegociacao}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-brand-400">
+                        Ainda sem resumo. Toque em “Reanalisar” aqui em cima para o Orientador ler a conversa inteira e resumir.
+                      </p>
+                    )}
+                    <p className="mt-2 border-t border-white/5 pt-2 text-[11px] text-brand-500">
+                      Este contato está marcado como “Não é cliente”, então o Orientador só resume — sem próxima ação, sem ficha de negociação e sem cobrança de retorno.
+                    </p>
+                  </div>
+                ) : (
+                <>
                 {/* Negociação — o segundo card. Três informações e só três:
                     máquina, valor e como vai pagar. A que já foi identificada
                     ganha "Verificado" em verde (mesmo ✓ de "Sua condução");
@@ -1090,24 +1125,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       <ItemVerificado rotulo="Entrada" valor={entradaDaNegociacao(n.entradaValor, n.entradaPercentual)} falta="entrada ainda não definida" />
                       <ItemVerificado rotulo="Pagamento" valor={pagamentoDaNegociacao(n.tipoPagamento, n.condicaoPagamento)} falta="à vista, financiado, consórcio ou parcelado pela casa — ainda não definido" />
                       <ItemVerificado rotulo="Obs" valor={n.observacao?.trim() || null} falta="braço da escavadeira e I.E. ainda não informados" />
-                      {/* A qual proposta esta conversa está vinculada. Importa
-                          justamente no caso do pedido de vínculo: a proposta
-                          está no nome da EMPRESA e a conversa é com a PESSOA.
-                          Sem esta linha o vendedor não teria como ver, no
-                          WhatsApp, que está falando dentro da proposta certa. */}
-                      <div className="flex gap-1.5 text-emerald-200">
-                        <span className="w-3 shrink-0 text-center font-bold text-emerald-400" title="Vinculado">✓</span>
-                        <span>
-                          Proposta de{" "}
-                          <Link href={`/negociacoes/${n.id}/proposta`} className="font-bold text-white underline-offset-2 hover:underline">
-                            {contexto.cliente!.nome}
-                          </Link>
-                          {sel.contactName && sel.contactName.trim().toLowerCase() !== contexto.cliente!.nome.trim().toLowerCase() && (
-                            <span className="text-brand-400"> · quem conduz: {sel.contactName}</span>
-                          )}
-                          <span className="text-brand-400"> · {n.estagio}</span>
-                        </span>
-                      </div>
                       {n.concorrente && <div className="flex gap-1.5 text-red-300"><span className="w-3 shrink-0 text-center">▼</span><span>Concorrente na mesa: {n.concorrente}</span></div>}
                     </div>
                   ))}
@@ -1352,6 +1369,8 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     </div>
                   )}
                 </div>
+                </>
+                )}
               </div>
             )}
           </div>
@@ -1381,15 +1400,27 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
   onVinculado: (clienteId: string) => void;
 }) {
   const [busca, setBusca] = useState("");
+  // Duas abas porque são dois jeitos de pensar. O vendedor quase sempre pensa
+  // "esta conversa é daquela proposta que está no funil" — sobretudo quando a
+  // proposta está no nome da EMPRESA e quem conversa é a pessoa física, caso
+  // em que buscar pelo nome do contato não acha nada. Por isso a aba da
+  // negociação é a que abre.
+  const [aba, setAba] = useState<"negociacao" | "cliente">("negociacao");
   const [clientes, setClientes] = useState<{ id: string; nome: string; telefone: string | null }[]>([]);
+  const [negociacoes, setNegociacoes] = useState<Awaited<ReturnType<typeof negociacoesDoFunilAction>>>([]);
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
+    let cancelado = false;
     setCarregando(true);
-    fetch(`/api/clientes/busca?q=${encodeURIComponent(busca || conv.externalPhone)}`)
-      .then((r) => r.json()).then((d) => setClientes(d.clientes ?? [])).catch(() => {}).finally(() => setCarregando(false));
-  }, [busca, conv.externalPhone]);
+    const pedido = aba === "negociacao"
+      ? negociacoesDoFunilAction(busca).then((n) => { if (!cancelado) setNegociacoes(n); })
+      : fetch(`/api/clientes/busca?q=${encodeURIComponent(busca || conv.externalPhone)}`)
+          .then((r) => r.json()).then((d) => { if (!cancelado) setClientes(d.clientes ?? []); });
+    pedido.catch(() => {}).finally(() => { if (!cancelado) setCarregando(false); });
+    return () => { cancelado = true; };
+  }, [busca, aba, conv.externalPhone]);
 
   async function vincular(clienteId: string) {
     setSalvando(true);
@@ -1408,18 +1439,49 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-brand-700 bg-brand-900 text-brand-100 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-brand-800 px-5 py-4">
           <div>
-            <h3 className="flex items-center gap-2 font-bold text-white"><Link2 size={16} className="text-agro-400" /> Vincular a um cliente</h3>
+            <h3 className="flex items-center gap-2 font-bold text-white"><Link2 size={16} className="text-agro-400" /> Vincular esta conversa</h3>
             <p className="mt-0.5 text-xs text-brand-400">{telefoneBonito(conv.externalPhone)}</p>
           </div>
           <button onClick={onClose} className={botaoIcone}><X size={18} /></button>
         </div>
         <div className="space-y-3 p-4">
-          <p className="text-xs text-brand-300">Escolha o cliente do CRM desta conversa. O Orientador passa a usar o cadastro nas respostas e a negociação entra no funil.</p>
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome ou telefone" autoFocus
+          <div className="flex gap-1 rounded-xl bg-brand-800/60 p-1">
+            {([["negociacao", "Negociação do funil"], ["cliente", "Cliente"]] as const).map(([id, rotulo]) => (
+              <button key={id} onClick={() => setAba(id)}
+                className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition",
+                  aba === id ? "bg-agro-400 text-brand-950" : "text-brand-300 hover:bg-white/5")}>
+                {rotulo}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-brand-300">
+            {aba === "negociacao"
+              ? "Escolha a negociação do funil a que esta conversa pertence. Serve para quando a proposta está no nome da empresa (ou de outra pessoa) e quem conversa é outro."
+              : "Escolha o cliente do CRM desta conversa. O Orientador passa a usar o cadastro nas respostas."}
+          </p>
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} autoFocus
+            placeholder={aba === "negociacao" ? "Buscar por cliente, marca ou modelo" : "Buscar por nome ou telefone"}
             className="w-full rounded-xl bg-brand-800 px-3 py-2 text-sm text-white placeholder:text-brand-400 outline-none focus:ring-1 focus:ring-agro-400/60" />
           <div className="max-h-64 space-y-1 overflow-y-auto">
             {carregando ? (
               <div className="flex justify-center py-4"><Loader2 size={20} className="animate-spin text-brand-400" /></div>
+            ) : aba === "negociacao" ? (
+              negociacoes.length === 0 ? (
+                <p className="py-4 text-center text-sm text-brand-400">Nenhuma negociação aberta encontrada</p>
+              ) : negociacoes.map((n) => (
+                <button key={n.id} onClick={() => vincular(n.clienteId)} disabled={salvando}
+                  className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/10 disabled:opacity-50">
+                  <Handshake size={16} className="mt-0.5 shrink-0 text-agro-300" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white">{n.clienteNome}</div>
+                    <div className="text-xs text-brand-300">
+                      {n.maquina ?? "máquina a definir"}
+                      {n.valor ? ` · ${formatCurrency(n.valor)}` : ""}
+                    </div>
+                    <div className="text-[11px] text-brand-500">{n.estagio}</div>
+                  </div>
+                </button>
+              ))
             ) : clientes.length === 0 ? (
               <p className="py-4 text-center text-sm text-brand-400">Nenhum cliente encontrado</p>
             ) : clientes.map((c) => (
@@ -1434,7 +1496,13 @@ function VincularContatoModal({ conv, onClose, onVinculado }: {
             ))}
           </div>
           <div className="border-t border-brand-800 pt-2">
-            <p className="text-xs text-brand-400">Não encontrou? <Link href={`/clientes?q=${encodeURIComponent(conv.externalPhone.replace(/\D/g, ""))}`} className="text-agro-300 hover:underline">Abrir Clientes</Link> e cadastrar com este telefone (o ZEUS vincula sozinho na próxima mensagem).</p>
+            <p className="text-xs text-brand-400">
+              {aba === "negociacao" ? (
+                <>Não encontrou? <Link href="/negociacoes" className="text-agro-300 hover:underline">Abrir Negociações</Link> e conferir o funil.</>
+              ) : (
+                <>Não encontrou? <Link href={`/clientes?q=${encodeURIComponent(conv.externalPhone.replace(/\D/g, ""))}`} className="text-agro-300 hover:underline">Abrir Clientes</Link> e cadastrar com este telefone (o ZEUS vincula sozinho na próxima mensagem).</>
+              )}
+            </p>
           </div>
         </div>
       </div>

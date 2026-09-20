@@ -73,7 +73,9 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   const trintaDiasAtras = new Date(Date.now() - 30 * 24 * HORA);
   const umaHoraAtras = new Date(Date.now() - HORA);
 
-  const [aguardando, alertas, posVenda, visitas, demandas, eventos, ritmo, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
+  // Sem os eventos do ZEUS: o grupo "Sistema" saiu da Central (ver abaixo), e
+  // a consulta ia junto — a página não paga mais por dado que não mostra.
+  const [aguardando, alertas, posVenda, visitas, demandas, ritmo, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
     // Só entra na lista depois de 1h sem resposta — antes disso ainda está
     // dentro do tempo normal de resposta, não precisa virar alerta.
     db.cliente.findMany({
@@ -99,11 +101,6 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
       orderBy: { dueDate: "asc" },
       take: 50,
       include: { cliente: { select: { nome: true } } },
-    }),
-    db.zeusEvent.findMany({
-      where: { resolvido: false, tipo: { in: ["health", "erro"] }, severidade: { in: ["alta", "critica"] }, criadoEm: { gte: seteDiasAtras } },
-      orderBy: { criadoEm: "desc" },
-      take: 20,
     }),
     calcularRitmoMetas().catch(() => null),
     // Clientes com 30+ dias sem contato (antes no Dashboard).
@@ -308,23 +305,13 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           }]
         : [],
     },
-    {
-      id: "sistema",
-      titulo: "Sistema",
-      descricao: "Problemas que o ZEUS detectou e que podem parar o WhatsApp ou a IA.",
-      itens: eventos.map((e) => ({
-        id: `zeus:${e.id}`,
-        titulo: e.titulo,
-        detalhe: [
-          e.tipo === "erro" ? "Erro no servidor." : "Verificação de saúde falhou.",
-          e.ocorrencias > 1 ? `repetiu ${e.ocorrencias}x` : null,
-        ].filter(Boolean).join(" · "),
-        severidade: e.severidade === "critica" ? ("alta" as const) : ("media" as const),
-        href: "/zeus",
-        hrefLabel: "Abrir ZEUS",
-        quando: formatDateTime(e.criadoEm),
-      })),
-    },
+    // O grupo "Sistema" (erros do servidor detectados pelo ZEUS) saiu daqui a
+    // pedido do vendedor: "essa parte de alertas do sistema pode deixar fora,
+    // o ZEUS já registra isso". E é verdade — os mesmos eventos aparecem
+    // inteiros na tela do ZEUS, com histórico e detalhe. Aqui eles só
+    // empurravam para baixo o que a Central existe para mostrar: cliente
+    // esperando resposta, negócio sem visita, pós-venda, meta. Erro de
+    // servidor não é tarefa de vendedor.
   ];
 
   // Itens resolvidos pelo vendedor saem da relação (e cada item leva o

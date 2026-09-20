@@ -26,6 +26,10 @@ import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZ
 import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
 import { recortarHistorico, MAX_MENSAGENS } from "@/lib/zeus/historico-janela";
+import { soResumo, montarPromptResumoContato, limparResumo, analiseSoResumo } from "@/lib/zeus/orientador-resumo";
+import { montarHistorico, montarUltimas, midiaDaConversa, type MidiaDaConversa } from "@/lib/zeus/historico-linha";
+import { resumoConferido, frasesDerrubadas } from "@/lib/zeus/resumo-checagem";
+import { corrigirTermos, corrigirTermosNaLista } from "@/lib/zeus/termos-pt";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
 import { resumoDasEtapas } from "@/lib/zeus/cerebro-resposta";
@@ -175,6 +179,18 @@ async function lerNotaVendedor(clienteId: string): Promise<string | null> {
  * dado. Nunca cria negociação — abrir negociação continua sendo decisão da
  * regra do pipeline; aqui só se completa a que já existe.
  */
+/**
+ * Grava na ficha da negociação o que foi lido DIRETO da caixa de contexto,
+ * sem passar pela IA (ver lib/nota-fatos.ts).
+ *
+ * Entra com temNota=true porque foi o vendedor que escreveu: ele esteve lá, e
+ * o que ele diz ganha do que estava gravado antes — exatamente a mesma regra
+ * que vale quando a nota chega pela análise.
+ */
+export async function aplicarFatosDaNota(clienteId: string, fatos: FatosNegociacao): Promise<void> {
+  await aplicarFatos(clienteId, fatos, true);
+}
+
 async function aplicarFatos(clienteId: string, fatos: FatosNegociacao, temNota: boolean): Promise<void> {
   try {
     // Cidade: só município do ES (municipioDoES já barrou o resto). Corrige
@@ -287,6 +303,109 @@ export async function gerarAnaliseOrientador(args: {
   }
 }
 
+// ── Contato "Não é cliente": só o resumo ─────────────────────────────────────
+//
+// "Para os contatos que eu selecionar que não é cliente, o orientador deixará
+// apenas um resumo do contexto de toda conversa." Ver orientador-resumo.ts
+// para o porquê; aqui fica só a parte que fala com o banco e com a IA.
+
+/** Status e nome do cadastro. null quando o cliente sumiu no meio do caminho. */
+async function cadastroDoCliente(clienteId: string): Promise<{ status: string | null; nome: string } | null> {
+  return db.cliente.findUnique({ where: { id: clienteId }, select: { status: true, nome: true } }).catch(() => null);
+}
+
+/**
+ * Resumo da conversa inteira, em texto puro. Chamada curta de propósito: não
+ * há coaching para gerar, então não se paga por ele.
+ */
+export async function gerarResumoContato(args: { nomeContato: string; historico: string }): Promise<string> {
+  const { system, user } = montarPromptResumoContato(args);
+  const bruto = await llmTexto(system, user, { maxTokens: 500 });
+  return limparResumo(bruto);
+}
+
+/**
+ * Roda e grava o caminho do não-cliente. Devolve false quando a IA falhou —
+ * aí o chamador decide o que dizer na tela.
+ *
+ * Além de gravar o resumo, APAGA o rastro de venda que esse contato possa ter
+ * deixado enquanto ainda era tratado como negociação: o alerta do Orientador e
+ * a espera por resposta. Sem isso ele continuaria cobrando retorno de alguém
+ * que o vendedor já disse que não é cliente.
+ */
+async function resumirContatoNaoCliente(args: {
+  clienteId: string; nomeContato: string; historico: string;
+}): Promise<boolean> {
+  const resumo = await gerarResumoContato({ nomeContato: args.nomeContato, historico: args.historico });
+  const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = analiseSoResumo(resumo);
+  void alertas; void conversaEncerrada; void fatos; void pedidos;
+  const coachingJson = coaching as unknown as Prisma.InputJsonValue;
+  await db.orientadorAnalise.upsert({
+    where: { clienteId: args.clienteId },
+    create: { clienteId: args.clienteId, ...campos, coaching: coachingJson, melhorResposta: null, pedidosPendentes: null },
+    update: { ...campos, coaching: coachingJson, melhorResposta: null, pedidosPendentes: null },
+  });
+  await atualizarAlertaOrientador(args.clienteId, []).catch(() => {});
+  await db.cliente.updateMany({ where: { id: args.clienteId, aguardandoResposta: true }, data: { aguardandoResposta: false } }).catch(() => {});
+  return !!resumo;
+}
+
+/**
+ * Passa o resumo pela conferência contra a conversa antes de gravar.
+ *
+ * "Esse resumo tá péssimo, o cliente não enviou os documentos." Prompt é
+ * pedido; isto é trava. Ver resumo-checagem.ts.
+ */
+function conferirResumo(resumo: string, midia: MidiaDaConversa, clienteId: string): string {
+  const derrubadas = frasesDerrubadas(resumo, midia);
+  if (derrubadas.length) {
+    console.warn("[orientador] resumo com frase sem apoio na conversa, de", clienteId, derrubadas);
+  }
+  return corrigirTermos(resumoConferido(resumo, midia));
+}
+
+/**
+ * Passa o texto que vai à tela pelo vocabulário da casa ("excavadora" →
+ * "escavadeira" e afins — ver termos-pt.ts) e confere o resumo contra a
+ * conversa. Um lugar só, para nenhum campo escapar.
+ */
+function limparAnalise(a: AnaliseOrientador, midia: MidiaDaConversa, clienteId: string): AnaliseOrientador {
+  const c = a.coaching;
+  return {
+    ...a,
+    resumoNegociacao: conferirResumo(a.resumoNegociacao, midia, clienteId),
+    probabilidadeExplicacao: corrigirTermos(a.probabilidadeExplicacao),
+    proximaAcao: corrigirTermos(a.proximaAcao),
+    oportunidadesPerdidas: corrigirTermosNaLista(a.oportunidadesPerdidas),
+    combinados: corrigirTermosNaLista(a.combinados),
+    pendencias: corrigirTermosNaLista(a.pendencias),
+    alertas: corrigirTermosNaLista(a.alertas),
+    coaching: {
+      ...c,
+      personalidade: {
+        ...c.personalidade,
+        descricao: corrigirTermos(c.personalidade.descricao),
+        comoFalar: corrigirTermosNaLista(c.personalidade.comoFalar),
+        evitar: corrigirTermosNaLista(c.personalidade.evitar),
+      },
+      alertaAgora: c.alertaAgora
+        ? { ...c.alertaAgora, titulo: corrigirTermos(c.alertaAgora.titulo), motivo: corrigirTermos(c.alertaAgora.motivo) }
+        : null,
+      conducao: {
+        ...c.conducao,
+        acertos: corrigirTermosNaLista(c.conducao.acertos),
+        correcoes: corrigirTermosNaLista(c.conducao.correcoes),
+      },
+      perguntasAgora: corrigirTermosNaLista(c.perguntasAgora),
+      informacoesFaltando: corrigirTermosNaLista(c.informacoesFaltando),
+      sinaisCompra: corrigirTermosNaLista(c.sinaisCompra),
+      sinaisRisco: corrigirTermosNaLista(c.sinaisRisco),
+      roteiro: c.roteiro.map((e) => ({ ...e, etapa: corrigirTermos(e.etapa), dica: corrigirTermos(e.dica) })),
+      tratamentoObjecoes: c.tratamentoObjecoes.map((o) => ({ ...o, comoTratar: corrigirTermos(o.comoTratar) })),
+    },
+  };
+}
+
 // UM só alerta "orientador" por cliente (nunca um por mensagem/análise): se já
 // existe um não resolvido, atualiza o texto; senão cria. Some sozinho quando a
 // IA deixa de achar que há algo pedindo atenção agora (mensagens vazio).
@@ -334,6 +453,19 @@ export async function processarOrientador(args: {
 }): Promise<{ respondido: boolean }> {
   if (!args.conv.clienteId) return { respondido: false };
 
+  // Contato marcado como "Não é cliente": só o resumo da conversa, nada de
+  // coaching nem de melhor resposta. Sai antes de tudo — inclusive antes de
+  // gastar a chamada grande da análise.
+  const cadastro = await cadastroDoCliente(args.conv.clienteId);
+  if (soResumo(cadastro?.status)) {
+    await resumirContatoNaoCliente({
+      clienteId: args.conv.clienteId,
+      nomeContato: cadastro?.nome ?? args.conv.externalPhone,
+      historico: recortarHistorico(args.historicoCompleto),
+    }).catch((e) => zeusReport(e, "resumo de contato que não é cliente"));
+    return { respondido: false };
+  }
+
   // 1) Análise completa (painel + coaching). Nada é enviado sozinho, então a
   // resposta pode esperar a análise e aproveitar as orientações dela.
   const aprendizado = await lerAprendizadoOrientador().catch(() => null);
@@ -369,9 +501,18 @@ export async function processarOrientador(args: {
   // pede; "respondido" = mensagem tratada (não precisa do fallback).
   const respondido = !!reply;
 
+  // A conferência do resumo precisa saber o que foi REALMENTE anexado na
+  // conversa e de que lado (ver resumo-checagem.ts). Só direção e tipo — é
+  // uma consulta curta.
+  const anexos = await db.whatsAppMessage.findMany({
+    where: { conversationId: args.conv.id, isDraft: false, mediaType: { not: null } },
+    select: { direction: true, body: true, mediaType: true, sentAt: true },
+  }).catch(() => []);
+  const midia = midiaDaConversa(anexos);
+
   // "fatos" NÃO é coluna de OrientadorAnalise: sai do spread e vai para a
   // ficha da negociação logo abaixo. Deixá-lo aqui derrubaria o upsert inteiro.
-  const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = analise;
+  const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = limparAnalise(analise, midia, args.conv.clienteId);
   const coachingJson = coaching as unknown as Prisma.InputJsonValue;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
@@ -413,8 +554,28 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   ]);
   if (msgs.length === 0) return { ok: false, erro: "Conversa sem mensagens." };
   msgs.reverse();
-  const historico = msgs.map((m) => `[${m.sentAt.toLocaleDateString("pt-BR")} ${m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}] ${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
-  const ultimas = msgs.slice(-5).map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`).join("\n");
+  // A conversa é escrita com autor e anexo explícitos — ver historico-linha.ts
+  // para o defeito que isso corrige ("Cliente enviou documentos" sem nenhum
+  // documento na conversa).
+  const historico = montarHistorico(msgs);
+  const ultimas = montarUltimas(msgs);
+  const midia = midiaDaConversa(msgs);
+  // Contato "Não é cliente": o Reanalisar refaz o resumo e para por aí.
+  const cadastro = await cadastroDoCliente(conv.clienteId);
+  if (soResumo(cadastro?.status)) {
+    try {
+      const fez = await resumirContatoNaoCliente({
+        clienteId: conv.clienteId,
+        nomeContato: cadastro?.nome ?? conv.contactName ?? conv.externalPhone,
+        historico: recortarHistorico(historico),
+      });
+      await consumirOrcamentoIA();
+      return fez ? { ok: true } : { ok: false, erro: "A IA não devolveu o resumo. Tente de novo." };
+    } catch (e) {
+      return { ok: false, erro: mensagemErroIA(e) };
+    }
+  }
+
   const contextoCliente = await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: conv.clienteId, externalPhone: conv.externalPhone });
   const contextoAcademia = montarContextoAcademia(historico);
   const aprendizado = await lerAprendizadoOrientador().catch(() => null);
@@ -428,7 +589,7 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
       : "";
     await consumirOrcamentoIA();
     // "fatos" não é coluna de OrientadorAnalise (ver processarOrientador).
-    const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = analise;
+    const { alertas, conversaEncerrada, coaching, fatos, pedidos, ...campos } = limparAnalise(analise, midia, conv.clienteId);
     const coachingJson = coaching as unknown as Prisma.InputJsonValue;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },

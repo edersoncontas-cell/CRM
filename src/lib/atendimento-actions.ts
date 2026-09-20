@@ -19,6 +19,9 @@ export type ContextoConversa = {
     nome: string;
     municipio: string | null;
     telefone: string | null;
+    // "cliente" | "potencial" | "nao_cliente". Em "nao_cliente" o painel
+    // mostra SÓ o resumo da conversa — ver lib/zeus/orientador-resumo.ts.
+    status: string | null;
     jaComprou: boolean;
     aguardandoResposta: boolean;
     leadScore: number;
@@ -67,7 +70,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
   const [cliente, orientador, negociacoes, visitas, alertas, colunas, estilo, agenda] = await Promise.all([
     db.cliente.findUnique({
       where: { id: clienteId },
-      select: { id: true, nome: true, telefone: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
+      select: { id: true, nome: true, telefone: true, status: true, jaComprou: true, aguardandoResposta: true, leadScore: true, resumoTexto: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
     }),
     db.orientadorAnalise.findUnique({ where: { clienteId } }),
     db.negociacao.findMany({ where: { clienteId, status: "aberta" }, orderBy: { atualizadoEm: "desc" }, take: 3, select: { id: true, marca: true, maquinaModelo: true, valor: true, entradaValor: true, entradaPercentual: true, observacao: true, tipoPagamento: true, condicaoPagamento: true, estagio: true, termometro: true, proximaAcao: true, concorrenteMencionado: true } }),
@@ -83,7 +86,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
   return {
     cliente: {
       id: cliente.id, nome: cliente.nome, municipio: cliente.municipio?.nome ?? null, telefone: cliente.telefone,
-      jaComprou: cliente.jaComprou, aguardandoResposta: cliente.aguardandoResposta, leadScore: cliente.leadScore,
+      status: cliente.status, jaComprou: cliente.jaComprou, aguardandoResposta: cliente.aguardandoResposta, leadScore: cliente.leadScore,
       resumoTexto: cliente.resumoTexto, proximaVisita: cliente.proximaVisita?.toISOString() ?? null, proximaVisitaNota: cliente.proximaVisitaNota,
     },
     orientador: orientador
@@ -215,6 +218,26 @@ export async function salvarNotaOrientadorAction(
     console.error("[salvarNotaOrientador]", e);
     return { ok: false, erro: "Não deu para salvar a informação." };
   }
+
+  // LEITURA DIRETA, sem IA. Defeito reportado: o vendedor escreveu
+  // "Entrada 10%", a nota foi guardada, e o card continuou dizendo "entrada
+  // ainda não definida" — porque quem transforma nota em ficha é a análise do
+  // Orientador, e a cota diária de IA tinha acabado naquele dia.
+  //
+  // "Entrada 10%" não precisa de IA para ser entendida. Aqui a ficha é
+  // atualizada na hora, de graça, e a análise completa segue depois com o que
+  // só ela sabe fazer. Fora do try acima de propósito: a nota já está salva, e
+  // uma falha aqui não pode virar "não deu para salvar".
+  try {
+    const { lerFatosDaNota, temAlgumFato } = await import("@/lib/nota-fatos");
+    const fatos = lerFatosDaNota(texto);
+    if (temAlgumFato(fatos)) {
+      const { aplicarFatosDaNota } = await import("@/lib/zeus/orientador");
+      await aplicarFatosDaNota(conv.clienteId, fatos);
+    }
+  } catch (e) {
+    console.error("[salvarNotaOrientador] leitura direta:", e);
+  }
   // Fora do try de propósito: a nota JÁ está gravada aqui. Se o revalidate
   // falhasse dentro do try, a tela diria "não deu para salvar" e pularia a
   // reanálise por causa de um cache que não atualizou — perdendo justamente o
@@ -344,4 +367,53 @@ export async function descartarPedidoOrientadorAction(conversationId: string): P
     await db.orientadorAnalise.updateMany({ where: { clienteId: conv.clienteId }, data: { pedidosPendentes: null } }).catch(() => {});
   }
   return { ok: true };
+}
+
+/**
+ * Negociações ABERTAS do funil, para vincular a conversa direto a uma delas.
+ *
+ * O vendedor não pensa "qual cliente é este contato", ele pensa "esta conversa
+ * é daquela proposta que está no funil". Muitas vezes é o caso da pessoa
+ * física conversando por uma proposta que está no nome da empresa — procurar
+ * pelo nome do contato não acha nada, e ele ficava sem caminho.
+ */
+export async function negociacoesDoFunilAction(busca: string): Promise<{
+  id: string; clienteId: string; clienteNome: string; maquina: string | null;
+  valor: number | null; estagio: string;
+}[]> {
+  const q = busca.trim();
+
+  // Só as colunas "em negociação" e "em banco" — negócio vivo, que ainda dá
+  // para conduzir. Confirmada, perdida e faturada ficam de fora: ligar uma
+  // conversa nova a uma venda já fechada ou perdida não faz sentido.
+  //
+  // O filtro é pelo PAPEL da coluna, não pelo título: os títulos podem ser
+  // renomeados no funil, e há mais de uma coluna com o papel "em_negociacao"
+  // (Primeiro contato, Visitas pendentes, Visita realizada).
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true } }).catch(() => []);
+  const titulos = colunas.filter((c) => ["em_negociacao", "banco"].includes(papelDaColuna(c))).map((c) => c.titulo);
+  if (!titulos.length) return [];
+
+  const rows = await db.negociacao.findMany({
+    where: {
+      status: "aberta",
+      estagio: { in: titulos },
+      ...(q ? { OR: [
+        { cliente: { nome: { contains: q, mode: "insensitive" } } },
+        { maquinaModelo: { contains: q, mode: "insensitive" } },
+        { marca: { contains: q, mode: "insensitive" } },
+      ] } : {}),
+    },
+    orderBy: { atualizadoEm: "desc" },
+    take: 30,
+    select: {
+      id: true, clienteId: true, marca: true, maquinaModelo: true, valor: true, estagio: true,
+      cliente: { select: { nome: true } },
+    },
+  }).catch(() => []);
+  return rows.map((n) => ({
+    id: n.id, clienteId: n.clienteId, clienteNome: n.cliente.nome,
+    maquina: [n.marca, n.maquinaModelo].filter(Boolean).join(" ") || null,
+    valor: n.valor, estagio: n.estagio,
+  }));
 }

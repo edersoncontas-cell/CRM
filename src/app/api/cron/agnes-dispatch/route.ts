@@ -4,6 +4,7 @@ import { getWaSettings, cronAutorizado } from "@/lib/whatsapp-settings";
 import { montarContextoCliente, montarContextoAcademia } from "@/lib/zeus/cerebro-resposta";
 import { processarOrientador } from "@/lib/zeus/orientador";
 import { deveReanalisar } from "@/lib/zeus/orientador-gatilho";
+import { montarHistorico, montarUltimas } from "@/lib/zeus/historico-linha";
 import { tocarHeartbeat } from "@/lib/zeus/estado";
 import { lerParametros } from "@/lib/parametros";
 
@@ -47,17 +48,9 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    const historicoCompleto = msgs
-      .map((m) => {
-        const quem = m.direction === "OUT" ? p.nomeVendedor : "Cliente";
-        const hr = m.sentAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        return `[${hr}] ${quem}: ${m.body}`;
-      })
-      .join("\n");
-    const ultimasMensagens = msgs
-      .slice(-5)
-      .map((m) => `${m.direction === "OUT" ? p.nomeVendedor : "Cliente"}: ${m.body}`)
-      .join("\n");
+    // Mesmo renderizador do despacho rápido — ver lib/zeus/historico-linha.ts.
+    const historicoCompleto = montarHistorico(msgs);
+    const ultimasMensagens = montarUltimas(msgs);
 
     const contextoCliente = await montarContextoCliente({
       id: conv.id,

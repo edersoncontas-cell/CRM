@@ -132,6 +132,21 @@ Devolva SOMENTE um JSON válido, sem texto antes ou depois:
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto.
+- CADA AFIRMAÇÃO DO "resumoNegociacao" TEM DE TER ORIGEM. Antes de escrever qualquer frase, pergunte-se: em qual
+  mensagem, ou em qual linha do contexto do vendedor, isso está escrito? Se não souber apontar, NÃO ESCREVA.
+  Resumo curto e certo vale mais que resumo completo e inventado. Três erros reais que já chegaram à tela do
+  vendedor e não podem se repetir:
+  * "Cliente enviou documentos" — sem nenhum documento na conversa. ANEXO só existe quando a linha do histórico
+    traz "[enviou um documento/uma foto/um áudio/um vídeo]", e vale para o lado que aparece na linha:
+    "VOCÊ (vendedor)" é o vendedor, "CLIENTE" é o cliente. Nome de arquivo escrito no meio do texto NÃO é anexo,
+    e anexo mandado pelo vendedor NUNCA vira "o cliente mandou".
+  * "Wadson, da construtora" — inventado a partir do NOME do cadastro ("BWB Construções"). O nome de uma empresa
+    é um rótulo, NÃO diz o ramo dela: "Construções" no nome não faz o cliente ser construtora, "Transportes" não
+    faz ser transportadora. Só diga o ramo, o cargo ou o vínculo de alguém se a conversa ou a nota do vendedor
+    disserem com todas as letras. Na dúvida, escreva só o nome.
+  * "excavadora" — não existe em português. É ESCAVADEIRA, sempre. Também: retroescavadeira, pá carregadeira,
+    rolo compactador, motoniveladora, entrada (não "enganche"), parcelas (não "cuotas"), financiamento (não
+    "financiación"). Escreva como o vendedor de campo brasileiro fala, sem termo de espanhol nem de inglês.
 - "objecoes" só com itens da lista permitida e que realmente apareceram.
 - "resumoNegociacao", "proximaAcao" e "pendencias" têm de ser COERENTES com "combinados": visita confirmada não
   aparece como "falta confirmar"; proposta já enviada não aparece como "enviar proposta".

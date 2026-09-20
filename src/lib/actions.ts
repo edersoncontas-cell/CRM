@@ -18,6 +18,7 @@ import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
 import { registrarAudit } from "./audit";
 import { mesAnoAtualBrasilia, inicioDoDiaBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
+import { soResumo } from "@/lib/cliente-status";
 import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
@@ -126,8 +127,19 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
       ...nascimento,
     },
   });
+  // Marcou como "Não é cliente": o Orientador para de orientar este contato
+  // (ver lib/zeus/orientador-resumo.ts). O alerta de venda que ele possa ter
+  // deixado, e a espera por resposta, saem na hora — sem isso o CRM ficaria
+  // cobrando retorno de alguém que o vendedor acabou de dizer que não é
+  // cliente, até a próxima análise.
+  if (soResumo(status)) {
+    await db.alerta.updateMany({ where: { clienteId: id, tipo: "orientador", resolvido: false }, data: { resolvido: true } }).catch(() => {});
+    await db.cliente.updateMany({ where: { id, aguardandoResposta: true }, data: { aguardandoResposta: false } }).catch(() => {});
+  }
   await enviarClienteParaGoogle(id).catch((e) => console.error("[google] contato:", e));
   revalidatePath(`/clientes/${id}`);
+  revalidatePath("/atendimento");
+  revalidatePath("/alertas");
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { ok: true };
