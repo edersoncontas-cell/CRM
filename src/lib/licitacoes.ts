@@ -16,9 +16,37 @@ import { getConfig, setConfig } from "@/lib/config";
 const CHAVE_ULTIMA = "licitacoes.ultima";
 const CACHE_MS = 5 * 60 * 1000;
 const PNCP = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta";
-// Modalidades que compram máquina: pregão eletrônico, concorrência, dispensa.
-const MODALIDADES = [6, 4, 8];
+
+/**
+ * Modalidades que compram máquina, com o nome para o diagnóstico.
+ *
+ * Faltavam as PRESENCIAIS, e é onde mora boa parte da compra de máquina no
+ * interior: Dores do Rio Preto, Divino de São Lourenço e Ibitirama ainda
+ * rodam pregão presencial. Olhar só o eletrônico deixava esses editais
+ * invisíveis — o painel não estava errado, estava cego para eles.
+ */
+export const MODALIDADES: { codigo: number; nome: string }[] = [
+  { codigo: 6, nome: "Pregão eletrônico" },
+  { codigo: 7, nome: "Pregão presencial" },
+  { codigo: 4, nome: "Concorrência eletrônica" },
+  { codigo: 5, nome: "Concorrência presencial" },
+  { codigo: 8, nome: "Dispensa" },
+];
+
 const TEMPO_MS = 12000;
+/**
+ * 50 é o tamanho de página documentado nas consultas do PNCP. A busca pedia
+ * 200 — acima do limite, o portal responde 400 e a modalidade inteira se
+ * perde. Não deu para confirmar o código de resposta daqui (a rede do
+ * ambiente não alcança o pncp.gov.br), mas 50 é seguro nos dois cenários:
+ * se 200 era aceito, o único efeito é ler mais páginas, e agora o robô
+ * pagina de qualquer jeito.
+ */
+export const POR_PAGINA = 50;
+/** Teto de páginas por modalidade — o ES inteiro cabe com folga. */
+export const MAX_PAGINAS = 20;
+/** Orçamento de tempo da rodada inteira: o cron da Vercel corta em 60 s. */
+export const PRAZO_TOTAL_MS = 40_000;
 
 export type Licitacao = {
   id: string;
@@ -33,11 +61,23 @@ export type Licitacao = {
   termos: string[]; // o que casou ("retroescavadeira", "pá carregadeira"…)
 };
 
+/** Como foi a leitura de UMA modalidade — é o que permite enxergar o robô. */
+export type LeituraModalidade = {
+  nome: string;
+  editaisLidos: number;
+  paginas: number;
+  erro: string | null;
+};
+
 export type LicitacoesGuardadas = {
   em: string | null;
   itens: Licitacao[];
   cidadesOlhadas: number;
   erro: string | null;
+  /** Quantos editais foram lidos no total (antes de filtrar por máquina). */
+  editaisLidos?: number;
+  /** Detalhe por modalidade, para a tela dizer o que o robô fez. */
+  leituras?: LeituraModalidade[];
 };
 
 // O que interessa. Só termo de máquina — "veículo" e "caminhão" ficam de
@@ -64,11 +104,37 @@ function semAcento(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-/** Termos de máquina que aparecem no objeto do edital ([] = não interessa). */
+/**
+ * Termos de máquina que aparecem no objeto do edital ([] = não interessa).
+ *
+ * A regra do descarte olha a POSIÇÃO, não a mera presença. O que manda no
+ * edital é o que vem antes da máquina:
+ *
+ *   "locação de retroescavadeira"            → locação ANTES  → fora
+ *   "aquisição de peças para motoniveladora" → peças ANTES    → fora
+ *   "aquisição de retroescavadeira com manutenção por 12 meses"
+ *                                            → manutenção DEPOIS → ENTRA
+ *
+ * Antes bastava a palavra aparecer em qualquer lugar, e era um buraco de
+ * verdade: quase todo edital de compra de máquina cita garantia, manutenção
+ * ou peças de reposição nas condições. O painel descartava justamente as
+ * compras mais bem especificadas — as que mais interessam.
+ */
 export function termosDeMaquina(objeto: string): string[] {
   const o = semAcento(objeto);
-  if (DESCARTE.some((d) => o.includes(semAcento(d)))) return [];
   const achados = TERMOS.filter((t) => o.includes(semAcento(t)));
+  if (!achados.length) return [];
+
+  // Onde a primeira máquina é citada.
+  const primeiraMaquina = Math.min(...achados.map((t) => o.indexOf(semAcento(t))));
+  // Alguma palavra de descarte aparece ANTES dela? Então o edital é sobre
+  // aquilo — conserto, aluguel, peça — e não sobre comprar a máquina.
+  const descartado = DESCARTE.some((d) => {
+    const i = o.indexOf(semAcento(d));
+    return i !== -1 && i < primeiraMaquina;
+  });
+  if (descartado) return [];
+
   // "escavadeira" casa dentro de "retroescavadeira": fica só o mais específico.
   return achados.filter((t) => !achados.some((outro) => outro !== t && outro.includes(t)));
 }
@@ -110,13 +176,46 @@ export function normalizarItemPncp(item: Obj): Omit<Licitacao, "termos" | "cidad
   };
 }
 
-async function buscarModalidade(modalidade: number, dataFinal: string): Promise<Obj[]> {
-  const url = `${PNCP}?dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}&uf=ES&pagina=1&tamanhoPagina=200`;
+/** Lê UMA página do PNCP e devolve os itens + quantas páginas existem. */
+async function buscarPagina(modalidade: number, dataFinal: string, pagina: number): Promise<{ itens: Obj[]; totalPaginas: number }> {
+  const url = `${PNCP}?dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}&uf=ES&pagina=${pagina}&tamanhoPagina=${POR_PAGINA}`;
   const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(TEMPO_MS) });
+  // 204 = o PNCP diz "não há nada com estes filtros". Não é erro.
+  if (res.status === 204) return { itens: [], totalPaginas: 0 };
   if (!res.ok) throw new Error(`PNCP respondeu ${res.status}`);
   const json = (await res.json()) as Obj;
   const dados = json.data ?? json.items ?? json;
-  return Array.isArray(dados) ? (dados as Obj[]) : [];
+  const total = typeof json.totalPaginas === "number" ? json.totalPaginas : 1;
+  return { itens: Array.isArray(dados) ? (dados as Obj[]) : [], totalPaginas: total };
+}
+
+/**
+ * Lê a modalidade INTEIRA, página a página.
+ *
+ * Este era o defeito central: a busca pedia uma página só e parava. O PNCP
+ * devolve todas as contratações abertas do Espírito Santo — milhares — e a
+ * compra de máquina é um punhado no meio. Filtrar 50 registros sorteados de
+ * milhares e concluir "nenhum edital de máquina" não era uma resposta: era um
+ * palpite. Agora o robô varre tudo e o painel passa a dizer quantos editais
+ * de fato olhou.
+ */
+async function buscarModalidade(modalidade: number, dataFinal: string, limite: number): Promise<{ itens: Obj[]; paginas: number }> {
+  const todos: Obj[] = [];
+  let paginas = 0;
+  const primeira = await buscarPagina(modalidade, dataFinal, 1);
+  todos.push(...primeira.itens);
+  paginas = 1;
+  const ate = Math.min(primeira.totalPaginas, MAX_PAGINAS);
+  for (let p = 2; p <= ate; p++) {
+    // O cron tem 60 s. Melhor entregar o que já leu do que ser cortado no
+    // meio e não gravar nada.
+    if (Date.now() > limite) break;
+    const r = await buscarPagina(modalidade, dataFinal, p);
+    todos.push(...r.itens);
+    paginas++;
+    if (!r.itens.length) break;
+  }
+  return { itens: todos, paginas };
 }
 
 /** Cidades da área de atuação (as que estão no CRM e não foram marcadas fora). */
@@ -137,11 +236,16 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
   const dataFinal = `${ate.getFullYear()}${String(ate.getMonth() + 1).padStart(2, "0")}${String(ate.getDate()).padStart(2, "0")}`;
 
   const achados = new Map<string, Licitacao>();
+  const leituras: LeituraModalidade[] = [];
+  const limite = Date.now() + PRAZO_TOTAL_MS;
   let erro: string | null = null;
+  let editaisLidos = 0;
 
-  for (const modalidade of MODALIDADES) {
+  for (const m of MODALIDADES) {
     try {
-      const itens = await buscarModalidade(modalidade, dataFinal);
+      const { itens, paginas } = await buscarModalidade(m.codigo, dataFinal, limite);
+      editaisLidos += itens.length;
+      leituras.push({ nome: m.nome, editaisLidos: itens.length, paginas, erro: null });
       for (const bruto of itens) {
         const it = normalizarItemPncp(bruto);
         if (!it) continue;
@@ -153,8 +257,10 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
       }
     } catch (e) {
       // Uma modalidade falhar não pode derrubar as outras.
-      erro = e instanceof Error ? e.message : String(e);
-      console.error(`[licitacoes] modalidade ${modalidade}:`, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      erro = msg;
+      leituras.push({ nome: m.nome, editaisLidos: 0, paginas: 0, erro: msg });
+      console.error(`[licitacoes] modalidade ${m.nome} (${m.codigo}):`, e);
     }
   }
 
@@ -168,9 +274,13 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
     em: new Date().toISOString(),
     itens: itens.slice(0, 40),
     cidadesOlhadas: cidades.length,
-    // Só reporta erro se NADA veio — erro numa modalidade com resultado nas
-    // outras não é problema que o vendedor precise ver.
-    erro: itens.length ? null : erro,
+    editaisLidos,
+    leituras,
+    // Só reporta erro quando o robô não conseguiu LER nada. Erro numa
+    // modalidade com leitura nas outras não é problema do vendedor — mas
+    // "nenhum edital de máquina" com ZERO editais lidos é falha, não
+    // ausência, e antes as duas coisas apareciam iguais na tela.
+    erro: editaisLidos > 0 ? null : erro,
   };
   await setConfig(CHAVE_ULTIMA, JSON.stringify(guardado));
   cacheMem = null;
