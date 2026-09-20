@@ -1,0 +1,72 @@
+# Autoconserto do ZEUS.
+#
+# O CRM detecta uma falha em produção, abre uma issue com a etiqueta
+# "zeus-falha" (ver src/lib/zeus/autofix.ts) e este workflow acorda: o Claude
+# lê o chamado, acha a causa, corrige, roda os testes e abre um Pull Request.
+#
+# O que ele NÃO faz: publicar. O PR fica esperando o merge de uma pessoa.
+# Conserto automático errado direto na produção é pior do que a falha original
+# — ninguém percebe até o CRM estar quebrado de outro jeito.
+#
+# Segurança: só dispara em issue com a etiqueta certa, e só se ela tiver sido
+# aberta pelo dono do repositório ou pelo robô. Assim uma issue de fora não
+# consegue acionar o Claude no repositório.
+
+name: ZEUS — autoconserto
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  corrigir:
+    if: >
+      contains(github.event.issue.labels.*.name, 'zeus-falha') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Claude diagnostica e corrige
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Uma falha de produção do CRM abriu a issue #${{ github.event.issue.number }}.
+
+            Leia a issue, ache a CAUSA RAIZ e corrija. O CRM é um sistema em uso
+            de verdade por um vendedor de máquinas pesadas — um conserto errado
+            atrapalha mais do que a falha.
+
+            Como trabalhar:
+            1. Reproduza o problema antes de mexer em qualquer coisa. Se não
+               conseguir reproduzir, diga isso na issue e pare — não chute.
+            2. Conserte a causa, não o sintoma. Nada de try/catch escondendo
+               erro.
+            3. Escreva um teste que falha sem o seu conserto e passa com ele.
+            4. Rode `npx vitest run`, `npx tsc --noEmit` e `npx next lint`.
+               Tudo tem de passar.
+            5. Abra um Pull Request explicando, em português, o que quebrou,
+               por quê, e o que você mudou. Ligue o PR a esta issue.
+
+            Não faça merge. Não publique. Não mexa em nada fora do que a falha
+            exige. Se a correção for grande ou arriscada, escreva na issue o que
+            você faria e por que precisa de decisão humana, em vez de abrir um PR.
+          claude_args: |
+            --allowedTools "Bash(npm:*),Bash(npx:*),Read,Edit,Write,Glob,Grep"

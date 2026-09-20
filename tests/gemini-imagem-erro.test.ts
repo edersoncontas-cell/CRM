@@ -81,17 +81,27 @@ describe("429 com conta paga: plano gratuito × limite por minuto", () => {
     expect(noPlanoGratuito(CORPO_PAGO_POR_MINUTO)).toBe(false);
   });
 
-  it("plano gratuito: avisa que assinar o app do Gemini não resolve", () => {
+  it("plano gratuito: diz quando a arte volta, sem mandar assinar nada", () => {
+    // O dono do CRM decidiu ficar no plano gratuito. A mensagem tem de ser
+    // útil para quem vai ficar: quando volta. Mandar "ative o faturamento"
+    // para quem já disse que não vai pagar é ruído.
     const m = mensagemDoErro(429, CORPO_GRATUITO);
-    expect(m).toContain("PLANO GRATUITO");
-    expect(m).toContain("faturamento");
-    expect(m).toContain("GEMINI_API_KEY");
+    expect(m).toContain("acabou por hoje");
+    expect(m).toMatch(/volta sozinha (hoje|amanhã) às \d{2}:\d{2}|volta sozinha em/);
+    expect(m).toContain("texto do post continua funcionando");
     expect(m).not.toContain("{");
   });
 
-  it("plano gratuito não manda esperar, porque esperar não adianta", () => {
+  it("explica que assinar o app do Gemini não mexe nesta cota", () => {
+    // Quem assina o Gemini no celular acha, com razão, que já pagou pela API.
+    // Não pagou: são produtos separados.
     const m = mensagemDoErro(429, CORPO_GRATUITO);
-    expect(m).not.toContain("Espere um minuto");
+    expect(m).toContain("Google One");
+    expect(m).toContain("não aumenta esta cota");
+  });
+
+  it("plano gratuito não manda esperar um minuto, porque não é disso que se trata", () => {
+    expect(mensagemDoErro(429, CORPO_GRATUITO)).not.toContain("Espere um minuto");
   });
 
   it("limite por minuto: repete a espera que a própria Google pediu", () => {

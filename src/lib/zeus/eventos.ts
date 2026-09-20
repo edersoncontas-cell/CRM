@@ -31,6 +31,10 @@ export async function registrarZeusEvent(opts: {
     }
     try {
       await db.zeusEvent.create({ data: { tipo: opts.tipo, titulo: opts.titulo, severidade, detalhe } });
+      // PRIMEIRA vez desta falha: abre o chamado de autoconserto. Só aqui, e
+      // nunca no ramo de incremento acima — o mesmo erro pipocando mil vezes é
+      // UMA falha, e abrir mil chamados seria pior do que não abrir nenhum.
+      if (opts.tipo === "erro") await dispararAutofix(opts.titulo, severidade, opts.detalhe);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         await db.zeusEvent.updateMany({
@@ -58,4 +62,29 @@ export async function zeusReport(err: unknown, contexto: string): Promise<void> 
     titulo: `Erro em ${contexto}: ${mensagem.slice(0, 150)}`,
     detalhe: { contexto, mensagem, stack },
   });
+}
+
+/**
+ * Chama o autoconserto sem segurar o fluxo que estourou o erro.
+ *
+ * Deliberadamente sem await no chamador: abrir issue no GitHub é rede, e o
+ * caminho que chega aqui costuma ser um webhook de WhatsApp. Ninguém pode
+ * perder uma mensagem de cliente porque o GitHub demorou a responder.
+ */
+async function dispararAutofix(titulo: string, severidade: string, detalhe: unknown): Promise<void> {
+  try {
+    const { autofixHabilitado, abrirChamadoDeFalha } = await import("@/lib/zeus/autofix");
+    if (!autofixHabilitado()) return;
+    const d = (typeof detalhe === "object" && detalhe ? detalhe : {}) as Record<string, unknown>;
+    const texto = (v: unknown) => (typeof v === "string" ? v : null);
+    void abrirChamadoDeFalha({
+      titulo, severidade,
+      contexto: texto(d.contexto),
+      mensagem: texto(d.mensagem),
+      stack: texto(d.stack),
+      ocorrencias: 1,
+    }).then((r) => { if (!r.aberto && r.motivo) console.warn("[autofix] não abriu:", r.motivo); });
+  } catch (e) {
+    console.error("[autofix] disparo:", e);
+  }
 }

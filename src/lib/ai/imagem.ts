@@ -3,6 +3,7 @@
 // provedores configurados com geração de imagem na camada gratuita).
 
 import { GEMINI_API_BASE, GEMINI_IMAGE_MODELS } from "./config";
+import { marcarEsgotado, modelosDisponiveis, primeiraLiberacao, proximaViradaDiariaGoogle, quandoVolta } from "./imagem-cota";
 
 export type ImagemGerada = { base64: string; mimeType: string; modelo: string };
 export type Referencia = { base64: string; mimeType: string };
@@ -40,7 +41,12 @@ export function mensagemDoErro(status: number, detalhe: string): string {
     // libera cota da API — são produtos separados. O que libera é ativar o
     // faturamento no projeto do Google AI Studio de onde saiu a chave.
     if (noPlanoGratuito(detalhe)) {
-      return "A chave do Gemini está no PLANO GRATUITO e a cota de hoje acabou. Atenção: assinar o aplicativo Gemini (Google One / Gemini Advanced) não libera a API — é preciso ativar o faturamento no projeto do Google AI Studio de onde saiu esta chave, ou gerar a chave no projeto que já tem faturamento e trocar GEMINI_API_KEY na Vercel.";
+      // Sem mandar assinar nada: a arte É de graça, o que acabou foi a cota do
+      // dia. A ressalva sobre o app existe porque quem assina o Gemini no
+      // celular acha, com razão, que já pagou pela API — e não pagou: são
+      // produtos separados, e o app não muda esta cota.
+      const volta = quandoVolta(proximaViradaDiariaGoogle());
+      return `A cota gratuita de imagens do Gemini acabou por hoje. A criação de arte volta sozinha ${volta}, e o texto do post continua funcionando normalmente. (Assinar o aplicativo Gemini, Google One ou AI Pro não aumenta esta cota — a API é cobrada à parte; só ativar faturamento no projeto do Google AI Studio tiraria o limite.)`;
     }
     const espera = esperaSugerida(detalhe);
     if (espera) {
@@ -83,8 +89,11 @@ async function gerarComModelo(modelo: string, prompt: string, referencias: Refer
     // Mensagem em português, não o JSON cru da Google: quem lê é o vendedor,
     // e "You exceeded your current quota" no meio de um JSON não diz o que
     // fazer. O detalhe técnico fica no log do servidor.
-    const erro = new Error(mensagemDoErro(res.status, detalhe)) as Error & { status?: number };
+    const erro = new Error(mensagemDoErro(res.status, detalhe)) as Error & { status?: number; detalhe?: string };
     erro.status = res.status;
+    // O corpo cru vai junto: é nele que a Google diz se foi o teto do dia ou
+    // o do minuto, e é isso que decide até quando marcar o modelo como fora.
+    erro.detalhe = detalhe;
     console.error(`[gemini-imagem] ${modelo} ${res.status}: ${detalhe.slice(0, 300)}`);
     throw erro;
   }
@@ -101,13 +110,36 @@ async function gerarComModelo(modelo: string, prompt: string, referencias: Refer
 // livre. Outros erros param a fila.
 export async function gerarImagemGemini(prompt: string, referencias: Referencia[] = []): Promise<ImagemGerada> {
   if (!geracaoDeImagemHabilitada()) throw new Error("Geração de imagem exige GEMINI_API_KEY.");
+
+  // A arte roda na camada GRATUITA do Gemini, que tem teto por minuto e por
+  // dia — e cada modelo tem o SEU teto. Modelo que já avisou que acabou não é
+  // tentado de novo: antes, cada clique queimava uma chamada em cada modelo
+  // sem chance nenhuma de dar certo, e a tela só sabia dizer "espere um
+  // minuto".
+  const agora = new Date();
+  const disponiveis = modelosDisponiveis(GEMINI_IMAGE_MODELS, agora);
+  if (!disponiveis.length) {
+    const volta = primeiraLiberacao(GEMINI_IMAGE_MODELS, agora);
+    throw new Error(
+      `A cota gratuita de imagens do Gemini acabou. A criação de arte volta sozinha ${volta ? quandoVolta(volta, agora) : "em breve"} — o texto do post continua funcionando normalmente.`,
+    );
+  }
+
   let ultimo: unknown = null;
-  for (const modelo of GEMINI_IMAGE_MODELS) {
+  for (const modelo of disponiveis) {
     try {
       return await gerarComModelo(modelo, prompt, referencias);
     } catch (e) {
       ultimo = e;
       const status = (e as { status?: number }).status;
+      const detalhe = (e as { detalhe?: string }).detalhe ?? "";
+      if (status === 429) {
+        // Teto do dia: só volta na virada do Google (meia-noite do Pacífico).
+        // Teto do minuto: volta na espera que a própria Google pediu.
+        const espera = esperaSugerida(detalhe);
+        const porDia = noPlanoGratuito(detalhe) || /per day|daily/i.test(detalhe) || !espera;
+        marcarEsgotado(modelo, porDia ? proximaViradaDiariaGoogle(agora) : new Date(agora.getTime() + espera * 1000));
+      }
       console.error(`[gemini-imagem] ${modelo} falhou:`, e instanceof Error ? e.message : e);
       if (status !== 404 && status !== 400 && status !== 429) break;
     }
