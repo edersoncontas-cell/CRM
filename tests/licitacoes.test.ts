@@ -3,7 +3,8 @@
 // perder venda. Estes testes travam as duas pontas.
 
 import { describe, it, expect } from "vitest";
-import { termosDeMaquina, cidadeAtendida, normalizarItemPncp, MODALIDADES, POR_PAGINA, MAX_PAGINAS, PRAZO_TOTAL_MS } from "@/lib/licitacoes";
+import { termosDeMaquina, cidadeAtendida, normalizarItemPncp, MODALIDADES, POR_PAGINA, MAX_PAGINAS, PRAZO_TOTAL_MS,
+  esperaDoRetryAfter, USER_AGENT, PAUSA_ENTRE_PAGINAS_MS, TENTATIVAS_429 } from "@/lib/licitacoes";
 
 describe("o que é licitação de máquina", () => {
   it("pega as máquinas que ele vende", () => {
@@ -158,5 +159,54 @@ describe("o tamanho de página respeita o limite do PNCP", () => {
   it("e há teto de páginas e prazo, para o cron de 60 s não ser cortado no meio", () => {
     expect(MAX_PAGINAS).toBeGreaterThan(1);
     expect(PRAZO_TOTAL_MS).toBeLessThan(60_000);
+  });
+});
+
+// ── O QUE O PORTAL REALMENTE RESPONDEU: 429 ─────────────────────────────────
+//
+// O diagnóstico que eu tinha acabado de construir deu a resposta, e desmentiu
+// a minha hipótese: não foi 400 (pedido grande demais), foi 429 em TODAS as
+// cinco modalidades. Ou seja, LIMITE DE ACESSO — o portal barrou o CRM.
+//
+// E a correção anterior piorava esse lado: paginar dispara muito mais
+// requisições, em rajada. Estes testes travam a educação do robô.
+describe("quando o portal limita o acesso (429)", () => {
+  it("respeita o Retry-After que o portal mandar", () => {
+    expect(esperaDoRetryAfter("2", 1)).toBe(2000);
+    expect(esperaDoRetryAfter("5", 1)).toBe(5000);
+  });
+
+  it("sem Retry-After, a espera cresce a cada tentativa", () => {
+    expect(esperaDoRetryAfter(null, 1)).toBe(1000);
+    expect(esperaDoRetryAfter(null, 2)).toBe(2000);
+    expect(esperaDoRetryAfter(null, 3)).toBe(4000);
+  });
+
+  it("nunca espera mais que 8 s — o cron inteiro tem 60", () => {
+    // Trocar um erro por um corte no meio da rodada não é melhoria.
+    expect(esperaDoRetryAfter("3600", 1)).toBe(8000);
+    expect(esperaDoRetryAfter(null, 10)).toBe(8000);
+  });
+
+  it("cabeçalho lixo não vira espera maluca", () => {
+    expect(esperaDoRetryAfter("amanhã", 1)).toBe(1000);
+    expect(esperaDoRetryAfter("-5", 2)).toBe(2000);
+    expect(esperaDoRetryAfter("", 1)).toBe(1000);
+  });
+
+  it("o robô se identifica e respira entre as páginas", () => {
+    // Requisição anônima em rajada é o perfil que portal público barra
+    // primeiro — e barrou.
+    expect(USER_AGENT).toMatch(/CRM/);
+    expect(PAUSA_ENTRE_PAGINAS_MS).toBeGreaterThan(0);
+    expect(TENTATIVAS_429).toBeGreaterThan(1);
+  });
+
+  it("a pausa entre páginas cabe no orçamento da rodada", () => {
+    // No pior caso (5 modalidades × 20 páginas) a soma das PAUSAS sozinha não
+    // pode consumir a janela inteira — senão o robô passaria a rodada
+    // esperando e leria menos do que lia antes.
+    const soPausas = MODALIDADES.length * MAX_PAGINAS * PAUSA_ENTRE_PAGINAS_MS;
+    expect(soPausas).toBeLessThan(PRAZO_TOTAL_MS);
   });
 });

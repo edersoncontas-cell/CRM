@@ -8,13 +8,13 @@ import { resolverAlerta, resolverVariosAlertasAction, registrarContatoPosVenda, 
 import type { GrupoCentral, ItemCentral, SeveridadeAlerta, GraficosCentral } from "@/lib/central-alertas";
 import { PosVendaModal } from "@/components/PosVendaClient";
 import { cn } from "@/lib/utils";
-import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, Snowflake, Route } from "lucide-react";
+import { Bell, CheckCircle2, ArrowRight, Loader2, MessageSquareQuote, Clock, Compass, HeartHandshake, MapPin, ListTodo, ShieldCheck, Target, MessageCircle, History, Snowflake, Route, Gavel } from "lucide-react";
 
 const ICONE_GRUPO: Record<string, typeof Bell> = {
-  rascunhos: MessageSquareQuote, aguardando: Clock, semcontato: Snowflake, visitar: Route, comerciais: Compass, posvenda: HeartHandshake, visitas: MapPin, demandas: ListTodo, meta: Target, sistema: ShieldCheck,
+  rascunhos: MessageSquareQuote, aguardando: Clock, semcontato: Snowflake, visitar: Route, comerciais: Compass, posvenda: HeartHandshake, visitas: MapPin, demandas: ListTodo, meta: Target, sistema: ShieldCheck, licitacoes: Gavel,
 };
 const COR_GRUPO: Record<string, string> = {
-  rascunhos: "#ffcb2d", aguardando: "#fb923c", semcontato: "#facc15", visitar: "#22d3ee", comerciais: "#a78bfa", posvenda: "#f472b6", visitas: "#38bdf8", demandas: "#34d399", meta: "#f87171", sistema: "#94a3b8",
+  rascunhos: "#ffcb2d", aguardando: "#fb923c", semcontato: "#facc15", visitar: "#22d3ee", comerciais: "#a78bfa", posvenda: "#f472b6", visitas: "#38bdf8", demandas: "#34d399", meta: "#f87171", sistema: "#94a3b8", licitacoes: "#fbbf24",
 };
 const COR_SEV: Record<SeveridadeAlerta, string> = { alta: "border-l-red-500", media: "border-l-amber-400", baixa: "border-l-slate-300" };
 const ROTULO_SEV: Record<SeveridadeAlerta, { texto: string; classe: string }> = {

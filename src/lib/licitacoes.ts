@@ -48,6 +48,16 @@ export const MAX_PAGINAS = 20;
 /** Orçamento de tempo da rodada inteira: o cron da Vercel corta em 60 s. */
 export const PRAZO_TOTAL_MS = 40_000;
 
+/**
+ * O portal barrou o CRM com 429 em todas as modalidades. Portal público não
+ * gosta de rajada nem de requisição anônima — estas três constantes são a
+ * resposta a isso: o robô se identifica, respira entre as páginas e recua
+ * quando é mandado recuar.
+ */
+export const USER_AGENT = "CRM-NewHolland-Dynapac-ES/1.0 (robô de licitações de máquinas; contato pelo CRM)";
+export const PAUSA_ENTRE_PAGINAS_MS = 250;
+export const TENTATIVAS_429 = 3;
+
 export type Licitacao = {
   id: string;
   orgao: string;
@@ -176,17 +186,63 @@ export function normalizarItemPncp(item: Obj): Omit<Licitacao, "termos" | "cidad
   };
 }
 
-/** Lê UMA página do PNCP e devolve os itens + quantas páginas existem. */
+const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Quanto esperar depois de um 429.
+ *
+ * O portal costuma dizer no cabeçalho `Retry-After` (em segundos). Quando não
+ * diz, a espera cresce a cada tentativa: 1s, 2s, 4s. Teto de 8s por tentativa
+ * porque o cron inteiro tem 60 s — esperar mais seria trocar um erro por um
+ * corte no meio.
+ */
+export function esperaDoRetryAfter(cabecalho: string | null, tentativa: number): number {
+  const s = Number(cabecalho);
+  if (Number.isFinite(s) && s > 0) return Math.min(s * 1000, 8_000);
+  return Math.min(1000 * 2 ** (tentativa - 1), 8_000);
+}
+
+/**
+ * Lê UMA página do PNCP, com educação.
+ *
+ * O portal respondeu 429 em TODAS as modalidades — limite de acesso, não
+ * tamanho de pedido. Três coisas mudam isso:
+ *
+ *  1. IDENTIFICAÇÃO. Requisição sem User-Agent parece robô anônimo e é a
+ *     primeira a ser barrada em portal público. Agora o CRM se apresenta.
+ *  2. RECUO. Em 429, espera o que o portal mandar esperar (Retry-After) e
+ *     tenta de novo, em vez de desistir na hora e perder a modalidade inteira.
+ *  3. PACIÊNCIA ENTRE PÁGINAS — ver buscarModalidade.
+ */
 async function buscarPagina(modalidade: number, dataFinal: string, pagina: number): Promise<{ itens: Obj[]; totalPaginas: number }> {
   const url = `${PNCP}?dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}&uf=ES&pagina=${pagina}&tamanhoPagina=${POR_PAGINA}`;
-  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(TEMPO_MS) });
-  // 204 = o PNCP diz "não há nada com estes filtros". Não é erro.
-  if (res.status === 204) return { itens: [], totalPaginas: 0 };
-  if (!res.ok) throw new Error(`PNCP respondeu ${res.status}`);
-  const json = (await res.json()) as Obj;
-  const dados = json.data ?? json.items ?? json;
-  const total = typeof json.totalPaginas === "number" ? json.totalPaginas : 1;
-  return { itens: Array.isArray(dados) ? (dados as Obj[]) : [], totalPaginas: total };
+
+  for (let tentativa = 1; tentativa <= TENTATIVAS_429; tentativa++) {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(TEMPO_MS),
+      headers: {
+        Accept: "application/json",
+        "User-Agent": USER_AGENT,
+      },
+    });
+    // 204 = o PNCP diz "não há nada com estes filtros". Não é erro.
+    if (res.status === 204) return { itens: [], totalPaginas: 0 };
+    if (res.status === 429 && tentativa < TENTATIVAS_429) {
+      await dormir(esperaDoRetryAfter(res.headers.get("retry-after"), tentativa));
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(res.status === 429
+        ? "PNCP limitou o acesso (429) — tentamos de novo e ele manteve"
+        : `PNCP respondeu ${res.status}`);
+    }
+    const json = (await res.json()) as Obj;
+    const dados = json.data ?? json.items ?? json;
+    const total = typeof json.totalPaginas === "number" ? json.totalPaginas : 1;
+    return { itens: Array.isArray(dados) ? (dados as Obj[]) : [], totalPaginas: total };
+  }
+  throw new Error("PNCP limitou o acesso (429) — tentamos de novo e ele manteve");
 }
 
 /**
@@ -210,6 +266,9 @@ async function buscarModalidade(modalidade: number, dataFinal: string, limite: n
     // O cron tem 60 s. Melhor entregar o que já leu do que ser cortado no
     // meio e não gravar nada.
     if (Date.now() > limite) break;
+    // Um respiro entre páginas. Disparar 100 requisições em rajada é o jeito
+    // mais rápido de um portal público te barrar — e barrou.
+    await dormir(PAUSA_ENTRE_PAGINAS_MS);
     const r = await buscarPagina(modalidade, dataFinal, p);
     todos.push(...r.itens);
     paginas++;
@@ -262,6 +321,20 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
       leituras.push({ nome: m.nome, editaisLidos: 0, paginas: 0, erro: msg });
       console.error(`[licitacoes] modalidade ${m.nome} (${m.codigo}):`, e);
     }
+  }
+
+  // ACUMULA EM VEZ DE SUBSTITUIR.
+  //
+  // O portal limita o acesso (429), então rodada parcial é o normal, não a
+  // exceção. Trocar o resultado inteiro pelo da última rodada fazia um 429
+  // APAGAR editais que já tinham sido encontrados — o vendedor perdia venda
+  // por causa de um limite de acesso momentâneo. Agora cada rodada SOMA:
+  // o que já estava continua valendo até o prazo dele vencer.
+  const anterior = await obterLicitacoes();
+  const agora = Date.now();
+  const vivo = (l: Licitacao) => !l.encerramento || Date.parse(l.encerramento) >= agora;
+  for (const l of anterior.itens) {
+    if (vivo(l) && !achados.has(l.id)) achados.set(l.id, l);
   }
 
   const itens = [...achados.values()].sort((a, b) => {

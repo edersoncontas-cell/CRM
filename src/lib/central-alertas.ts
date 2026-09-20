@@ -5,6 +5,7 @@
 // críticos do sistema. Usada pela página /alertas e pelo contador do menu.
 
 import { db } from "@/lib/db";
+import { obterLicitacoes, type LicitacoesGuardadas } from "@/lib/licitacoes";
 import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
 import { calcularRitmoMetas } from "@/lib/metas";
@@ -75,7 +76,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
 
   // Sem os eventos do ZEUS: o grupo "Sistema" saiu da Central (ver abaixo), e
   // a consulta ia junto — a página não paga mais por dado que não mostra.
-  const [aguardando, alertas, posVenda, visitas, demandas, ritmo, semContato, negAbertas, colunasFunil, ocultos] = await Promise.all([
+  const [aguardando, alertas, posVenda, visitas, demandas, ritmo, semContato, negAbertas, colunasFunil, ocultos, licitacoes] = await Promise.all([
     // Só entra na lista depois de 1h sem resposta — antes disso ainda está
     // dentro do tempo normal de resposta, não precisa virar alerta.
     db.cliente.findMany({
@@ -123,6 +124,10 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     // contato…), então ele só volta se a situação mudar — antes, qualquer
     // mensagem do cliente reabria tudo e "Resolvido" parecia não pegar.
     db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000, select: { chave: true } }).catch(() => [] as { chave: string }[]),
+    // Licitações já gravadas pelo robô de mercado. Leitura barata (uma
+    // linha em Configuracao) e nunca bate no portal daqui: a Central não
+    // pode depender de site externo para abrir.
+    obterLicitacoes().catch(() => ({ em: null, itens: [], cidadesOlhadas: 0, erro: null } as LicitacoesGuardadas)),
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
   const chavesOcultas = new Set(ocultos.map((o) => o.chave));
@@ -286,6 +291,30 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
           href: "/pipeline",
           hrefLabel: "Abrir demandas",
           quando: d.dueDate ? formatDateTime(d.dueDate) : null,
+        };
+      }),
+    },
+    {
+      // "Deixar as licitações então na central de alertas."
+      //
+      // E faz mais sentido aqui do que num painel do Dashboard: edital de
+      // máquina é raro e tem PRAZO. Num painel, depende de o vendedor lembrar
+      // de olhar no dia certo; na Central, ele é cobrado como qualquer outra
+      // coisa que vence. O que fecha em até 7 dias entra como alta.
+      id: "licitacoes",
+      titulo: "Licitações de máquinas nas suas cidades",
+      descricao: "Prefeitura comprando máquina é venda na porta — e tem prazo para entregar a proposta. Fonte: PNCP.",
+      itens: licitacoes.itens.map((l) => {
+        const dias = l.encerramento ? Math.ceil((Date.parse(l.encerramento) - Date.now()) / (24 * HORA)) : null;
+        const prazo = dias == null ? null : dias < 0 ? "encerrada" : dias === 0 ? "encerra hoje" : `${dias} dia(s) para propor`;
+        return {
+          id: `licitacao:${l.id}`,
+          titulo: `${l.cidade}: ${l.termos.join(", ") || "máquina"}`,
+          detalhe: [l.objeto, l.orgao, prazo].filter(Boolean).join(" · "),
+          severidade: (dias != null && dias >= 0 && dias <= 7 ? "alta" : "media") as SeveridadeAlerta,
+          href: l.link ?? "/dashboard",
+          hrefLabel: l.link ? "Abrir o edital" : "Ver no painel",
+          quando: l.encerramento ? formatDateTime(new Date(l.encerramento)) : null,
         };
       }),
     },
