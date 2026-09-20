@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Calendar, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Calendar, MoreVertical, Pencil, Trash2, Merge } from "lucide-react";
 import { excluirCliente, adicionarVisita } from "@/lib/actions";
 import { EditarClienteForm } from "@/components/EditarClienteForm";
+import { UnirContatosModal } from "@/components/UnirContatosModal";
 
 type Municipio = { id: string; nome: string; foraDeArea?: boolean };
 type MaquinaOpt = { id: string; marca: string; modelo: string; categoria: string };
@@ -37,6 +38,7 @@ export function ClienteAcoes({
   const [menuAberto, setMenuAberto] = useState(false);
   const [editando, setEditando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [unindo, setUnindo] = useState(false);
   const [agendandoVisita, setAgendandoVisita] = useState(false);
   const [dataVisita, setDataVisita] = useState("");
   const [horaVisita, setHoraVisita] = useState("");
@@ -112,6 +114,16 @@ export function ClienteAcoes({
           >
             <Pencil size={14} className="text-slate-500" /> Editar
           </button>
+          {/* "coloque a opção UNIR CONTATO nos 3 pontinhos de cada cadastro":
+              o duplicado aparece aqui, na lista, e é aqui que ele se resolve —
+              sem o vendedor ter de procurar uma tela de limpeza em outro
+              canto do CRM. */}
+          <button
+            onClick={(e) => { parar(e); setMenuAberto(false); setUnindo(true); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <Merge size={14} className="text-slate-500" /> Unir contato
+          </button>
           <button
             onClick={(e) => { parar(e); setMenuAberto(false); setConfirmando(true); }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
@@ -120,6 +132,8 @@ export function ClienteAcoes({
           </button>
         </div>
       )}
+
+      {unindo && <UnirContatosModal clienteId={cliente.id} clienteNome={cliente.nome} onClose={() => setUnindo(false)} />}
 
       {/* Modal de edição (controlado) */}
       <EditarClienteForm

@@ -6,8 +6,6 @@ import { TickerMercado } from "@/components/TickerMercado";
 import { NoticiasSetor } from "@/components/NoticiasSetor";
 import { obterCotacoes } from "@/lib/mercado";
 import { obterNoticias } from "@/lib/noticias";
-import { obterLicitacoes } from "@/lib/licitacoes";
-import { PainelLicitacoes } from "@/components/PainelLicitacoes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
@@ -60,7 +58,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     negociacoes, futuros, demandasHoje,
     visitasSemanaAgendadas, negociosCriadosSemana,
     total30DiasSemContato, colunasFunil,
-    vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias, licitacoes,
+    vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
     db.cliente.findMany({
@@ -102,7 +100,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     contarClientesConversados(),
     obterCotacoes(),
     obterNoticias(),
-    obterLicitacoes(),
   ]);
 
   const { metaAnualVendas: META_ANUAL_VENDAS, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
@@ -234,7 +231,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           e a prefeitura das cidades da área comprando máquina. */}
       <FraseMotivacional />
 
-      <PainelLicitacoes dados={licitacoes} />
 
       {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

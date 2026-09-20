@@ -29,37 +29,58 @@ const fmtBRL = (v: number | null, casas = 2) =>
 const NH_AMARELO = "#ffcb2d";
 const NH_BORDA = "#e09e00";
 const NH_TEXTO = "#141416";
-const NH_SUAVE = "rgba(20,20,22,0.62)";
-const NH_ALTA = "#14532d";
-const NH_BAIXA = "#7f1d1d";
+// "todas as palavras sejam na cor preta exceto o árabica que fique cor de
+// café, ou marrom". Tudo preto — inclusive a variação, que antes era verde e
+// vermelha. A alta e a baixa não se perdem: continuam nas setas ▲ e ▼, que
+// são forma, não cor (e por isso também funcionam para quem não distingue
+// verde de vermelho).
+const NH_SUAVE = "rgba(20,20,22,0.66)";
+const CAFE = "#5b3a1e";
 
-/** As cotações que o CRM tem hoje, na ordem em que passam. */
+/**
+ * As cotações do letreiro — AS MESMAS dos cartões do topo do Dashboard.
+ *
+ *   "os valores do letreiro de cima que mantemos sempre atualizado não está
+ *    refletindo no letreiro de baixo, corrija"
+ *
+ * Estava, mas não parecia: eu punha o preço FÍSICO do ES e o da BOLSA como
+ * ativos separados, para ter seis itens e o rodízio mostrar "outros ativos" a
+ * cada grupo. Só que aí o rodapé exibia dois preços de arábica diferentes,
+ * enquanto o cartão de cima mostrava um — e duas verdades na mesma tela lêem
+ * como erro, não como informação.
+ *
+ * Agora a régua é uma só, e é a mesma do cartão: preço do ES quando existe,
+ * bolsa só como reserva quando o ES não veio. O que o vendedor lê em cima é
+ * exatamente o que passa embaixo.
+ */
 function cotacoesDaFita(c: CotacoesMercado): CotacaoFita[] {
   const es = c.cafeES ?? null;
   const lista: CotacaoFita[] = [];
-  if (es?.arabica != null) lista.push({ chave: "arabica-es", rotulo: "Arábica ES", valor: fmtBRL(es.arabica), pct: es.variacaoArabicaPct ?? null, sub: "sc 60 kg" });
-  else if (c.cafeArabica != null) lista.push({ chave: "arabica-ny", rotulo: "Arábica NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct ?? null, sub: "sc 60 kg" });
-  if (es?.conilon != null) lista.push({ chave: "conilon-es", rotulo: "Conilon ES", valor: fmtBRL(es.conilon), pct: es.variacaoConilonPct ?? null, sub: "sc 60 kg" });
-  else if (c.cafeConilon != null) lista.push({ chave: "conilon-ldn", rotulo: "Conilon Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct ?? null, sub: "sc 60 kg" });
+
+  if (es?.arabica != null) lista.push({ chave: "arabica-es", rotulo: "Arábica ES", valor: fmtBRL(es.arabica), pct: es.variacaoArabicaPct ?? null });
+  else if (c.cafeArabica != null) lista.push({ chave: "arabica-ny", rotulo: "Arábica NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct ?? null });
+
+  if (es?.conilon != null) lista.push({ chave: "conilon-es", rotulo: "Conilon ES", valor: fmtBRL(es.conilon), pct: es.variacaoConilonPct ?? null });
+  else if (c.cafeConilon != null) lista.push({ chave: "conilon-ldn", rotulo: "Conilon Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct ?? null });
+
   const dolar = es?.dolar ?? c.dolar;
-  if (dolar != null) lista.push({ chave: "dolar", rotulo: "Dólar", valor: fmtBRL(dolar), pct: c.detalhe?.dolar?.variacaoPct ?? null });
-  // Quando o preço físico do ES existe, a bolsa entra como o ativo seguinte —
-  // é o que dá pano para o rodízio mostrar OUTROS ativos no grupo seguinte.
-  if (es?.arabica != null && c.cafeArabica != null) lista.push({ chave: "arabica-ny", rotulo: "Arábica NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct ?? null, sub: "bolsa" });
-  if (es?.conilon != null && c.cafeConilon != null) lista.push({ chave: "conilon-ldn", rotulo: "Conilon Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct ?? null, sub: "bolsa" });
+  if (dolar != null) lista.push({ chave: "dolar", rotulo: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct ?? null });
+
   return lista;
 }
 
 function Peca({ item }: { item: ItemFita }) {
   if (item.tipo === "cotacao") {
-    const cor = item.pct == null ? NH_SUAVE : item.pct > 0 ? NH_ALTA : item.pct < 0 ? NH_BAIXA : NH_SUAVE;
     const seta = item.pct == null ? "" : item.pct > 0 ? "▲" : item.pct < 0 ? "▼" : "•";
+    // O arábica é o preço que manda no bolso do cliente dele: sai na cor do
+    // café, e é o único que destoa do preto.
+    const ehArabica = /arabica/i.test(item.chave);
     return (
       <span className="inline-flex shrink-0 items-baseline gap-1.5 pr-8 text-[12px]">
-        <span className="font-black uppercase tracking-wider" style={{ color: NH_SUAVE }}>{item.rotulo}</span>
-        <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>
+        <span className="font-black uppercase tracking-wider" style={{ color: ehArabica ? CAFE : NH_SUAVE }}>{item.rotulo}</span>
+        <span className="font-bold" style={{ color: ehArabica ? CAFE : NH_TEXTO }}>{item.valor}</span>
         {item.pct != null && (
-          <span className="text-[11px] font-bold" style={{ color: cor }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
+          <span className="text-[11px] font-bold" style={{ color: ehArabica ? CAFE : NH_TEXTO }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
         )}
       </span>
     );
