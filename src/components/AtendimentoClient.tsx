@@ -1112,7 +1112,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 <>
                 {/* Negociação — o segundo card. Três informações e só três:
                     máquina, valor e como vai pagar. A que já foi identificada
-                    ganha "Verificado" em verde (mesmo ✓ de "Sua condução");
+                    ganha "Verificado" em verde (o mesmo ✓ verde do painel);
                     a que falta fica apagada, para o vendedor ver o buraco. */}
                 <div>
                   <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">Negociação</div>
@@ -1142,7 +1142,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                 {contexto.orientador ? (() => {
                   const o = contexto.orientador;
                   const c = o.coaching;
-                  const corNota = c ? (c.conducao.nota >= 8 ? "text-emerald-300" : c.conducao.nota >= 6 ? "text-amber-300" : "text-red-300") : "text-brand-300";
                   return (
                   <div className="space-y-2.5">
                     {/* ── ORIENTADOR: tudo o que ele manda FAZER, num card só ──
@@ -1201,13 +1200,10 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                         <p className="line-clamp-4">{o.melhorResposta}</p>
                       </button>
                     )}
-                    {c && (c.conducao.acertos.length > 0 || c.conducao.correcoes.length > 0) && (
-                      <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
-                        <div className="flex items-center justify-between"><b className="text-brand-100">Sua condução</b><span className={cn("font-bold", corNota)}>nota {c.conducao.nota}/10</span></div>
-                        {c.conducao.acertos.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.acertos.map((a) => <li key={a} className="flex gap-1.5 text-emerald-200"><span className="w-3 shrink-0 text-center font-bold text-emerald-400">✓</span><span>{a}</span></li>)}</ul>}
-                        {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.correcoes.map((a) => <li key={a} className="flex gap-1.5 text-amber-100"><span>→</span><span>{a}</span></li>)}</ul>}
-                      </div>
-                    )}
+                    {/* O card que dava NOTA ao vendedor (0 a 10, com acertos e
+                        correções da condução) saiu do painel a pedido dele. A
+                        IA continua avaliando a condução — é ela que orienta a
+                        "Melhor resposta" —, só não cobra mais nota na tela. */}
                     </div>
 
                     {/* ── Contexto e porquê ───────────────────────────────

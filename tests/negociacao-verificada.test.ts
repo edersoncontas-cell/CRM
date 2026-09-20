@@ -103,6 +103,16 @@ describe("o painel mostra UM resumo, e é o do Orientador", () => {
     expect(painel).toContain("{contexto.orientador.resumoNegociacao}");
   });
 
+  it('não cobra nota: "Sua condução" saiu do painel', () => {
+    // "Do orientador dentro do atendimento retire esse card de todos."
+    // A IA continua avaliando a condução — é ela que orienta a "Melhor
+    // resposta" —, só não fica mais dando nota de 0 a 10 na tela.
+    expect(painel).not.toContain("Sua condução");
+    expect(painel).not.toContain("conducao.nota");
+    expect(painel).not.toContain("conducao.acertos");
+    expect(painel).not.toContain("conducao.correcoes");
+  });
+
   it("e não se repete lá embaixo, no card do Orientador", () => {
     // A linha solta "{o.resumoNegociacao && <p …>}" era a segunda impressão
     // do mesmo texto na mesma tela.
