@@ -78,7 +78,7 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <ListaTermos tipo="palavra" titulo="Palavras inteiras" dica='Bate só como palavra inteira: "banco" pega "Banco do Brasil", não pega "Bancorbrás".' exemplo="ex.: despachante" itens={listas.palavras} onAdicionar={adicionar} onRemover={remover} />
+        <ListaTermos tipo="palavra" titulo="Palavras inteiras" dica='Bate só como palavra inteira: "banco" pega "Banco do Brasil", não pega "Bancorbrás". Pode ter mais de uma palavra: "new holland" pega "New Holland Vitória".' exemplo="ex.: despachante" itens={listas.palavras} onAdicionar={adicionar} onRemover={remover} />
         <ListaTermos tipo="termo" titulo="Pedaços de palavra" dica='Bate dentro de qualquer palavra: "contab" pega contabilidade, contábil, contábeis.' exemplo="ex.: cartor" itens={listas.termos} onAdicionar={adicionar} onRemover={remover} />
       </div>
 

@@ -70,12 +70,17 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // antigos pelo telefone (marcarVinculosManuaisAntigos), que devolve o nome de
 // quem conversa nas conversas já vinculadas.
 //
+// v39: termo de DUAS PALAVRAS na lista de contatos que não são clientes
+// ("new holland") nunca batia em nada — ver motivoBloqueioComListas em
+// lib/utils.ts. Com a regra corrigida, a varredura precisa rodar de novo para
+// apagar quem vinha escapando, e não esperar a próxima hora do cron.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v38";
+export const CHAVE_MANUTENCAO = "manutencao.v39";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

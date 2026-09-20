@@ -174,13 +174,57 @@ export function nomeMarcadoComAsterisco(nome: string | null | undefined): boolea
   return /\*+\s*$/.test((nome ?? "").trim());
 }
 
+// Quebra um nome (ou um termo da lista) nas palavras que o formam, já sem
+// acento e sem pontuação: "NEW HOLLAND - Suporte" → ["new","holland","suporte"].
+const palavrasDe = (s: string): string[] => semAcento(s).split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * O termo aparece no nome como PALAVRA INTEIRA — inclusive quando o termo tem
+ * mais de uma palavra.
+ *
+ * Era aqui que "new holland" morria. A regra antiga perguntava se alguma
+ * palavra do nome era IGUAL ao termo inteiro; como nenhuma palavra contém
+ * espaço, qualquer termo com duas palavras na caixa "Palavras inteiras" nunca
+ * batia em nada — ficava na tela dando a impressão de estar filtrando, e o
+ * contato passava direto. "new holland", "banco do brasil", "posto ipiranga":
+ * todos silenciosamente inúteis.
+ *
+ * Agora procura a SEQUÊNCIA de palavras. "new holland" pega "New Holland
+ * Vitória" e "NEW HOLLAND - Suporte", e continua não pegando "Newholland" nem
+ * "Renew Hollander" — que é o sentido de palavra inteira.
+ */
+function contemSequencia(partes: string[], alvo: string[]): boolean {
+  if (!alvo.length || alvo.length > partes.length) return false;
+  for (let i = 0; i + alvo.length <= partes.length; i++) {
+    let bate = true;
+    for (let j = 0; j < alvo.length; j++) {
+      if (partes[i + j] !== alvo[j]) { bate = false; break; }
+    }
+    if (bate) return true;
+  }
+  return false;
+}
+
 export function motivoBloqueioComListas(nome: string, termos: string[], palavras: string[]): string | null {
   if (nomeMarcadoComAsterisco(nome)) return MOTIVO_ASTERISCO;
-  const n = semAcento(nome);
-  const termo = termos.find((t) => semAcento(t).trim().length >= TAMANHO_MINIMO_TERMO && n.includes(semAcento(t).trim()));
+  // Espaços repetidos viram um só dos dois lados: "NEW  HOLLAND" (dois
+  // espaços, e isso acontece em nome copiado da agenda) tem que bater com o
+  // termo "new holland" igual ao nome escrito normalmente.
+  const n = semAcento(nome).replace(/\s+/g, " ");
+  const termo = termos.find((t) => {
+    const alvo = semAcento(t).trim().replace(/\s+/g, " ");
+    return alvo.length >= TAMANHO_MINIMO_TERMO && n.includes(alvo);
+  });
   if (termo) return termo;
-  const partes = n.split(/[^a-z0-9]+/).filter(Boolean);
-  const palavra = palavras.find((p) => semAcento(p).trim().length >= TAMANHO_MINIMO_TERMO && partes.includes(semAcento(p).trim()));
+  const partes = palavrasDe(nome);
+  const palavra = palavras.find((p) => {
+    const alvo = palavrasDe(p);
+    // O tamanho mínimo é medido nas letras do termo, sem os separadores: "a b"
+    // tem 3 caracteres mas só 2 letras, e continua sendo curto demais para
+    // apagar contato.
+    if (alvo.join("").length < TAMANHO_MINIMO_TERMO) return false;
+    return contemSequencia(partes, alvo);
+  });
   return palavra ?? null;
 }
 
