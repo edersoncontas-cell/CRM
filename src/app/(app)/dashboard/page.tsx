@@ -212,8 +212,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       <TickerMercado inicial={{ cotacoes, noticias: noticias.itens }} />
 
-      {/* Logo abaixo dos preços do café: prefeitura das cidades da área
-          comprando máquina. */}
+      {/* Logo abaixo dos preços do café, os dois: a motivação do dia (é a
+          primeira coisa que ele lê de manhã, não faz sentido no pé da página)
+          e a prefeitura das cidades da área comprando máquina. */}
+      <FraseMotivacional />
+
       <PainelLicitacoes dados={licitacoes} />
 
       {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}
@@ -449,8 +452,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           )}
         </Painel>
       </div>
-
-      <FraseMotivacional />
 
       <NoticiasSetor />
 

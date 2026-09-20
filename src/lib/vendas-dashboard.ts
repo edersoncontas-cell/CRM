@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { coordenadasMunicipioES } from "@/lib/municipios-es";
+import { anosParaSeletor } from "@/lib/data-faturamento";
 
 export const META_ANUAL_VENDAS = 40;
 
@@ -118,7 +119,9 @@ export function resumoVendas(vendas: VendaDash[], ano: number, metaAnual: number
     };
   });
 
-  const anosDisponiveis = Array.from(new Set([new Date().getFullYear(), ...vendas.map((v) => v.faturadoEm.getFullYear())])).sort((a, b) => b - a);
+  // Ano impossível não vira chip. Era daqui que saía o "20" ao lado de 2026 e
+  // 2025: uma venda com a data gravada errada virava "ano" no seletor.
+  const anosDisponiveis = anosParaSeletor([new Date().getFullYear(), ...vendas.map((v) => v.faturadoEm.getFullYear())]);
 
   const ticketPorAno = anosDisponiveis
     .filter((a) => a <= ano)

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
+import { lerDataFaturamento } from "./data-faturamento";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
@@ -2145,11 +2146,16 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   // Data de faturamento: usa a informada manualmente (ex: CRD PME) ou, se a
   // coluna já é FATURADO, a data de agora.
   const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
-  const faturadoEmFinal = dataFaturamentoRaw
-    ? new Date(dataFaturamentoRaw + "T12:00:00-03:00")
-    : isFaturadoEstagio
-    ? new Date()
-    : null;
+  let faturadoEmFinal: Date | null = null;
+  if (dataFaturamentoRaw) {
+    const lida = lerDataFaturamento(dataFaturamentoRaw);
+    // Ano impossível não entra: é o que gerava o chip "20" no Dashboard e
+    // fazia aquela venda desaparecer das contas do ano.
+    if (!lida.ok) throw new Error(lida.erro);
+    faturadoEmFinal = lida.data;
+  } else if (isFaturadoEstagio) {
+    faturadoEmFinal = new Date();
+  }
 
   // Entrada
   const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
@@ -2230,11 +2236,16 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
   const usada = lerUsadaDoForm(formData);
 
   const dataFaturamentoRaw = String(formData.get("dataFaturamento") ?? "");
-  const faturadoEmFinal = dataFaturamentoRaw
-    ? new Date(dataFaturamentoRaw + "T12:00:00-03:00")
-    : isFaturadoEstagio
-    ? new Date()
-    : null;
+  let faturadoEmFinal: Date | null = null;
+  if (dataFaturamentoRaw) {
+    const lida = lerDataFaturamento(dataFaturamentoRaw);
+    // Ano impossível não entra: é o que gerava o chip "20" no Dashboard e
+    // fazia aquela venda desaparecer das contas do ano.
+    if (!lida.ok) throw new Error(lida.erro);
+    faturadoEmFinal = lida.data;
+  } else if (isFaturadoEstagio) {
+    faturadoEmFinal = new Date();
+  }
 
   const entradaValorRaw = String(formData.get("entradaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
   const entradaValorParsed = entradaValorRaw ? parseFloat(entradaValorRaw) : null;
@@ -2315,10 +2326,14 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
 // ou em uma data retroativa).
 export async function definirFaturadoEm(id: string, data: string) {
   "use server";
-  if (!data) return { ok: false };
+  // Barra aqui, não só no campo da tela: foi uma data com o ano errado que
+  // criou o "20" no seletor do Dashboard — e aquela venda sumia do
+  // faturamento, da meta e do ticket, porque não caía em ano nenhum.
+  const lida = lerDataFaturamento(data);
+  if (!lida.ok) return { ok: false, erro: lida.erro };
   await db.negociacao.update({
     where: { id },
-    data: { faturadoEm: new Date(data + "T12:00:00-03:00") },
+    data: { faturadoEm: lida.data },
   });
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
