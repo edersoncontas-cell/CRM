@@ -99,12 +99,20 @@ export function diagnosticoIA(configurados: ProvedorId[]): DiagnosticoIA {
   if (quantos === 1) {
     const unico = ativos[0];
     const reserva = ORDEM_PROVEDORES.find((id) => !tem.has(id) && GRATUITO[id]);
+    // O Groq sozinho merece aviso próprio: o teto por minuto da camada
+    // gratuita é tão baixo (6 mil tokens) que a análise do Orientador precisa
+    // ser encolhida para caber — ela lê um trecho da conversa, não a conversa
+    // inteira. Funciona, mas é uma limitação real, e o vendedor tem de saber
+    // que não é a IA "ficando burra" sem motivo.
+    const apertado = unico.id === "groq";
     return {
       linhas, quantos,
       resumo: `Só ${unico.nome}. Sem reserva.`,
-      risco: `Quando o ${unico.nome} atinge o limite, o Orientador para até a cota voltar — não há para onde cair.`,
+      risco: apertado
+        ? `O limite por minuto do ${unico.nome} gratuito é baixo, então o Orientador analisa só um trecho da conversa — e para de vez quando o limite estoura, sem ter para onde cair.`
+        : `Quando o ${unico.nome} atinge o limite, o Orientador para até a cota voltar — não há para onde cair.`,
       solucao: reserva
-        ? `Configure ${CHAVE_PROVEDOR[reserva]} na Vercel (a API do ${NOME_PROVEDOR[reserva]} tem camada gratuita). O CRM passa para ela sozinho quando o ${unico.nome} recusar.`
+        ? `Configure ${CHAVE_PROVEDOR[reserva]} na Vercel (a API do ${NOME_PROVEDOR[reserva]} tem camada gratuita e limite muito maior). O CRM passa a usá-la sozinho, volta a ler a conversa inteira e deixa o ${unico.nome} de reserva.`
         : `Configure um segundo provedor na Vercel para o CRM ter para onde cair.`,
     };
   }

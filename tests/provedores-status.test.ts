@@ -48,7 +48,7 @@ describe("o diagnóstico", () => {
   it("UM provedor só é o caso de risco — foi o que derrubou o Orientador", () => {
     const d = diagnosticoIA(["groq"]);
     expect(d.quantos).toBe(1);
-    expect(d.risco).toMatch(/não há para onde cair/i);
+    expect(d.risco).toMatch(/para onde cair/i);
     expect(d.risco).toContain("Groq");
     expect(d.solucao).toContain("GEMINI_API_KEY");
   });

@@ -8,6 +8,7 @@ import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
 import { esperaDoLimite } from "./cota";
 import { diagnosticoIA, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
+import { janelaDeCaracteres, janelaApertada } from "./orcamento-prompt";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -54,6 +55,22 @@ export function visaoHabilitada() {
  */
 export function diagnosticoDaIA(): DiagnosticoIA {
   return diagnosticoIA(provedoresDisponiveis() as ProvedorId[]);
+}
+
+/**
+ * Quantos caracteres de histórico cabem no provedor que vai atender.
+ *
+ * Sem isto, a análise mandava ~34.500 tokens para um provedor cujo teto por
+ * minuto é 6.000 — e tomava 429 SEMPRE, não por uso excessivo, mas porque o
+ * pedido nunca coube. Ver lib/ai/orcamento-prompt.ts.
+ */
+export function janelaHistoricoAtual(janelaCheia: number): number {
+  return janelaDeCaracteres(provedoresDisponiveis() as ProvedorId[], janelaCheia);
+}
+
+/** A janela teve de encolher por causa do provedor? Para a tela explicar. */
+export function janelaFoiApertada(janelaCheia: number): boolean {
+  return janelaApertada(provedoresDisponiveis() as ProvedorId[], janelaCheia);
 }
 
 // Nome amigável do provedor de IA ativo (para exibir na interface).

@@ -13,7 +13,7 @@
 // inteira terminar de ser GERADA (token a token) antes de receber a
 // resposta, que era a causa raiz da lentidão reportada.
 
-import { llmTexto, iaHabilitada } from "@/lib/ai";
+import { llmTexto, iaHabilitada, janelaHistoricoAtual } from "@/lib/ai";
 import { mensagemErroIA } from "@/lib/ai/erros";
 import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
@@ -25,7 +25,7 @@ import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador } f
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
-import { recortarHistorico, MAX_MENSAGENS } from "@/lib/zeus/historico-janela";
+import { recortarHistorico, MAX_MENSAGENS, JANELA_HISTORICO } from "@/lib/zeus/historico-janela";
 import { soResumo, montarPromptResumoContato, limparResumo, analiseSoResumo } from "@/lib/zeus/orientador-resumo";
 import { montarHistorico, montarUltimas, midiaDaConversa, type MidiaDaConversa } from "@/lib/zeus/historico-linha";
 import { resumoConferido, frasesDerrubadas } from "@/lib/zeus/resumo-checagem";
@@ -461,7 +461,7 @@ export async function processarOrientador(args: {
     await resumirContatoNaoCliente({
       clienteId: args.conv.clienteId,
       nomeContato: cadastro?.nome ?? args.conv.externalPhone,
-      historico: recortarHistorico(args.historicoCompleto),
+      historico: recortarHistorico(args.historicoCompleto, janelaHistoricoAtual(JANELA_HISTORICO)),
     }).catch((e) => zeusReport(e, "resumo de contato que não é cliente"));
     return { respondido: false };
   }
@@ -476,7 +476,7 @@ export async function processarOrientador(args: {
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
-      historico: recortarHistorico(args.historicoCompleto),
+      historico: recortarHistorico(args.historicoCompleto, janelaHistoricoAtual(JANELA_HISTORICO)),
       ultimasMensagens: args.ultimasMensagens,
       contextoCliente: args.contextoCliente,
       contextoAcademia: args.contextoAcademia,
@@ -491,7 +491,7 @@ export async function processarOrientador(args: {
 
   // 2) Melhor resposta, orientada pelo coaching (alerta, perfil, perguntas).
   const reply = await gerarRespostaRapida({
-    historico: recortarHistorico(args.historicoCompleto),
+    historico: recortarHistorico(args.historicoCompleto, janelaHistoricoAtual(JANELA_HISTORICO)),
     ultimasMensagens: args.ultimasMensagens,
     contextoCliente: args.contextoCliente,
     estilo: args.estilo,
@@ -567,7 +567,7 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
       const fez = await resumirContatoNaoCliente({
         clienteId: conv.clienteId,
         nomeContato: cadastro?.nome ?? conv.contactName ?? conv.externalPhone,
-        historico: recortarHistorico(historico),
+        historico: recortarHistorico(historico, janelaHistoricoAtual(JANELA_HISTORICO)),
       });
       await consumirOrcamentoIA();
       return fez ? { ok: true } : { ok: false, erro: "A IA não devolveu o resumo. Tente de novo." };
@@ -583,9 +583,9 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   const notaVendedor = await lerNotaVendedor(conv.clienteId);
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
-    const analise = await gerarAnaliseOrientador({ historico: recortarHistorico(historico), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes, notaVendedor });
+    const analise = await gerarAnaliseOrientador({ historico: recortarHistorico(historico, janelaHistoricoAtual(JANELA_HISTORICO)), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes, notaVendedor });
     const resposta = ultimaDoCliente
-      ? await gerarRespostaRapida({ historico: recortarHistorico(historico), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
+      ? await gerarRespostaRapida({ historico: recortarHistorico(historico, janelaHistoricoAtual(JANELA_HISTORICO)), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
       : "";
     await consumirOrcamentoIA();
     // "fatos" não é coluna de OrientadorAnalise (ver processarOrientador).
