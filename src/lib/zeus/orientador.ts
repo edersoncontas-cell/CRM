@@ -22,6 +22,7 @@ import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador } from "@/lib/zeus/orientador-prompt";
+import { normalizarFatos, mudancasDaNegociacao, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
 import { resumoDasEtapas } from "@/lib/zeus/cerebro-resposta";
@@ -49,6 +50,9 @@ export type AnaliseOrientador = {
   // true quando a conversa não deixou pendência (cliente agradeceu, assunto
   // resolvido, sem pergunta em aberto): o cliente sai de "aguardando resposta".
   conversaEncerrada: boolean;
+  // Os dados duros (máquina, valor, pagamento, cidade) lidos da conversa E da
+  // nota do vendedor. Viram a ficha da negociação — ver aplicarFatos abaixo.
+  fatos: FatosNegociacao;
 };
 
 // Quanto do histórico vai para a IA (caracteres). Conversas longas precisam
@@ -71,6 +75,7 @@ function fallback(motivo: string): AnaliseOrientador {
     coaching: coachingVazio(),
     alertas: [],
     conversaEncerrada: false,
+    fatos: { ...FATOS_VAZIOS },
   };
 }
 
@@ -138,6 +143,54 @@ async function lerNotaVendedor(clienteId: string): Promise<string | null> {
   } catch (e) {
     console.error("[orientador] não deu para ler a nota do vendedor de", clienteId, e);
     return null;
+  }
+}
+
+/**
+ * Grava na ficha do cliente os fatos que o Orientador leu.
+ *
+ * Existe porque o card "Negociação" do painel lê a tabela Negociacao, e quem
+ * alimentava essa tabela (analisarConversaIA, no pipeline do WhatsApp) nunca
+ * enxergou o campo "O que o Orientador precisa saber". Resultado: o vendedor
+ * escrevia a máquina e o valor fechado na mão, a leitura do Orientador até
+ * mudava, e o card seguia dizendo "modelo ainda não definido".
+ *
+ * Agora quem lê as duas fontes é o Orientador, e é aqui que o que ele leu vira
+ * dado. Nunca cria negociação — abrir negociação continua sendo decisão da
+ * regra do pipeline; aqui só se completa a que já existe.
+ */
+async function aplicarFatos(clienteId: string, fatos: FatosNegociacao, temNota: boolean): Promise<void> {
+  try {
+    // Cidade: só município do ES (municipioDoES já barrou o resto). Corrige
+    // até uma cidade errada já gravada, porque foi assim que um cliente de
+    // Guaçuí ficou marcado como sendo de Recife — e ninguém tinha como saber.
+    if (fatos.municipio) {
+      const muni = await db.municipio.upsert({
+        where: { nome: fatos.municipio },
+        create: { nome: fatos.municipio },
+        update: {},
+        select: { id: true },
+      });
+      await db.cliente.updateMany({
+        where: { id: clienteId, NOT: { municipioId: muni.id } },
+        data: { municipioId: muni.id },
+      });
+    }
+
+    const aberta = await db.negociacao.findFirst({
+      where: { clienteId, status: "aberta" },
+      orderBy: { atualizadoEm: "desc" },
+      select: { id: true, marca: true, maquinaModelo: true, valor: true, tipoPagamento: true },
+    });
+    if (!aberta) return;
+
+    const mudancas = mudancasDaNegociacao(aberta, fatos, temNota);
+    if (!Object.keys(mudancas).length) return;
+    await db.negociacao.update({ where: { id: aberta.id }, data: mudancas });
+  } catch (e) {
+    // Falhar aqui não pode derrubar a análise: o painel ainda é útil sem a
+    // ficha atualizada. Mas aparece no log, em vez de sumir calado.
+    console.error("[orientador] não deu para gravar os fatos de", clienteId, e);
   }
 }
 
@@ -209,6 +262,7 @@ export async function gerarAnaliseOrientador(args: {
       coaching: normalizarCoaching(parsed),
       alertas,
       conversaEncerrada: parsed.conversaEncerrada === true,
+      fatos: normalizarFatos(parsed.fatos),
     };
   } catch (e) {
     console.error("[orientador] falha na análise:", e);
@@ -298,7 +352,9 @@ export async function processarOrientador(args: {
   // pede; "respondido" = mensagem tratada (não precisa do fallback).
   const respondido = !!reply;
 
-  const { alertas, conversaEncerrada, coaching, ...campos } = analise;
+  // "fatos" NÃO é coluna de OrientadorAnalise: sai do spread e vai para a
+  // ficha da negociação logo abaixo. Deixá-lo aqui derrubaria o upsert inteiro.
+  const { alertas, conversaEncerrada, coaching, fatos, ...campos } = analise;
   const coachingJson = coaching as unknown as Prisma.InputJsonValue;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
@@ -306,6 +362,7 @@ export async function processarOrientador(args: {
     update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined },
   });
 
+  await aplicarFatos(args.conv.clienteId, fatos, !!notaVendedor);
   await atualizarAlertaOrientador(args.conv.clienteId, alertas).catch(() => {});
   await aplicarConversaEncerrada(args.conv.clienteId, conversaEncerrada);
 
@@ -353,13 +410,15 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
       ? await gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
       : "";
     await consumirOrcamentoIA();
-    const { alertas, conversaEncerrada, coaching, ...campos } = analise;
+    // "fatos" não é coluna de OrientadorAnalise (ver processarOrientador).
+    const { alertas, conversaEncerrada, coaching, fatos, ...campos } = analise;
     const coachingJson = coaching as unknown as Prisma.InputJsonValue;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
       create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null },
       update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}) },
     });
+    await aplicarFatos(conv.clienteId, fatos, !!notaVendedor);
     await atualizarAlertaOrientador(conv.clienteId, alertas).catch(() => {});
     await aplicarConversaEncerrada(conv.clienteId, conversaEncerrada);
     return { ok: true };

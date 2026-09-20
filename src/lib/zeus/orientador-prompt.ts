@@ -104,7 +104,14 @@ Devolva SOMENTE um JSON válido, sem texto antes ou depois:
     "nome": string,                        // nome exato como aparece na Academia (metodologia, objeção ou fechamento)
     "porque": string                       // 1 frase: por que ela serve agora, citando o que o cliente falou
   } | null,
-  "conversaEncerrada": boolean             // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
+  "conversaEncerrada": boolean,            // true SÓ se a última troca não deixou nada pendente: cliente agradeceu/encerrou, dúvida respondida, sem pergunta em aberto e sem combinado a cumprir. Se o cliente ainda espera algo (preço, retorno, visita), false.
+  "fatos": {                               // OS DADOS DUROS DA NEGOCIAÇÃO. Isto vai direto para a ficha da negociação do CRM, então preencha com o que está DITO (na nota do vendedor ou na conversa) e deixe null o que não estiver. Nunca deduza, nunca arredonde, nunca repita exemplo.
+    "marca": "New Holland"|"Dynapac"|null,
+    "maquinaModelo": string|null,          // o modelo EXATO citado ("B110", "E145C EVO", "CA25 D"). Categoria solta ("retroescavadeira", "um rolo") NÃO é modelo: nesse caso null.
+    "valor": number|null,                  // o valor da NOSSA negociação em reais, número puro (610 mil => 610000). Se o vendedor deu mais de um número, use o que está FECHADO/ACERTADO, não o que o cliente está pedindo de desconto. Preço de concorrente NUNCA entra aqui.
+    "condicaoPagamento": "avista"|"financiamento"|"consorcio"|"crd_pme"|null,  // financiamento = banco/Finame/BNDES/crédito bancário; crd_pme = parcelado pela própria casa/boleto nosso. Se não estiver dito, null — NUNCA use "outro".
+    "municipio": string|null               // a cidade do cliente, SOMENTE se ela aparecer de verdade. É uma cidade do Espírito Santo; se a que você tem não é do ES, é erro de leitura: devolva null.
+  }
 }
 REGRAS CRÍTICAS:
 - NUNCA invente dado (preço, prazo, especificação, nome) que não esteja no contexto.
@@ -148,7 +155,16 @@ REGRAS CRÍTICAS:
   "probabilidadeFechamento", "combinados", "pendencias", "proximaAcao" e "resumoNegociacao": se ele diz que já
   visitou, a visita está feita; se diz que o cliente vai financiar, a condição está definida; se diz o modelo,
   a máquina está definida. NUNCA peça em "perguntasAgora" ou "informacoesFaltando" algo que já está escrito lá,
-  e NUNCA trate como pendência o que ele diz que já resolveu.`;
+  e NUNCA trate como pendência o que ele diz que já resolveu.
+- "fatos" é o que mais importa depois da próxima ação: esse bloco VIRA A FICHA DA NEGOCIAÇÃO no CRM
+  (máquina, valor, forma de pagamento, cidade). Varra a nota do vendedor E a conversa inteira atrás
+  desses quatro dados e preencha cada um que estiver DITO em qualquer uma das duas — a nota conta
+  tanto quanto a conversa. O que não pode acontecer: o vendedor escreve "fechamos em 610 mil, vou
+  entrar com o financiamento no meu banco" e você devolve valor null e condicaoPagamento null; ali
+  está escrito valor 610000 e condicaoPagamento "financiamento". Ao mesmo tempo, o que não estiver
+  dito fica null — campo vazio é honesto, campo inventado estraga a ficha do cliente. Não confunda
+  horas de uso, número de parcelas, percentual de entrada ou preço do concorrente com o valor da
+  máquina, e não chame de modelo o que é só categoria ("uma retro", "um rolo").`;
 
 
 /** Cabeçalho do bloco da nota. Constante porque o teste procura por ele. */

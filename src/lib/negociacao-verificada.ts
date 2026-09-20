@@ -10,6 +10,8 @@
 // formulário. "Pesquisa de preço" NÃO é forma de pagamento e não pode
 // aparecer como verificada.
 
+import { normalizarPagamento } from "@/lib/orientador-fatos";
+
 /**
  * Condições de pagamento de verdade, no vocabulário do vendedor.
  * CRD PME é o parcelamento em boleto da própria casa (ver Financeiro: a
@@ -21,9 +23,6 @@ const ROTULO_PAGAMENTO: Record<string, string> = {
   consorcio: "Consórcio",
   crd_pme: "Parcelado pela casa",
 };
-
-// Saem do mesmo <select>, mas dizem o interesse, não como ele vai pagar.
-const NAO_E_PAGAMENTO = new Set(["pesquisa_preco", "interesse_real", "outro"]);
 
 /** "New Holland B110" a partir de marca + modelo; null quando não dá nome. */
 export function maquinaDaNegociacao(marca: string | null, modelo: string | null): string | null {
@@ -44,10 +43,11 @@ export function pagamentoDaNegociacao(
   tipoPagamento: string | null,
   condicaoPagamento: string | null,
 ): string | null {
-  const tipo = (tipoPagamento ?? "").trim().toLowerCase();
-  if (ROTULO_PAGAMENTO[tipo]) return ROTULO_PAGAMENTO[tipo];
-  if (tipo && !NAO_E_PAGAMENTO.has(tipo)) return tipo;
-  return (condicaoPagamento ?? "").trim() || null;
+  // As duas pontas passam pelo mesmo normalizador. Antes o texto livre era
+  // mostrado como veio, e a tela chegou a exibir "Pagamento: outro" com o
+  // símbolo de confirmado — "outro" não é forma de pagamento nenhuma.
+  const codigo = normalizarPagamento(tipoPagamento) ?? normalizarPagamento(condicaoPagamento);
+  return codigo ? ROTULO_PAGAMENTO[codigo] : null;
 }
 
 /**

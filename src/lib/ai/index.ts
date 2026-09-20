@@ -357,10 +357,10 @@ Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto a
   "perfil": string,                       // perfil do cliente (construtora, empreiteira, locadora, prefeitura, etc.)
   "nomeCliente": string|null,             // nome do cliente, se identificável na conversa
   "telefoneCliente": string|null,         // telefone do cliente (só dígitos), se aparecer
-  "municipio": string|null,               // cidade/município do cliente, se mencionado (ex: "Vila Velha")
+  "municipio": string|null,               // cidade do cliente, SOMENTE se ela for dita de verdade na conversa. É uma cidade do ESPÍRITO SANTO (ex: "Guaçuí", "Cachoeiro de Itapemirim", "Vila Velha"). Se a cidade que você tem não é do ES, é erro de leitura: devolva null. Nunca deduza cidade por DDD, sotaque ou nome de pessoa.
   "maquina": string|null,                 // modelo SOMENTE se o cliente mencionar explicitamente (ex: "E215C", "B95C", "CA25 D"). NUNCA invente um modelo. Se nada for citado, use null.
   "valor": number|null,                   // valor em reais (número puro)
-  "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"outro"|null,
+  "condicaoPagamento": "avista"|"consorcio"|"financiamento"|"crd_pme"|null,  // financiamento = banco/Finame/BNDES; crd_pme = parcelado pela própria casa. Se não estiver dito, null — não existe "outro" aqui.
   "concorrente": string|null,             // concorrente citado (Caterpillar, Komatsu, Volvo, JCB, Case, XCMG, Sany...)
   "dataVisita": string|null,              // ISO 8601 do dia/hora de uma VISITA PRESENCIAL (vendedor vai ao cliente/obra, ou cliente vem à loja). NÃO é visita: "amanhã te dou uma posição", "amanhã falo com meu sócio", "te ligo amanhã", "semana que vem a gente vê" — nesses casos null
   "visitaConfirmada": boolean,            // true SÓ se os DOIS lados combinaram a visita presencial num dia ("fechado, quinta 14h na obra" / "te espero terça"). Proposta de um lado ainda sem resposta, "vou ver", "se der" = false
@@ -374,7 +374,8 @@ Analise a conversa com um cliente e devolva SOMENTE um JSON válido, sem texto a
 REGRAS CRÍTICAS:
 - "maquina" só pode ser preenchido com um modelo que o cliente realmente citou na conversa. Se não citar, DEVE ser null. Jamais use um modelo padrão/exemplo.
 - "valor" é o valor da NOSSA negociação (proposta nossa, orçamento pedido, quanto o cliente quer pagar). Preço de concorrente vai em "valorConcorrente". Se não houver valor nosso, "valor" é null.
-- A conversa vem em ordem cronológica; analise a ÚLTIMA mensagem do cliente à luz das anteriores (ex.: "quinta 14h pode ser" só faz sentido com a pergunta anterior). Não repita dados já resolvidos como se fossem novos.`;
+- A conversa vem em ordem cronológica; analise a ÚLTIMA mensagem do cliente à luz das anteriores (ex.: "quinta 14h pode ser" só faz sentido com a pergunta anterior). Não repita dados já resolvidos como se fossem novos.
+- "municipio" e "condicaoPagamento" vão direto para o cadastro do cliente e para a ficha da negociação. Na dúvida, null: um campo vazio é honesto, um campo chutado vira erro que ninguém vê. Já aconteceu de um cliente de Guaçuí ser gravado como de Recife por causa de um chute aqui.`;
 
 export async function analisarConversaIA(
   texto: string,

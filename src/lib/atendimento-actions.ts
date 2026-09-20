@@ -199,12 +199,16 @@ export async function salvarNotaOrientadorAction(
       create: { clienteId: conv.clienteId, estagioVenda: "prospeccao", temperatura: "fria", objecoes: [], oportunidadesPerdidas: [], notaVendedor: texto || null },
       update: { notaVendedor: texto || null },
     });
-    revalidatePath("/orientador");
-    return { ok: true };
   } catch (e) {
     console.error("[salvarNotaOrientador]", e);
     return { ok: false, erro: "Não deu para salvar a informação." };
   }
+  // Fora do try de propósito: a nota JÁ está gravada aqui. Se o revalidate
+  // falhasse dentro do try, a tela diria "não deu para salvar" e pularia a
+  // reanálise por causa de um cache que não atualizou — perdendo justamente o
+  // que o vendedor acabou de escrever.
+  try { revalidatePath("/orientador"); } catch (e) { console.error("[salvarNotaOrientador] revalidate:", e); }
+  return { ok: true };
 }
 
 export async function reanalisarConversaAction(conversationId: string): Promise<{ ok: boolean; erro?: string }> {

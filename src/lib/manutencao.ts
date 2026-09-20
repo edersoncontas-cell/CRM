@@ -8,7 +8,7 @@
 // barato (memoizado por request com React.cache) para checar a chave.
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { aplicarMigracoes } from "@/lib/migrations";
+import { aplicarMigracoes, limparMunicipiosInventados } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { aplicarCorteInicialWhatsApp } from "@/lib/whatsapp-corte";
@@ -54,6 +54,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // PostMarketing, MemoriaCerebro).
 // v31: NotaContextoCliente — o que o vendedor ensina sobre um cliente e que
 // nunca apareceria na conversa do WhatsApp.
+// v33: limpeza das cidades que a IA inventou (um cliente de Guaçuí gravado
+// como sendo de Recife). Ver limparMunicipiosInventados em migrations.ts.
+//
 // v32: OrientadorAnalise.notaVendedor — o que o vendedor escreve na tela para
 // o Orientador levar em conta.
 //
@@ -62,7 +65,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v32";
+export const CHAVE_MANUTENCAO = "manutencao.v33";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -76,6 +79,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Limpeza de contatos bloqueados (contabilidade, bancos, hotéis…)", async () => { await limparContatosIndesejados(); }],
     ["Data de corte do WhatsApp (conversas antigas)", async () => { await aplicarCorteInicialWhatsApp(); }],
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
+    ["Cidades inventadas pela IA (fora do ES)", async () => { await limparMunicipiosInventados(); }],
     ["Máquinas novas (pós-seed)", garantirMaquinasNovas],
     ["Fichas técnicas verificadas", garantirFichasVerificadas],
   ];

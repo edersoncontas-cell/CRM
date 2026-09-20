@@ -18,6 +18,7 @@ import { baixarAudio } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { transcreverBuffer } from "@/lib/integrations/transcription";
 import { sincronizarVisitaComAgenda } from "@/lib/integrations/google";
+import { municipioDoES, normalizarPagamento } from "@/lib/orientador-fatos";
 
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
@@ -28,12 +29,28 @@ export async function vincularMunicipio(
   nomeMunicipio: string | null
 ): Promise<void> {
   if (!nomeMunicipio?.trim()) return;
-  const alvo = normalizar(nomeMunicipio);
+
+  // Só município do Espírito Santo, e com o nome escrito como o CRM escreve.
+  //
+  // O contrato da IA pedia "cidade do cliente, se mencionada" e aceitava
+  // qualquer texto; o CRM então criava o município do jeito que veio. Foi
+  // assim que um cliente de Guaçuí ficou marcado como sendo de Recife. E não
+  // era só o rótulo errado: o CRM inteiro é do ES (mapa do Dashboard,
+  // coordenadas, abordagem por cidade, licitações das cidades atendidas), então
+  // uma cidade de fora não desenha no mapa nem entra em conta nenhuma — é
+  // dado quebrado. Cidade de fora do ES, ou nome que não existe, é erro de
+  // leitura: ignora. Quem precisar cadastrar exceção faz na mão, no cadastro.
+  const oficial = municipioDoES(nomeMunicipio);
+  if (!oficial) {
+    console.warn("[pipeline] município ignorado (não é do ES):", nomeMunicipio);
+    return;
+  }
+  const alvo = normalizar(oficial);
 
   const todos = await db.municipio.findMany();
   let muni = todos.find((m) => normalizar(m.nome) === alvo);
   if (!muni) {
-    muni = await db.municipio.create({ data: { nome: nomeMunicipio.trim() } });
+    muni = await db.municipio.create({ data: { nome: oficial } });
   }
 
   const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
@@ -106,7 +123,9 @@ export async function alimentarNegociacao(
         ...(trocaMaquina && maquinaOuCategoria ? { maquinaModelo: maquinaOuCategoria } : {}),
         ...(marca && !aberta.marca ? { marca } : {}),
         ...(ex.valor != null && ex.valor > 0 ? { valor: ex.valor } : {}),
-        ...(ex.condicaoPagamento ? { condicaoPagamento: ex.condicaoPagamento } : {}),
+        // Só forma de pagamento de verdade. A IA podia devolver "outro", isso
+        // ia para o banco e o painel exibia "Pagamento: outro" como se fosse dado.
+        ...(normalizarPagamento(ex.condicaoPagamento) ? { tipoPagamento: normalizarPagamento(ex.condicaoPagamento)! } : {}),
         ...(concorrenteTexto ? { concorrenteMencionado: concorrenteTexto } : {}),
         ...(ex.dataVisita ? { dataVisita: ex.dataVisita } : {}),
         ...(ex.intencao === "comprar" && !aberta.proximaAcao?.toLowerCase().includes("proposta") ? { proximaAcao: "Enviar proposta de uma página e condição" } : {}),
@@ -133,7 +152,7 @@ export async function alimentarNegociacao(
         ...(maquinaOuCategoria ? { maquinaModelo: maquinaOuCategoria } : {}),
         ...(marca ? { marca } : {}),
         ...(ex.valor != null && ex.valor > 0 ? { valor: ex.valor } : {}),
-        ...(ex.condicaoPagamento ? { condicaoPagamento: ex.condicaoPagamento } : {}),
+        ...(normalizarPagamento(ex.condicaoPagamento) ? { tipoPagamento: normalizarPagamento(ex.condicaoPagamento)! } : {}),
         ...(concorrenteTexto ? { concorrenteMencionado: concorrenteTexto } : {}),
         ...(ex.dataVisita ? { dataVisita: ex.dataVisita } : {}),
         ultimoContato: new Date(),

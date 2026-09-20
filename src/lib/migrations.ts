@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { RENOMEAR_DYNAPAC, DYNAPAC_FORA_DE_LINHA } from "./dynapac-catalogo";
+import { NOMES_MUNICIPIOS_ES } from "./municipios-es";
 
 let applied = false;
 
@@ -609,5 +610,50 @@ export async function aplicarMigracoes(): Promise<void> {
     }
   } catch (e) {
     console.error("[migracoes] erro ao aplicar:", e);
+  }
+}
+
+/**
+ * Desfaz as cidades que a IA inventou.
+ *
+ * O contrato antigo pedia "cidade do cliente, se mencionada" e aceitava
+ * qualquer texto; vincularMunicipio criava o município do jeito que viesse.
+ * Foi assim que um cliente de Guaçuí apareceu no CRM como sendo de Recife.
+ *
+ * E não era só o rótulo: o CRM é inteiro do Espírito Santo — o mapa do
+ * Dashboard, as coordenadas, a abordagem por cidade e as licitações das
+ * cidades atendidas. Um município de fora não desenha no mapa nem entra em
+ * conta nenhuma; fica lá, errado e invisível.
+ *
+ * O que esta limpeza mexe é estreito de propósito: só município que (1) não
+ * existe no Espírito Santo E (2) está sem coordenada, que é a assinatura de
+ * quem nasceu automaticamente pelo pipeline do WhatsApp. Município escolhido
+ * por uma pessoa no cadastro veio da lista do ES e não é tocado. O cliente só
+ * perde o vínculo com a cidade errada — nenhum outro dado é apagado, e a
+ * cidade certa volta sozinha assim que a conversa ou a nota do vendedor
+ * disser qual é.
+ */
+export async function limparMunicipiosInventados(): Promise<number> {
+  try {
+    const nomesES = NOMES_MUNICIPIOS_ES.map((n) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase());
+    const municipios = await db.municipio.findMany({ select: { id: true, nome: true, lat: true, lng: true } });
+    const inventados = municipios.filter((m) => {
+      const chave = m.nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+      return !nomesES.includes(chave) && m.lat == null && m.lng == null;
+    });
+    if (!inventados.length) return 0;
+
+    const ids = inventados.map((m) => m.id);
+    const { count } = await db.cliente.updateMany({ where: { municipioId: { in: ids } }, data: { municipioId: null } });
+    // Só apaga o município depois de soltar os clientes; se sobrar qualquer
+    // outro vínculo, o delete falha e o município fica — de propósito.
+    for (const m of inventados) {
+      await db.municipio.delete({ where: { id: m.id } }).catch(() => {});
+    }
+    console.warn(`[migracoes] municípios fora do ES removidos: ${inventados.map((m) => m.nome).join(", ")} (${count} cliente(s) sem cidade agora)`);
+    return count;
+  } catch (e) {
+    console.error("[migracoes] limparMunicipiosInventados:", e);
+    return 0;
   }
 }

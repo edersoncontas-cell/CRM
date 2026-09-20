@@ -136,10 +136,9 @@ function Temperatura({ t }: { t: string }) {
 }
 
 /**
- * Uma linha do card "Negociação": máquina, valor ou pagamento. Quando o dado
- * já foi identificado sai com "Verificado" e em verde — mesmo ✓ e mesmo verde
- * do card "Sua condução", de propósito, para o vendedor ler os dois do mesmo
- * jeito. O que ainda falta fica apagado, dizendo o que falta.
+ * Uma linha do card "Negociação": máquina, valor ou pagamento. Confirmado sai
+ * com o ✓ verde e nada mais — só o símbolo, sem a palavra na frente. O que
+ * ainda falta fica apagado, dizendo o que falta.
  */
 function ItemVerificado({ rotulo, valor, falta }: { rotulo: string; valor: string | null; falta: string }) {
   if (!valor) {
@@ -152,8 +151,8 @@ function ItemVerificado({ rotulo, valor, falta }: { rotulo: string; valor: strin
   }
   return (
     <div className="flex gap-1.5 text-emerald-200">
-      <span className="w-3 shrink-0 text-center">✓</span>
-      <span><b className="text-emerald-300">Verificado</b> · {rotulo}: <b className="text-white">{valor}</b></span>
+      <span className="w-3 shrink-0 text-center font-bold text-emerald-400" title="Confirmado">✓</span>
+      <span>{rotulo}: <b className="text-white">{valor}</b></span>
     </div>
   );
 }

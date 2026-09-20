@@ -48,9 +48,23 @@ describe("condição de pagamento", () => {
     expect(pagamentoDaNegociacao("outro", null)).toBe(null);
   });
 
-  it("cai no texto livre antigo quando o estruturado não serve", () => {
-    expect(pagamentoDaNegociacao("pesquisa_preco", "entrada de 30% + 48x")).toBe("entrada de 30% + 48x");
-    expect(pagamentoDaNegociacao(null, "Finame Banco do Brasil")).toBe("Finame Banco do Brasil");
+  it("o texto livre antigo ainda vale, desde que diga uma das quatro", () => {
+    expect(pagamentoDaNegociacao("pesquisa_preco", "Finame Banco do Brasil")).toBe("Financiado");
+    expect(pagamentoDaNegociacao(null, "consórcio")).toBe("Consórcio");
+  });
+
+  it("texto livre que não diz a forma fica como não definido, e não com o ✓", () => {
+    // "entrada de 30% + 48x" descreve as condições, mas não diz se é banco,
+    // consórcio ou parcelamento da casa. Marcar isso como confirmado é o
+    // mesmo defeito do "Pagamento: outro" que apareceu na tela: símbolo de
+    // confirmado num campo que ninguém confirmou.
+    expect(pagamentoDaNegociacao("pesquisa_preco", "entrada de 30% + 48x")).toBe(null);
+    expect(pagamentoDaNegociacao(null, "a combinar")).toBe(null);
+  });
+
+  it('"outro" nunca aparece como confirmado — foi o erro reportado', () => {
+    expect(pagamentoDaNegociacao("outro", null)).toBe(null);
+    expect(pagamentoDaNegociacao(null, "outro")).toBe(null);
   });
 
   it("nada definido continua nada definido", () => {
