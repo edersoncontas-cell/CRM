@@ -74,6 +74,28 @@ export function coachingVazio(): Coaching {
   };
 }
 
+/**
+ * O coaching está vazio — ou seja, nenhuma leitura de condução foi feita?
+ *
+ * Existe por causa de um defeito real: os contratos COMPACTO e INCREMENTAL
+ * não produzem coaching (é a maior parte do JSON, e foi o que se cortou para
+ * caber na camada gratuita). A mesclagem do incremental preserva o coaching
+ * anterior — o que é certo quando ele existe, e uma armadilha quando ele está
+ * vazio: ficaria vazio PARA SEMPRE, porque nenhuma análise incremental tem
+ * como preenchê-lo. Quem chama usa isto para forçar uma releitura completa.
+ */
+export function coachingEstaVazio(c: Coaching): boolean {
+  return (
+    !c.personalidade.estilo &&
+    !c.alertaAgora &&
+    c.roteiro.length === 0 &&
+    c.perguntasAgora.length === 0 &&
+    c.conducao.acertos.length === 0 &&
+    c.conducao.correcoes.length === 0 &&
+    c.tratamentoObjecoes.length === 0
+  );
+}
+
 // Normaliza o JSON da IA para a estrutura acima (tolerante a campos faltando).
 export function normalizarCoaching(raw: unknown): Coaching {
   const p = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

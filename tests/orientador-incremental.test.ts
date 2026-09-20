@@ -46,7 +46,7 @@ const base = (over: Partial<AnaliseOrientador> = {}): AnaliseOrientador => ({
 });
 
 describe("quando o incremental pode acontecer", () => {
-  const ok = { temEstadoAnterior: true, mensagensNovas: 3, incrementaisSeguidas: 0, forcarCompleta: false };
+  const ok = { temEstadoAnterior: true, mensagensNovas: 3, incrementaisSeguidas: 0, forcarCompleta: false, coachingVazio: false };
 
   it("com estado anterior e mensagem nova, pode", () => {
     expect(podeSerIncremental(ok)).toBe(true);
@@ -64,6 +64,15 @@ describe("quando o incremental pode acontecer", () => {
     // É o botão de "esqueça o que você achou e olhe de novo". Um incremental
     // partindo da leitura errada não teria como consertá-la.
     expect(podeSerIncremental({ ...ok, forcarCompleta: true })).toBe(false);
+  });
+
+  it("coaching VAZIO proíbe o incremental — senão o painel apodrece", () => {
+    // O defeito que isto corrige: nem o contrato compacto nem o incremental
+    // produzem coaching, e a mesclagem preserva o anterior. Um coaching que
+    // esvaziou uma vez (porque a análise foi servida pelo provedor apertado)
+    // ficaria vazio PARA SEMPRE, e o vendedor veria o painel definhar sem
+    // entender por quê. Foi exatamente o que apareceu na conversa do Wadson.
+    expect(podeSerIncremental({ ...ok, coachingVazio: true })).toBe(false);
   });
 
   it("a cada 10 incrementais seguidas, uma releitura completa — a trava da deriva", () => {

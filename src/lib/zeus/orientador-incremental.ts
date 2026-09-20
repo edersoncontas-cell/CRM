@@ -74,10 +74,23 @@ export function podeSerIncremental(args: {
   incrementaisSeguidas: number;
   /** "Reanalisar" apertado na mão: o vendedor quer uma leitura nova. */
   forcarCompleta: boolean;
+  /**
+   * O coaching da análise anterior está vazio?
+   *
+   * Se estiver, o incremental é PROIBIDO — e esse detalhe é o que separa um
+   * painel que se recupera de um que apodrece. Nem o contrato compacto nem o
+   * incremental produzem coaching; a mesclagem preserva o anterior. Então um
+   * coaching que esvaziou uma vez (porque a análise foi servida pelo provedor
+   * apertado) ficaria vazio PARA SEMPRE, e o vendedor veria o painel
+   * definhar sem entender por quê. Com esta regra, a próxima análise relê a
+   * conversa inteira e o reconstrói.
+   */
+  coachingVazio: boolean;
 }): boolean {
   if (args.forcarCompleta) return false;
   if (!args.temEstadoAnterior) return false;
   if (args.mensagensNovas <= 0) return false;
+  if (args.coachingVazio) return false;
   return args.incrementaisSeguidas < LIMITE_INCREMENTAIS;
 }
 

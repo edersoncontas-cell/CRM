@@ -22,7 +22,7 @@ import { sendText } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
-import { normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
+import { normalizarCoaching, coachingVazio, coachingEstaVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, montarPromptCompacto } from "@/lib/zeus/orientador-prompt";
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
@@ -540,11 +540,16 @@ async function montarIncremental(clienteId: string, mensagensNovas: string): Pro
 } | null> {
   try {
     const anterior = await db.orientadorAnalise.findUnique({ where: { clienteId } });
+    const coachingAnterior = anterior?.coaching ? normalizarCoaching(anterior.coaching) : coachingVazio();
     if (!podeSerIncremental({
       temEstadoAnterior: !!anterior,
       mensagensNovas: mensagensNovas.trim().length,
       incrementaisSeguidas: anterior?.incrementaisSeguidas ?? 0,
       forcarCompleta: false,
+      // Coaching vazio: o incremental não tem como reconstruí-lo, então a
+      // próxima análise TEM de reler a conversa inteira. Sem isto, o painel
+      // que perdeu a condução uma vez nunca mais a recuperaria.
+      coachingVazio: coachingEstaVazio(coachingAnterior),
     })) return null;
 
     const [neg, cli] = await Promise.all([
@@ -558,7 +563,7 @@ async function montarIncremental(clienteId: string, mensagensNovas: string): Pro
     ]);
 
     const a = anterior!;
-    const coaching = a.coaching ? normalizarCoaching(a.coaching) : coachingVazio();
+    const coaching = coachingAnterior;
     const visitaFeita = coaching.roteiro.find((e) => /visita/i.test(e.etapa))?.status === "feito" ? true : null;
 
     return {
