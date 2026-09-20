@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { analisarConversaIA, classificarConversaIA, type ExtracaoConversa } from "@/lib/ai";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
 import { papelDaColuna } from "@/lib/pipeline";
+import { telefoneParaGravar } from "@/lib/telefone-valido";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { deveAbrirNegociacao } from "@/lib/zeus/regra-negociacao";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
@@ -209,14 +210,20 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
   // 1) Vincular cliente existente pelo telefone, ou criar um novo automaticamente.
   if (!clienteId) {
     const nomeContato = conv.contactName?.trim() || `Contato ${conv.externalPhone}`;
-    if (!(await deveDescartarContato(nomeContato))) {
+    // O WhatsApp nem sempre entrega o número real: quando o contato só tem
+    // LID (identificador interno, 15 dígitos), NÃO se cria cadastro. "Ou é o
+    // contato verdadeiro do cliente ou não fica cadastrado" — era por aqui
+    // que o LID entrava no lugar do telefone. A conversa continua no
+    // Atendimento; o cadastro nasce quando o número real aparecer.
+    const telefoneReal = telefoneParaGravar(conv.externalPhone);
+    if (telefoneReal && !(await deveDescartarContato(nomeContato))) {
       const existente = await acharClientePorTelefone(conv.externalPhone);
       if (existente) {
         clienteId = existente.id;
         clienteNome = existente.nome;
       } else {
         const novo = await db.cliente.create({
-          data: { nome: nomeContato, telefone: conv.externalPhone.replace(/\D/g, "") || conv.externalPhone, origem: "whatsapp" },
+          data: { nome: nomeContato, telefone: telefoneReal, origem: "whatsapp" },
         });
         clienteId = novo.id;
         clienteNome = novo.nome;

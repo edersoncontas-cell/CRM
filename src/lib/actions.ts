@@ -19,6 +19,7 @@ import { registrarAudit } from "./audit";
 import { mesAnoAtualBrasilia, inicioDoDiaBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { soResumo, STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
+import { telefoneRecusado, telefoneParaGravar, motivoTelefoneRecusado, ehTelefoneReal } from "@/lib/telefone-valido";
 import { excluirClienteDefinitivo } from "@/lib/contatos-bloqueados";
 import { CHAVES, setConfig } from "./config";
 import { atualizarCotacaoCafe } from "./mercado";
@@ -41,11 +42,15 @@ export async function criarCliente(formData: FormData): Promise<{ ok: boolean; e
   if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   const { nome, email } = parsed.data;
   if (await deveDescartarContato(nome)) return { ok: false, erro: "Nome não permitido." };
+  // "ou é o contato verdadeiro do cliente ou não fica cadastrado": número
+  // preenchido tem de ser telefone de verdade. Vazio continua valendo.
+  const telBruto = String(formData.get("telefone") ?? "");
+  if (telefoneRecusado(telBruto)) return { ok: false, erro: motivoTelefoneRecusado(telBruto) };
 
   const novo = await db.cliente.create({
     data: {
       nome,
-      telefone: String(formData.get("telefone") ?? "") || null,
+      telefone: telefoneParaGravar(telBruto),
       email: email || null,
       endereco: String(formData.get("endereco") ?? "") || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
@@ -100,7 +105,11 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
   const { nome, email } = parsed.data;
 
   const status = String(formData.get("status") ?? "potencial") || "potencial";
-  const tel = String(formData.get("telefone") ?? "").replace(/^(\+55|55)(?=\d{10,11}$)/, "");
+  // Mesma régua da criação: número preenchido tem de ser telefone de verdade.
+  // Era por aqui que um LID do WhatsApp entrava e ficava no lugar do contato.
+  const telBrutoEdicao = String(formData.get("telefone") ?? "");
+  if (telefoneRecusado(telBrutoEdicao)) return { ok: false, erro: motivoTelefoneRecusado(telBrutoEdicao) };
+  const tel = telefoneParaGravar(telBrutoEdicao);
   // Aniversário: só mexe se o formulário trouxe o campo. Mudou → "manual";
   // igual ao que já estava → mantém a origem (pode ter vindo de um documento).
   const nascimento: { dataNascimento?: Date | null; dataNascimentoOrigem?: string | null } = {};
@@ -117,7 +126,7 @@ export async function atualizarCliente(id: string, formData: FormData): Promise<
     where: { id },
     data: {
       nome,
-      telefone: tel || null,
+      telefone: tel,
       email: email || null,
       municipioId: String(formData.get("municipioId") ?? "") || null,
       status,
@@ -981,14 +990,16 @@ async function acharOuCriarCliente(
   });
   if (existente) {
     // completa telefone se faltava
-    if (tel && !existente.telefone) {
-      await db.cliente.update({ where: { id: existente.id }, data: { telefone: tel } });
+    if (tel && !existente.telefone && ehTelefoneReal(tel)) {
+      await db.cliente.update({ where: { id: existente.id }, data: { telefone: telefoneParaGravar(tel) } });
     }
     return existente.id;
   }
 
   const novo = await db.cliente.create({
-    data: { nome: nome ?? "Novo contato", telefone: tel, origem },
+    // telefoneParaGravar: o que não é telefone (LID do WhatsApp) entra como
+    // vazio em vez de ocupar o lugar do contato verdadeiro.
+    data: { nome: nome ?? "Novo contato", telefone: telefoneParaGravar(tel), origem },
   });
   return novo.id;
 }

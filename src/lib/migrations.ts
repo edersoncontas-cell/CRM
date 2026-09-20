@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { RENOMEAR_DYNAPAC, DYNAPAC_FORA_DE_LINHA } from "./dynapac-catalogo";
 import { NOMES_MUNICIPIOS_ES } from "./municipios-es";
+import { ehLidWhatsApp } from "./telefone-valido";
 
 let applied = false;
 
@@ -685,4 +686,64 @@ export async function limparMunicipiosInventados(): Promise<number> {
     console.error("[migracoes] limparMunicipiosInventados:", e);
     return 0;
   }
+}
+
+/**
+ * Tira do CRM os cadastros com IDENTIFICADOR DO WHATSAPP no lugar do telefone.
+ *
+ *   "Quero que todos os contatos que tem esse padrão de numeros no lugar do
+ *    numero de telefone sejam excluídos definitivamente do CRM (…) ou é o
+ *    contato verdadeiro do cliente ou não fica cadastrado, nem gera relatório
+ *    de informações."
+ *
+ * O padrão é o LID: 14 dígitos ou mais, como 100175850774738. Não disca, não
+ * recebe nada fora do WhatsApp e faz o cadastro parecer completo quando não
+ * está.
+ *
+ * DUAS SAÍDAS, e a diferença entre elas importa:
+ *
+ *   sem vínculo  → o cadastro é APAGADO. É sobra de conversa, não tem nada
+ *                  dentro.
+ *   com vínculo  → o cadastro FICA, mas o número falso é apagado do campo.
+ *                  Destruir uma negociação ou uma visita de verdade porque o
+ *                  telefone estava errado seria um estrago muito maior que o
+ *                  problema — e irreversível. O cadastro continua lá, agora
+ *                  sem telefone, esperando o número certo.
+ *
+ * Idempotente: na segunda passada não há mais nada para fazer.
+ */
+export async function limparTelefonesFalsos(): Promise<{ apagados: number; limpos: number; nomes: string[] }> {
+  const r = { apagados: 0, limpos: 0, nomes: [] as string[] };
+  try {
+    const clientes = await db.cliente.findMany({
+      select: {
+        id: true, nome: true, telefone: true,
+        _count: { select: { negociacoes: true, visitas: true, frota: true, tarefas: true, alertas: true } },
+      },
+    });
+    const alvos = clientes.filter((c) => ehLidWhatsApp(c.telefone));
+    for (const c of alvos) {
+      const vinculos = c._count.negociacoes + c._count.visitas + c._count.frota + c._count.tarefas + c._count.alertas;
+      if (vinculos > 0) {
+        await db.cliente.update({ where: { id: c.id }, data: { telefone: null } });
+        r.limpos++;
+        r.nomes.push(`${c.nome} (telefone falso removido; cadastro mantido por ter ${vinculos} vínculo(s))`);
+        continue;
+      }
+      // Sem vínculo: sai inteiro, junto com a conversa que o criou.
+      await db.whatsAppMessage.deleteMany({ where: { conversation: { clienteId: c.id } } }).catch(() => ({ count: 0 }));
+      await db.whatsAppConversation.deleteMany({ where: { clienteId: c.id } }).catch(() => ({ count: 0 }));
+      await db.auditLog.deleteMany({ where: { clienteId: c.id } }).catch(() => ({ count: 0 }));
+      await db.alertaOculto.deleteMany({ where: { clienteId: c.id } }).catch(() => ({ count: 0 }));
+      await db.cliente.delete({ where: { id: c.id } }).catch(() => {});
+      r.apagados++;
+      r.nomes.push(c.nome);
+    }
+    if (r.apagados || r.limpos) {
+      console.warn(`[migracoes] telefones falsos (LID do WhatsApp): ${r.apagados} cadastro(s) apagado(s), ${r.limpos} com o número removido.`);
+    }
+  } catch (e) {
+    console.error("[migracoes] limparTelefonesFalsos:", e);
+  }
+  return r;
 }

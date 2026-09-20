@@ -62,6 +62,10 @@ export function chaveNome(nome: string): string | null {
 export function telefoneNacional(raw: string): string | null {
   const d = raw.replace(/\D/g, "").replace(/^0+/, "");
   if (d.length < 8) return null;
+  // Identificador interno do WhatsApp (14+ dígitos) não é telefone e não pode
+  // virar o contato do cliente — "ou é o contato verdadeiro ou não fica
+  // cadastrado". Ver lib/telefone-valido.ts.
+  if (d.length >= 14) return null;
   if ((d.length === 12 || d.length === 13) && d.startsWith("55")) return d.slice(2);
   return d;
 }
