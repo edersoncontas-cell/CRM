@@ -23,6 +23,8 @@ import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador } from "@/lib/zeus/orientador-prompt";
 import { normalizarFatos, mudancasDaNegociacao, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
+import { textoParaPrompt } from "@/lib/orientador-notas";
+import { recortarHistorico, MAX_MENSAGENS } from "@/lib/zeus/historico-janela";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
 import { resumoDasEtapas } from "@/lib/zeus/cerebro-resposta";
@@ -55,9 +57,6 @@ export type AnaliseOrientador = {
   fatos: FatosNegociacao;
 };
 
-// Quanto do histórico vai para a IA (caracteres). Conversas longas precisam
-// caber inteiras para os combinados de semanas atrás contarem.
-const JANELA_HISTORICO = 24_000;
 
 function fallback(motivo: string): AnaliseOrientador {
   return {
@@ -139,7 +138,9 @@ async function lerNotaVendedor(clienteId: string): Promise<string | null> {
       where: { clienteId },
       select: { notaVendedor: true },
     });
-    return r?.notaVendedor?.trim() || null;
+    // Os contextos são vários e datados: chegam à IA em ordem, com o aviso de
+    // que o mais novo ganha do mais velho quando se contradisserem.
+    return textoParaPrompt(r?.notaVendedor);
   } catch (e) {
     console.error("[orientador] não deu para ler a nota do vendedor de", clienteId, e);
     return null;
@@ -327,7 +328,7 @@ export async function processarOrientador(args: {
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
-      historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
+      historico: recortarHistorico(args.historicoCompleto),
       ultimasMensagens: args.ultimasMensagens,
       contextoCliente: args.contextoCliente,
       contextoAcademia: args.contextoAcademia,
@@ -342,7 +343,7 @@ export async function processarOrientador(args: {
 
   // 2) Melhor resposta, orientada pelo coaching (alerta, perfil, perguntas).
   const reply = await gerarRespostaRapida({
-    historico: args.historicoCompleto.slice(-JANELA_HISTORICO),
+    historico: recortarHistorico(args.historicoCompleto),
     ultimasMensagens: args.ultimasMensagens,
     contextoCliente: args.contextoCliente,
     estilo: args.estilo,
@@ -391,7 +392,7 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
   const p = await lerParametros();
   const [msgs, estilo] = await Promise.all([
-    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "desc" }, take: 250 }),
+    db.whatsAppMessage.findMany({ where: { conversationId, isDraft: false }, orderBy: { sentAt: "desc" }, take: MAX_MENSAGENS }),
     db.estiloDeFala.findFirst().catch(() => null),
   ]);
   if (msgs.length === 0) return { ok: false, erro: "Conversa sem mensagens." };
@@ -405,9 +406,9 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   const notaVendedor = await lerNotaVendedor(conv.clienteId);
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
-    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes, notaVendedor });
+    const analise = await gerarAnaliseOrientador({ historico: recortarHistorico(historico), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes, notaVendedor });
     const resposta = ultimaDoCliente
-      ? await gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
+      ? await gerarRespostaRapida({ historico: recortarHistorico(historico), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
       : "";
     await consumirOrcamentoIA();
     // "fatos" não é coluna de OrientadorAnalise (ver processarOrientador).

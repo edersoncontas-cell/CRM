@@ -12,7 +12,12 @@ export function mensagemErroIA(e: unknown): string {
     return "Nenhuma chave de IA configurada. Defina GEMINI_API_KEY (grátis) ou GROQ_API_KEY na Vercel.";
   }
   if (erroDeCotaIA(msg)) {
-    return "A cota diária grátis de IA acabou em todos os provedores configurados. Ela volta sozinha à meia-noite (UTC). Para não parar: configure GEMINI_API_KEY (grátis) como reserva na Vercel.";
+    // NÃO mandar configurar chave aqui. A mensagem antiga dizia "configure
+    // GEMINI_API_KEY (grátis) como reserva" para quem já tinha a chave
+    // configurada — conselho inútil, e ainda aparecia numa tarja vermelha
+    // sobre o painel do Orientador, dando a entender que a leitura estava
+    // errada. Ela não estava: só não tinha acabado de ser atualizada.
+    return "A cota de IA de hoje acabou. A leitura abaixo é a última que deu tempo de fazer e continua valendo; ela se atualiza sozinha quando a cota voltar.";
   }
   if (/does not exist|model_not_found|decommissioned|deprecated/i.test(msg)) {
     return "O modelo de IA configurado foi desativado pelo provedor. O CRM já troca sozinho para o próximo — tente de novo em instantes.";

@@ -21,6 +21,7 @@ import {
   contextoConversaAction, marcarRespondidoAction, resolverAlertaConversaAction, registrarUsoRespostaAction,
   listarRespostasProntasAction, salvarRespostaProntaAction, excluirRespostaProntaAction, reanalisarConversaAction,
   salvarNotaOrientadorAction,
+  removerNotaOrientadorAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -251,9 +252,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   const [nota, setNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
   const [notaAviso, setNotaAviso] = useState<string | null>(null);
-  // De qual conversa a nota da caixa já foi carregada — sem isto, o contexto
-  // recarregando no meio da digitação apagaria o que está sendo escrito.
-  const notaCarregadaDe = useRef<string | null>(null);
   const anexoRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -426,8 +424,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     if (!selId || reanalisando) return;
     setReanalisando(true); setAvisoPainel(null);
     const r = await reanalisarConversaAction(selId).catch(() => ({ ok: false, erro: "Falha ao reanalisar." }));
-    if (!r.ok) setAvisoPainel(r.erro ?? "Falha ao reanalisar.");
-    notaCarregadaDe.current = null; // deixa a caixa recarregar do que foi salvo
+    if (!r.ok) { setAvisoPainel(r.erro ?? "Falha ao reanalisar."); setTimeout(() => setAvisoPainel(null), 10000); }
     await carregarContexto(selId);
     setReanalisando(false);
   }
@@ -440,11 +437,15 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     try {
       const s = await salvarNotaOrientadorAction(selId, nota);
       if (!s.ok) { setNotaAviso(s.erro ?? "Não deu para salvar."); return; }
+      // Limpa a caixa assim que o texto está guardado: ela fica pronta para o
+      // PRÓXIMO contexto, que é o que o vendedor faz — conta a máquina agora,
+      // a forma de pagamento amanhã. Por isso o salvamento acrescenta em vez
+      // de trocar (ver salvarNotaOrientadorAction).
+      setNota("");
       setNotaAviso("Guardado. Reanalisando com essa informação…");
       const r = await reanalisarConversaAction(selId).catch(() => ({ ok: false, erro: "Falha ao reanalisar." }));
       if (!r.ok) setNotaAviso(r.erro ?? "Guardado, mas a reanálise falhou.");
-      else setNotaAviso("Pronto — a leitura abaixo já considera o que você escreveu.");
-      notaCarregadaDe.current = null;
+      else setNotaAviso("Pronto — pode escrever o próximo contexto aí em cima.");
       await carregarContexto(selId);
     } catch {
       setNotaAviso("Não deu para falar com o servidor.");
@@ -452,6 +453,15 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
       setSalvandoNota(false);
       setTimeout(() => setNotaAviso(null), 8000);
     }
+  }
+
+  // Apaga um contexto já guardado. Precisa existir: um fato errado entra na
+  // análise como FATO e estraga toda leitura seguinte.
+  async function apagarContexto(indice: number) {
+    if (!selId) return;
+    const r = await removerNotaOrientadorAction(selId, indice).catch(() => ({ ok: false, erro: "Falha ao apagar." }));
+    if (!r.ok) { setNotaAviso(r.erro ?? "Não deu para apagar."); setTimeout(() => setNotaAviso(null), 8000); return; }
+    await carregarContexto(selId);
   }
 
   function htmlParaTexto(html: string): string {
@@ -552,20 +562,13 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     try { setContexto(await contextoConversaAction(id)); } catch { setContexto(null); } finally { setCarregandoContexto(false); }
   }, []);
 
-  // Trocou de conversa: esvazia a caixa e marca para recarregar.
+  // Trocou de conversa: esvazia a caixa. Ela nunca é preenchida de volta —
+  // é sempre uma folha em branco para o PRÓXIMO contexto; o que já foi
+  // contado aparece listado abaixo dela.
   useEffect(() => {
-    notaCarregadaDe.current = null;
     setNota("");
     setNotaAviso(null);
   }, [selId]);
-
-  // Chegou o contexto daquela conversa: preenche a caixa com o que está
-  // salvo — uma vez só, para não atropelar quem está digitando.
-  useEffect(() => {
-    if (!contexto || !selId || notaCarregadaDe.current === selId) return;
-    notaCarregadaDe.current = selId;
-    setNota(contexto.orientador?.notaVendedor ?? "");
-  }, [contexto, selId]);
 
   const mergeMsgs = useCallback((novas: Mensagem[]) => {
     setMensagens((prev) => {
@@ -989,8 +992,13 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
               <button onClick={() => setPainelAberto(false)} className={cn(botaoIcone, "xl:hidden")} aria-label="Fechar painel"><X size={16} /></button>
             </div>
           </div>
+          {/* Aviso do "Reanalisar" junto do botão que o causou, e discreto: era
+              uma tarja vermelha no topo do painel, que dava a entender que a
+              leitura abaixo estava errada — ela só não estava fresca. */}
+          {avisoPainel && (
+            <p className="shrink-0 border-b border-brand-800 bg-amber-400/5 px-4 py-2 text-[11px] text-amber-200/90">{avisoPainel}</p>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm">
-            {avisoPainel && <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">{avisoPainel}</p>}
             {carregandoContexto && !contexto ? (
               <div className="flex items-center gap-2 text-brand-400"><Loader2 size={14} className="animate-spin" /> Carregando…</div>
             ) : !contexto?.cliente ? (
@@ -1032,9 +1040,6 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                         {contexto.orientador.probabilidadeFechamento != null && <span className="rounded-full bg-agro-400/15 px-2 py-0.5 font-bold text-agro-300">{contexto.orientador.probabilidadeFechamento}% de fechar</span>}
                         {contexto.orientador.coaching?.personalidade.estilo && <span className="text-brand-400">cliente {contexto.orientador.coaching.personalidade.estilo}{contexto.orientador.coaching.personalidade.papel ? ` · ${contexto.orientador.coaching.personalidade.papel}` : ""}</span>}
                       </div>
-                      {contexto.orientador.proximaAcao && (
-                        <div className="mt-2 rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {contexto.orientador.proximaAcao}</div>
-                      )}
                     </>
                   )}
                 </div>
@@ -1074,12 +1079,23 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   const corNota = c ? (c.conducao.nota >= 8 ? "text-emerald-300" : c.conducao.nota >= 6 ? "text-amber-300" : "text-red-300") : "text-brand-300";
                   return (
                   <div className="space-y-2.5">
-                    {/* ── O que fazer agora ─────────────────────────────── */}
+                    {/* ── ORIENTADOR: tudo o que ele manda FAZER, num card só ──
+                        Alerta do momento, próxima ação, perguntas, o que falta
+                        saber, a melhor resposta e a nota da sua condução
+                        estavam soltos, cada um numa caixinha. Agora é um
+                        bloco só: é a voz do Orientador, e ela fala de uma vez. */}
+                    <div className="space-y-2 rounded-xl border border-agro-400/25 bg-agro-400/[0.05] p-3">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-agro-300">
+                        <Compass size={12} /> Orientador
+                      </div>
                     {c?.alertaAgora && (
                       <div className={cn("rounded-xl border p-2.5 text-xs", corAlerta[c.alertaAgora.nivel])}>
                         <div className={cn("flex items-center gap-1.5 font-bold", corTitulo[c.alertaAgora.nivel])}><AlertTriangle size={13} /> {c.alertaAgora.titulo}</div>
                         {c.alertaAgora.motivo && <p className="mt-1">{c.alertaAgora.motivo}</p>}
                       </div>
+                    )}
+                    {o.proximaAcao && (
+                      <div className="rounded-xl border border-agro-400/30 bg-agro-400/10 p-2.5 text-xs text-agro-50"><b className="text-agro-300">Próxima ação:</b> {o.proximaAcao}</div>
                     )}
                     {c && (c.perguntasAgora.length > 0 || c.informacoesFaltando.length > 0) && (
                       <div className="rounded-xl bg-white/[0.04] p-2.5 text-xs text-brand-200">
@@ -1107,6 +1123,7 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                         {c.conducao.correcoes.length > 0 && <ul className="mt-1 space-y-0.5">{c.conducao.correcoes.map((a) => <li key={a} className="flex gap-1.5 text-amber-100"><span>→</span><span>{a}</span></li>)}</ul>}
                       </div>
                     )}
+                    </div>
 
                     {/* ── Contexto e porquê ─────────────────────────────── */}
                     {o.resumoNegociacao && <p className="text-xs text-brand-200">{o.resumoNegociacao}</p>}
@@ -1227,10 +1244,10 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     <span className="text-[10px] text-brand-500">{nota.length}/4000</span>
                     <button
                       onClick={salvarNotaEReanalisar}
-                      disabled={salvandoNota}
+                      disabled={salvandoNota || !nota.trim()}
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition",
-                        salvandoNota ? "bg-white/5 text-brand-400" : "bg-agro-400 text-brand-950 hover:bg-agro-300",
+                        salvandoNota || !nota.trim() ? "bg-white/5 text-brand-400" : "bg-agro-400 text-brand-950 hover:bg-agro-300",
                       )}
                     >
                       {salvandoNota ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -1238,6 +1255,42 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     </button>
                   </div>
                   {notaAviso && <p className="mt-1.5 text-[11px] text-agro-300">{notaAviso}</p>}
+
+                  {/* O que já foi contado. Precisa estar à vista: a caixa
+                      limpa a cada salvamento, então sem esta lista o vendedor
+                      não teria como saber o que o Orientador já sabe — e
+                      repetiria, ou deixaria de contar. O ✕ existe porque um
+                      fato errado entra na análise como FATO e estraga toda
+                      leitura seguinte. */}
+                  {(contexto.orientador?.notasVendedor.length ?? 0) > 0 && (
+                    <div className="mt-3 border-t border-agro-400/20 pt-2">
+                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-brand-400">
+                        Já contei ao Orientador
+                      </div>
+                      <ul className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                        {contexto.orientador!.notasVendedor.map((n, i) => (
+                          <li key={`${n.em ?? "sem-data"}-${i}`} className="flex items-start justify-between gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11px] text-brand-200">
+                            <span className="min-w-0">
+                              {n.em && (
+                                <span className="mr-1.5 text-brand-500">
+                                  {new Date(n.em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" })}
+                                </span>
+                              )}
+                              {n.texto}
+                            </span>
+                            <button
+                              onClick={() => apagarContexto(i)}
+                              title="Apagar este contexto"
+                              aria-label="Apagar este contexto"
+                              className="shrink-0 text-brand-500 transition hover:text-red-300"
+                            >
+                              <X size={12} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

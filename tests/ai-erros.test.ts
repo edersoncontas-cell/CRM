@@ -12,8 +12,14 @@ describe("erros de IA", () => {
   });
   it("traduz para o vendedor sem o JSON cru", () => {
     const m = mensagemErroIA(groq429);
-    expect(m).toMatch(/cota diária/i);
+    expect(m).toMatch(/cota de IA/i);
     expect(m).not.toContain("{");
+    // NÃO manda configurar chave: a mensagem antiga dizia "configure
+    // GEMINI_API_KEY (grátis) como reserva" para quem já tinha a chave — e
+    // aparecia numa tarja vermelha sobre o painel do Orientador, dando a
+    // entender que a leitura estava errada quando ela só estava desatualizada.
+    expect(m).not.toContain("GEMINI_API_KEY");
+    expect(m).toMatch(/continua valendo/i);
     expect(mensagemErroIA(new Error("model `x` does not exist"))).toMatch(/desativado/);
     expect(mensagemErroIA(new Error("Falha no Groq (500): {\"error\":\"x\"} algo deu errado"))).toBe("Falha no Groq (500): algo deu errado");
   });

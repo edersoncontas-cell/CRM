@@ -10,6 +10,7 @@ import { normalizarCoaching, type Coaching } from "@/lib/zeus/orientador-coachin
 import { rotuloPapel, papelDaColuna } from "@/lib/pipeline";
 import { registrarAudit } from "@/lib/audit";
 import { montarContextoAgenda } from "@/lib/zeus/agenda-contexto";
+import { lerNotas, acrescentarNota, removerNota, LIMITE_ENTRADA, type NotaVendedor } from "@/lib/orientador-notas";
 
 export type ContextoConversa = {
   cliente: {
@@ -38,8 +39,9 @@ export type ContextoConversa = {
     combinados: string[];
     pendencias: string[];
     coaching: Coaching | null;
-    // O que o vendedor escreveu na mão para o Orientador levar em conta.
-    notaVendedor: string | null;
+    // Tudo o que o vendedor já contou ao Orientador, em ordem — a caixa
+    // limpa a cada salvamento e os contextos se somam.
+    notasVendedor: NotaVendedor[];
     atualizadoEm: string;
   } | null;
   // Se já existe um guia de estilo de fala aprendido do vendedor — a "melhor
@@ -89,7 +91,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
           oportunidadesPerdidas: orientador.oportunidadesPerdidas, resumoNegociacao: orientador.resumoNegociacao,
           combinados: orientador.combinados ?? [], pendencias: orientador.pendencias ?? [],
           coaching: orientador.coaching ? normalizarCoaching(orientador.coaching) : null,
-          notaVendedor: orientador.notaVendedor ?? null,
+          notasVendedor: lerNotas(orientador.notaVendedor),
           atualizadoEm: orientador.atualizadoEm.toISOString(),
         }
       : null,
@@ -190,14 +192,20 @@ export async function salvarNotaOrientadorAction(
 ): Promise<{ ok: boolean; erro?: string }> {
   const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
   if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
-  const texto = nota.trim().slice(0, 4000);
+  const texto = nota.trim().slice(0, LIMITE_ENTRADA);
+  if (!texto) return { ok: false, erro: "Escreva alguma coisa antes de salvar." };
   try {
+    // ACRESCENTA, não troca. A caixa limpa depois de salvar, então trocar
+    // faria o contexto novo apagar o anterior — escrever a máquina hoje e a
+    // forma de pagamento amanhã perderia a máquina.
+    const atual = await db.orientadorAnalise.findUnique({ where: { clienteId: conv.clienteId }, select: { notaVendedor: true } });
+    const notas = acrescentarNota(atual?.notaVendedor, texto);
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
       // Se ainda não existe análise, cria o mínimo para guardar a nota — a
       // próxima passada do Orientador preenche o resto.
-      create: { clienteId: conv.clienteId, estagioVenda: "prospeccao", temperatura: "fria", objecoes: [], oportunidadesPerdidas: [], notaVendedor: texto || null },
-      update: { notaVendedor: texto || null },
+      create: { clienteId: conv.clienteId, estagioVenda: "prospeccao", temperatura: "fria", objecoes: [], oportunidadesPerdidas: [], notaVendedor: notas },
+      update: { notaVendedor: notas },
     });
   } catch (e) {
     console.error("[salvarNotaOrientador]", e);
@@ -220,4 +228,31 @@ export async function reanalisarConversaAction(conversationId: string): Promise<
     revalidatePath("/orientador");
   }
   return r;
+}
+
+/**
+ * Apaga UM dos contextos guardados.
+ *
+ * Existe porque um fato errado entra na análise como FATO e envenena tudo daí
+ * em diante: se o vendedor escreve "fechamos em 610 mil" e depois o negócio
+ * muda, sem poder apagar ele ficaria brigando com a própria nota para sempre.
+ */
+export async function removerNotaOrientadorAction(
+  conversationId: string,
+  indice: number,
+): Promise<{ ok: boolean; erro?: string }> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
+  try {
+    const atual = await db.orientadorAnalise.findUnique({ where: { clienteId: conv.clienteId }, select: { notaVendedor: true } });
+    await db.orientadorAnalise.update({
+      where: { clienteId: conv.clienteId },
+      data: { notaVendedor: removerNota(atual?.notaVendedor, indice) },
+    });
+  } catch (e) {
+    console.error("[removerNotaOrientador]", e);
+    return { ok: false, erro: "Não deu para apagar." };
+  }
+  try { revalidatePath("/orientador"); } catch { /* cache não é motivo para falhar */ }
+  return { ok: true };
 }
