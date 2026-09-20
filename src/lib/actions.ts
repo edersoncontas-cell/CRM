@@ -2490,6 +2490,37 @@ export async function zerarOrientadorAction(): Promise<{ ok: boolean; apagadas: 
   return { ok: true, apagadas: r.count };
 }
 
+/**
+ * "Não é negociação": tira o card do Orientador.
+ *
+ * Nem toda conversa é venda — tem recado, bom dia, assunto pessoal. O card
+ * fica escondido a partir de agora; se o cliente mandar mensagem NOVA depois
+ * disto, ele volta (é a regra que a lista já aplica: só some enquanto a
+ * última mensagem for anterior ao momento em que foi escondido).
+ *
+ * A leitura da IA é apagada junto: guardá-la só gastaria espaço com a análise
+ * de uma conversa que o vendedor disse que não é negociação.
+ */
+export async function descartarCardOrientadorAction(clienteId: string): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    const cli = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } });
+    if (!cli) return { ok: false, erro: "Cliente não encontrado." };
+    await db.cliente.update({ where: { id: clienteId }, data: { orientadorOcultoEm: new Date() } });
+    await db.orientadorAnalise.deleteMany({ where: { clienteId } }).catch(() => {});
+    await db.alerta.updateMany({ where: { clienteId, tipo: "orientador", resolvido: false }, data: { resolvido: true } }).catch(() => {});
+    await registrarAudit({
+      acao: "perfil_atualizado", origem: "usuario", clienteId,
+      descricao: `Card do Orientador descartado (conversa marcada como "não é negociação") — ${cli.nome}.`,
+    }).catch(() => {});
+    revalidatePath("/orientador");
+    revalidatePath("/atendimento");
+    return { ok: true };
+  } catch (e) {
+    console.error("[descartarCardOrientador]", e);
+    return { ok: false, erro: "Não deu para descartar o card." };
+  }
+}
+
 // Analisa até 3 conversas por chamada (limite de tempo da função); o cliente
 // chama em lotes até acabar.
 export async function analisarLoteOrientadorAction(conversaIds: string[]): Promise<{ feitas: number; erros: string[] }> {

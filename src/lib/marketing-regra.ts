@@ -110,16 +110,26 @@ Devolva SOMENTE um JSON válido:
 
 // Prompt da ARTE (Gemini imagem). Mantém a identidade visual e evita texto
 // escrito pela IA na imagem, que quase sempre sai errado.
-export function promptArtePost(p: PedidoPost, ideiaDeArte?: string | null): string {
+export function promptArtePost(p: PedidoPost, ideiaDeArte?: string | null, quantasReferencias = 0): string {
   const cenario = p.regiao.toLowerCase().includes("esp") ? "região serrana e litorânea do sul do Espírito Santo" : p.regiao;
   return [
     "Fotografia publicitária profissional de máquina pesada de construção em operação.",
+    // Com anexo, a instrução tem que vir ANTES do resto: senão o modelo trata
+    // a imagem como enfeite e desenha uma máquina genérica no lugar da dele.
+    quantasReferencias > 0
+      ? `Use ${quantasReferencias === 1 ? "a imagem anexada" : `as ${quantasReferencias} imagens anexadas`} como BASE: a máquina, as cores e as marcas que aparecem nela devem ser mantidas fielmente. Não troque o modelo da máquina nem invente outro equipamento.`
+      : "",
     ideiaDeArte?.trim() ? `Cena: ${ideiaDeArte.trim()}.` : `Cena ligada ao tema: ${p.tema}.`,
     p.maquina ? `Equipamento em destaque: ${p.maquina}.` : "",
     `Ambiente: obra real no Brasil, ${cenario}, luz natural do fim da tarde.`,
     "Composição limpa, com espaço vazio no topo para o texto ser colocado depois.",
     "Cores fortes e contraste alto, aspecto de catálogo de fabricante.",
-    "NÃO escreva nenhum texto, letra, número, logotipo ou marca d'água na imagem.",
+    // Com anexo, proibir logotipo brigaria com "mantenha as marcas da imagem
+    // anexada" — a marca da máquina dele tem que continuar lá. Sem anexo, a
+    // proibição vale inteira, para não inventar marca nenhuma.
+    quantasReferencias > 0
+      ? "NÃO escreva nenhum texto, letra, número ou marca d'água na imagem — a única marca permitida é a que já aparece na máquina anexada."
+      : "NÃO escreva nenhum texto, letra, número, logotipo ou marca d'água na imagem.",
     "Nada de pessoas com rosto reconhecível.",
   ].filter(Boolean).join(" ");
 }

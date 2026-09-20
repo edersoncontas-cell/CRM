@@ -51,6 +51,31 @@ export async function registrarExclusaoConversa(
   ));
 }
 
+/**
+ * Telefones que o vendedor apagou À MÃO (motivo "manual"), em um Set pronto
+ * para consulta. Não entram as exclusões feitas pela data de corte: aquelas
+ * são limpeza automática de histórico velho, não uma decisão dele.
+ *
+ * Uma consulta só, e o casamento é por VARIANTE do número — a conversa pode
+ * ter voltado gravada com o 9º dígito diferente de como foi apagada.
+ */
+export async function telefonesApagadosPeloVendedor(): Promise<Set<string>> {
+  const rows = await db.conversaExcluida.findMany({ where: { motivo: "manual" }, select: { telefone: true } });
+  const set = new Set<string>();
+  for (const r of rows) {
+    set.add(r.telefone);
+    for (const v of phoneLookupVariants(r.telefone)) set.add(v);
+  }
+  return set;
+}
+
+/** Este telefone está na lista dos apagados à mão? */
+export function foiApagadoPeloVendedor(phone: string, apagados: Set<string>): boolean {
+  if (!apagados.size) return false;
+  if (apagados.has(phone)) return true;
+  return phoneLookupVariants(phone).some((v) => apagados.has(v));
+}
+
 // Momento da última exclusão desta conversa (por telefone ou lid), se houve.
 // Com `ignorarCorte`, as exclusões feitas pela data de corte não contam (o
 // vendedor está importando de antes do corte e quer essas conversas de volta).

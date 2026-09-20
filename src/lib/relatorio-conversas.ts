@@ -10,6 +10,7 @@
 import { jsPDF } from "jspdf";
 import { db } from "@/lib/db";
 import { resumirConversaIA } from "@/lib/ai";
+import { telefonesApagadosPeloVendedor, foiApagadoPeloVendedor } from "@/lib/whatsapp-corte";
 
 export type LinhaRelatorio = {
   conversaId: string;
@@ -74,8 +75,28 @@ async function carregarConversas(f: FiltroRelatorio) {
     : [];
   const nomePorId = new Map(clientes.map((c) => [c.id, c.nome]));
 
+  // Conversa que o vendedor APAGOU à mão não volta para o relatório só porque
+  // o contato mandou um "bom dia" depois. Ele apagou porque não era negócio.
+  // A exceção é ter interesse de VERDADE: negociação aberta no funil — aí a
+  // conversa volta a contar sozinha, sem ele precisar fazer nada.
+  const apagados = await telefonesApagadosPeloVendedor().catch(() => new Set<string>());
+  const comNegociacao = new Set<string>();
+  if (apagados.size && clienteIds.length) {
+    const negs = await db.negociacao.findMany({
+      where: { clienteId: { in: clienteIds }, status: "aberta" },
+      select: { clienteId: true },
+      distinct: ["clienteId"],
+    }).catch(() => []);
+    for (const n of negs) if (n.clienteId) comNegociacao.add(n.clienteId);
+  }
+
   return convs
     .filter((c) => c.messages.length > 0)
+    // Pedir uma conversa específica (o PDF de uma conversa só) sempre vale:
+    // ali ele escolheu ver aquela, não é o relatório varrendo tudo.
+    .filter((c) => !!f.conversaId
+      || !foiApagadoPeloVendedor(c.externalPhone, apagados)
+      || (!!c.clienteId && comNegociacao.has(c.clienteId)))
     .map((c) => ({ ...c, nomeCliente: c.clienteId ? nomePorId.get(c.clienteId) ?? null : null }));
 }
 

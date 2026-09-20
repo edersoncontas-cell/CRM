@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import {
   buscarOrientadorAnalise, zerarOrientadorAction, analisarLoteOrientadorAction, proximaAcaoViraDemandaAction,
+  descartarCardOrientadorAction,
 } from "@/lib/actions";
 import { adicionarContextoClienteAction, removerContextoClienteAction } from "@/lib/contexto-cliente-actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
@@ -114,8 +115,9 @@ function Secao({ icone, titulo, children }: { icone: React.ReactNode; titulo: st
 }
 
 // ── Card de leitura ─────────────────────────────────────────────────────────
-function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
-  a: Item; analisando: boolean; onAbrir: () => void; onAnalisar: () => void;
+function CardOrientador({ a, analisando, descartando, onAbrir, onAnalisar, onDescartar }: {
+  a: Item; analisando: boolean; descartando: boolean;
+  onAbrir: () => void; onAnalisar: () => void; onDescartar: () => void;
 }) {
   const desatualizado = leituraDesatualizada(a);
   const alerta = a.alertaNivel ? COR_ALERTA[a.alertaNivel] : null;
@@ -199,6 +201,16 @@ function CardOrientador({ a, analisando, onAbrir, onAnalisar }: {
           >
             {analisando ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} strokeWidth={2.5} />}
           </button>
+          {/* Nem toda conversa é venda: recado, bom dia, assunto pessoal. Tira
+              o card daqui. Se o cliente mandar mensagem nova depois, ele volta. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDescartar(); }}
+            disabled={descartando}
+            title="Não é negociação — tirar este card"
+            className="flex items-center justify-center rounded-lg bg-slate-100 px-2 py-2 text-slate-500 ring-1 ring-slate-200 hover:bg-red-100 hover:text-red-700 hover:ring-red-200 disabled:opacity-60"
+          >
+            {descartando ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} strokeWidth={2.5} />}
+          </button>
         </div>
       </Card>
     </div>
@@ -221,6 +233,24 @@ export function OrientadorLista({ itens, contagem, periodo }: {
   const [novoContexto, setNovoContexto] = useState("");
   const [salvandoContexto, setSalvandoContexto] = useState(false);
   const [, startTransition] = useTransition();
+
+  const [descartando, setDescartando] = useState<Set<string>>(new Set());
+
+  // "Não é negociação": some o card na hora (otimista) e grava. Se der erro,
+  // o card volta — não pode sumir da tela sem ter sumido do banco.
+  async function descartarUm(item: Item) {
+    setDescartando((s) => new Set(s).add(item.clienteId));
+    setRemovidos((s) => new Set(s).add(item.clienteId));
+    const r = await descartarCardOrientadorAction(item.clienteId).catch(() => ({ ok: false, erro: "Falha ao descartar." }));
+    setDescartando((s) => { const n = new Set(s); n.delete(item.clienteId); return n; });
+    if (!r.ok) {
+      setRemovidos((s) => { const n = new Set(s); n.delete(item.clienteId); return n; });
+      setAviso({ tipo: "erro", texto: r.erro ?? "Falha ao descartar." });
+      return;
+    }
+    setAviso({ tipo: "ok", texto: `${item.clienteNome} saiu do Orientador. Se ele mandar mensagem nova, volta.` });
+    startTransition(() => router.refresh());
+  }
 
   async function analisarUm(item: Item) {
     setAnalisando((s) => new Set(s).add(item.clienteId));
@@ -368,8 +398,10 @@ export function OrientadorLista({ itens, contagem, periodo }: {
                 key={a.clienteId}
                 a={a}
                 analisando={analisando.has(a.clienteId)}
+                descartando={descartando.has(a.clienteId)}
                 onAnalisar={() => analisarUm(a)}
                 onAbrir={() => abrir(a.clienteId)}
+                onDescartar={() => descartarUm(a)}
               />
             ))}
           </div>

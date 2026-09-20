@@ -5,10 +5,10 @@
 // promoção), o tema e a máquina, revisa, salva e publica — ou manda direto
 // para a carteira pelo envio em lote do WhatsApp.
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
-  Sparkles, Image as ImageIcon, Loader2, Copy, Check, Save, Trash2, Send, CalendarDays, Megaphone, Rocket, Newspaper, Tag, Download,
+  Sparkles, Image as ImageIcon, Loader2, Copy, Check, Save, Trash2, Send, CalendarDays, Megaphone, Rocket, Newspaper, Tag, Download, Paperclip,
 } from "lucide-react";
 import {
   gerarLegendaAction, gerarArtePostAction, salvarPostAction, excluirPostAction, marcarPostPublicadoAction,
@@ -64,6 +64,11 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
   const [legenda, setLegenda] = useState("");
   const [hashtags, setHashtags] = useState("");
   const [ideiaDeArte, setIdeiaDeArte] = useState("");
+  // Imagens de referência: foto da máquina dele, arte antiga no estilo que
+  // ele quer. O Gemini usa como base — é o que faz a arte sair com a máquina
+  // certa em vez de uma inventada.
+  const [referencias, setReferencias] = useState<{ nome: string; url: string; base64: string; mime: string }[]>([]);
+  const refArquivo = useRef<HTMLInputElement>(null);
   const [imagem, setImagem] = useState<{ url: string; base64: string; mime: string } | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -86,6 +91,9 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
   function limpar() {
     setEditando(null); setLegenda(""); setHashtags(""); setIdeiaDeArte(""); setImagem(null);
     setTema(""); setInstrucoes(""); setErro(null); setAviso(null);
+    // Libera as URLs locais das miniaturas, senão ficam presas na memória do
+    // navegador a cada post novo.
+    setReferencias((lista) => { lista.forEach((r) => URL.revokeObjectURL(r.url)); return []; });
   }
 
   async function escrever() {
@@ -98,9 +106,36 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
     setIdeiaDeArte(r.ideiaDeArte ?? "");
   }
 
+  // Lê os arquivos escolhidos como base64 (é o formato que o Gemini aceita).
+  // Limite de 4 MB por imagem: acima disso o pedido fica pesado demais e o
+  // Gemini recusa — melhor avisar aqui do que deixar falhar lá.
+  async function anexosEscolhidos(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivos = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!arquivos.length) return;
+    setErro(null);
+    const novos: typeof referencias = [];
+    for (const f of arquivos.slice(0, 4 - referencias.length)) {
+      if (!f.type.startsWith("image/")) { setErro(`"${f.name}" não é uma imagem.`); continue; }
+      if (f.size > 4 * 1024 * 1024) { setErro(`"${f.name}" passa de 4 MB. Use uma imagem menor.`); continue; }
+      const base64 = await new Promise<string>((ok, falhou) => {
+        const fr = new FileReader();
+        fr.onload = () => ok(String(fr.result).split(",")[1] ?? "");
+        fr.onerror = () => falhou(fr.error);
+        fr.readAsDataURL(f);
+      }).catch(() => "");
+      if (base64) novos.push({ nome: f.name, url: URL.createObjectURL(f), base64, mime: f.type });
+    }
+    if (novos.length) setReferencias((r) => [...r, ...novos].slice(0, 4));
+  }
+
   async function desenhar() {
     setErro(null); setAviso(null); setDesenhando(true);
-    const r = await gerarArtePostAction({ ...pedido, ideiaDeArte: ideiaDeArte || null });
+    const r = await gerarArtePostAction({
+      ...pedido,
+      ideiaDeArte: ideiaDeArte || null,
+      referencias: referencias.map((x) => ({ base64: x.base64, mime: x.mime })),
+    });
     setDesenhando(false);
     if (!r.ok || !r.imagem || !r.base64) { setErro(r.erro ?? "Não consegui criar a arte."); return; }
     setImagem({ url: r.imagem, base64: r.base64, mime: r.mime ?? "image/png" });
@@ -231,6 +266,42 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
               className={`${campo} resize-y`}
             />
             <p className="mt-1 text-[11px] text-slate-400">O Cérebro só fala de preço, prazo ou condição se você escrever aqui.</p>
+          </div>
+
+          {/* Anexo de referência: sem isto, a arte saía com uma máquina
+              genérica inventada. Com a foto da máquina dele, sai a máquina
+              certa, com a cor e a marca certas. */}
+          <div className="mt-3">
+            <label className={rotulo}>Imagem de referência para a arte (opcional)</label>
+            <input ref={refArquivo} type="file" accept="image/*" multiple onChange={anexosEscolhidos} className="hidden" />
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {referencias.map((r, i) => (
+                <div key={r.url} className="group relative h-16 w-16 overflow-hidden rounded-lg border border-slate-300">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={r.url} alt={r.nome} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setReferencias((lista) => lista.filter((_, j) => j !== i))}
+                    title="Tirar esta imagem"
+                    className="absolute right-0 top-0 rounded-bl-lg bg-black/60 px-1 text-white opacity-0 transition group-hover:opacity-100"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+              {referencias.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => refArquivo.current?.click()}
+                  className="inline-flex h-16 items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 text-xs font-semibold text-slate-500 hover:border-agro-400 hover:text-slate-700"
+                >
+                  <Paperclip size={14} /> Anexar
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Foto da máquina, uma arte antiga no estilo que você quer. Até 4 imagens, 4 MB cada — o Cérebro desenha em cima delas.
+            </p>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">

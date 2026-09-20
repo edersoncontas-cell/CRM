@@ -83,11 +83,19 @@ export async function gerarLegendaAction(entrada: {
 // ── Arte ────────────────────────────────────────────────────────────────────
 export async function gerarArtePostAction(entrada: {
   tipo: TipoPost; tema: string; canal: CanalPost; maquina?: string | null; instrucoes?: string | null; ideiaDeArte?: string | null;
+  // Imagens que o vendedor anexou: foto da máquina, arte antiga que ele quer
+  // no mesmo estilo, logo. O Gemini usa como BASE — é o que faz a arte sair
+  // com a máquina dele e não com uma máquina genérica inventada.
+  referencias?: { base64: string; mime: string }[] | null;
 }): Promise<{ ok: boolean; imagem?: string; base64?: string; mime?: string; erro?: string }> {
   if (!geracaoDeImagemHabilitada()) return { ok: false, erro: "Criar arte precisa da GEMINI_API_KEY nas variáveis da Vercel." };
   const pedido = await montarPedido(entrada);
+  const refs = (entrada.referencias ?? [])
+    .filter((r) => r.base64)
+    .slice(0, 4) // mais que isso o pedido fica pesado e o Gemini recusa por tamanho
+    .map((r) => ({ base64: r.base64, mimeType: r.mime || "image/png" }));
   try {
-    const img = await gerarImagemGemini(promptArtePost(pedido, entrada.ideiaDeArte ?? null));
+    const img = await gerarImagemGemini(promptArtePost(pedido, entrada.ideiaDeArte ?? null, refs.length), refs);
     await registrarAudit({ acao: "post_gerado", origem: "ia", descricao: `Arte de post criada pelo Gemini (${img.modelo}) — ${entrada.tema}.` }).catch(() => {});
     return { ok: true, imagem: `data:${img.mimeType};base64,${img.base64}`, base64: img.base64, mime: img.mimeType };
   } catch (e) {
