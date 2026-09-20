@@ -16,6 +16,7 @@ import { clienteRedirecionado } from "@/lib/clientes-duplicados";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, MapPin, Bot, Clock, MessageCircle, Truck, Compass, Target, HeartHandshake, Cake } from "lucide-react";
 import { diaMes, idadeEm, diasAteAniversario, descreverOrigem } from "@/lib/aniversario-regra";
+import { ehTelefoneReal } from "@/lib/telefone-valido";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,24 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
   const perfilDISC = cliente.perfilDISC ?? null;
   const abordagemIA = cliente.abordagemIA ?? null;
 
-  const waHref = waConv ? `/atendimento?conversa=${waConv.id}` : `/atendimento`;
+  // O botão WhatsApp da ficha.
+  //
+  //   "ao clicar em whatsapp quando o cliente não tiver uma conversa aberta,
+  //    abrir uma nova já na janela para enviar uma mensagem para ele"
+  //
+  // Sem conversa, ele largava o vendedor em /atendimento — a lista inteira,
+  // sem dizer o que fazer. E é justamente o cliente NOVO, sem conversa, que
+  // mais precisa da primeira mensagem.
+  //
+  // O caminho ?cliente= já existe e faz tudo: procura a conversa do cliente,
+  // CRIA uma se não houver e leva direto para ela, com a caixa de escrever
+  // aberta (ver conversaDoCliente em atendimento/page.tsx). Havendo conversa,
+  // vai direto pelo id — é um redirecionamento a menos.
+  //
+  // Sem telefone de verdade não há conversa possível: aí o botão diz isso, em
+  // vez de fingir que leva a algum lugar.
+  const podeAbrirWhatsApp = ehTelefoneReal(cliente.telefone);
+  const waHref = waConv ? `/atendimento?conversa=${waConv.id}` : `/atendimento?cliente=${cliente.id}`;
 
   return (
     <div>
@@ -131,12 +149,22 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             clienteNome={cliente.nome}
             clienteTelefone={cliente.telefone}
           />
-          <Link
-            href={waHref}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-sm font-semibold text-agro-400 hover:bg-brand-800"
-          >
-            <MessageCircle size={14} /> WhatsApp
-          </Link>
+          {podeAbrirWhatsApp ? (
+            <Link
+              href={waHref}
+              title={waConv ? "Abrir a conversa deste cliente" : "Abrir uma conversa nova com este cliente"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-sm font-semibold text-agro-400 hover:bg-brand-800"
+            >
+              <MessageCircle size={14} /> WhatsApp
+            </Link>
+          ) : (
+            <span
+              title="Este cadastro não tem telefone válido. Preencha em “Editar dados” para abrir a conversa."
+              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-400"
+            >
+              <MessageCircle size={14} /> WhatsApp
+            </span>
+          )}
           <EditarClienteForm
             cliente={{
               id: cliente.id,

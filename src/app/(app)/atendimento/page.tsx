@@ -27,7 +27,14 @@ export default async function AtendimentoPage({
   searchParams: { conversa?: string; cliente?: string };
 }) {
   if (!searchParams.conversa && searchParams.cliente) {
-    const id = await conversaDoCliente(searchParams.cliente).catch(() => null);
+    // O erro NÃO pode ser engolido: quando a criação da conversa falha, o
+    // vendedor cai na lista inteira sem entender por quê, e não fica rastro
+    // nenhum para descobrir depois. Cair na lista continua sendo o plano B —
+    // mas agora o motivo vai para o log.
+    const id = await conversaDoCliente(searchParams.cliente).catch((e) => {
+      console.error("[atendimento] não deu para abrir/criar a conversa do cliente:", searchParams.cliente, e);
+      return null;
+    });
     redirect(id ? `/atendimento?conversa=${id}` : "/atendimento");
   }
 

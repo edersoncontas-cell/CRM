@@ -30,20 +30,14 @@ const NH_AMARELO = "#ffcb2d";
 const NH_BORDA = "#e09e00";
 const NH_TEXTO = "#141416";
 
-// "Quero os ativos na cor branca e o percentual com a setinha pra cima ou pra
-//  baixo no padrão de verde quando positiva e vermelho quando negativo."
+// "o percentual com a setinha pra cima ou pra baixo no padrão de verde quando
+//  positiva e vermelho quando negativo" — e, depois de ver o branco na tela:
+//  "Não gostei em branco, deixa em preto mesmo."
 //
-// O NOME do ativo sai branco; o PREÇO fica no preto forte, porque é o número
-// que ele lê de relance dirigindo — trocar o preço por branco custaria
-// legibilidade onde ela mais importa.
+// O nome do ativo voltou ao preto. Foi a escolha certa: branco sobre o amarelo
+// da marca tem contraste de ≈1.7:1, e nem a sombra que eu tinha posto para
+// segurar resolvia de verdade num celular ao sol.
 //
-// Branco sobre o amarelo da marca tem contraste baixo (≈1.7:1). Em vez de
-// recusar a cor pedida ou entregar um borrão no sol, o nome leva uma sombra
-// fina escura: o branco continua branco e ganha borda para se destacar do
-// amarelo.
-const NH_BRANCO = "#ffffff";
-const SOMBRA_NO_AMARELO = "0 1px 2px rgba(0,0,0,0.55)";
-
 // Verde e vermelho ESCUROS, pelo mesmo motivo: o verde-claro e o vermelho-claro
 // de costume somem sobre amarelo. Estes continuam sendo lidos como verde e
 // vermelho, e continuam legíveis. As setas ▲ e ▼ seguem ao lado — são forma,
@@ -94,7 +88,7 @@ function Peca({ item }: { item: ItemFita }) {
       item.pct == null || item.pct === 0 ? NH_TEXTO : item.pct > 0 ? VERDE_ALTA : VERMELHO_BAIXA;
     return (
       <span className="inline-flex shrink-0 items-baseline gap-1.5 pr-8 text-[12px]">
-        <span className="font-black uppercase tracking-wider" style={{ color: NH_BRANCO, textShadow: SOMBRA_NO_AMARELO }}>{item.rotulo}</span>
+        <span className="font-black uppercase tracking-wider" style={{ color: NH_SUAVE }}>{item.rotulo}</span>
         <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>
         {item.pct != null && (
           <span className="text-[11px] font-black" style={{ color: corDaVariacao }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>

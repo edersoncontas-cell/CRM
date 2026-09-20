@@ -26,6 +26,7 @@ import { atualizarCotacaoCafe } from "./mercado";
 import { z } from "zod";
 import { parseArquivoCsv, parseArquivoExcel, parseArquivoPdf } from "@/lib/importar-contatos-arquivo";
 import { lerParametros, descricaoVendedor } from "@/lib/parametros";
+import { chaveEstavel } from "@/lib/alerta-chave";
 
 // Validação de maior risco (grava direto no banco a partir de FormData bruto).
 const clienteInputSchema = z.object({
@@ -1538,9 +1539,13 @@ export async function ocultarItemCentralAction(chave: string, clienteId?: string
     revalidatePath("/alertas"); revalidatePath("/zeus");
     return { ok: true };
   }
+  // Guarda a chave ESTÁVEL (ver lib/alerta-chave.ts): a chave longa carregava
+  // a situação do cliente, que muda — inclusive por causa deste mesmo clique —
+  // e aí o card voltava sozinho.
+  const estavel = chaveEstavel(chave);
   await db.alertaOculto.upsert({
-    where: { chave },
-    create: { chave, clienteId: clienteId ?? null },
+    where: { chave: estavel },
+    create: { chave: estavel, clienteId: clienteId ?? null },
     update: { clienteId: clienteId ?? null, ocultoEm: new Date() },
   });
   revalidatePath("/alertas"); revalidatePath("/dashboard");
@@ -1574,14 +1579,18 @@ export async function ocultarVariosItensCentralAction(
     await db.zeusEvent.updateMany({ where: { id: { in: idsZeus } }, data: { resolvido: true } }).catch(() => {});
   }
 
+  // Mesma chave ESTÁVEL do "Resolvido" de um item só (ver lib/alerta-chave.ts):
+  // resolver em lote não pode ter regra diferente de resolver um por um.
   const demais = validos.filter((i) => !i.chave.startsWith("aguardando:") && !i.chave.startsWith("atacar:") && !i.chave.startsWith("zeus:"));
   if (demais.length) {
+    const estaveis = [...new Set(demais.map((i) => chaveEstavel(i.chave)))];
+    const clientePorChave = new Map(demais.map((i) => [chaveEstavel(i.chave), i.clienteId ?? null]));
     await db.alertaOculto.createMany({
-      data: demais.map((i) => ({ chave: i.chave, clienteId: i.clienteId ?? null })),
+      data: estaveis.map((chave) => ({ chave, clienteId: clientePorChave.get(chave) ?? null })),
       skipDuplicates: true,
     }).catch(() => {});
     await db.alertaOculto.updateMany({
-      where: { chave: { in: demais.map((i) => i.chave) } },
+      where: { chave: { in: estaveis } },
       data: { ocultoEm: new Date() },
     }).catch(() => {});
   }

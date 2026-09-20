@@ -10,6 +10,7 @@ import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
 import { calcularRitmoMetas } from "@/lib/metas";
 import { criarCategorizadorColunas } from "@/lib/pipeline";
+import { estaResolvido } from "@/lib/alerta-chave";
 
 export type SeveridadeAlerta = "alta" | "media" | "baixa";
 
@@ -347,7 +348,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   // clienteId para o "Resolvido" saber quando reabrir).
   const grupos: GrupoCentral[] = gruposBrutos.map((g) => ({
     ...g,
-    itens: g.itens.filter((i) => !chavesOcultas.has(i.id)).map((i) => ({ ...i, clienteId: i.clienteId ?? clienteIdDoItem(i) })),
+    itens: g.itens.filter((i) => !estaResolvido(i.id, chavesOcultas)).map((i) => ({ ...i, clienteId: i.clienteId ?? clienteIdDoItem(i) })),
   }));
   const todos = grupos.flatMap((g) => g.itens);
 
