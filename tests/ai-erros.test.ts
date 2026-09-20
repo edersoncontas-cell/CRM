@@ -12,7 +12,11 @@ describe("erros de IA", () => {
   });
   it("traduz para o vendedor sem o JSON cru", () => {
     const m = mensagemErroIA(groq429);
-    expect(m).toMatch(/cota de IA/i);
+    // O fixture é um limite POR DIA (TPD), então a frase fala em cota DIÁRIA.
+    // A distinção é nova e é o ponto: antes todo 429 virava "a cota de hoje
+    // acabou", inclusive o limite por minuto, que volta em segundos — e o
+    // vendedor passava o dia sem o painel à toa. Ver tests/ai-cota.test.ts.
+    expect(m).toMatch(/cota diária de IA/i);
     expect(m).not.toContain("{");
     // NÃO manda configurar chave: a mensagem antiga dizia "configure
     // GEMINI_API_KEY (grátis) como reserva" para quem já tinha a chave — e

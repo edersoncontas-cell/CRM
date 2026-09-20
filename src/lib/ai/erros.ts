@@ -1,9 +1,14 @@
 // Tradução dos erros dos provedores de IA para uma frase que o vendedor
 // entende (em vez do JSON cru do Groq no painel). Módulo PURO, testável.
 
+import { mensagemDeCota } from "@/lib/ai/cota";
+
 export function erroDeCotaIA(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
-  return /\b429\b|rate.?limit|tokens per (day|minute)|\bTPD\b|\bTPM\b|quota|RESOURCE_EXHAUSTED|insufficient_quota/i.test(msg);
+  // "Groq: nenhum modelo disponível" entra aqui: ele é o desfecho de todos os
+  // modelos terem estourado a cota. Sem isso, o painel mostrava essa frase
+  // técnica crua para o vendedor, que não diz nem o que houve nem o que fazer.
+  return /\b429\b|rate.?limit|tokens per (day|minute)|\bTPD\b|\bTPM\b|quota|RESOURCE_EXHAUSTED|insufficient_quota|nenhum modelo dispon/i.test(msg);
 }
 
 export function mensagemErroIA(e: unknown): string {
@@ -17,7 +22,12 @@ export function mensagemErroIA(e: unknown): string {
     // configurada — conselho inútil, e ainda aparecia numa tarja vermelha
     // sobre o painel do Orientador, dando a entender que a leitura estava
     // errada. Ela não estava: só não tinha acabado de ser atualizada.
-    return "A cota de IA de hoje acabou. A leitura abaixo é a última que deu tempo de fazer e continua valendo; ela se atualiza sozinha quando a cota voltar.";
+    //
+    // E, principalmente: dizer "acabou por hoje" num limite POR MINUTO é
+    // falso e caro. A cota volta em segundos; o vendedor que lê "acabou hoje"
+    // passa o dia sem o painel por causa de uma rajada de 9 segundos. Agora a
+    // frase sai do que o provedor informou — ver lib/ai/cota.ts.
+    return mensagemDeCota(msg);
   }
   if (/does not exist|model_not_found|decommissioned|deprecated/i.test(msg)) {
     return "O modelo de IA configurado foi desativado pelo provedor. O CRM já troca sozinho para o próximo — tente de novo em instantes.";

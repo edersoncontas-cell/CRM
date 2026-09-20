@@ -101,6 +101,8 @@ export function marcarModeloGroqRuim(modelo: string): void {
 // modelo fica "esgotado" por um tempo (não para sempre, como o 404) e a
 // chamada é refeita com o seguinte. Só depois de todos esgotarem é que a
 // cascata passa para o próximo provedor.
+// Padrão de uma hora só quando o provedor não informa nada. Na prática ele
+// quase sempre informa ("Please try again in 8.5s") — ver lib/ai/cota.ts.
 const ESGOTADO_MS = 60 * 60_000;
 const esgotados = new Map<string, number>();
 
@@ -109,8 +111,8 @@ export function erroDeCotaGroq(e: unknown): boolean {
   return /\b429\b|rate.?limit|tokens per (day|minute)|\bTPD\b|\bTPM\b/i.test(msg);
 }
 
-export function marcarModeloGroqEsgotado(modelo: string, agora = Date.now()): void {
-  esgotados.set(modelo, agora + ESGOTADO_MS);
+export function marcarModeloGroqEsgotado(modelo: string, agora = Date.now(), duracaoMs = ESGOTADO_MS): void {
+  esgotados.set(modelo, agora + Math.max(1_000, duracaoMs));
 }
 
 export function modeloGroqEsgotado(modelo: string, agora = Date.now()): boolean {

@@ -5,7 +5,8 @@ import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
 import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, GEMINI_API_BASE, DEEPSEEK_MODEL } from "./config";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
-import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, GROQ_BASE_URL } from "./groq";
+import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
+import { esperaDoLimite } from "./cota";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -154,8 +155,14 @@ async function chamarProvedorTexto(
   // groq — modelo escolhido automaticamente (ver ./groq.ts). Se o Groq disser
   // que o modelo não existe mais, marca como ruim e refaz com o próximo; se o
   // JSON estrito falhar, refaz pedindo o JSON só pelo prompt.
+  // O teto era 5, com NOVE modelos candidatos: numa rajada em que os modelos
+  // estouram a cota um a um, cada troca gastava uma tentativa e a chamada
+  // morria em "nenhum modelo disponível" com QUATRO modelos ainda com cota
+  // própria intactos. O teto agora cobre a lista inteira, com folga para as
+  // duas refeições que não trocam de modelo (JSON estrito e modelo ruim).
   let semFormato = false;
-  for (let tentativa = 0; tentativa < 5; tentativa++) {
+  const MAX_TENTATIVAS = CANDIDATOS_GROQ.length + 3;
+  for (let tentativa = 0; tentativa < MAX_TENTATIVAS; tentativa++) {
     const modelo = await modeloGroq();
     const sistema = opts?.json && semFormato ? `${system}\n\nResponda SOMENTE com um JSON válido, sem texto antes ou depois, sem markdown.` : system;
     const res = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
@@ -177,7 +184,10 @@ async function chamarProvedorTexto(
       if (res.status === 404 && erroDeModeloGroq(detalhe)) { marcarModeloGroqRuim(modelo); continue; }
       // Cota do Groq é por modelo: este esgotou (tokens/dia ou /min), o próximo
       // candidato ainda tem a dele — troca e refaz em vez de falhar.
-      if (res.status === 429 && erroDeCotaGroq(detalhe)) { marcarModeloGroqEsgotado(modelo); continue; }
+      // A espera sai do que o PRÓPRIO Groq informou ("try again in 8.5s"), e
+      // não de uma hora fixa: limite por minuto volta em segundos, e congelar
+      // o modelo por uma hora jogava fora cota que já tinha voltado.
+      if (res.status === 429 && erroDeCotaGroq(detalhe)) { marcarModeloGroqEsgotado(modelo, Date.now(), esperaDoLimite(detalhe)); continue; }
       if (res.status === 400 && opts?.json && !semFormato && erroDeJsonGroq(detalhe)) { semFormato = true; continue; }
       throw new Error(`Falha no Groq (${res.status}, ${modelo}): ${detalhe.slice(0, 200)}`);
     }
