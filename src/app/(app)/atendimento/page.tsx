@@ -45,6 +45,16 @@ export default async function AtendimentoPage({
   const comRascunho = new Set(rascunhos.map((r) => r.conversationId));
   const clientesAguardando = new Set(aguardando.map((c) => c.id));
 
+  // Nome do cliente para cada conversa vinculada. A conversa guarda só o id
+  // (não há relação no schema), então é uma busca à parte — uma só, com todos
+  // os ids de uma vez.
+  const idsClientes = [...new Set(conversas.map((c) => c.clienteId).filter((id): id is string => !!id))];
+  const nomePorCliente = new Map<string, string>();
+  if (idsClientes.length) {
+    const cs = await db.cliente.findMany({ where: { id: { in: idsClientes } }, select: { id: true, nome: true } });
+    for (const c of cs) nomePorCliente.set(c.id, c.nome);
+  }
+
   const lista: ConvLista[] = conversas.map((c) => {
     const ult = c.messages[0];
     return {
@@ -58,6 +68,9 @@ export default async function AtendimentoPage({
       category: c.category,
       contactPhotoUrl: c.contactPhotoUrl,
       clienteId: c.clienteId,
+      // O nome do cliente vem da SUA agenda (Google Contatos → Clientes) e é
+      // ele que deve aparecer, não o nome de perfil que o contato escolheu.
+      nomeCliente: c.clienteId ? nomePorCliente.get(c.clienteId) ?? null : null,
       lastMessageAt: c.lastMessageAt.toISOString(),
       naoLida: !!(c.lastAccessedAt ? c.lastMessageAt > c.lastAccessedAt : true),
       previa: ult ? `${ult.direction === "OUT" ? "Você: " : ""}${ult.mediaType && !ult.body ? `[${ult.mediaType}]` : ult.body}` : "",

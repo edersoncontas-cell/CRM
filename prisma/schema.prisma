@@ -151,6 +151,11 @@ model OrientadorAnalise {
   // Coaching completo (personalidade, condução, alerta, roteiro…) — ver
   // lib/zeus/orientador-coaching.ts.
   coaching                Json?
+  // O que o VENDEDOR sabe e o WhatsApp não mostra: o que foi falado no
+  // telefone, na visita, o que o cliente contou por fora. Escrito por ele na
+  // tela e mandado junto no próximo "Reanalisar" — a IA nunca sobrescreve
+  // este campo, só lê.
+  notaVendedor            String?
   atualizadoEm            DateTime @updatedAt
 }
 

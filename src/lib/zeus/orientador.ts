@@ -253,6 +253,7 @@ export async function gerarAnaliseOrientador(args: {
   contextoAcademia: string;
   estilo: string | null;
   licoes?: string[] | null; // lições do histórico real do vendedor (ver orientador-aprendizado.ts) — contexto leve, não regra
+  notaVendedor?: string | null; // o que o vendedor escreveu na mão (ver abaixo)
 }): Promise<AnaliseOrientador> {
   if (!iaHabilitada()) {
     return fallback("IA não configurada (defina OPENAI_API_KEY, ANTHROPIC_API_KEY ou GROQ_API_KEY).");
@@ -268,7 +269,15 @@ ${args.contextoAcademia}
 
 ${resumoDasEtapas()}
 ${args.estilo ? `\n## Estilo de comunicação do vendedor (real, aprendido das mensagens dele — use para calibrar "personalidade.comoFalar" e nunca contradizer)\n${args.estilo}` : ""}
-${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (referência leve para calibrar tom do alerta e da condução — não cite números ao cliente, não trate como regra fixa)\n${args.licoes.map((l) => `- ${l}`).join("\n")}` : ""}`;
+${args.licoes?.length ? `\n## O que o histórico REAL deste vendedor mostra (referência leve para calibrar tom do alerta e da condução — não cite números ao cliente, não trate como regra fixa)\n${args.licoes.map((l) => `- ${l}`).join("\n")}` : ""}
+${args.notaVendedor?.trim() ? `\n## O QUE O VENDEDOR SABE E A CONVERSA NÃO MOSTRA (escrito por ele agora)
+Isto veio do telefone, da visita ou do que o cliente falou fora do WhatsApp.
+É FATO, com o mesmo peso das mensagens — e quando contradisser o que o
+histórico sugere, ESTE TEXTO GANHA, porque o vendedor esteve lá.
+Use para corrigir o estágio, a temperatura, a probabilidade, as pendências e
+a próxima ação; nunca ignore e nunca responda pedindo o que já está escrito aqui.
+
+${args.notaVendedor.trim()}` : ""}`;
 
   try {
     const raw = await llmTexto(
@@ -368,6 +377,13 @@ export async function processarOrientador(args: {
   // 1) Análise completa (painel + coaching). Nada é enviado sozinho, então a
   // resposta pode esperar a análise e aproveitar as orientações dela.
   const aprendizado = await lerAprendizadoOrientador().catch(() => null);
+  // A nota do vendedor vale também na análise automática, não só no
+  // "Reanalisar" — senão a próxima mensagem do cliente apagaria o que ele
+  // escreveu.
+  const notaAtual = await db.orientadorAnalise.findUnique({
+    where: { clienteId: args.conv.clienteId },
+    select: { notaVendedor: true },
+  }).catch(() => null);
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -377,6 +393,7 @@ export async function processarOrientador(args: {
       contextoAcademia: args.contextoAcademia,
       estilo: args.estilo,
       licoes: aprendizado?.licoes,
+      notaVendedor: notaAtual?.notaVendedor ?? null,
     });
   } catch (e) {
     await zeusReport(e, "gerarAnaliseOrientador (Orientador de Vendas)");
@@ -441,9 +458,14 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
   const contextoCliente = await montarContextoCliente({ id: conv.id, contactName: conv.contactName, clienteId: conv.clienteId, externalPhone: conv.externalPhone });
   const contextoAcademia = montarContextoAcademia(historico);
   const aprendizado = await lerAprendizadoOrientador().catch(() => null);
+  // A nota que o vendedor escreveu na tela entra na análise.
+  const analiseAtual = await db.orientadorAnalise.findUnique({
+    where: { clienteId: conv.clienteId },
+    select: { notaVendedor: true },
+  }).catch(() => null);
   try {
     const ultimaDoCliente = msgs[msgs.length - 1].direction === "IN";
-    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes });
+    const analise = await gerarAnaliseOrientador({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, contextoAcademia, estilo: estilo?.guia ?? null, licoes: aprendizado?.licoes, notaVendedor: analiseAtual?.notaVendedor ?? null });
     const resposta = ultimaDoCliente
       ? await gerarRespostaRapida({ historico: historico.slice(-JANELA_HISTORICO), ultimasMensagens: ultimas, contextoCliente, estilo: estilo?.guia ?? null, dicas: dicasParaResposta(analise.coaching, analise.proximaAcao) })
       : "";

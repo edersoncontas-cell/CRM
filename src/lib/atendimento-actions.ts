@@ -38,6 +38,8 @@ export type ContextoConversa = {
     combinados: string[];
     pendencias: string[];
     coaching: Coaching | null;
+    // O que o vendedor escreveu na mão para o Orientador levar em conta.
+    notaVendedor: string | null;
     atualizadoEm: string;
   } | null;
   // Se já existe um guia de estilo de fala aprendido do vendedor — a "melhor
@@ -89,6 +91,7 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
           oportunidadesPerdidas: orientador.oportunidadesPerdidas, resumoNegociacao: orientador.resumoNegociacao,
           combinados: orientador.combinados ?? [], pendencias: orientador.pendencias ?? [],
           coaching: orientador.coaching ? normalizarCoaching(orientador.coaching) : null,
+          notaVendedor: orientador.notaVendedor ?? null,
           atualizadoEm: orientador.atualizadoEm.toISOString(),
         }
       : null,
@@ -179,6 +182,34 @@ export async function excluirRespostaProntaAction(id: string): Promise<{ ok: boo
 // ── Reanalisar agora ─────────────────────────────────────────────────────────
 // Roda o Orientador de Vendas sob demanda para a conversa (painel + melhor
 // resposta), sem criar rascunho nem enviar nada. Respeita o orçamento de IA.
+/**
+ * Guarda o que o vendedor sabe e o WhatsApp não mostra (conversa por telefone,
+ * visita, o que o cliente falou por fora). Fica no cliente e entra em TODA
+ * análise do Orientador daí em diante — a IA lê e nunca sobrescreve.
+ */
+export async function salvarNotaOrientadorAction(
+  conversationId: string,
+  nota: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true } });
+  if (!conv?.clienteId) return { ok: false, erro: "Vincule a conversa a um cliente primeiro." };
+  const texto = nota.trim().slice(0, 4000);
+  try {
+    await db.orientadorAnalise.upsert({
+      where: { clienteId: conv.clienteId },
+      // Se ainda não existe análise, cria o mínimo para guardar a nota — a
+      // próxima passada do Orientador preenche o resto.
+      create: { clienteId: conv.clienteId, estagioVenda: "prospeccao", temperatura: "fria", objecoes: [], oportunidadesPerdidas: [], notaVendedor: texto || null },
+      update: { notaVendedor: texto || null },
+    });
+    revalidatePath("/orientador");
+    return { ok: true };
+  } catch (e) {
+    console.error("[salvarNotaOrientador]", e);
+    return { ok: false, erro: "Não deu para salvar a informação." };
+  }
+}
+
 export async function reanalisarConversaAction(conversationId: string): Promise<{ ok: boolean; erro?: string }> {
   const { analisarConversaSemResposta } = await import("@/lib/zeus/orientador");
   const r = await analisarConversaSemResposta(conversationId);

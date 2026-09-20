@@ -20,6 +20,7 @@ import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "
 import {
   contextoConversaAction, marcarRespondidoAction, resolverAlertaConversaAction, registrarUsoRespostaAction,
   listarRespostasProntasAction, salvarRespostaProntaAction, excluirRespostaProntaAction, reanalisarConversaAction,
+  salvarNotaOrientadorAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -35,6 +36,10 @@ export type ConvLista = {
   category: string | null;
   contactPhotoUrl: string | null;
   clienteId: string | null;
+  // Nome do cliente no CRM. É o nome da SUA agenda: o Google Contatos traz a
+  // lista de contatos do celular para cá. Tem prioridade sobre o nome que vem
+  // do WhatsApp, que é o que o próprio contato escolheu no perfil dele.
+  nomeCliente: string | null;
   lastMessageAt: string;
   naoLida: boolean;
   previa: string;
@@ -85,9 +90,19 @@ function quandoCurto(iso: string) {
 function diaChave(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" });
 }
-function nomeConv(c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string }, overlayName?: string | null) {
-  if (overlayName) return overlayName;
-  return (c.isGroup ? c.groupName : c.contactName) || c.contactName || c.externalPhone;
+// Ordem de quem manda no nome:
+//   1. o cliente cadastrado no CRM — que é a SUA agenda, trazida do celular
+//      pelo Google Contatos. É este o nome que você escreveu.
+//   2. o nome que veio do WhatsApp (perfil do contato) — só quando não tem
+//      cliente vinculado, senão o apelido que ele pôs no WhatsApp dele
+//      apareceria no lugar do nome que você deu.
+//   3. o número.
+function nomeConv(
+  c: { contactName: string | null; groupName: string | null; isGroup: boolean; externalPhone: string; nomeCliente?: string | null },
+  overlayName?: string | null,
+) {
+  if (c.isGroup) return c.groupName || c.contactName || c.externalPhone;
+  return c.nomeCliente || overlayName || c.contactName || c.externalPhone;
 }
 function telefoneBonito(p: string) {
   const d = p.replace(/\D/g, "");
@@ -209,6 +224,13 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   const [respostas, setRespostas] = useState<RespostaPronta[] | null>(null);
   const [reanalisando, setReanalisando] = useState(false);
   const [avisoPainel, setAvisoPainel] = useState<string | null>(null);
+  // "O que você sabe": o que o vendedor digita para o Orientador levar em conta.
+  const [nota, setNota] = useState("");
+  const [salvandoNota, setSalvandoNota] = useState(false);
+  const [notaAviso, setNotaAviso] = useState<string | null>(null);
+  // De qual conversa a nota da caixa já foi carregada — sem isto, o contexto
+  // recarregando no meio da digitação apagaria o que está sendo escrito.
+  const notaCarregadaDe = useRef<string | null>(null);
   const anexoRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -382,8 +404,31 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     setReanalisando(true); setAvisoPainel(null);
     const r = await reanalisarConversaAction(selId).catch(() => ({ ok: false, erro: "Falha ao reanalisar." }));
     if (!r.ok) setAvisoPainel(r.erro ?? "Falha ao reanalisar.");
+    notaCarregadaDe.current = null; // deixa a caixa recarregar do que foi salvo
     await carregarContexto(selId);
     setReanalisando(false);
+  }
+
+  // Salva o que o vendedor escreveu e já manda o Orientador reanalisar com
+  // aquilo — é isso que ele quer quando digita: ver a leitura mudar.
+  async function salvarNotaEReanalisar() {
+    if (!selId || salvandoNota) return;
+    setSalvandoNota(true); setNotaAviso(null); setAvisoPainel(null);
+    try {
+      const s = await salvarNotaOrientadorAction(selId, nota);
+      if (!s.ok) { setNotaAviso(s.erro ?? "Não deu para salvar."); return; }
+      setNotaAviso("Guardado. Reanalisando com essa informação…");
+      const r = await reanalisarConversaAction(selId).catch(() => ({ ok: false, erro: "Falha ao reanalisar." }));
+      if (!r.ok) setNotaAviso(r.erro ?? "Guardado, mas a reanálise falhou.");
+      else setNotaAviso("Pronto — a leitura abaixo já considera o que você escreveu.");
+      notaCarregadaDe.current = null;
+      await carregarContexto(selId);
+    } catch {
+      setNotaAviso("Não deu para falar com o servidor.");
+    } finally {
+      setSalvandoNota(false);
+      setTimeout(() => setNotaAviso(null), 8000);
+    }
   }
 
   function htmlParaTexto(html: string): string {
@@ -483,6 +528,21 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     setCarregandoContexto(true);
     try { setContexto(await contextoConversaAction(id)); } catch { setContexto(null); } finally { setCarregandoContexto(false); }
   }, []);
+
+  // Trocou de conversa: esvazia a caixa e marca para recarregar.
+  useEffect(() => {
+    notaCarregadaDe.current = null;
+    setNota("");
+    setNotaAviso(null);
+  }, [selId]);
+
+  // Chegou o contexto daquela conversa: preenche a caixa com o que está
+  // salvo — uma vez só, para não atropelar quem está digitando.
+  useEffect(() => {
+    if (!contexto || !selId || notaCarregadaDe.current === selId) return;
+    notaCarregadaDe.current = selId;
+    setNota(contexto.orientador?.notaVendedor ?? "");
+  }, [contexto, selId]);
 
   const mergeMsgs = useCallback((novas: Mensagem[]) => {
     setMensagens((prev) => {
@@ -931,6 +991,44 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                     {contexto.cliente.aguardandoResposta && <span className="rounded-full bg-orange-400/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">aguardando</span>}
                   </div>
                   {contexto.cliente.resumoTexto && <p className="mt-2 line-clamp-4 text-xs text-brand-300">{contexto.cliente.resumoTexto.split("\n").slice(-2).join(" ")}</p>}
+                </div>
+
+                {/* O que o vendedor sabe e o WhatsApp não mostra. O Orientador
+                    só enxerga a conversa; o que foi combinado por telefone ou
+                    na visita ficava de fora e a leitura saía torta. Aqui ele
+                    escreve, e isso entra em TODA análise daí em diante. */}
+                <div className="rounded-xl border border-agro-400/30 bg-agro-400/[0.06] p-3">
+                  <label htmlFor="nota-orientador" className="flex items-center gap-1.5 text-xs font-bold text-agro-300">
+                    <Sparkles size={13} /> O que o Orientador precisa saber
+                  </label>
+                  <p className="mt-0.5 text-[11px] text-brand-300">
+                    O que ficou combinado por telefone, o que você viu na visita, o que o cliente falou fora do WhatsApp. Entra na análise como fato.
+                  </p>
+                  <textarea
+                    id="nota-orientador"
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    disabled={salvandoNota}
+                    rows={3}
+                    maxLength={4000}
+                    placeholder="Ex.: falei por telefone, ele quer a D150 com entrada de 30% e quer fechar até o fim do mês. Já tem o banco aprovado."
+                    className="mt-2 w-full resize-y rounded-lg border border-brand-700 bg-brand-950/60 px-2.5 py-2 text-xs text-white placeholder:text-brand-500 focus:border-agro-400 focus:outline-none"
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-brand-500">{nota.length}/4000</span>
+                    <button
+                      onClick={salvarNotaEReanalisar}
+                      disabled={salvandoNota}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold transition",
+                        salvandoNota ? "bg-white/5 text-brand-400" : "bg-agro-400 text-brand-950 hover:bg-agro-300",
+                      )}
+                    >
+                      {salvandoNota ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      {salvandoNota ? "Atualizando…" : "Salvar e atualizar"}
+                    </button>
+                  </div>
+                  {notaAviso && <p className="mt-1.5 text-[11px] text-agro-300">{notaAviso}</p>}
                 </div>
 
                 {/* Leitura do Orientador — coach de vendas ao lado do vendedor.

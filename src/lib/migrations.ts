@@ -569,6 +569,12 @@ export async function aplicarMigracoes(): Promise<void> {
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     `);
 
+    // ── Nota do vendedor para o Orientador (v31) ───────────────────────────
+    // O que o vendedor sabe e o WhatsApp não mostra (conversa por telefone,
+    // visita, o que o cliente falou por fora). Ele escreve na tela e vai
+    // junto no próximo "Reanalisar".
+    await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "notaVendedor" TEXT`);
+
     // ── Catálogo Dynapac atualizado (v30) ──────────────────────────────────
     // Os rolos de solo passam a usar o nome curto da fábrica (CA6500 D →
     // CA65 D). Renomear em vez de recriar preserva ficha técnica, notas,

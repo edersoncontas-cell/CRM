@@ -6,6 +6,8 @@ import { TickerMercado } from "@/components/TickerMercado";
 import { NoticiasSetor } from "@/components/NoticiasSetor";
 import { obterCotacoes } from "@/lib/mercado";
 import { obterNoticias } from "@/lib/noticias";
+import { obterLicitacoes } from "@/lib/licitacoes";
+import { PainelLicitacoes } from "@/components/PainelLicitacoes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
@@ -54,7 +56,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     negociacoes, futuros, demandasHoje,
     visitasSemanaAgendadas, negociosCriadosSemana,
     total30DiasSemContato, colunasFunil,
-    vendasFaturadas, visitasMes, clientesProximaVisitaMes, conversados, cotacoes, noticias,
+    vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias, licitacoes,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
     db.cliente.findMany({
@@ -85,9 +87,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       orderBy: { proximaVisita: "asc" },
       select: { id: true, nome: true, proximaVisita: true, proximaVisitaNota: true, municipio: { select: { nome: true } } },
     }),
+    // Compromissos/eventos do calendário: reunião, feira, folga, o que for.
+    // Um evento pode durar vários dias, então pega tudo que ENCOSTA no mês
+    // (começa antes e termina dentro, ou vice-versa), não só o que começa nele.
+    db.evento.findMany({
+      where: { inicio: { lt: fimMesCal }, fim: { gte: inicioMesCal } },
+      orderBy: { inicio: "asc" },
+      select: { id: true, titulo: true, inicio: true, fim: true, diaInteiro: true, cidade: true, uf: true, observacao: true },
+    }),
     contarClientesConversados(),
     obterCotacoes(),
     obterNoticias(),
+    obterLicitacoes(),
   ]);
 
   const { metaAnualVendas: META_ANUAL_VENDAS, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
@@ -116,13 +127,48 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const diasRestantesAno = 365 - diaDoAno;
   const ritmoMensal = vendasAno > 0 ? (vendasAno / (anoSel === anoAtual ? hoje.getMonth() + 1 : 12)).toFixed(1) : "0";
 
-  // Agenda do mês: um item por visita (registrada ou anotada no cliente),
-  // agrupado por dia, para preencher o espaço abaixo do calendário.
-  type ItemAgenda = { chave: string; data: Date; clienteId: string; nome: string; local: string | null; obs: string | null; prevista: boolean };
+  // Agenda do mês: o dia inteiro do vendedor, não só visita — visita
+  // registrada, visita prevista no cliente e os compromissos/eventos do
+  // calendário (reunião, feira, folga). Agrupado por dia.
+  type ItemAgenda = {
+    chave: string; data: Date; clienteId: string | null; nome: string;
+    local: string | null; obs: string | null; prevista: boolean; evento: boolean;
+  };
+
+  // Evento de vários dias entra em CADA dia que ocupa dentro do mês, senão
+  // uma feira de quarta a sexta só apareceria na quarta.
+  const itensEvento: ItemAgenda[] = [];
+  for (const e of eventosMes) {
+    const primeiro = e.inicio < inicioMesCal ? inicioMesCal : e.inicio;
+    const ultimo = e.fim >= fimMesCal ? new Date(fimMesCal.getTime() - 1) : e.fim;
+    const d = new Date(primeiro.getFullYear(), primeiro.getMonth(), primeiro.getDate());
+    let n = 0;
+    while (d <= ultimo && n < 62) {
+      // No primeiro dia mantém a hora de início (se não for dia inteiro);
+      // nos seguintes o item é do dia, sem hora.
+      const mesmoDia = d.getDate() === e.inicio.getDate() && d.getMonth() === e.inicio.getMonth();
+      itensEvento.push({
+        chave: `e:${e.id}:${d.getDate()}`,
+        data: mesmoDia && !e.diaInteiro ? e.inicio : new Date(d),
+        clienteId: null,
+        nome: e.titulo,
+        local: [e.cidade, e.uf].filter(Boolean).join(" · ") || null,
+        obs: e.observacao,
+        prevista: false,
+        evento: true,
+      });
+      d.setDate(d.getDate() + 1);
+      n++;
+    }
+  }
+
   const itensAgenda: ItemAgenda[] = [
-    ...visitasMes.map((v) => ({ chave: `v:${v.id}`, data: v.data, clienteId: v.cliente.id, nome: v.cliente.nome, local: v.cidade ?? v.cliente.municipio?.nome ?? null, obs: v.observacao, prevista: false })),
-    ...clientesProximaVisitaMes.filter((c) => c.proximaVisita).map((c) => ({ chave: `p:${c.id}`, data: c.proximaVisita!, clienteId: c.id, nome: c.nome, local: c.municipio?.nome ?? null, obs: c.proximaVisitaNota, prevista: true })),
+    ...visitasMes.map((v) => ({ chave: `v:${v.id}`, data: v.data, clienteId: v.cliente.id, nome: v.cliente.nome, local: v.cidade ?? v.cliente.municipio?.nome ?? null, obs: v.observacao, prevista: false, evento: false })),
+    ...clientesProximaVisitaMes.filter((c) => c.proximaVisita).map((c) => ({ chave: `p:${c.id}`, data: c.proximaVisita!, clienteId: c.id, nome: c.nome, local: c.municipio?.nome ?? null, obs: c.proximaVisitaNota, prevista: true, evento: false })),
+    ...itensEvento,
   ].sort((a, b) => a.data.getTime() - b.data.getTime());
+  const qtdVisitas = itensAgenda.filter((i) => !i.evento).length;
+  const qtdEventos = itensEvento.length;
   const agendaPorDia = new Map<number, ItemAgenda[]>();
   for (const it of itensAgenda) {
     const d = it.data.getDate();
@@ -165,6 +211,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       <TickerMercado inicial={{ cotacoes, noticias: noticias.itens }} />
+
+      {/* Logo abaixo dos preços do café: prefeitura das cidades da área
+          comprando máquina. */}
+      <PainelLicitacoes dados={licitacoes} />
 
       {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -343,10 +393,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <GraficoBarrasHorizontais dados={resumo.porModelo} />
           </div>
         </Painel>
-        <Painel titulo="Agenda de visitas" subtitulo={itensAgenda.length ? `${itensAgenda.length} visita(s) no mês · quem e quando` : "dias marcados têm visita"}>
+        <Painel
+          titulo="Agenda"
+          subtitulo={itensAgenda.length
+            ? [qtdVisitas ? `${qtdVisitas} visita(s)` : null, qtdEventos ? `${qtdEventos} compromisso(s)` : null].filter(Boolean).join(" · ") + " no mês"
+            : "dias marcados têm compromisso"}
+        >
           <CalendarioVisitas ano={anoAtual} mes={hoje.getMonth()} diasComVisita={diasComVisita} hoje={diaHoje} />
           {itensAgenda.length === 0 ? (
-            <p className="mt-3 text-xs" style={{ color: T.mudo }}>Nenhuma visita marcada neste mês. Agende em <Link href="/visitas" className="underline">Visitas</Link>.</p>
+            <p className="mt-3 text-xs" style={{ color: T.mudo }}>Nada marcado neste mês. Agende em <Link href="/visitas" className="underline">Visitas</Link>.</p>
           ) : (
             <div className="mt-3 space-y-2">
               {Array.from(agendaPorDia.entries()).map(([dia, itens]) => {
@@ -357,20 +412,35 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   <div key={dia} className="rounded-xl p-2" style={{ background: T.sobre, opacity: passado ? 0.55 : 1, border: ehHoje ? `1px solid ${T.ciano}` : `1px solid transparent` }}>
                     <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-widest" style={{ color: ehHoje ? T.ciano : T.texto2 }}>
                       <span className="capitalize">{ehHoje ? "Hoje · " : ""}{rotuloDia}</span>
-                      <span style={{ color: T.mudo }}>{itens.length} visita{itens.length > 1 ? "s" : ""}</span>
+                      <span style={{ color: T.mudo }}>{itens.length} item{itens.length > 1 ? "ns" : ""}</span>
                     </div>
                     <ul className="space-y-1">
-                      {itens.map((it, i) => (
-                        <li key={it.chave} className="flex items-start gap-2 text-xs">
-                          <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black" style={{ background: it.prevista ? T.sobre2 : `linear-gradient(135deg, ${T.rosa}, ${T.violeta})`, color: it.prevista ? T.texto2 : "#111" }}>{i + 1}</span>
-                          <div className="min-w-0 flex-1">
-                            <Link href={`/clientes/${it.clienteId}`} className="block truncate font-semibold hover:underline">{it.nome}</Link>
-                            <div className="truncate text-[11px]" style={{ color: T.mudo }}>
-                              {[it.data.getHours() || it.data.getMinutes() ? it.data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null, it.local, it.obs, it.prevista ? "prevista" : null].filter(Boolean).join(" · ")}
+                      {itens.map((it, i) => {
+                        // Compromisso não tem cliente para abrir: vira texto, e
+                        // o marcador muda de cor para dar para distinguir de
+                        // visita num relance.
+                        const fundoMarcador = it.evento
+                          ? `linear-gradient(135deg, ${T.ciano}, ${T.verde})`
+                          : it.prevista ? T.sobre2 : `linear-gradient(135deg, ${T.rosa}, ${T.violeta})`;
+                        const detalhe = [
+                          it.data.getHours() || it.data.getMinutes() ? it.data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null,
+                          it.local, it.obs,
+                          it.evento ? "compromisso" : it.prevista ? "prevista" : null,
+                        ].filter(Boolean).join(" · ");
+                        return (
+                          <li key={it.chave} className="flex items-start gap-2 text-xs">
+                            <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black" style={{ background: fundoMarcador, color: it.prevista && !it.evento ? T.texto2 : "#111" }}>{i + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              {it.clienteId ? (
+                                <Link href={`/clientes/${it.clienteId}`} className="block truncate font-semibold hover:underline">{it.nome}</Link>
+                              ) : (
+                                <span className="block truncate font-semibold">{it.nome}</span>
+                              )}
+                              <div className="truncate text-[11px]" style={{ color: T.mudo }}>{detalhe}</div>
                             </div>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 );
