@@ -164,3 +164,53 @@ describe("o pedido inteiro cabe no menor modelo gratuito", () => {
     expect(parametrosGroq("llama-3.1-8b-instant", 1400, true, false, false).max_tokens).toBe(1400);
   });
 });
+
+// ── O DEFEITO DA CASCATA ────────────────────────────────────────────────────
+//
+// "Na conversa com Wadson, continua dando o erro de limite."
+//
+// A causa que faltava, e é minha: o pedido era dimensionado só para o PRIMEIRO
+// provedor da fila. Com Gemini na frente, ele saía do tamanho do Gemini —
+// janela de 120 mil, instruções completas, saída inflada, ~41.800 tokens. O
+// Gemini aceita (teto de 1 milhão por minuto).
+//
+// Mas quando o Gemini tropeça, a cascata manda ESSE MESMO PEDIDO para o Groq,
+// cujo teto por minuto é 6.000. O Groq não recusava por uso excessivo: recusava
+// porque o pedido NUNCA TEVE COMO CABER. Ou seja, todo tropeço do Gemini virava
+// um 429 garantido no Groq, indefinidamente — o erro que não saía da tela.
+//
+// A correção é a cascata remontar o pedido a cada tentativa, no tamanho do
+// provedor da vez. Estes testes travam isso.
+describe("cada provedor recebe um pedido do tamanho dele", () => {
+  const CHEIA = 120_000;
+
+  it("o Gemini recebe a conversa inteira", () => {
+    expect(janelaDeCaracteres(["gemini"], CHEIA)).toBe(CHEIA);
+    expect(modoCompacto(["gemini"])).toBe(false);
+  });
+
+  it("o Groq recebe uma versão que CABE nele", () => {
+    const janela = janelaDeCaracteres(["groq"], CHEIA);
+    expect(janela).toBeLessThan(CHEIA);
+    expect(modoCompacto(["groq"])).toBe(true);
+  });
+
+  it("o pedido do Gemini NÃO caberia no Groq — é a prova do defeito", () => {
+    // Se a cascata reaproveitasse o pedido, seria exatamente isto que
+    // chegaria ao Groq: um pedido cinco vezes maior que o teto dele.
+    const doGemini = (janelaDeCaracteres(["gemini"], CHEIA) + RESERVA_PROMPT_CHARS) / CHARS_POR_TOKEN;
+    expect(doGemini).toBeGreaterThan(TETO_ENTRADA.groq * 5);
+  });
+
+  it("e o pedido remontado para o Groq cabe", () => {
+    const doGroq = (janelaDeCaracteres(["groq"], CHEIA) + RESERVA_PROMPT_COMPACTO_CHARS) / CHARS_POR_TOKEN
+      + RESERVA_RESPOSTA_COMPACTA_TOKENS;
+    expect(doGroq).toBeLessThanOrEqual(TETO_ENTRADA.groq);
+  });
+
+  it("o dimensionamento é por provedor, não pela fila inteira", () => {
+    // Com Gemini e Groq configurados, cada um tem o SEU tamanho — e é isso
+    // que permite ao Gemini ler tudo sem condenar o Groq ao 429.
+    expect(janelaDeCaracteres(["gemini"], CHEIA)).not.toBe(janelaDeCaracteres(["groq"], CHEIA));
+  });
+});

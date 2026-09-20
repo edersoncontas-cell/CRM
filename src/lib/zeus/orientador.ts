@@ -13,7 +13,9 @@
 // inteira terminar de ser GERADA (token a token) antes de receber a
 // resposta, que era a causa raiz da lentidão reportada.
 
-import { llmTexto, iaHabilitada, janelaHistoricoAtual, modoCompactoAtual } from "@/lib/ai";
+import { llmTexto, iaHabilitada, janelaHistoricoAtual, modoCompactoAtual,
+         modoCompactoDoProvedor, janelaDoProvedor } from "@/lib/ai";
+import type { ProvedorId } from "@/lib/ai/provedores-status";
 import { mensagemErroIA } from "@/lib/ai/erros";
 import { db } from "@/lib/db";
 import { sendText } from "@/lib/zapi";
@@ -291,11 +293,54 @@ export async function gerarAnaliseOrientador(args: {
       });
 
   try {
+    // CADA PROVEDOR RECEBE UM PEDIDO DO TAMANHO DELE.
+    //
+    // Antes, o pedido era dimensionado só para o PRIMEIRO da fila. Quando o
+    // Gemini falhava, esse mesmo pedido — montado para uma janela de 1 milhão
+    // de tokens — ia para o Groq, cujo teto por minuto é 6.000. O Groq não
+    // recusava por uso excessivo: recusava porque o pedido nunca teve como
+    // caber. Todo tropeço do Gemini virava 429 GARANTIDO no Groq, para
+    // sempre — e era exatamente o erro que não saía da tela.
+    //
+    // Agora a cascata remonta o pedido a cada tentativa: o Gemini lê a
+    // conversa inteira; se ele cair, o Groq recebe a versão compacta, que
+    // passa.
+    const porProvedor = (prov: ProvedorId) => {
+      if (inc) {
+        // O incremental já é pequeno o bastante para qualquer provedor.
+        return { system, user, maxTokens: 1400, apertado: true };
+      }
+      const apertadoAqui = modoCompactoDoProvedor(prov);
+      const janela = janelaDoProvedor(prov, JANELA_HISTORICO);
+      const historicoAqui = recortarHistorico(args.historico, janela);
+      if (apertadoAqui) {
+        const p = montarPromptCompacto({
+          historico: historicoAqui,
+          ultimasMensagens: args.ultimasMensagens,
+          contextoCliente: args.contextoCliente,
+          notaVendedor: args.notaVendedor,
+        });
+        return { system: p.system, user: p.user, maxTokens: 1400, apertado: true };
+      }
+      const p = montarPromptOrientador({
+        historico: historicoAqui,
+        ultimasMensagens: args.ultimasMensagens,
+        contextoCliente: args.contextoCliente,
+        contextoAcademia: args.contextoAcademia,
+        resumoEtapas: resumoDasEtapas(),
+        regras,
+        estilo: args.estilo,
+        licoes: args.licoes,
+        notaVendedor: args.notaVendedor,
+      });
+      return { system: p.system, user: p.user, maxTokens: 2400, apertado: false };
+    };
+
     // `apertado` impede os +4.000 tokens de reserva do raciocínio, que eram o
     // maior desperdício do pedido no limite por minuto.
     const raw = (inc || compacto)
-      ? await llmTexto(system, user, { maxTokens: 1400, json: true, apertado: true })
-      : await llmTexto(system, user, { maxTokens: 2400, json: true, raciocinio: true });
+      ? await llmTexto(system, user, { maxTokens: 1400, json: true, apertado: true, porProvedor })
+      : await llmTexto(system, user, { maxTokens: 2400, json: true, raciocinio: true, porProvedor });
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(json);
 

@@ -90,6 +90,16 @@ export function modoCompactoAtual(): boolean {
   return modoCompacto(provedoresDisponiveis() as ProvedorId[]);
 }
 
+/** O modo compacto é necessário NESTE provedor? (para o porProvedor). */
+export function modoCompactoDoProvedor(prov: ProvedorId): boolean {
+  return modoCompacto([prov]);
+}
+
+/** A janela que cabe NESTE provedor (para o porProvedor). */
+export function janelaDoProvedor(prov: ProvedorId, janelaCheia: number): number {
+  return janelaDeCaracteres([prov], janelaCheia);
+}
+
 /** A janela teve de encolher por causa do provedor? Para a tela explicar. */
 export function janelaFoiApertada(janelaCheia: number): boolean {
   return janelaApertada(provedoresDisponiveis() as ProvedorId[], janelaCheia);
@@ -260,7 +270,24 @@ async function chamarProvedorTexto(
 export async function llmTexto(
   system: string,
   user: string,
-  opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean }
+  opts?: {
+    maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean;
+    /**
+     * Monta o pedido SOB MEDIDA para cada provedor que a cascata tentar.
+     *
+     * Existe por causa de um defeito preciso: o pedido era dimensionado para
+     * o PRIMEIRO provedor da fila e, quando ele falhava, esse MESMO pedido —
+     * montado para uma janela de 1 milhão de tokens — era enviado ao próximo,
+     * cujo teto por minuto é 6.000. O segundo provedor não recusava por
+     * excesso de uso: recusava porque o pedido nunca teve como caber. Ou seja,
+     * todo tropeço do Gemini virava um 429 GARANTIDO no Groq, para sempre.
+     *
+     * Com isto, cada tentativa remonta o pedido no tamanho daquele provedor:
+     * o Gemini lê a conversa inteira; se ele cair, o Groq recebe uma versão
+     * compacta que de fato passa.
+     */
+    porProvedor?: (prov: ProvedorId) => { system: string; user: string; maxTokens?: number; apertado?: boolean };
+  }
 ): Promise<string> {
   // Funil único de toda chamada de texto: é aqui que as chaves salvas na tela
   // do CRM entram no ambiente, sem sobrescrever as da hospedagem. Ver
@@ -272,7 +299,14 @@ export async function llmTexto(
   let ultimoErro: unknown = null;
   for (const prov of provs) {
     try {
-      return await chamarProvedorTexto(prov, system, user, opts);
+      // Cada provedor recebe um pedido do tamanho DELE — ver porProvedor.
+      const sob = opts?.porProvedor?.(prov as ProvedorId);
+      return await chamarProvedorTexto(
+        prov,
+        sob?.system ?? system,
+        sob?.user ?? user,
+        sob ? { ...opts, maxTokens: sob.maxTokens ?? opts?.maxTokens, apertado: sob.apertado ?? opts?.apertado } : opts,
+      );
     } catch (e) {
       ultimoErro = e;
       console.error(`[llmTexto] provedor ${prov} falhou, tentando o próximo:`, e instanceof Error ? e.message : e);
