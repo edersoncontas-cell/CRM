@@ -497,14 +497,10 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
     await carregarContexto(selId);
   }
 
-  // Apaga um contexto já guardado. Precisa existir: um fato errado entra na
-  // análise como FATO e estraga toda leitura seguinte.
-  async function apagarContexto(indice: number) {
-    if (!selId) return;
-    const r = await removerNotaOrientadorAction(selId, indice).catch(() => ({ ok: false, erro: "Falha ao apagar." }));
-    if (!r.ok) { setNotaAviso(r.erro ?? "Não deu para apagar."); setTimeout(() => setNotaAviso(null), 8000); return; }
-    await carregarContexto(selId);
-  }
+  // apagarContexto saiu junto com a lista "Já contei ao Orientador": sem a
+  // lista na tela não há de onde clicar no ✕. A ação do servidor
+  // (removerNotaOrientadorAction) fica, porque os contextos continuam
+  // guardados e um dia pode ser preciso apagar um — mas nada aqui a chama.
 
   function htmlParaTexto(html: string): string {
     const comQuebras = html.replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n");
@@ -1333,41 +1329,12 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                   </div>
                   {notaAviso && <p className="mt-1.5 text-[11px] text-agro-300">{notaAviso}</p>}
 
-                  {/* O que já foi contado. Precisa estar à vista: a caixa
-                      limpa a cada salvamento, então sem esta lista o vendedor
-                      não teria como saber o que o Orientador já sabe — e
-                      repetiria, ou deixaria de contar. O ✕ existe porque um
-                      fato errado entra na análise como FATO e estraga toda
-                      leitura seguinte. */}
-                  {(contexto.orientador?.notasVendedor.length ?? 0) > 0 && (
-                    <div className="mt-3 border-t border-agro-400/20 pt-2">
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-brand-400">
-                        Já contei ao Orientador
-                      </div>
-                      <ul className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-                        {contexto.orientador!.notasVendedor.map((n, i) => (
-                          <li key={`${n.em ?? "sem-data"}-${i}`} className="flex items-start justify-between gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11px] text-brand-200">
-                            <span className="min-w-0">
-                              {n.em && (
-                                <span className="mr-1.5 text-brand-500">
-                                  {new Date(n.em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" })}
-                                </span>
-                              )}
-                              {n.texto}
-                            </span>
-                            <button
-                              onClick={() => apagarContexto(i)}
-                              title="Apagar este contexto"
-                              aria-label="Apagar este contexto"
-                              className="shrink-0 text-brand-500 transition hover:text-red-300"
-                            >
-                              <X size={12} />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {/* A lista "Já contei ao Orientador" saiu daqui a pedido do
+                      vendedor: "não quero ver o que eu já enviei pro
+                      orientador". Os contextos CONTINUAM guardados e
+                      continuam entrando na análise — o que sumiu foi só o
+                      espelho deles na tela, que ocupava o painel repetindo o
+                      que ele mesmo acabou de escrever. */}
                 </div>
                 </>
                 )}

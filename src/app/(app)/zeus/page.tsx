@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { statusConexao } from "@/lib/zapi";
 import { ultimoHeartbeat, zeusAtivo } from "@/lib/zeus/estado";
 import { getWaSettings } from "@/lib/whatsapp-settings";
-import { iaHabilitada, provedorIANome } from "@/lib/ai";
+import { iaHabilitada, provedorIANome, diagnosticoDaIA } from "@/lib/ai";
 import { ZeusPainel, type ZeusEventoRow, type AuditRow } from "@/components/ZeusPainel";
 import { ShieldCheck } from "lucide-react";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
@@ -60,6 +60,43 @@ export default async function ZeusPage() {
           <p className="text-xs text-zinc-500">Governança autônoma 24/7 · saúde do sistema · higiene de dados · alertas</p>
         </div>
       </div>
+
+      {/* Provedores de IA, na ordem em que o CRM tenta.
+          A tela mostrava só o nome do PRIMEIRO, o que não responde a pergunta
+          que importa: e se ele cair? Com um provedor só, qualquer limite por
+          minuto derruba o Orientador e o painel congela na leitura anterior —
+          foi o que aconteceu, e não havia como ver isso em lugar nenhum. */}
+      {(() => {
+        const d = diagnosticoDaIA();
+        return (
+          <div className="rounded-2xl border p-4" style={{ borderColor: d.risco ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-white">Provedores de IA</h2>
+              <span className="text-xs" style={{ color: d.risco ? "#f87171" : "#a1a1aa" }}>{d.resumo}</span>
+            </div>
+            <ul className="mt-3 space-y-1.5">
+              {d.linhas.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="w-4 text-center font-bold" style={{ color: l.configurado ? "#4ade80" : "#52525b" }}>
+                    {l.configurado ? "✓" : "○"}
+                  </span>
+                  <span style={{ color: l.configurado ? "#e4e4e7" : "#71717a" }}>
+                    {l.posicao ? `${l.posicao}º · ` : ""}{l.nome}
+                  </span>
+                  {l.gratuito && <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>tem camada grátis</span>}
+                  {!l.configurado && <code className="text-[10px] text-zinc-600">{l.chave}</code>}
+                </li>
+              ))}
+            </ul>
+            {d.risco && (
+              <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "rgba(248,113,113,0.08)" }}>
+                <p style={{ color: "#fca5a5" }}>{d.risco}</p>
+                {d.solucao && <p className="mt-1" style={{ color: "#e4e4e7" }}>{d.solucao}</p>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <ZeusPainel
         ativo={ativo}

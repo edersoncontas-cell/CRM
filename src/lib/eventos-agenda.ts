@@ -27,6 +27,30 @@ function hora(d: Date): string {
   return d.toLocaleTimeString("pt-BR", { timeZone: BR, hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * O dia do mês (1–31) em que a data cai NO FUSO DE BRASÍLIA.
+ *
+ * Existe porque `date.getDate()` devolve o dia no fuso do SERVIDOR, e o
+ * servidor da Vercel roda em UTC. Um evento que termina em 25/09 às 23:59 de
+ * Brasília é 26/09 às 02:59 em UTC — então `getDate()` responde 26.
+ *
+ * Foi exatamente esse o defeito reportado: a feira de 22 a 25 aparecia no
+ * calendário certinha (ele já usava o fuso certo) e no Dashboard ia até
+ * sábado 26. Mesma agenda, dois resultados, porque havia duas contas
+ * diferentes para "que dia é este". Agora só existe esta.
+ *
+ * Vale para visita também, não só para evento: uma visita marcada às 21h cai
+ * no dia seguinte em UTC e apareceria no dia errado pelo mesmo motivo.
+ */
+export function diaDoMesBrasilia(d: Date): number {
+  return Number(diaIso(d).slice(8, 10));
+}
+
+/** O mês (1–12) em que a data cai no fuso de Brasília. */
+export function mesBrasilia(d: Date): number {
+  return Number(diaIso(d).slice(5, 7));
+}
+
 // Todos os dias que o evento ocupa, de início a fim (inclusive) — é isso que
 // pinta a faixa no calendário.
 export function diasDoEvento(inicioIso: string, fimIso: string): string[] {

@@ -18,6 +18,10 @@ import { calcularRitmoMetas } from "@/lib/metas";
 import { contarClientesConversados } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
 import { T } from "@/lib/dash-tema";
+// Mesmas funções do calendário da página de Visitas — ver o comentário na
+// expansão dos eventos, abaixo. Duas contas para "que dia é este" foi
+// exatamente o defeito da feira que ia até sábado.
+import { diaIso, diasDoEvento, diaDoMesBrasilia } from "@/lib/eventos-agenda";
 import Link from "next/link";
 import {
   Target, Clock, Bell, Snowflake, ArrowRight, Calendar, Trophy, MapPin, Wallet, Receipt, Handshake, Landmark, ListTodo, TrendingUp, Users,
@@ -137,19 +141,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   // Evento de vários dias entra em CADA dia que ocupa dentro do mês, senão
   // uma feira de quarta a sexta só apareceria na quarta.
+  //
+  // A expansão usa diasDoEvento/diaIso — as MESMAS funções do calendário da
+  // página de Visitas. Antes esta tela tinha a sua própria conta, com
+  // `getDate()` e comparação de Date crua, que responde no fuso do SERVIDOR
+  // (UTC na Vercel). Um evento que termina 25/09 23:59 de Brasília é 26/09
+  // 02:59 em UTC, então o laço ia até sábado 26: era o defeito reportado, a
+  // feira de 22 a 25 certa no calendário e errada aqui. Duas contas para a
+  // mesma pergunta viram, cedo ou tarde, duas respostas.
   const itensEvento: ItemAgenda[] = [];
+  // O prefixo "AAAA-MM" sai do ANO e do MÊS, não de converter a meia-noite do
+  // dia 1 para Brasília: 01/09 00:00 do servidor (UTC) é 31/08 21:00 em
+  // Brasília, e o filtro acabaria descartando o mês inteiro. Foi o que a
+  // verificação pegou — a feira sumia do Dashboard em vez de ir até sábado.
+  const mesAtualIso = `${anoAtual}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
   for (const e of eventosMes) {
-    const primeiro = e.inicio < inicioMesCal ? inicioMesCal : e.inicio;
-    const ultimo = e.fim >= fimMesCal ? new Date(fimMesCal.getTime() - 1) : e.fim;
-    const d = new Date(primeiro.getFullYear(), primeiro.getMonth(), primeiro.getDate());
-    let n = 0;
-    while (d <= ultimo && n < 62) {
+    const inicioIso = diaIso(e.inicio);
+    const fimIso = diaIso(e.fim);
+    for (const diaIsoStr of diasDoEvento(inicioIso, fimIso)) {
+      if (!diaIsoStr.startsWith(mesAtualIso)) continue; // sobra de outro mês
       // No primeiro dia mantém a hora de início (se não for dia inteiro);
       // nos seguintes o item é do dia, sem hora.
-      const mesmoDia = d.getDate() === e.inicio.getDate() && d.getMonth() === e.inicio.getMonth();
+      const ehPrimeiro = diaIsoStr === inicioIso;
       itensEvento.push({
-        chave: `e:${e.id}:${d.getDate()}`,
-        data: mesmoDia && !e.diaInteiro ? e.inicio : new Date(d),
+        chave: `e:${e.id}:${diaIsoStr}`,
+        data: ehPrimeiro && !e.diaInteiro ? e.inicio : new Date(`${diaIsoStr}T12:00:00-03:00`),
         clienteId: null,
         nome: e.titulo,
         local: [e.cidade, e.uf].filter(Boolean).join(" · ") || null,
@@ -157,8 +173,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         prevista: false,
         evento: true,
       });
-      d.setDate(d.getDate() + 1);
-      n++;
     }
   }
 
@@ -169,14 +183,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   ].sort((a, b) => a.data.getTime() - b.data.getTime());
   const qtdVisitas = itensAgenda.filter((i) => !i.evento).length;
   const qtdEventos = itensEvento.length;
+  // Agrupa pelo dia DE BRASÍLIA, não pelo dia do servidor: uma visita das 21h
+  // é o dia seguinte em UTC, e cairia no quadradinho errado do calendário
+  // pelo mesmo motivo que a feira ia até sábado.
   const agendaPorDia = new Map<number, ItemAgenda[]>();
   for (const it of itensAgenda) {
-    const d = it.data.getDate();
+    const d = diaDoMesBrasilia(it.data);
     agendaPorDia.set(d, [...(agendaPorDia.get(d) ?? []), it]);
   }
   const diasComVisita = new Map<number, number>();
   for (const [d, itens] of agendaPorDia) diasComVisita.set(d, itens.length);
-  const diaHoje = hoje.getDate();
+  const diaHoje = diaDoMesBrasilia(hoje);
 
   const cidadesTop = resumo.pontosMapa.slice(0, 8).map((p) => ({ nome: p.nome, qtd: p.vendas }));
 

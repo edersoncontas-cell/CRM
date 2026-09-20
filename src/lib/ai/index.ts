@@ -7,6 +7,7 @@ import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus
 import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
 import { esperaDoLimite } from "./cota";
+import { diagnosticoIA, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -42,6 +43,17 @@ export function iaHabilitada() {
 // Há provedor que lê imagem/PDF (ver llmVisao)?
 export function visaoHabilitada() {
   return !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+}
+
+/**
+ * A situação dos provedores, para a tela do ZEUS mostrar.
+ *
+ * Só esta função lê as variáveis de ambiente; a interpretação fica no módulo
+ * puro provedores-status.ts, que tem teste. Nenhuma chave é exposta — só o
+ * fato de estar ou não configurada.
+ */
+export function diagnosticoDaIA(): DiagnosticoIA {
+  return diagnosticoIA(provedoresDisponiveis() as ProvedorId[]);
 }
 
 // Nome amigável do provedor de IA ativo (para exibir na interface).
