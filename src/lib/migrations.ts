@@ -577,6 +577,11 @@ export async function aplicarMigracoes(): Promise<void> {
     await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "notaVendedor" TEXT`);
     // v34: pedidos que o vendedor deu na nota e ainda não confirmou na tela.
     await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "pedidosPendentes" TEXT`);
+    // v35: contador de análises incrementais seguidas do Orientador. Ver
+    // zeus/orientador-incremental.ts — a cada 10, a conversa é relida inteira
+    // para o estado acumulado não se afastar da verdade sem limite.
+    await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "incrementaisSeguidas" INTEGER NOT NULL DEFAULT 0`);
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 

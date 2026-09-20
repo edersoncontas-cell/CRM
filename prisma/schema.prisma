@@ -159,6 +159,10 @@ model OrientadorAnalise {
   // Ordens que o vendedor deu na nota ("vincular à empresa X") que o
   // Orientador entendeu e AINDA NÃO foram confirmadas por ele. JSON.
   pedidosPendentes        String?
+  // Quantas análises INCREMENTAIS seguidas (ver zeus/orientador-incremental.ts).
+  // Zera a cada releitura completa da conversa. Existe para a deriva do estado
+  // nunca passar de LIMITE_INCREMENTAIS passos sem correção.
+  incrementaisSeguidas    Int      @default(0)
   atualizadoEm            DateTime @updatedAt
 }
 

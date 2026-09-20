@@ -27,6 +27,8 @@ import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
 import { recortarHistorico, MAX_MENSAGENS, JANELA_HISTORICO } from "@/lib/zeus/historico-janela";
 import { soResumo, montarPromptResumoContato, limparResumo, analiseSoResumo } from "@/lib/zeus/orientador-resumo";
+import { montarPromptIncremental, mesclarIncremental, podeSerIncremental, estadoDaAnalise,
+         LIMITE_INCREMENTAIS, type EstadoAnterior } from "@/lib/zeus/orientador-incremental";
 import { montarHistorico, montarUltimas, midiaDaConversa, type MidiaDaConversa } from "@/lib/zeus/historico-linha";
 import { resumoConferido, frasesDerrubadas } from "@/lib/zeus/resumo-checagem";
 import { corrigirTermos, corrigirTermosNaLista } from "@/lib/zeus/termos-pt";
@@ -236,6 +238,15 @@ export async function gerarAnaliseOrientador(args: {
   estilo: string | null;
   licoes?: string[] | null; // lições do histórico real do vendedor (ver orientador-aprendizado.ts) — contexto leve, não regra
   notaVendedor?: string | null; // o que o vendedor escreveu na mão (ver abaixo)
+  // ANÁLISE INCREMENTAL (ver zeus/orientador-incremental.ts): quando vem
+  // estado anterior E mensagens novas, a IA ATUALIZA o que já existe em vez
+  // de reler a conversa inteira. Metade do tamanho do pedido, e o começo da
+  // conversa fica preservado no estado em vez de ser cortado pela janela.
+  incremental?: {
+    estado: EstadoAnterior;
+    mensagensNovas: string;
+    anterior: AnaliseOrientador;
+  } | null;
 }): Promise<AnaliseOrientador> {
   if (!iaHabilitada()) {
     return fallback("IA não configurada (defina OPENAI_API_KEY, ANTHROPIC_API_KEY ou GROQ_API_KEY).");
@@ -252,7 +263,15 @@ export async function gerarAnaliseOrientador(args: {
   // tokens de instrução e cabe. Análise mais simples que roda todo dia vale
   // mais que análise completa que nunca roda; com Gemini, o completo volta.
   const compacto = modoCompactoAtual();
-  const { system, user } = compacto
+  const inc = args.incremental ?? null;
+  const { system, user } = inc
+    ? montarPromptIncremental({
+        estado: inc.estado,
+        mensagensNovas: inc.mensagensNovas,
+        contextoCliente: args.contextoCliente,
+        notaVendedor: args.notaVendedor,
+      })
+    : compacto
     ? montarPromptCompacto({
         historico: args.historico,
         ultimasMensagens: args.ultimasMensagens,
@@ -274,7 +293,7 @@ export async function gerarAnaliseOrientador(args: {
   try {
     // `apertado` impede os +4.000 tokens de reserva do raciocínio, que eram o
     // maior desperdício do pedido no limite por minuto.
-    const raw = compacto
+    const raw = (inc || compacto)
       ? await llmTexto(system, user, { maxTokens: 1400, json: true, apertado: true })
       : await llmTexto(system, user, { maxTokens: 2400, json: true, raciocinio: true });
     const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
@@ -297,7 +316,7 @@ export async function gerarAnaliseOrientador(args: {
       ? Math.max(0, Math.min(100, Math.round(parsed.probabilidadeFechamento)))
       : 50;
 
-    return {
+    const analiseNova: AnaliseOrientador = {
       resumoNegociacao: typeof parsed.resumoNegociacao === "string" ? parsed.resumoNegociacao : "",
       estagioVenda: ESTAGIOS.includes(parsed.estagioVenda) ? parsed.estagioVenda : "Lead",
       perfilComprador: PERFIS.includes(parsed.perfilComprador) ? parsed.perfilComprador : null,
@@ -315,6 +334,12 @@ export async function gerarAnaliseOrientador(args: {
       fatos: normalizarFatos(parsed.fatos),
       pedidos: normalizarPedidos(parsed.pedidos),
     };
+
+    // No incremental, a mesclagem é a rede de proteção: o prompt PEDE para
+    // manter o que está preenchido, isto GARANTE. Um campo esvaziado à toa
+    // sumiria do estado e nunca mais voltaria, porque a próxima análise parte
+    // deste estado já empobrecido — degradação silenciosa e cumulativa.
+    return inc ? mesclarIncremental(inc.anterior, analiseNova) : analiseNova;
   } catch (e) {
     console.error("[orientador] falha na análise:", e);
     throw e;
@@ -455,6 +480,84 @@ async function atualizarAlertaOrientador(clienteId: string, mensagens: string[])
   }
 }
 
+/**
+ * Monta o pedido incremental, ou devolve null quando a releitura completa é
+ * o caminho.
+ *
+ * Releitura completa acontece quando: não há análise anterior (nada a
+ * atualizar), ou já foram LIMITE_INCREMENTAIS análises seguidas sem reler a
+ * fonte. Esse segundo caso é a trava contra a DERIVA: o estado acumulado nunca
+ * se afasta da verdade por mais de dez passos, porque uma leitura da conversa
+ * inteira vem corrigi-lo.
+ */
+async function montarIncremental(clienteId: string, mensagensNovas: string): Promise<{
+  estado: EstadoAnterior; mensagensNovas: string; anterior: AnaliseOrientador;
+} | null> {
+  try {
+    const anterior = await db.orientadorAnalise.findUnique({ where: { clienteId } });
+    if (!podeSerIncremental({
+      temEstadoAnterior: !!anterior,
+      mensagensNovas: mensagensNovas.trim().length,
+      incrementaisSeguidas: anterior?.incrementaisSeguidas ?? 0,
+      forcarCompleta: false,
+    })) return null;
+
+    const [neg, cli] = await Promise.all([
+      db.negociacao.findFirst({
+        where: { clienteId, status: "aberta" },
+        orderBy: { atualizadoEm: "desc" },
+        select: { marca: true, maquinaModelo: true, valor: true, tipoPagamento: true,
+                  entradaValor: true, entradaPercentual: true, observacao: true },
+      }),
+      db.cliente.findUnique({ where: { id: clienteId }, select: { municipio: { select: { nome: true } } } }),
+    ]);
+
+    const a = anterior!;
+    const coaching = a.coaching ? normalizarCoaching(a.coaching) : coachingVazio();
+    const visitaFeita = coaching.roteiro.find((e) => /visita/i.test(e.etapa))?.status === "feito" ? true : null;
+
+    return {
+      estado: estadoDaAnalise(a, neg, cli?.municipio?.nome ?? null, visitaFeita),
+      mensagensNovas,
+      // O estado anterior COMPLETO vai junto para a mesclagem: é ele que
+      // repõe o que o modelo esvaziar sem motivo.
+      anterior: {
+        resumoNegociacao: a.resumoNegociacao ?? "",
+        estagioVenda: a.estagioVenda,
+        perfilComprador: a.perfilComprador,
+        objecoes: a.objecoes ?? [],
+        probabilidadeFechamento: a.probabilidadeFechamento ?? 50,
+        probabilidadeExplicacao: a.probabilidadeExplicacao ?? "",
+        temperatura: (a.temperatura as Temperatura) ?? "morna",
+        proximaAcao: a.proximaAcao ?? "",
+        oportunidadesPerdidas: a.oportunidadesPerdidas ?? [],
+        combinados: a.combinados ?? [],
+        pendencias: a.pendencias ?? [],
+        coaching,
+        alertas: [],
+        conversaEncerrada: false,
+        fatos: {
+          marca: neg?.marca ?? null,
+          maquinaModelo: neg?.maquinaModelo ?? null,
+          valor: neg?.valor ?? null,
+          condicaoPagamento: (neg?.tipoPagamento as FatosNegociacao["condicaoPagamento"]) ?? null,
+          municipio: cli?.municipio?.nome ?? null,
+          visitaRealizada: visitaFeita,
+          entradaValor: neg?.entradaValor ?? null,
+          entradaPercentual: neg?.entradaPercentual ?? null,
+          observacao: neg?.observacao ?? null,
+        },
+        pedidos: [],
+      },
+    };
+  } catch (e) {
+    // Falhar aqui não pode derrubar a análise: sem incremental, o CRM relê a
+    // conversa inteira, que é o comportamento antigo e continua correto.
+    console.error("[orientador] não deu para montar o incremental de", clienteId, e);
+    return null;
+  }
+}
+
 // Ponto único que liga a análise do Orientador à persistência (painel) e ao
 // envio/rascunho da resposta no WhatsApp — chamado pelas duas rotas de
 // despacho (despacho-rapido e o fallback do cron agnes-dispatch) para nunca
@@ -491,6 +594,13 @@ export async function processarOrientador(args: {
   // "Reanalisar" — senão a próxima mensagem do cliente apagaria o que ele
   // escreveu.
   const notaVendedor = await lerNotaVendedor(args.conv.clienteId);
+
+  // ANÁLISE INCREMENTAL (ver zeus/orientador-incremental.ts). Em vez de reler
+  // a conversa inteira a cada mensagem, atualiza o estado que já existe com o
+  // que é novo: metade do tamanho do pedido, e o começo da conversa fica
+  // preservado no estado em vez de ser cortado pela janela.
+  const incremental = await montarIncremental(args.conv.clienteId, args.ultimasMensagens);
+
   let analise: AnaliseOrientador;
   try {
     analise = await gerarAnaliseOrientador({
@@ -501,6 +611,7 @@ export async function processarOrientador(args: {
       estilo: args.estilo,
       licoes: aprendizado?.licoes,
       notaVendedor,
+      incremental,
     });
   } catch (e) {
     await zeusReport(e, "gerarAnaliseOrientador (Orientador de Vendas)");
@@ -534,8 +645,10 @@ export async function processarOrientador(args: {
   const coachingJson = coaching as unknown as Prisma.InputJsonValue;
   await db.orientadorAnalise.upsert({
     where: { clienteId: args.conv.clienteId },
-    create: { clienteId: args.conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: reply || null, pedidosPendentes: guardarPedidos(pedidos) },
-    update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined, pedidosPendentes: guardarPedidos(pedidos) },
+    // O contador anda quando foi incremental e zera quando foi releitura
+    // completa — é ele que garante a correção periódica do estado.
+    create: { clienteId: args.conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: reply || null, pedidosPendentes: guardarPedidos(pedidos), incrementaisSeguidas: incremental ? 1 : 0 },
+    update: { ...campos, coaching: coachingJson, melhorResposta: reply || undefined, pedidosPendentes: guardarPedidos(pedidos), ...(incremental ? { incrementaisSeguidas: { increment: 1 } } : { incrementaisSeguidas: 0 }) },
   });
 
   await aplicarFatos(args.conv.clienteId, fatos, !!notaVendedor);
@@ -556,6 +669,14 @@ async function aplicarConversaEncerrada(clienteId: string, encerrada: boolean) {
 // Análise sob demanda (botões "Reanalisar" e "Zerar e recomeçar"): roda o
 // Orientador para a conversa e grava o painel e a melhor resposta, SEM criar
 // rascunho nem enviar nada. Retorna ok=false com motivo quando não dá.
+/**
+ * Análise sob demanda — o botão "Reanalisar".
+ *
+ * SEMPRE relê a conversa inteira, de propósito. É o botão do vendedor para
+ * dizer "esqueça o que você achou e olhe de novo": se ele o aperta, é porque
+ * a leitura está errada, e um incremental partindo justamente da leitura
+ * errada não teria como consertá-la. Também zera o contador de incrementais.
+ */
 export async function analisarConversaSemResposta(conversationId: string): Promise<{ ok: boolean; erro?: string }> {
   if (!iaHabilitada()) return { ok: false, erro: "Nenhuma chave de IA configurada." };
   const { orcamentoIADisponivel, consumirOrcamentoIA } = await import("@/lib/zeus/estado");
@@ -611,8 +732,9 @@ export async function analisarConversaSemResposta(conversationId: string): Promi
     const coachingJson = coaching as unknown as Prisma.InputJsonValue;
     await db.orientadorAnalise.upsert({
       where: { clienteId: conv.clienteId },
-      create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null, pedidosPendentes: guardarPedidos(pedidos) },
-      update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}), pedidosPendentes: guardarPedidos(pedidos) },
+      // incrementaisSeguidas: 0 — esta foi uma releitura completa.
+      create: { clienteId: conv.clienteId, ...campos, coaching: coachingJson, melhorResposta: resposta || null, pedidosPendentes: guardarPedidos(pedidos), incrementaisSeguidas: 0 },
+      update: { ...campos, coaching: coachingJson, ...(resposta ? { melhorResposta: resposta } : {}), pedidosPendentes: guardarPedidos(pedidos), incrementaisSeguidas: 0 },
     });
     await aplicarFatos(conv.clienteId, fatos, !!notaVendedor);
     await atualizarAlertaOrientador(conv.clienteId, alertas).catch(() => {});

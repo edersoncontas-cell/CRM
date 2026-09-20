@@ -69,7 +69,7 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v34";
+export const CHAVE_MANUTENCAO = "manutencao.v35";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
