@@ -46,7 +46,20 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
   const [tipo, setTipo] = useState<TipoPost>("diario");
   const [tema, setTema] = useState("");
   const [canal, setCanal] = useState<CanalPost>("instagram");
+  // Marca e modelo em dois campos. Numa lista só, as 145 máquinas viravam um
+  // rolo sem fim: as Dynapac ocupavam a tela inteira e as New Holland ficavam
+  // lá embaixo, dando a impressão de que só existia uma marca.
+  const [marca, setMarca] = useState("");
   const [maquina, setMaquina] = useState("");
+
+  const marcas = useMemo(
+    () => [...new Set(maquinas.map((m) => m.marca))].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [maquinas],
+  );
+  const modelosDaMarca = useMemo(
+    () => maquinas.filter((m) => m.marca === marca).sort((a, b) => a.modelo.localeCompare(b.modelo, "pt-BR", { numeric: true })),
+    [maquinas, marca],
+  );
   const [instrucoes, setInstrucoes] = useState("");
   const [legenda, setLegenda] = useState("");
   const [hashtags, setHashtags] = useState("");
@@ -62,7 +75,13 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
 
   const sugestoes = TEMAS_SUGERIDOS[tipo];
   const limite = limiteDoCanal(canal);
-  const pedido = useMemo(() => ({ tipo, tema, canal, maquina: maquina || null, instrucoes: instrucoes || null }), [tipo, tema, canal, maquina, instrucoes]);
+  // O que vai para o Cérebro: "New Holland E145C" quando tem modelo, só a
+  // marca quando ele escolheu a marca e deixou o modelo em aberto.
+  const maquinaCompleta = useMemo(
+    () => [marca, maquina].filter(Boolean).join(" ") || null,
+    [marca, maquina],
+  );
+  const pedido = useMemo(() => ({ tipo, tema, canal, maquina: maquinaCompleta, instrucoes: instrucoes || null }), [tipo, tema, canal, maquinaCompleta, instrucoes]);
 
   function limpar() {
     setEditando(null); setLegenda(""); setHashtags(""); setIdeiaDeArte(""); setImagem(null);
@@ -92,7 +111,7 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
     start(async () => {
       const r = await salvarPostAction({
         id: editando, tipo, tema, canal, legenda, hashtags,
-        maquina: maquina || null, base64: imagem?.base64 ?? null, mime: imagem?.mime ?? null, status,
+        maquina: maquinaCompleta, base64: imagem?.base64 ?? null, mime: imagem?.mime ?? null, status,
       });
       if (!r.ok || !r.post) { setErro(r.erro ?? "Não consegui salvar."); return; }
       setPosts((lista) => [r.post!, ...lista.filter((p) => p.id !== r.post!.id)]);
@@ -103,7 +122,13 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
 
   function abrir(p: PostSalvo) {
     setEditando(p.id); setTipo(p.tipo); setTema(p.tema); setCanal(p.canal ?? "instagram");
-    setLegenda(p.legenda); setHashtags(p.hashtags); setMaquina(p.maquina ?? "");
+    setLegenda(p.legenda); setHashtags(p.hashtags);
+    // O post guarda "Marca Modelo" numa string só: separa de volta nos dois
+    // campos, senão reabrir um post perdia a escolha da máquina.
+    const salvo = (p.maquina ?? "").trim();
+    const marcaSalva = marcas.find((m) => salvo === m || salvo.startsWith(m + " ")) ?? "";
+    setMarca(marcaSalva);
+    setMaquina(marcaSalva ? salvo.slice(marcaSalva.length).trim() : salvo);
     setImagem(p.imagem ? { url: p.imagem, base64: "", mime: "image/png" } : null);
     setErro(null); setAviso(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -165,7 +190,7 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
             ))}
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className={rotulo}>Canal</label>
               <select value={canal} onChange={(e) => setCanal(e.target.value as CanalPost)} className={campo}>
@@ -173,10 +198,27 @@ export function MarketingClient({ posts: postsIniciais, maquinas, temIA, temImag
               </select>
             </div>
             <div>
-              <label className={rotulo}>Máquina em destaque</label>
-              <select value={maquina} onChange={(e) => setMaquina(e.target.value)} className={campo}>
+              <label className={rotulo}>Marca</label>
+              <select
+                value={marca}
+                // Trocou de marca: o modelo antigo é de outra marca, então sai.
+                onChange={(e) => { setMarca(e.target.value); setMaquina(""); }}
+                className={campo}
+              >
                 <option value="">Nenhuma em especial</option>
-                {maquinas.map((m) => <option key={`${m.marca}-${m.modelo}`} value={m.modelo}>{m.marca} {m.modelo}</option>)}
+                {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={rotulo}>Modelo</label>
+              <select
+                value={maquina}
+                onChange={(e) => setMaquina(e.target.value)}
+                disabled={!marca}
+                className={`${campo} disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400`}
+              >
+                <option value="">{marca ? "Todos da marca" : "Escolha a marca antes"}</option>
+                {modelosDaMarca.map((m) => <option key={m.modelo} value={m.modelo}>{m.modelo}</option>)}
               </select>
             </div>
           </div>

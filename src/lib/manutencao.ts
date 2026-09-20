@@ -54,7 +54,15 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // PostMarketing, MemoriaCerebro).
 // v31: NotaContextoCliente — o que o vendedor ensina sobre um cliente e que
 // nunca apareceria na conversa do WhatsApp.
-export const CHAVE_MANUTENCAO = "manutencao.v31";
+// v32: OrientadorAnalise.notaVendedor — o que o vendedor escreve na tela para
+// o Orientador levar em conta.
+//
+// ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
+// este número. A manutenção só roda quando a chave ainda NÃO está gravada no
+// banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
+// criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
+// aconteceu com a notaVendedor no Orientador.
+export const CHAVE_MANUTENCAO = "manutencao.v32";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -106,5 +114,17 @@ export async function garantirManutencaoSeNecessario(): Promise<void> {
   } catch {
     return; // outra lambda já está cuidando disso ou o banco não está pronto
   }
-  await rodarManutencao();
+  const relatorio = await rodarManutencao().catch((e) => {
+    console.error("[manutencao] falhou inteira:", e);
+    return [{ etapa: "geral", ok: false, erro: String(e) }] as EtapaManutencao[];
+  });
+  // Se alguma etapa falhou, APAGA a marca para tentar de novo na próxima
+  // carga. Sem isto, a marca gravada antes de rodar (o lock que evita duas
+  // lambdas juntas) ficava dizendo "já fiz" para sempre, e a migração que
+  // não passou nunca mais teria uma segunda chance.
+  const falhou = relatorio.filter((e) => !e.ok);
+  if (falhou.length) {
+    console.error("[manutencao] etapas com erro:", falhou.map((e) => `${e.etapa}: ${e.erro}`).join(" | "));
+    await db.configuracao.delete({ where: { chave: CHAVE_MANUTENCAO } }).catch(() => {});
+  }
 }

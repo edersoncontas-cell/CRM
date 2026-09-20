@@ -13,6 +13,26 @@ export function geracaoDeImagemHabilitada(): boolean {
 
 type Parte = { text?: string; inlineData?: { mimeType: string; data: string } };
 
+/** Erro da Google traduzido para o que o vendedor precisa saber e fazer. */
+export function mensagemDoErro(status: number, detalhe: string): string {
+  const d = detalhe.toLowerCase();
+  if (status === 429) {
+    return d.includes("per day") || d.includes("daily")
+      ? "A cota de imagens do Gemini acabou por hoje. A criação de arte volta sozinha amanhã — o texto do post continua funcionando normalmente."
+      : "O Gemini recusou por excesso de pedidos agora. Espere um minuto e tente de novo; se insistir, a cota do dia acabou e volta amanhã.";
+  }
+  if (status === 401 || status === 403) {
+    return "A chave do Gemini (GEMINI_API_KEY) foi recusada. Confira a chave nas variáveis da Vercel.";
+  }
+  if (status === 400 && (d.includes("safety") || d.includes("blocked"))) {
+    return "O Gemini achou que o pedido esbarra nas regras dele. Descreva a arte de outro jeito.";
+  }
+  if (status >= 500) {
+    return "O serviço do Gemini está instável agora. Tente de novo em alguns minutos.";
+  }
+  return `Não consegui criar a arte (erro ${status} do Gemini). Tente de novo; se continuar, mude a descrição.`;
+}
+
 async function gerarComModelo(modelo: string, prompt: string, referencias: Referencia[]): Promise<ImagemGerada> {
   const res = await fetch(`${GEMINI_API_BASE}/v1beta/models/${modelo}:generateContent`, {
     method: "POST",
@@ -31,8 +51,12 @@ async function gerarComModelo(modelo: string, prompt: string, referencias: Refer
   });
   if (!res.ok) {
     const detalhe = await res.text().catch(() => "");
-    const erro = new Error(`Gemini ${modelo} (${res.status}): ${detalhe.slice(0, 200)}`) as Error & { status?: number };
+    // Mensagem em português, não o JSON cru da Google: quem lê é o vendedor,
+    // e "You exceeded your current quota" no meio de um JSON não diz o que
+    // fazer. O detalhe técnico fica no log do servidor.
+    const erro = new Error(mensagemDoErro(res.status, detalhe)) as Error & { status?: number };
     erro.status = res.status;
+    console.error(`[gemini-imagem] ${modelo} ${res.status}: ${detalhe.slice(0, 300)}`);
     throw erro;
   }
   const data = (await res.json()) as { candidates?: { content?: { parts?: Parte[] }; finishReason?: string }[]; promptFeedback?: { blockReason?: string } };
@@ -43,7 +67,9 @@ async function gerarComModelo(modelo: string, prompt: string, referencias: Refer
 }
 
 // Tenta os modelos na ordem de GEMINI_IMAGE_MODELS: modelo que não existe
-// mais (404) ou não aceita imagem (400) passa a vez; outros erros param.
+// mais (404), que não aceita imagem (400) ou que estourou a cota (429) passa
+// a vez — a cota do Gemini é por modelo, então o seguinte da lista pode estar
+// livre. Outros erros param a fila.
 export async function gerarImagemGemini(prompt: string, referencias: Referencia[] = []): Promise<ImagemGerada> {
   if (!geracaoDeImagemHabilitada()) throw new Error("Geração de imagem exige GEMINI_API_KEY.");
   let ultimo: unknown = null;
@@ -54,7 +80,7 @@ export async function gerarImagemGemini(prompt: string, referencias: Referencia[
       ultimo = e;
       const status = (e as { status?: number }).status;
       console.error(`[gemini-imagem] ${modelo} falhou:`, e instanceof Error ? e.message : e);
-      if (status !== 404 && status !== 400) break;
+      if (status !== 404 && status !== 400 && status !== 429) break;
     }
   }
   throw ultimo instanceof Error ? ultimo : new Error(String(ultimo));

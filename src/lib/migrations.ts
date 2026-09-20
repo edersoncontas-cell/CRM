@@ -569,7 +569,7 @@ export async function aplicarMigracoes(): Promise<void> {
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     `);
 
-    // ── Nota do vendedor para o Orientador (v31) ───────────────────────────
+    // ── Nota do vendedor para o Orientador (v32) ───────────────────────────
     // O que o vendedor sabe e o WhatsApp não mostra (conversa por telefone,
     // visita, o que o cliente falou por fora). Ele escreve na tela e vai
     // junto no próximo "Reanalisar".
