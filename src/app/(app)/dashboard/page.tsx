@@ -428,7 +428,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   <div key={dia} className="rounded-xl p-2" style={{ background: T.sobre, opacity: passado ? 0.55 : 1, border: ehHoje ? `1px solid ${T.ciano}` : `1px solid transparent` }}>
                     <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-widest" style={{ color: ehHoje ? T.ciano : T.texto2 }}>
                       <span className="capitalize">{ehHoje ? "Hoje · " : ""}{rotuloDia}</span>
-                      <span style={{ color: T.mudo }}>{itens.length} item{itens.length > 1 ? "ns" : ""}</span>
+                      {/* "item" no plural é ITENS, não "itemns": o m vira n.
+                          Colar "ns" no fim escrevia errado em toda linha com
+                          mais de um compromisso. */}
+                      <span style={{ color: T.mudo }}>{itens.length} {itens.length > 1 ? "itens" : "item"}</span>
                     </div>
                     <ul className="space-y-1">
                       {itens.map((it, i) => {

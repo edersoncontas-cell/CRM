@@ -47,12 +47,22 @@ function ItemArrastavel({ item, ativo, fechar }: { item: ItemMenu; ativo: boolea
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
       className={cn(
-        "group flex items-center gap-2 rounded-xl px-2 py-2 text-sm font-medium",
+        // select-none: sem isto, segurar o dedo na linha para arrastar começa a
+        // selecionar o texto do item em vez de mover.
+        "group flex select-none items-center gap-2 rounded-xl px-2 py-1 text-sm font-medium",
         ativo ? "bg-white/15 text-white" : "text-brand-300"
       )}
     >
-      <span {...attributes} {...listeners} className="cursor-grab touch-none rounded p-1 text-brand-500 active:cursor-grabbing">
-        <GripVertical size={15} />
+      {/* A alça tinha 23px — abaixo do mínimo de 48 que o dedo acerta, e ele
+          usa o CRM na rua. Grande no celular, compacta no computador, onde o
+          ponteiro é preciso e o espaço do menu é mais curto. */}
+      <span
+        {...attributes}
+        {...listeners}
+        aria-label={`Arrastar ${item.label}`}
+        className="flex h-12 w-12 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-brand-500 active:cursor-grabbing active:bg-white/10 md:h-8 md:w-8"
+      >
+        <GripVertical size={20} className="md:h-4 md:w-4" />
       </span>
       <Icon size={17} className="shrink-0 text-brand-400" />
       <span className="truncate">{item.label}</span>

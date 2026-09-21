@@ -8,7 +8,16 @@
 
 /* ── Performance mobile: remove delay de 300ms em taps ── */
 /* IMPORTANTE: NÃO aplicar touch-action em * — bloqueia scroll no iOS */
-a, button, [role="button"], label, input[type="checkbox"], input[type="radio"], input[type="submit"], input[type="button"] {
+/* O :where() é a MESMA correção do seletor de input mais abaixo, pelo mesmo
+   motivo. [role="button"] pesa (0,1,0), igual a uma classe do Tailwind, e como
+   esta regra vem depois do @tailwind utilities no arquivo, ela ganhava o
+   desempate de ordem — a classe touch-none escrita no componente não valia
+   nada. Quem pagou foi o arrastar do menu no celular: a alça do dnd-kit recebe
+   role="button" de brinde, caía aqui, ficava "manipulation" em vez de "none",
+   e o navegador tratava o gesto como rolagem e cancelava o arrasto. No
+   computador passava despercebido porque mouse não consulta touch-action.
+   Com :where() a regra vale (0,0,0) e qualquer classe do componente ganha. */
+:where(a, button, [role="button"], label, input[type="checkbox"], input[type="radio"], input[type="submit"], input[type="button"]) {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
 }
