@@ -65,15 +65,6 @@ interface CardData {
 type Cliente = { id: string; nome: string };
 type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean; papel: string | null; probabilidade: number };
 type MaquinaPropria = { marca: string; modelo: string };
-// Recorte escolhido no cabeçalho. de/ate em ISO (null = todo o histórico).
-type Periodo = { de: string | null; ate: string | null; rotulo: string };
-
-// Quantas destas ENTRARAM no período. As colunas abertas mostram tudo que está
-// de pé, sempre — este número é a leitura de período sem esconder card.
-function entraramNoPeriodo(lista: { criadoEm: string }[], p: Periodo): number {
-  if (!p.de || !p.ate) return lista.length;
-  return lista.filter((c) => c.criadoEm >= p.de! && c.criadoEm < p.ate!).length;
-}
 
 // Só marca os extremos: chama = negociação quente, floco = fria. O meio
 // (a maioria dos cards) fica limpo, sem ícone.
@@ -89,13 +80,14 @@ export function FunilNegociacoes({
   clientes,
   colunas: colunasIniciais,
   maquinasProprias,
-  periodo,
+  periodoRotulo,
 }: {
   cards: CardData[];
   clientes: Cliente[];
   colunas: ColunaFunil[];
   maquinasProprias: MaquinaPropria[];
-  periodo: Periodo;
+  /** Só para a coluna vazia dizer de QUE período ela está vazia. */
+  periodoRotulo: string;
 }) {
   const [cards, setCards] = useState(cardsIniciais);
   const [colunas, setColunas] = useState(colunasIniciais);
@@ -288,7 +280,7 @@ export function FunilNegociacoes({
                   coluna={col}
                   cards={lista}
                   total={totalCol}
-                  periodo={periodo}
+                  periodoRotulo={periodoRotulo}
                   onEditar={setEditando}
                   onPapel={async (novoPapel, prob) => {
                     const r = await definirPapelColunaFunil(col.id, novoPapel, prob);
@@ -599,12 +591,12 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, periodo, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
+  coluna, cards, total, periodoRotulo, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
-  periodo: Periodo;
+  periodoRotulo: string;
   onEditar: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
@@ -622,7 +614,6 @@ function ColunaFunilView({
   const papel = papelDaColuna(coluna);
   const isPerdido = papel === "perdida";
   const probabilidade = probabilidadeDaColuna(coluna);
-  const noPeriodo = entraramNoPeriodo(cards, periodo);
 
   return (
     <div
@@ -662,25 +653,12 @@ function ColunaFunilView({
           )}
 
           <div className="flex items-center gap-1 shrink-0">
-            {/* Duas leituras no mesmo lugar: quantas há na coluna, e quantas
-                ENTRARAM no período escolhido. A segunda só aparece quando há
-                recorte e quando ela diz algo diferente da primeira — número
-                repetido lado a lado é ruído. O FATURADO já vem recortado pelo
-                período, então não repete a conta. */}
             <span className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-bold shadow-sm",
               isPerdido ? "bg-red-500/20 text-red-300" : "bg-white/90 text-slate-700"
             )}>
               {cards.length}
             </span>
-            {periodo.de && papel !== "faturado" && noPeriodo !== cards.length && (
-              <span
-                title={`${noPeriodo} entrou(aram) em ${periodo.rotulo}`}
-                className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300"
-              >
-                +{noPeriodo}
-              </span>
-            )}
 
             {/* Menu da coluna */}
             <div className="relative">
@@ -783,9 +761,12 @@ function ColunaFunilView({
           <NegCardView key={c.id} card={c} cor={corDaColuna(coluna)} onEditar={() => onEditar(c)} />
         ))}
         {cards.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-slate-600">
+          // Vazia por falta de movimento no período é diferente de vazia por
+          // não ter nada: sem dizer qual das duas, ele acha que sumiu card.
+          <div className="flex flex-col items-center justify-center gap-0.5 py-8 text-center text-xs text-slate-600">
             <ChevronRight size={20} className="mb-1 opacity-30" />
-            <span>Arraste um card aqui</span>
+            <span>Nada em {periodoRotulo}</span>
+            <span className="text-[10px] text-slate-700">arraste um card aqui</span>
           </div>
         )}
       </div>

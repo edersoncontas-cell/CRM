@@ -1,168 +1,131 @@
 // APROVEITE A VIAGEM.
 //
-// "clientes com mais de 60 dias sem visita, o sistema fará uma sugestão de
-//  visita de clientes desta cidade ou próximas"
+// "Vamos alterar, para ficar só os clientes da cidade, e não o filtro de 60
+//  dias, e retira essa informação de nunca visita desse card"
 //
-// O risco aqui é GASTAR A VIAGEM DO VENDEDOR. Sugestão errada não é só ruído:
-// ele pega a estrada por causa dela. Por isso cliente sem cidade no mapa fica
-// de fora em vez de entrar com distância chutada, e quem já está agendado nunca
-// é sugerido de novo.
+// A pergunta é direta: estou indo a esta cidade, quem eu tenho aqui? Sem corte
+// de tempo e sem cidade vizinha. O que ainda precisa ser garantido é que a
+// lista não repita quem já está na agenda — sugestão repetida faz o vendedor
+// parar de ler o quadro — e que cliente sem cidade nunca entre por engano.
 
 import { describe, it, expect } from "vitest";
-import {
-  sugerirVisitasNaViagem, rotuloSemVisita, rotuloDistancia,
-  DIAS_SEM_VISITA_PADRAO, type ClienteVisitavel, type VisitaMarcada,
-} from "@/lib/visitas-na-viagem";
+import { sugerirVisitasNaViagem, type ClienteVisitavel, type VisitaMarcada } from "@/lib/visitas-na-viagem";
 
-const AGORA = new Date("2026-09-21T12:00:00-03:00");
-const diasAtras = (n: number) => new Date(AGORA.getTime() - n * 86_400_000);
-const daquiA = (n: number) => new Date(AGORA.getTime() + n * 86_400_000);
-
-// Cachoeiro e Alegre ficam a ~40 km; Vitória fica a ~130 km de Cachoeiro.
-const CACHOEIRO = { lat: -20.848, lng: -41.113 };
-const ALEGRE = { lat: -20.764, lng: -41.532 };
-const VITORIA = { lat: -20.315, lng: -40.313 };
+const HOJE = new Date("2026-09-21T12:00:00-03:00");
+const daquiA = (n: number) => new Date(HOJE.getTime() + n * 86_400_000);
 
 const visita = (over: Partial<VisitaMarcada> = {}): VisitaMarcada => ({
-  clienteId: "alvo", data: daquiA(2), cidade: "Cachoeiro de Itapemirim", ponto: CACHOEIRO, ...over,
+  clienteId: "alvo", data: daquiA(3), cidade: "Dores do Rio Preto", ...over,
 });
 const cliente = (over: Partial<ClienteVisitavel> = {}): ClienteVisitavel => ({
-  id: "c1", nome: "Terraplanagem Um", cidade: "Cachoeiro de Itapemirim",
-  ponto: CACHOEIRO, ultimaVisita: diasAtras(90), ...over,
+  id: "c1", nome: "Afonsinho Pedra Menina", cidade: "Dores do Rio Preto", ...over,
 });
 
-describe("quem entra na sugestão", () => {
-  it("cliente da mesma cidade, esquecido há mais de 60 dias, entra", () => {
-    const r = sugerirVisitasNaViagem([visita()], [cliente()], AGORA);
+describe("quem entra na lista", () => {
+  it("todo cliente da cidade entra, sem olhar quando foi a última visita", () => {
+    const r = sugerirVisitasNaViagem([visita()], [cliente()]);
     expect(r).toHaveLength(1);
     expect(r[0].clientes.map((c) => c.id)).toEqual(["c1"]);
-    expect(r[0].clientes[0].km).toBe(0);
   });
 
-  it("visitado há pouco NÃO entra", () => {
-    const r = sugerirVisitasNaViagem([visita()], [cliente({ ultimaVisita: diasAtras(10) })], AGORA);
+  it("cliente de outra cidade NÃO entra, nem que seja vizinha", () => {
+    const r = sugerirVisitasNaViagem([visita()], [cliente({ id: "fora", cidade: "Guaçuí" })]);
     expect(r).toHaveLength(0);
   });
 
-  it("59 dias não entra, 60 entra — o corte é onde ele pediu", () => {
-    const a = sugerirVisitasNaViagem([visita()], [cliente({ ultimaVisita: diasAtras(59) })], AGORA);
-    const b = sugerirVisitasNaViagem([visita()], [cliente({ ultimaVisita: diasAtras(60) })], AGORA);
-    expect(a).toHaveLength(0);
-    expect(b).toHaveLength(1);
-    expect(DIAS_SEM_VISITA_PADRAO).toBe(60);
-  });
-
-  it("quem nunca foi visitado entra", () => {
-    const r = sugerirVisitasNaViagem([visita()], [cliente({ ultimaVisita: null })], AGORA);
-    expect(r[0].clientes[0].diasSemVisita).toBeNull();
-  });
-
-  it("quem já tem visita marcada na viagem NÃO é sugerido de novo", () => {
-    const r = sugerirVisitasNaViagem([visita({ clienteId: "c1" })], [cliente({ id: "c1" })], AGORA);
+  it("cliente sem cidade cadastrada fica de fora", () => {
+    const r = sugerirVisitasNaViagem([visita()], [cliente({ cidade: null })]);
     expect(r).toHaveLength(0);
   });
 
-  it("cliente sem cidade no mapa fica de fora — melhor uma sugestão a menos que uma errada", () => {
-    const r = sugerirVisitasNaViagem([visita()], [cliente({ ponto: null })], AGORA);
+  it("o cliente da própria visita não se auto-sugere", () => {
+    const r = sugerirVisitasNaViagem([visita({ clienteId: "c1" })], [cliente({ id: "c1" })]);
     expect(r).toHaveLength(0);
   });
 
-  it("viagem sem cidade no mapa não sugere nada — não há de onde medir", () => {
-    const r = sugerirVisitasNaViagem([visita({ ponto: null })], [cliente()], AGORA);
+  it("quem já tem visita marcada na janela não aparece de novo", () => {
+    const r = sugerirVisitasNaViagem(
+      [visita(), visita({ clienteId: "c2", data: daquiA(5) })],
+      [cliente({ id: "c2" }), cliente({ id: "c3", nome: "Outro" })]
+    );
+    for (const s of r) expect(s.clientes.map((c) => c.id)).not.toContain("c2");
+  });
+});
+
+describe("o nome da cidade é comparado sem tropeçar em acento ou caixa", () => {
+  it("acento não separa o mesmo município", () => {
+    const r = sugerirVisitasNaViagem([visita({ cidade: "Guaçuí" })], [cliente({ cidade: "GUACUI" })]);
+    expect(r).toHaveLength(1);
+  });
+
+  it("espaço sobrando não separa", () => {
+    const r = sugerirVisitasNaViagem([visita()], [cliente({ cidade: "  Dores do Rio Preto  " })]);
+    expect(r).toHaveLength(1);
+  });
+
+  it("viagem sem cidade não sugere nada", () => {
+    const r = sugerirVisitasNaViagem([visita({ cidade: "" })], [cliente()]);
     expect(r).toHaveLength(0);
   });
 });
 
-describe("cidade próxima, mas não o estado inteiro", () => {
-  it("cidade vizinha entra; cidade longe fica fora", () => {
+describe("a lista", () => {
+  it("vem em ordem alfabética, que é como se procura nome", () => {
     const r = sugerirVisitasNaViagem(
       [visita()],
       [
-        cliente({ id: "perto", cidade: "Alegre", ponto: ALEGRE }),
-        cliente({ id: "longe", cidade: "Vitória", ponto: VITORIA }),
-      ],
-      AGORA,
-      { raioKm: 50 }
+        cliente({ id: "c3", nome: "Edson Dores Do Rio Preto E145" }),
+        cliente({ id: "c1", nome: "Afonsinho Pedra Menina" }),
+        cliente({ id: "c2", nome: "Davi E145 Dores Do Rio Preto" }),
+      ]
     );
-    expect(r[0].clientes.map((c) => c.id)).toEqual(["perto"]);
+    expect(r[0].clientes.map((c) => c.nome)).toEqual([
+      "Afonsinho Pedra Menina",
+      "Davi E145 Dores Do Rio Preto",
+      "Edson Dores Do Rio Preto E145",
+    ]);
   });
 
-  it("o raio é configurável, e com raio curto só sobra a própria cidade", () => {
-    const r = sugerirVisitasNaViagem(
-      [visita()],
-      [cliente({ id: "mesma" }), cliente({ id: "vizinha", cidade: "Alegre", ponto: ALEGRE })],
-      AGORA,
-      { raioKm: 5 }
+  it("tem teto alto: uma cidade com 20 clientes mostra os 20", () => {
+    const muitos = Array.from({ length: 20 }, (_, i) =>
+      cliente({ id: `c${i}`, nome: `Cliente ${String(i).padStart(2, "0")}` })
     );
-    expect(r[0].clientes.map((c) => c.id)).toEqual(["mesma"]);
+    const r = sugerirVisitasNaViagem([visita()], muitos);
+    expect(r[0].clientes).toHaveLength(20);
+  });
+
+  it("mas não vira parede de nome sem fim", () => {
+    const muitos = Array.from({ length: 200 }, (_, i) => cliente({ id: `c${i}`, nome: `Cliente ${i}` }));
+    const r = sugerirVisitasNaViagem([visita()], muitos);
+    expect(r[0].clientes.length).toBeLessThanOrEqual(30);
   });
 });
 
-describe("a ordem da lista", () => {
-  it("mesma cidade antes de cidade vizinha", () => {
-    const r = sugerirVisitasNaViagem(
-      [visita()],
-      [cliente({ id: "vizinha", cidade: "Alegre", ponto: ALEGRE }), cliente({ id: "mesma" })],
-      AGORA,
-      { raioKm: 50 }
-    );
-    expect(r[0].clientes.map((c) => c.id)).toEqual(["mesma", "vizinha"]);
-  });
-
-  it("empatada a distância, quem nunca foi visitado vem antes do esquecido há 300 dias", () => {
-    const r = sugerirVisitasNaViagem(
-      [visita()],
-      [cliente({ id: "velho", ultimaVisita: diasAtras(300) }), cliente({ id: "nunca", ultimaVisita: null })],
-      AGORA
-    );
-    expect(r[0].clientes.map((c) => c.id)).toEqual(["nunca", "velho"]);
-  });
-
-  it("entre dois visitados, o mais esquecido vem primeiro", () => {
-    const r = sugerirVisitasNaViagem(
-      [visita()],
-      [cliente({ id: "recente", ultimaVisita: diasAtras(70) }), cliente({ id: "antigo", ultimaVisita: diasAtras(300) })],
-      AGORA
-    );
-    expect(r[0].clientes.map((c) => c.id)).toEqual(["antigo", "recente"]);
-  });
-
-  it("a lista tem teto, para o quadro não virar parede de nome", () => {
-    const muitos = Array.from({ length: 20 }, (_, i) => cliente({ id: `c${i}`, nome: `Cliente ${i}` }));
-    const r = sugerirVisitasNaViagem([visita()], muitos, AGORA, { porViagem: 5 });
-    expect(r[0].clientes).toHaveLength(5);
-  });
-});
-
-describe("duas visitas na mesma cidade no mesmo dia", () => {
-  it("sugerem uma lista só, não duas iguais", () => {
+describe("duas visitas no mesmo dia", () => {
+  it("na mesma cidade viram uma lista só", () => {
     const r = sugerirVisitasNaViagem(
       [visita({ clienteId: "a" }), visita({ clienteId: "b" })],
-      [cliente()],
-      AGORA
+      [cliente()]
     );
     expect(r).toHaveLength(1);
   });
 
-  it("cidades diferentes no mesmo dia continuam sendo duas viagens", () => {
+  it("em cidades diferentes continuam sendo duas viagens", () => {
     const r = sugerirVisitasNaViagem(
-      [visita({ clienteId: "a" }), visita({ clienteId: "b", cidade: "Alegre", ponto: ALEGRE })],
-      [cliente(), cliente({ id: "c2", cidade: "Alegre", ponto: ALEGRE })],
-      AGORA,
-      { raioKm: 5 }
+      [visita({ clienteId: "a" }), visita({ clienteId: "b", cidade: "Guaçuí" })],
+      [cliente(), cliente({ id: "c2", cidade: "Guaçuí", nome: "Outro" })]
     );
     expect(r).toHaveLength(2);
   });
-});
 
-describe("como o vendedor lê", () => {
-  it("dias sem visita", () => {
-    expect(rotuloSemVisita(74)).toBe("há 74 dias");
-    expect(rotuloSemVisita(null)).toBe("nunca visitado");
-  });
-
-  it("distância", () => {
-    expect(rotuloDistancia(0)).toBe("na cidade");
-    expect(rotuloDistancia(12)).toBe("a 12 km");
+  it("as viagens saem na ordem do calendário", () => {
+    const r = sugerirVisitasNaViagem(
+      [
+        visita({ clienteId: "b", cidade: "Guaçuí", data: daquiA(9) }),
+        visita({ clienteId: "a", data: daquiA(2) }),
+      ],
+      [cliente(), cliente({ id: "c2", cidade: "Guaçuí", nome: "Outro" })]
+    );
+    expect(r.map((s) => s.cidade)).toEqual(["Dores do Rio Preto", "Guaçuí"]);
   });
 });

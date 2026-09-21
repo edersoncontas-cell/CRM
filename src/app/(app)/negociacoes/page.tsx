@@ -23,26 +23,29 @@ export default async function NegociacoesPage({
     ? "todos"
     : (() => { const a = Number(searchParams.ano); return anoPlausivel(a, anoAtual) ? a : anoAtual; })();
 
-  // O PERÍODO (ano e mês) recorta o HISTÓRICO — o que já aconteceu —, sempre
-  // pela data de faturamento, com atualizadoEm só para registro antigo sem
-  // faturadoEm preenchido.
+  // O PERÍODO (ano e mês) recorta TODAS as colunas.
   //
-  // As colunas abertas NÃO são recortadas, de propósito: uma negociação que
-  // nasceu em julho e continua de pé é trabalho de hoje, e sumir com ela ao
-  // escolher "setembro" faria o vendedor perder negócio de vista dentro do
-  // próprio funil. Período serve para olhar o que fechou, não para esconder o
-  // que está aberto. Quem quer o recorte de entrada tem o contador de
-  // "entraram no período" no cabeçalho de cada coluna aberta.
+  // "o filtro quando seleciono é em cima de todas as colunas, se não tem dado
+  //  de negociação que entrou em uma das colunas que fique zerado"
+  //
+  // Cada coluna é recortada pela data que significa "entrou aqui":
+  //   · FATURADO   → faturadoEm, que é exatamente quando entrou nesta coluna;
+  //   · as abertas → criadoEm, quando a negociação entrou no funil.
+  //
+  // O CRM não guarda quando a negociação entrou em CADA coluna — só quando
+  // nasceu e quando foi mexida pela última vez. criadoEm é o mais honesto que
+  // existe hoje: atualizadoEm mudaria a cada edição de valor ou de observação,
+  // e a negociação pularia de mês sem ter saído do lugar.
   const periodo: Periodo = { ano: anoSelecionado, mes: mesDaUrl(searchParams.mes) };
   const intervalo = intervaloDoPeriodo(periodo);
-  const filtroPeriodo = (campo: "faturadoEm" | "atualizadoEm") =>
+  const filtroPeriodo = (campo: "faturadoEm" | "atualizadoEm" | "criadoEm") =>
     intervalo ? { [campo]: { gte: intervalo.gte, lt: intervalo.lt } } : {};
 
   const [negociacoes, anosComDados, clientes, colunasFunil, maquinasProprias] = await Promise.all([
     db.negociacao.findMany({
       where: {
         OR: [
-          { status: "aberta" },
+          { status: "aberta", ...filtroPeriodo("criadoEm") },
           { status: "ganha", faturadoEm: { not: null }, ...filtroPeriodo("faturadoEm") },
           { status: "ganha", faturadoEm: null, ...filtroPeriodo("atualizadoEm") },
           { status: "perdida", ...filtroPeriodo("atualizadoEm") },
@@ -121,9 +124,9 @@ export default async function NegociacoesPage({
         acao={<SeletorPeriodo basePath="/negociacoes" periodo={periodo} anosDisponiveis={anosDisponiveis} />}
       />
       <p className="-mt-4 mb-4 text-xs text-slate-400">
-        O FATURADO mostra {rotuloPeriodo(periodo)}. Oportunidade, Proposta e Negociação mostram sempre tudo que está de pé — o número entre parênteses no topo de cada uma é quanto entrou no período. As perdidas têm página própria.
+        Tudo nesta tela é de {rotuloPeriodo(periodo)}: as colunas abertas mostram o que <b>entrou no funil</b> no período, o FATURADO o que foi <b>faturado</b> nele. Coluna sem movimento no período fica zerada. As perdidas têm página própria.
       </p>
-      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} periodo={{ de: intervalo?.gte.toISOString() ?? null, ate: intervalo?.lt.toISOString() ?? null, rotulo: rotuloPeriodo(periodo) }} />
+      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} periodoRotulo={rotuloPeriodo(periodo)} />
     </div>
   );
 }

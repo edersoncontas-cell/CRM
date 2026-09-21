@@ -11,10 +11,7 @@ import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
 import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
 import type { VisitaMapa, AgendaProxima } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
-import {
-  sugerirVisitasNaViagem, rotuloSemVisita, rotuloDistancia,
-  DIAS_SEM_VISITA_PADRAO, RAIO_KM_PADRAO,
-} from "@/lib/visitas-na-viagem";
+import { sugerirVisitasNaViagem } from "@/lib/visitas-na-viagem";
 import Link from "next/link";
 
 // As três colunas do rodapé (realizadas, não realizadas, reagendadas) juntam
@@ -61,7 +58,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
   const mesAnterior = mesCal === 1 ? `${anoCal - 1}-12` : `${anoCal}-${String(mesCal - 1).padStart(2, "0")}`;
   const mesProximo = mesCal === 12 ? `${anoCal + 1}-01` : `${anoCal}-${String(mesCal + 1).padStart(2, "0")}`;
 
-  const [visitas, clientesRaw, municipiosRaw, ultimasVisitas] = await Promise.all([
+  const [visitas, clientesRaw, municipiosRaw] = await Promise.all([
     db.visita.findMany({
       include: { cliente: { include: { municipio: true } } },
       orderBy: { data: "asc" },
@@ -73,38 +70,28 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       select: { id: true, nome: true, _count: { select: { clientes: { where: { origem: { not: "prospect_ia" } } } } } },
       orderBy: { nome: "asc" },
     }),
-    // Última visita REALIZADA de cada cliente. Consulta própria (e não a lista
-    // de visitas já carregada) porque aquela tem teto de 600 registros: com o
-    // teto, um cliente visitado há muito tempo pareceria nunca visitado, e a
-    // sugestão mandaria o vendedor na estrada por engano.
-    db.visita.groupBy({ by: ["clienteId"], where: { status: "realizada" }, _max: { data: true } }),
   ]);
   const cidadesComClientes = municipiosRaw.filter((m) => m._count.clientes > 0).map((m) => ({ id: m.id, nome: m.nome, total: m._count.clientes }));
   const clientes = clientesRaw.map((c) => ({ id: c.id, nome: c.nome, cidade: c.municipio?.nome ?? null }));
 
   // ── APROVEITE A VIAGEM ────────────────────────────────────────────────
-  // Para cada visita já marcada, quem mais está naquela cidade (ou perto)
-  // devendo visita. O cálculo mora em lib/visitas-na-viagem.ts, que é puro.
-  const ultimaPorCliente = new Map(ultimasVisitas.map((u) => [u.clienteId, u._max.data ?? null]));
+  // Para cada visita marcada nos próximos 30 dias, os clientes daquela cidade.
+  // A regra mora em lib/visitas-na-viagem.ts, que é puro.
   const fimJanelaViagem = new Date(hojeInicio.getTime() + 30 * 86_400_000);
   const sugestoesViagem = sugerirVisitasNaViagem(
     visitas
       .filter((v) => v.status === "agendada" && v.data >= hojeInicio && v.data <= fimJanelaViagem)
-      .map((v) => {
-        const cidade = v.cidade?.trim() || v.cliente.municipio?.nome || "";
-        return { clienteId: v.clienteId, data: v.data, cidade, ponto: cidade ? coordenadasMunicipioES(cidade) : null };
-      })
+      .map((v) => ({
+        clienteId: v.clienteId,
+        data: v.data,
+        // A cidade escrita na visita manda; a do cadastro do cliente é a
+        // reserva, para visita antiga que ficou sem cidade preenchida.
+        cidade: v.cidade?.trim() || v.cliente.municipio?.nome || "",
+      }))
       .filter((v) => v.cidade),
     clientesRaw
       .filter((c) => c.status !== "nao_cliente")
-      .map((c) => ({
-        id: c.id,
-        nome: c.nome,
-        cidade: c.municipio?.nome ?? null,
-        ponto: c.municipio?.nome ? coordenadasMunicipioES(c.municipio.nome) : null,
-        ultimaVisita: ultimaPorCliente.get(c.id) ?? null,
-      })),
-    hoje
+      .map((c) => ({ id: c.id, nome: c.nome, cidade: c.municipio?.nome ?? null }))
   );
   const cidades = NOMES_MUNICIPIOS_ES;
 
@@ -267,15 +254,16 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
             Aproveite a viagem
           </h2>
           <p className="mb-2 text-xs text-slate-400">
-            Quem está na cidade (ou até {RAIO_KM_PADRAO} km) devendo visita há mais de {DIAS_SEM_VISITA_PADRAO} dias.
-            Toque para marcar junto.
+            Os clientes que você tem em cada cidade onde já vai. Toque para marcar junto.
           </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {sugestoesViagem.map((sug) => (
               <Card key={`${sug.data.toISOString()}-${sug.cidade}`} className="flex flex-col">
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                   <span className="text-sm font-bold text-slate-800">{sug.cidade}</span>
-                  <span className="text-xs font-semibold text-slate-500">{formatDate(sug.data)}</span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    {sug.clientes.length} cliente(s) · {formatDate(sug.data)}
+                  </span>
                 </div>
                 {/* Rolagem interna de altura fixa: no celular, lista comprida
                     dentro de card empurra a página até o rodapé sumir. */}
@@ -287,16 +275,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
                           href={`/visitas?cliente=${c.id}&novo=1`}
                           className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 transition-colors hover:border-agro-400 hover:bg-slate-50"
                         >
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold text-slate-800">{c.nome}</div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
-                              <span className="font-medium text-slate-600">{rotuloDistancia(c.km)}</span>
-                              {c.cidade && c.km > 0 && <span>{c.cidade}</span>}
-                              <span className={c.diasSemVisita === null ? "font-semibold text-red-600" : ""}>
-                                {rotuloSemVisita(c.diasSemVisita)}
-                              </span>
-                            </div>
-                          </div>
+                          <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{c.nome}</div>
                           <MapPin size={14} className="shrink-0 text-slate-300" />
                         </Link>
                       </li>
