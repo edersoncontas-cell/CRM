@@ -3,7 +3,8 @@ import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { normalizarEstagio } from "@/lib/pipeline";
 import { FunilNegociacoes } from "@/components/FunilNegociacoes";
 import { PageHeader } from "@/components/ui";
-import { SeletorAno } from "@/components/SeletorAno";
+import { SeletorPeriodo } from "@/components/SeletorPeriodo";
+import { intervaloDoPeriodo, mesDaUrl, rotuloPeriodo, type Periodo } from "@/lib/periodo-funil";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function NegociacoesPage({
   searchParams,
 }: {
-  searchParams: { ano?: string };
+  searchParams: { ano?: string; mes?: string };
 }) {
   await garantirManutencaoSeNecessario();
 
@@ -22,23 +23,29 @@ export default async function NegociacoesPage({
     ? "todos"
     : (() => { const a = Number(searchParams.ano); return anoPlausivel(a, anoAtual) ? a : anoAtual; })();
 
-  // Ganhas/perdidas (histórico) respeitam o ano selecionado — sempre pela
-  // data de faturamento (faturadoEm), com atualizadoEm como base só para
-  // registros antigos sem faturadoEm preenchido. Em aberto nunca filtra por
-  // ano: é o pipeline vivo, não histórico.
-  const filtroAno = (campo: "faturadoEm" | "atualizadoEm") =>
-    anoSelecionado === "todos"
-      ? {}
-      : { [campo]: { gte: new Date(anoSelecionado, 0, 1), lt: new Date(anoSelecionado + 1, 0, 1) } };
+  // O PERÍODO (ano e mês) recorta o HISTÓRICO — o que já aconteceu —, sempre
+  // pela data de faturamento, com atualizadoEm só para registro antigo sem
+  // faturadoEm preenchido.
+  //
+  // As colunas abertas NÃO são recortadas, de propósito: uma negociação que
+  // nasceu em julho e continua de pé é trabalho de hoje, e sumir com ela ao
+  // escolher "setembro" faria o vendedor perder negócio de vista dentro do
+  // próprio funil. Período serve para olhar o que fechou, não para esconder o
+  // que está aberto. Quem quer o recorte de entrada tem o contador de
+  // "entraram no período" no cabeçalho de cada coluna aberta.
+  const periodo: Periodo = { ano: anoSelecionado, mes: mesDaUrl(searchParams.mes) };
+  const intervalo = intervaloDoPeriodo(periodo);
+  const filtroPeriodo = (campo: "faturadoEm" | "atualizadoEm") =>
+    intervalo ? { [campo]: { gte: intervalo.gte, lt: intervalo.lt } } : {};
 
   const [negociacoes, anosComDados, clientes, colunasFunil, maquinasProprias] = await Promise.all([
     db.negociacao.findMany({
       where: {
         OR: [
           { status: "aberta" },
-          { status: "ganha", faturadoEm: { not: null }, ...filtroAno("faturadoEm") },
-          { status: "ganha", faturadoEm: null, ...filtroAno("atualizadoEm") },
-          { status: "perdida", ...filtroAno("atualizadoEm") },
+          { status: "ganha", faturadoEm: { not: null }, ...filtroPeriodo("faturadoEm") },
+          { status: "ganha", faturadoEm: null, ...filtroPeriodo("atualizadoEm") },
+          { status: "perdida", ...filtroPeriodo("atualizadoEm") },
         ],
       },
       include: { cliente: { include: { municipio: true } } },
@@ -61,6 +68,9 @@ export default async function NegociacoesPage({
     id: n.id,
     estagio: normalizarEstagio(n.estagio),
     status: n.status,
+    // Para o cabeçalho da coluna dizer quantas ENTRARAM no período escolhido,
+    // sem precisar esconder as que estão abertas de antes.
+    criadoEm: n.criadoEm.toISOString(),
     clienteId: n.clienteId,
     cliente: n.cliente.nome,
     municipio: n.cliente.municipio?.nome ?? null,
@@ -108,12 +118,12 @@ export default async function NegociacoesPage({
       <PageHeader
         titulo="Negociações"
         subtitulo="Funil de vendas — arraste os cards entre os estágios e gerencie suas oportunidades"
-        acao={<SeletorAno basePath="/negociacoes" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
+        acao={<SeletorPeriodo basePath="/negociacoes" periodo={periodo} anosDisponiveis={anosDisponiveis} />}
       />
       <p className="-mt-4 mb-4 text-xs text-slate-400">
-        O FATURADO mostra {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Oportunidade, Proposta e Negociação mostram sempre tudo que está de pé, sem filtro de ano. As perdidas têm página própria.
+        O FATURADO mostra {rotuloPeriodo(periodo)}. Oportunidade, Proposta e Negociação mostram sempre tudo que está de pé — o número entre parênteses no topo de cada uma é quanto entrou no período. As perdidas têm página própria.
       </p>
-      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} />
+      <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} periodo={{ de: intervalo?.gte.toISOString() ?? null, ate: intervalo?.lt.toISOString() ?? null, rotulo: rotuloPeriodo(periodo) }} />
     </div>
   );
 }

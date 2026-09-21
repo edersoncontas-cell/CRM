@@ -29,6 +29,7 @@ interface CardData {
   id: string;
   estagio: string;
   status: string;
+  criadoEm: string;
   clienteId: string;
   cliente: string;
   municipio: string | null;
@@ -64,6 +65,15 @@ interface CardData {
 type Cliente = { id: string; nome: string };
 type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean; papel: string | null; probabilidade: number };
 type MaquinaPropria = { marca: string; modelo: string };
+// Recorte escolhido no cabeçalho. de/ate em ISO (null = todo o histórico).
+type Periodo = { de: string | null; ate: string | null; rotulo: string };
+
+// Quantas destas ENTRARAM no período. As colunas abertas mostram tudo que está
+// de pé, sempre — este número é a leitura de período sem esconder card.
+function entraramNoPeriodo(lista: { criadoEm: string }[], p: Periodo): number {
+  if (!p.de || !p.ate) return lista.length;
+  return lista.filter((c) => c.criadoEm >= p.de! && c.criadoEm < p.ate!).length;
+}
 
 // Só marca os extremos: chama = negociação quente, floco = fria. O meio
 // (a maioria dos cards) fica limpo, sem ícone.
@@ -79,11 +89,13 @@ export function FunilNegociacoes({
   clientes,
   colunas: colunasIniciais,
   maquinasProprias,
+  periodo,
 }: {
   cards: CardData[];
   clientes: Cliente[];
   colunas: ColunaFunil[];
   maquinasProprias: MaquinaPropria[];
+  periodo: Periodo;
 }) {
   const [cards, setCards] = useState(cardsIniciais);
   const [colunas, setColunas] = useState(colunasIniciais);
@@ -276,6 +288,7 @@ export function FunilNegociacoes({
                   coluna={col}
                   cards={lista}
                   total={totalCol}
+                  periodo={periodo}
                   onEditar={setEditando}
                   onPapel={async (novoPapel, prob) => {
                     const r = await definirPapelColunaFunil(col.id, novoPapel, prob);
@@ -586,11 +599,12 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
+  coluna, cards, total, periodo, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
+  periodo: Periodo;
   onEditar: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
@@ -608,6 +622,7 @@ function ColunaFunilView({
   const papel = papelDaColuna(coluna);
   const isPerdido = papel === "perdida";
   const probabilidade = probabilidadeDaColuna(coluna);
+  const noPeriodo = entraramNoPeriodo(cards, periodo);
 
   return (
     <div
@@ -647,12 +662,25 @@ function ColunaFunilView({
           )}
 
           <div className="flex items-center gap-1 shrink-0">
+            {/* Duas leituras no mesmo lugar: quantas há na coluna, e quantas
+                ENTRARAM no período escolhido. A segunda só aparece quando há
+                recorte e quando ela diz algo diferente da primeira — número
+                repetido lado a lado é ruído. O FATURADO já vem recortado pelo
+                período, então não repete a conta. */}
             <span className={cn(
               "rounded-full px-2.5 py-0.5 text-xs font-bold shadow-sm",
               isPerdido ? "bg-red-500/20 text-red-300" : "bg-white/90 text-slate-700"
             )}>
               {cards.length}
             </span>
+            {periodo.de && papel !== "faturado" && noPeriodo !== cards.length && (
+              <span
+                title={`${noPeriodo} entrou(aram) em ${periodo.rotulo}`}
+                className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300"
+              >
+                +{noPeriodo}
+              </span>
+            )}
 
             {/* Menu da coluna */}
             <div className="relative">
