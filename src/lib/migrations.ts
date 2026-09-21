@@ -649,6 +649,11 @@ export async function aplicarMigracoes(): Promise<void> {
     `);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "EnvioProgramado_status_quando_idx" ON "EnvioProgramado" ("status", "quando")`);
 
+    // v41: cursor do envio em ondas. A lista de 2 mil não sai numa rodada só
+    // de 45s; sem esta coluna o despachante fechava o envio como "enviado" no
+    // meio do caminho e o resto da lista nunca recebia nada.
+    await db.$executeRawUnsafe(`ALTER TABLE "EnvioProgramado" ADD COLUMN IF NOT EXISTS "enviadosAte" INTEGER NOT NULL DEFAULT 0`);
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 

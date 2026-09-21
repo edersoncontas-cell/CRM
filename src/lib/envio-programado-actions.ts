@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { checarAgendamento, quandoPorExtenso } from "@/lib/envio-programado";
+import { checarAgendamento, quandoPorExtenso, MAX_CLIENTES_POR_ENVIO } from "@/lib/envio-programado";
 import { registrarAudit } from "@/lib/audit";
 
 // Agendar, listar e cancelar a mensagem em massa marcada para sair mais tarde.
-// A regra de data/hora (fuso de Brasília) mora em lib/envio-programado.ts, que
-// é pura e testada. O disparo é o cron /api/cron/mensagens-programadas.
-
-const MAX_CLIENTES = 500;
+// A regra de data/hora (fuso de Brasília) e o teto da lista moram em
+// lib/envio-programado.ts, que é puro e testado ("use server" não pode exportar
+// constante). O disparo é o cron /api/cron/mensagens-programadas, que manda a
+// lista grande em ondas até terminar.
 
 export type EnvioProgramadoLista = {
   id: string;
@@ -33,7 +33,7 @@ export async function programarEnvioAction(
 ): Promise<{ ok: boolean; erro?: string; quandoTexto?: string }> {
   const ids = Array.from(new Set(clienteIds)).filter(Boolean);
   if (!ids.length) return { ok: false, erro: "Nenhum cliente selecionado." };
-  if (ids.length > MAX_CLIENTES) return { ok: false, erro: `No máximo ${MAX_CLIENTES} clientes por envio.` };
+  if (ids.length > MAX_CLIENTES_POR_ENVIO) return { ok: false, erro: `No máximo ${MAX_CLIENTES_POR_ENVIO} clientes por envio.` };
   const corpo = (texto ?? "").trim();
   if (!corpo && !midiaId) return { ok: false, erro: "Escreva a mensagem ou anexe um arquivo." };
 

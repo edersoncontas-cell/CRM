@@ -78,12 +78,16 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v40: tabela EnvioProgramado — mensagem em massa marcada para sair mais
 // tarde, com data e hora de Brasília.
 //
+// v41: coluna enviadosAte no EnvioProgramado — o cursor que deixa o envio
+// grande sair em ondas. Sem ela, a lista que não cabe numa rodada era fechada
+// como "enviado" pela metade, e o resto dos clientes não recebia nada.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v40";
+export const CHAVE_MANUTENCAO = "manutencao.v41";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

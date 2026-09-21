@@ -423,6 +423,11 @@ model EnvioProgramado {
   processadoEm DateTime?
   enviados     Int       @default(0)
   falhas       Int       @default(0)
+  // Até onde a última rodada chegou na lista (índice em clienteIds). Lista
+  // grande não cabe nos 45s de uma rodada: o que sobra volta para "pendente"
+  // e a rodada seguinte continua daqui. Sem este cursor, o envio era fechado
+  // como "enviado" no meio e o resto nunca saía.
+  enviadosAte  Int       @default(0)
   erro         String?
   @@index([status, quando])
 }

@@ -10,7 +10,7 @@ import {
   programarEnvioAction, listarEnviosProgramadosAction, cancelarEnvioProgramadoAction,
   type EnvioProgramadoLista,
 } from "@/lib/envio-programado-actions";
-import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia } from "@/lib/envio-programado";
+import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia, MAX_CLIENTES_POR_ENVIO, cabemPorRodada, ondasEstimadas } from "@/lib/envio-programado";
 import {
   listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
   type ClienteAlvo,
@@ -519,6 +519,19 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
                 A mensagem sai <b>a partir</b> do horário escolhido — o robô confere de 15 em 15 minutos, então pode
                 sair alguns minutos depois. Nunca antes.
               </p>
+              {/* Lista grande não cabe numa rodada só: ele precisa saber que
+                  vai levar horas ANTES de programar, e não descobrir vendo o
+                  contador subir devagar. */}
+              {comTelefone.length > cabemPorRodada() && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  São {comTelefone.length} — o robô manda aos poucos, para o WhatsApp não bloquear o seu número.
+                  Leva umas <b>{ondasEstimadas(comTelefone.length)} rodadas</b> (cerca de {ondasEstimadas(comTelefone.length) * 15} min) para
+                  terminar, e a lista aqui embaixo mostra quantos já saíram.
+                </p>
+              )}
+              {comTelefone.length > MAX_CLIENTES_POR_ENVIO && (
+                <p className="mt-1 text-xs text-red-600">No máximo {MAX_CLIENTES_POR_ENVIO} clientes por envio.</p>
+              )}
               {erroAgenda && <p className="mt-1 text-xs text-red-600">{erroAgenda}</p>}
             </div>
           )}
@@ -556,9 +569,17 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
                       p.status === "pendente" ? "bg-amber-100 text-amber-700" :
                       p.status === "enviado" ? "bg-green-100 text-green-700" :
                       p.status === "cancelado" ? "bg-slate-200 text-slate-600" : "bg-red-100 text-red-700"}`}>
-                      {p.status === "pendente" ? "aguardando" : p.status}
+                      {p.status === "pendente" ? (p.enviados > 0 ? "saindo" : "aguardando") : p.status}
                     </span>
-                    {p.status === "enviado" && <span className="text-slate-500">{p.enviados} enviada(s){p.falhas ? ` · ${p.falhas} falhou(aram)` : ""}</span>}
+                    {/* Lista grande sai em ondas de 15 em 15 min: entre uma e
+                        outra o envio volta a "pendente". Sem mostrar o quanto
+                        já saiu, ele leria "aguardando" achando que nada foi. */}
+                    {p.enviados > 0 && (
+                      <span className="text-slate-500">
+                        {p.status === "enviado" ? `${p.enviados} enviada(s)` : `${p.enviados} de ${p.total} enviada(s)`}
+                        {p.falhas ? ` · ${p.falhas} falhou(aram)` : ""}
+                      </span>
+                    )}
                     {p.status === "pendente" && (
                       <button type="button" onClick={() => cancelarProgramado(p.id)} className="ml-auto font-semibold text-red-600 hover:underline">
                         cancelar

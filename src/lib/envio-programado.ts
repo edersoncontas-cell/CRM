@@ -75,3 +75,80 @@ export function quandoPorExtenso(d: Date): string {
 export function estaNaHora(quando: Date, agora: Date = new Date()): boolean {
   return quando.getTime() <= agora.getTime();
 }
+
+// ── O ENVIO GRANDE SAI EM ONDAS ───────────────────────────────────────────
+//
+// "aumente para 2 mil"
+//
+// O teto de clientes por envio e a regra de como uma rodada do despachante
+// fecha. Moram aqui, e não no despacho, porque são a parte que dá para provar
+// sem banco — e porque o "use server" das actions não pode exportar constante.
+
+/**
+ * Teto de clientes por envio programado.
+ *
+ * Não é o quanto sai de uma vez: é o tamanho da lista que ele pode marcar. O
+ * despachante manda em ondas de 15 em 15 minutos até terminar (ver
+ * fecharRodada), então 2 mil é uma lista de 2 mil, não um disparo de 2 mil.
+ */
+export const MAX_CLIENTES_POR_ENVIO = 2000;
+
+/** Quantos vão por vez, e a pausa entre os lotes — o WhatsApp não gosta de rajada. */
+export const TAMANHO_LOTE = 5;
+export const PAUSA_ENTRE_LOTES_MS = 700;
+
+/**
+ * Prazo de UMA rodada. A função da Vercel morre em 60s; parar em 45 deixa
+ * folga para gravar onde a rodada parou — que é o que permite continuar.
+ */
+export const PRAZO_RODADA_MS = 45_000;
+
+/**
+ * Teto otimista de quantos clientes cabem numa rodada: só a pausa entre os
+ * lotes, sem contar o tempo de cada mensagem sair. O número real é bem menor.
+ *
+ * Existe para a tela poder dizer, por alto, em quantas ondas a lista sai —
+ * e para o teste travar a conta que antes ninguém tinha feito: com 500 na
+ * lista, o envio já estourava o prazo e o resto NUNCA saía.
+ */
+export function cabemPorRodada(prazoMs: number = PRAZO_RODADA_MS): number {
+  return Math.max(TAMANHO_LOTE, Math.floor(prazoMs / PAUSA_ENTRE_LOTES_MS) * TAMANHO_LOTE);
+}
+
+/** Por alto, quantas rodadas de 15 minutos uma lista deste tamanho vai levar. */
+export function ondasEstimadas(total: number): number {
+  return Math.max(1, Math.ceil(total / cabemPorRodada()));
+}
+
+export type FechamentoRodada = { status: "enviado" | "pendente" | "erro"; concluido: boolean; erro: string | null };
+
+/**
+ * Como a rodada fecha: terminou, continua na próxima, ou morreu.
+ *
+ * Esta função é a correção de um buraco sério. Antes, quando o prazo acabava
+ * no meio da lista, o envio era fechado como "enviado" com o resto nunca
+ * mandado — a tela dizia que a mensagem tinha saído para os 1298, e mais de
+ * mil pessoas não recebiam nada. Agora, lista pela metade volta para
+ * "pendente" com o cursor gravado, e a rodada seguinte continua de onde parou.
+ *
+ * "erro" fica reservado para o envio que não conseguiu mandar NADA, em
+ * nenhuma rodada: aí não é uma onda que faltou, é um envio que não anda.
+ */
+export function fecharRodada(
+  cursor: number,
+  total: number,
+  enviados: number,
+  erroFatal: string | null,
+): FechamentoRodada {
+  if (cursor >= total) {
+    return { status: "enviado", concluido: true, erro: erroFatal };
+  }
+  if (erroFatal && enviados === 0) {
+    return { status: "erro", concluido: true, erro: erroFatal };
+  }
+  return {
+    status: "pendente",
+    concluido: false,
+    erro: erroFatal ?? `Saiu para ${cursor} de ${total}. O resto sai na próxima rodada.`,
+  };
+}
