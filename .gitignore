@@ -32,3 +32,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# claude code — preferências e permissões locais desta máquina.
+# Nunca versionar: guarda liberação de comando (inclusive o push de produção),
+# que é decisão de quem está na máquina, não regra do projeto.
+.claude/settings.local.json
