@@ -57,12 +57,51 @@ export function normalizarEstagio(estagio: string): string {
 export type PapelColuna = "em_negociacao" | "banco" | "confirmada" | "faturado" | "perdida";
 
 export const PAPEIS_COLUNA: { id: PapelColuna; label: string; descricao: string; probabilidadePadrao: number }[] = [
-  { id: "em_negociacao", label: "Em negociação", descricao: "Negociação aberta, em andamento.", probabilidadePadrao: 40 },
-  { id: "banco", label: "Em banco", descricao: "Proposta em análise de crédito.", probabilidadePadrao: 70 },
-  { id: "confirmada", label: "Venda confirmada", descricao: "Cliente fechou; aguarda faturamento.", probabilidadePadrao: 90 },
+  { id: "em_negociacao", label: "Oportunidade", descricao: "Cliente falou com você, ou você falou com ele, e apareceu chance de negócio. Nasce da conversa do WhatsApp ou na mão.", probabilidadePadrao: 20 },
+  { id: "banco", label: "Proposta", descricao: "Já tem proposta: para o cliente tentar crédito no banco dele, ou no nosso banco de fábrica (Banco CNH / BCNH).", probabilidadePadrao: 50 },
+  { id: "confirmada", label: "Negociação", descricao: "Crédito aprovado, ou cliente na iminência de fechar. É onde o termômetro está muito quente.", probabilidadePadrao: 80 },
   { id: "faturado", label: "Faturado", descricao: "Máquina faturada: entra no Financeiro, no Dashboard e no pós-venda.", probabilidadePadrao: 100 },
-  { id: "perdida", label: "Venda perdida", descricao: "Negociação encerrada sem venda. Pede o motivo.", probabilidadePadrao: 0 },
+  { id: "perdida", label: "Venda perdida", descricao: "Negociação encerrada sem venda. Pede o motivo, e vive fora do funil, na página de Vendas Perdidas.", probabilidadePadrao: 0 },
 ];
+
+// ── O FUNIL CANÔNICO ────────────────────────────────────────────────────────
+//
+// Quatro colunas no quadro, nesta ordem, e a perdida fora dele.
+//
+// O TÍTULO é o que o vendedor lê e o que fica gravado em Negociacao.estagio;
+// o PAPEL é o que o código consulta. Por isso renomear uma coluna exige migrar
+// os estágios junto (ver migrations.ts v42) — e por isso nada aqui é lido por
+// nome em outro lugar do sistema.
+export const FUNIL_CANONICO: { papel: PapelColuna; titulo: string; ordem: number; probabilidade: number; noQuadro: boolean }[] = [
+  { papel: "em_negociacao", titulo: "OPORTUNIDADE", ordem: 1, probabilidade: 20,  noQuadro: true },
+  { papel: "banco",         titulo: "PROPOSTA",     ordem: 2, probabilidade: 50,  noQuadro: true },
+  { papel: "confirmada",    titulo: "NEGOCIAÇÃO",   ordem: 3, probabilidade: 80,  noQuadro: true },
+  { papel: "faturado",      titulo: "FATURADO",     ordem: 4, probabilidade: 100, noQuadro: true },
+  // Sai do quadro: tem página própria (/vendas-perdidas). A coluna continua
+  // existindo porque é o destino de quem é marcado como perdido.
+  { papel: "perdida",       titulo: "VENDA PERDIDA", ordem: 5, probabilidade: 0,  noQuadro: false },
+];
+
+// Paleta "Sóbrio": o card fica neutro e a cor aparece só no trilho da coluna,
+// na barra do topo e no contador. Cada papel tem sua variável CSS, definida
+// nos dois temas em globals.css — quando o tema claro/escuro do CRM inteiro
+// for feito, esta parte já está pronta e não precisa ser reescrita.
+//
+// Os tons NÃO foram escolhidos no olho: passaram no validador de daltonismo e
+// de contraste contra o fundo escuro e contra o claro. Combinações mais bonitas
+// foram descartadas por isso — azul com violeta lado a lado, por exemplo, fica
+// praticamente idêntico para daltonismo vermelho-verde (ΔE 1,9).
+export const VAR_COR_PAPEL: Record<PapelColuna, string> = {
+  em_negociacao: "var(--funil-oportunidade)",
+  banco:         "var(--funil-proposta)",
+  confirmada:    "var(--funil-negociacao)",
+  faturado:      "var(--funil-faturado)",
+  perdida:       "var(--funil-perdida)",
+};
+
+export function corDaColuna(col: ColunaComPapel): string {
+  return VAR_COR_PAPEL[papelDaColuna(col)];
+}
 
 export function rotuloPapel(papel: string | null | undefined): string {
   return PAPEIS_COLUNA.find((p) => p.id === papel)?.label ?? "Em negociação";
@@ -112,7 +151,21 @@ export function rotuloMotivoPerda(motivo: string | null | undefined): string {
 }
 
 // Categoria usada por Dashboard, Funil e Orientador para contagens.
-export type CategoriaColuna = "banco" | "confirmada" | "perdida" | "em_negociacao" | "outro";
+//
+// "negociacao" é a coluna NEGOCIAÇÃO: crédito aprovado ou cliente na iminência
+// de fechar. É uma fase ABERTA — o negócio ainda não aconteceu. Ela existe
+// separada de "confirmada" (que agora significa faturado, venda de verdade)
+// justamente porque misturar as duas contaria como vendido o que ainda pode
+// cair. Só o FATURADO é venda.
+export type CategoriaColuna = "banco" | "negociacao" | "confirmada" | "perdida" | "em_negociacao" | "outro";
+
+// As fases em que a negociação ainda está de pé. Regra única, porque Dashboard,
+// Funil e Central de alertas contavam isso cada um por conta — e quando a
+// NEGOCIAÇÃO entrou no funil, as três teriam que lembrar de somar a coluna
+// nova. Uma esqueceria.
+export function ehFunilAberto(cat: CategoriaColuna): boolean {
+  return cat === "em_negociacao" || cat === "banco" || cat === "negociacao";
+}
 
 // Constrói o categorizador a partir das colunas REAIS do funil (ColunaFunil).
 // Negociações "órfãs" (estagio que não bate com nenhuma coluna atual, sobra de
@@ -131,7 +184,11 @@ export function criarCategorizadorColunas(colunas: ColunaComPapel[]) {
       return "outro";
     }
     if (papel === "perdida") return "perdida";
-    if (papel === "faturado" || papel === "confirmada") return "confirmada";
+    // Só FATURADO é venda. A NEGOCIAÇÃO (papel "confirmada") é fase aberta:
+    // crédito aprovado ainda não é máquina faturada, e contar como vendido
+    // inflaria o Dashboard e o Financeiro com negócio que ainda pode cair.
+    if (papel === "faturado") return "confirmada";
+    if (papel === "confirmada") return "negociacao";
     if (papel === "banco") return "banco";
     return "em_negociacao";
   };

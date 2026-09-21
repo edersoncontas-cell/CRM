@@ -8,7 +8,7 @@ import { lerDataFaturamento } from "./data-faturamento";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, type PapelColuna } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, FUNIL_CANONICO, type PapelColuna } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
@@ -887,25 +887,13 @@ export async function moverNegociacao(id: string, estagio: string, motivoPerda?:
     await usadaDaTrocaParaEstoque(id).catch((e) => console.error("[usada-troca] estoque:", e));
     revalidatePath("/dashboard");
     revalidatePath("/financeiro");
-  } else if (papel === "confirmada") {
-    const neg = await db.negociacao.update({
-      where: { id },
-      data: { status: "ganha", estagio: tituloFinal, ultimoContato: new Date() },
-      include: { cliente: true },
-    });
-    await db.cliente.update({ where: { id: neg.clienteId }, data: { jaComprou: true } });
-    await registrarAudit({
-      acao: "negociacao_ganha",
-      origem: "usuario",
-      descricao: `Venda confirmada! ${neg.maquinaModelo ?? "Máquina"} para ${neg.cliente.nome}`,
-      entidade: "Negociacao",
-      entidadeId: id,
-      clienteId: neg.clienteId,
-      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, cliente: neg.cliente.nome },
-    });
-    revalidatePath("/dashboard");
-    revalidatePath("/financeiro");
   } else {
+    // NEGOCIAÇÃO (papel "confirmada") cai aqui de propósito: crédito aprovado
+    // ainda NÃO é venda. Antes esta coluna marcava status "ganha" e
+    // cliente.jaComprou — fazia sentido quando ela se chamava "Vendas
+    // Confirmadas", mas com o significado novo tirava a negociação das abertas,
+    // sumia com ela da previsão do funil e contava como vendido o que ainda
+    // pode cair. Só o FATURADO marca venda.
     await db.negociacao.update({
       where: { id },
       data: { status: "aberta", estagio: tituloFinal, ultimoContato: new Date(), faturadoEm: null },
@@ -2034,16 +2022,17 @@ export async function limparContatosAutomaticos(): Promise<{ ok: boolean; removi
 export async function garantirColunasFunil() {
   const count = await db.colunaFunil.count();
   if (count === 0) {
-    // Cria as colunas padrão com base nos estágios fixos do pipeline
-    const defaults = [
-      { titulo: "Primeiro contato",    cor: "border-t-sky-400",    ordem: 1, fixa: true,  papel: "em_negociacao", probabilidade: 20 },
-      { titulo: "Visitas pendentes",   cor: "border-t-agro-400",   ordem: 2, fixa: true,  papel: "em_negociacao", probabilidade: 35 },
-      { titulo: "Visita realizada",    cor: "border-t-emerald-400",ordem: 3, fixa: false, papel: "em_negociacao", probabilidade: 50 },
-      { titulo: "Proposta no BCNH",    cor: "border-t-violet-400", ordem: 4, fixa: false, papel: "banco",         probabilidade: 70 },
-      { titulo: "Vendas Confirmadas",  cor: "border-t-green-500",  ordem: 5, fixa: false, papel: "confirmada",    probabilidade: 90 },
-      { titulo: "Venda perdida",       cor: "border-t-red-400",    ordem: 6, fixa: true,  papel: "perdida",       probabilidade: 0 },
-      { titulo: "FATURADO",            cor: "border-t-yellow-500",  ordem: 7, fixa: true,  papel: "faturado",      probabilidade: 100 },
-    ];
+    // Banco novo já nasce no funil atual: OPORTUNIDADE → PROPOSTA →
+    // NEGOCIAÇÃO → FATURADO, com a venda perdida fora do quadro.
+    //
+    // A cor NÃO vem daqui. Cada papel tem sua variável CSS (VAR_COR_PAPEL em
+    // lib/pipeline.ts), para a paleta valer nos dois temas sem depender do que
+    // está gravado no banco — o campo `cor` fica só para coluna que o vendedor
+    // criar à mão.
+    const defaults = FUNIL_CANONICO.map((c) => ({
+      titulo: c.titulo, ordem: c.ordem, fixa: true,
+      papel: c.papel, probabilidade: c.probabilidade, cor: "border-t-slate-400",
+    }));
     await db.colunaFunil.createMany({ data: defaults });
   }
   // Migra negociações com estagio (ID antigo) para o título da coluna correspondente
@@ -2274,13 +2263,13 @@ export async function criarNegociacaoCompleta(formData: FormData) {
       mesAnoReferencia,
       ultimoContato: new Date(),
       // O papel da coluna decide o status inicial.
-      status: isFaturadoEstagio || papelEstagio === "confirmada" ? "ganha" : papelEstagio === "perdida" ? "perdida" : "aberta",
+      status: isFaturadoEstagio ? "ganha" : papelEstagio === "perdida" ? "perdida" : "aberta",
       faturadoEm: faturadoEmFinal,
       ...usada,
     },
   });
 
-  if (isFaturadoEstagio || papelEstagio === "confirmada") {
+  if (isFaturadoEstagio) {
     await db.cliente.update({ where: { id: clienteId }, data: { jaComprou: true } });
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
@@ -2362,13 +2351,12 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
       ultimoContato: new Date(),
       ...usada,
       ...(isFaturadoEstagio ? { status: "ganha" as const, faturadoEm: faturadoEmFinal } : {}),
-      ...(papelEstagio === "confirmada" ? { status: "ganha" as const } : {}),
       ...(papelEstagio === "perdida" ? { status: "perdida" as const } : {}),
-      ...(papelEstagio === "em_negociacao" || papelEstagio === "banco" ? { status: "aberta" as const, faturadoEm: null } : {}),
+      ...(papelEstagio === "em_negociacao" || papelEstagio === "banco" || papelEstagio === "confirmada" ? { status: "aberta" as const, faturadoEm: null } : {}),
     },
   });
 
-  if (isFaturadoEstagio || papelEstagio === "confirmada") {
+  if (isFaturadoEstagio) {
     await db.cliente.update({ where: { id: antes.clienteId }, data: { jaComprou: true } });
   }
   if (isFaturadoEstagio) await usadaDaTrocaParaEstoque(id).catch((e) => console.error("[usada-troca] estoque:", e));

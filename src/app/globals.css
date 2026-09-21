@@ -4,6 +4,41 @@
 
 :root {
     --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    /* ── Paleta do funil ("Sóbrio") ──────────────────────────────────────
+       Uma variável por PAPEL de coluna, nunca por título — o vendedor pode
+       renomear a coluna sem a cor mudar de lugar.
+
+       Os tons não foram escolhidos no olho: passaram no validador de
+       daltonismo e de contraste, nos dois fundos. Por isso azul e violeta
+       não são vizinhos no quadro (lado a lado ficam iguais para daltonismo
+       vermelho-verde) e o verde do dinheiro nunca é o verde do FATURADO.
+
+       Os valores abaixo são os do tema ESCURO, que é o funil de hoje. Os do
+       tema claro já estão escritos mais abaixo, atrás de [data-theme="light"]:
+       nada seta esse atributo ainda, e é de propósito — quando o tema claro do
+       CRM for feito, esta parte já está pronta e não precisa ser reescrita. */
+    --funil-oportunidade: #3987e5;
+    --funil-proposta: #d95926;
+    --funil-negociacao: #9085e9;
+    --funil-faturado: #199e70;
+    --funil-perdida: #e66767;
+    /* Fundo do card no tratamento Sóbrio: neutro, para o nome, o valor e a
+       próxima ação ganharem o palco. A cor fica só no trilho e no contador. */
+    --funil-card: #16213a;
+    --funil-card-borda: rgba(148, 163, 184, 0.16);
+}
+
+/* Tema claro do funil — mesmos tons, degrau escolhido para o fundo claro.
+   Ainda não é acionado por nada (ver comentário acima). */
+:root[data-theme="light"] {
+    --funil-oportunidade: #2a78d6;
+    --funil-proposta: #eb6834;
+    --funil-negociacao: #4a3aa7;
+    --funil-faturado: #1baf7a;
+    --funil-perdida: #e34948;
+    --funil-card: #ffffff;
+    --funil-card-borda: rgba(15, 23, 42, 0.1);
 }
 
 /* ── Performance mobile: remove delay de 300ms em taps ── */

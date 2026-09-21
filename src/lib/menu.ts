@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -44,6 +44,8 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Análise",
     links: [
       { href: "/financeiro", label: "Financeiro", icon: Banknote },
+      // Saiu do funil: perdida não é fase de venda, é material de análise.
+      { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
     ],
   },
   {

@@ -12,7 +12,7 @@ import {
   definirFaturadoEm,
 } from "@/lib/actions";
 import {
-  criarCategorizadorColunas, papelDaColuna, probabilidadeDaColuna, valorPonderado,
+  criarCategorizadorColunas, papelDaColuna, probabilidadeDaColuna, valorPonderado, corDaColuna, ehFunilAberto,
   PAPEIS_COLUNA, MOTIVOS_PERDA, rotuloMotivoPerda, rotuloPapel,
 } from "@/lib/pipeline";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils";
@@ -65,12 +65,6 @@ type Cliente = { id: string; nome: string };
 type ColunaFunil = { id: string; titulo: string; cor: string; ordem: number; fixa: boolean; papel: string | null; probabilidade: number };
 type MaquinaPropria = { marca: string; modelo: string };
 
-function temaCalor(t: number): string {
-  if (t >= 70) return "from-orange-500/25 to-rose-600/10 border-orange-400/40";
-  if (t >= 40) return "from-amber-400/25 to-yellow-600/10 border-amber-400/40";
-  return "from-sky-500/25 to-blue-600/10 border-sky-400/40";
-}
-
 // Só marca os extremos: chama = negociação quente, floco = fria. O meio
 // (a maioria dos cards) fica limpo, sem ícone.
 function iconeCalor(t: number) {
@@ -96,13 +90,17 @@ export function FunilNegociacoes({
   const [ativo, setAtivo] = useState<CardData | null>(null);
   const [editando, setEditando] = useState<CardData | null>(null);
   const [filtro, setFiltro] = useState("");
-  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados" | "perdidos">("todos");
+  const [abaFiltro, setAbaFiltro] = useState<"todos" | "abertos" | "faturados">("todos");
   const [confirmFaturamento, setConfirmFaturamento] = useState<{ cardId: string; cliente: string } | null>(null);
   const [celebrando, setCelebrando] = useState(false);
   const [confirmPerda, setConfirmPerda] = useState<{ cardId: string; cliente: string; estagio: string } | null>(null);
   const [novaNegociacaoAberta, setNovaNegociacaoAberta] = useState(false);
   const [estagioPreSelecionado, setEstagioPreSelecionado] = useState<string | null>(null);
   const colunasParaNova = colunas.filter((c) => papelDaColuna(c) !== "perdida");
+  // A venda perdida saiu do quadro: tem página própria (/vendas-perdidas). A
+  // coluna continua existindo no banco, porque é para onde a negociação vai
+  // quando é marcada como perdida — ela só não é desenhada aqui.
+  const colunasNoQuadro = colunas.filter((c) => papelDaColuna(c) !== "perdida");
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -121,8 +119,7 @@ export function FunilNegociacoes({
   const categorizarColuna = criarCategorizadorColunas(colunas);
   const abertos = cards.filter((c) => {
     if (c.status !== "aberta") return false;
-    const cat = categorizarColuna(c.estagio);
-    return cat === "em_negociacao" || cat === "banco";
+    return ehFunilAberto(categorizarColuna(c.estagio));
   });
   const faturados = cards.filter((c) => c.status === "ganha");
   const perdidos = cards.filter((c) => c.status === "perdida");
@@ -132,14 +129,6 @@ export function FunilNegociacoes({
   const previsaoPonderada = valorPonderado(abertos, colunas);
   const encerrados = faturados.length + perdidos.length;
   const taxaConversao = encerrados > 0 ? Math.round((faturados.length / encerrados) * 100) : 0;
-  // Por que perdemos: contagem por motivo (lista fixa + texto livre antigo).
-  const motivosPerda = Object.entries(
-    perdidos.reduce<Record<string, { qtd: number; valor: number }>>((acc, c) => {
-      const k = rotuloMotivoPerda(c.motivoPerda).split(" · ")[0];
-      acc[k] = { qtd: (acc[k]?.qtd ?? 0) + 1, valor: (acc[k]?.valor ?? 0) + (c.valor ?? 0) };
-      return acc;
-    }, {})
-  ).sort((a, b) => b[1].qtd - a[1].qtd);
 
   // Filtrar cards
   const cardsFiltrados = cards.filter((c) => {
@@ -150,8 +139,7 @@ export function FunilNegociacoes({
     const matchAba =
       abaFiltro === "todos" ||
       (abaFiltro === "abertos" && abertos.some((a) => a.id === c.id)) ||
-      (abaFiltro === "faturados" && c.status === "ganha") ||
-      (abaFiltro === "perdidos" && c.status === "perdida");
+      (abaFiltro === "faturados" && c.status === "ganha");
     return matchFiltro && matchAba;
   });
 
@@ -177,7 +165,8 @@ export function FunilNegociacoes({
       setConfirmPerda({ cardId: card.id, cliente: card.cliente, estagio: novoEstagio });
       return;
     }
-    const isGanha = papel === "faturado" || papel === "confirmada";
+    // Só FATURADO marca venda: NEGOCIAÇÃO é fase aberta (ver actions.ts).
+    const isGanha = papel === "faturado";
     setCards((cs) =>
       cs.map((c) =>
         c.id === card.id ? { ...c, estagio: novoEstagio, status: isGanha ? "ganha" : "aberta", faturadoEm: papel === "faturado" ? new Date().toISOString() : c.faturadoEm } : c
@@ -212,24 +201,6 @@ export function FunilNegociacoes({
         <KpiCard icone={<BarChart3 size={20} />} rotulo="Taxa conversão" valor={`${taxaConversao}%`} sub={`${faturados.length} ganhas · ${perdidos.length} perdidas`} cor="roxo" />
       </div>
 
-      {abaFiltro === "perdidos" && (
-        <div className="rounded-2xl border border-red-200 bg-red-50/60 p-4">
-          <div className="mb-2 text-sm font-bold text-red-800">Por que perdemos</div>
-          {motivosPerda.length === 0 ? (
-            <p className="text-xs text-red-700/80">Nenhuma venda perdida no período.</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {motivosPerda.map(([motivo, m]) => (
-                <div key={motivo} className="rounded-xl bg-white px-3 py-2 shadow-sm">
-                  <div className="text-xs font-semibold text-slate-700">{motivo}</div>
-                  <div className="text-sm font-bold text-red-700">{m.qtd} {m.qtd === 1 ? "negociação" : "negociações"}</div>
-                  <div className="text-[11px] text-slate-500">{formatCurrency(m.valor)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Barra de filtros + botão nova coluna */}
       <div className="flex flex-wrap items-center gap-3">
@@ -247,7 +218,7 @@ export function FunilNegociacoes({
           )}
         </div>
         <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-          {(["todos", "abertos", "faturados", "perdidos"] as const).map((aba) => (
+          {(["todos", "abertos", "faturados"] as const).map((aba) => (
             <button
               key={aba}
               onClick={() => setAbaFiltro(aba)}
@@ -256,10 +227,18 @@ export function FunilNegociacoes({
                 abaFiltro === aba ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
               )}
             >
-              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : aba === "faturados" ? "Faturados" : "Perdidos"}
+              {aba === "todos" ? "Todos" : aba === "abertos" ? "Em aberto" : "Faturados"}
             </button>
           ))}
         </div>
+        {/* A venda perdida saiu do quadro; o caminho para ela fica aqui, ao
+            lado dos filtros, para não virar tela escondida no menu. */}
+        <Link
+          href="/vendas-perdidas"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition-colors hover:border-red-200 hover:text-red-600"
+        >
+          Vendas perdidas <ChevronRight size={13} />
+        </Link>
         <BotaoNovaColuna />
       </div>
 
@@ -276,7 +255,7 @@ export function FunilNegociacoes({
       <DndContext id="dnd-funil" sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
-            {colunas.map((col) => {
+            {colunasNoQuadro.map((col) => {
               const papel = papelDaColuna(col);
               // FATURADO é a coluna "chão-de-fábrica" do dinheiro faturado: mostra
               // TODOS os cards ganha com data de faturamento (mesmo padrão da
@@ -288,7 +267,7 @@ export function FunilNegociacoes({
                 : papel === "faturado"
                 ? cardsFiltrados.filter((c) => c.status === "ganha" && (c.faturadoEm || c.estagio === col.titulo))
                 : papel === "confirmada"
-                ? cardsFiltrados.filter((c) => c.status === "ganha" && c.estagio === col.titulo)
+                ? cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo)
                 : cardsFiltrados.filter((c) => c.status === "aberta" && c.estagio === col.titulo);
               const totalCol = lista.reduce((s, c) => s + (c.valor ?? 0), 0);
               return (
@@ -635,10 +614,12 @@ function ColunaFunilView({
       ref={setNodeRef}
       className={cn(
         "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/80 backdrop-blur-sm p-3 transition-all duration-200 max-h-[75vh]",
-        coluna.cor,
         isOver && "ring-2 ring-agro-400 bg-slate-800/90 scale-[1.01] shadow-xl"
       )}
-      style={{ minHeight: 200 }}
+      // A cor vem do PAPEL, em variável CSS — não da classe gravada em
+      // coluna.cor. Assim renomear a coluna não muda a cor de lugar, e a
+      // paleta vale nos dois temas sem tocar no banco.
+      style={{ minHeight: 200, borderTopColor: corDaColuna(coluna) }}
     >
       {/* Cabeçalho */}
       <div className="mb-3">
@@ -771,7 +752,7 @@ function ColunaFunilView({
       {/* Cards com animação de entrada — rolagem própria da coluna, não da página */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
         {cards.map((c) => (
-          <NegCardView key={c.id} card={c} onEditar={() => onEditar(c)} />
+          <NegCardView key={c.id} card={c} cor={corDaColuna(coluna)} onEditar={() => onEditar(c)} />
         ))}
         {cards.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-slate-600">
@@ -786,7 +767,7 @@ function ColunaFunilView({
 }
 
 // ── Card de negociação ───────────────────────────────────────────────────
-function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastando?: boolean; onEditar?: () => void }) {
+function NegCardView({ card, cor, arrastando, onEditar }: { card: CardData; cor?: string; arrastando?: boolean; onEditar?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
 
   // Movimento suave: transição CSS apenas quando não está arrastando
@@ -794,21 +775,25 @@ function NegCardView({ card, arrastando, onEditar }: { card: CardData; arrastand
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, transition: "none" }
     : { transition: "transform 200ms cubic-bezier(0.25, 1, 0.5, 1)" };
 
-  const tema = card.status === "perdida"
-    ? "from-slate-700/50 to-slate-800 border-slate-600"
-    : card.status === "ganha"
-    ? "from-green-600/20 to-emerald-700/10 border-green-500/40"
-    : temaCalor(card.termometro);
+  // Paleta "Sóbrio": o card é NEUTRO e a cor aparece só no trilho da esquerda,
+  // que é a cor da coluna. Antes o card era pintado pelo TERMÔMETRO — e era
+  // por isso que OPORTUNIDADE e PROPOSTA ficavam as duas laranja e vermelho, e
+  // não dava para distinguir a fase de relance. O termômetro continua visível,
+  // na chaminha ao lado do nome.
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        background: "var(--funil-card)",
+        borderColor: "var(--funil-card-borda)",
+        borderLeft: `3px solid ${cor ?? "var(--funil-card-borda)"}`,
+      }}
       className={cn(
-        "group relative rounded-xl border bg-gradient-to-br p-3 shadow-md",
+        "group relative rounded-xl border p-3 shadow-md",
         "hover:shadow-lg hover:brightness-110 cursor-grab active:cursor-grabbing",
         "transition-shadow transition-[filter]",
-        tema,
         (isDragging || arrastando) && "opacity-60 shadow-2xl ring-2 ring-agro-400 scale-105 z-50"
       )}
     >

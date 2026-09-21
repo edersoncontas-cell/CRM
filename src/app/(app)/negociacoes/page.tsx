@@ -111,7 +111,7 @@ export default async function NegociacoesPage({
         acao={<SeletorAno basePath="/negociacoes" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
       />
       <p className="-mt-4 mb-4 text-xs text-slate-400">
-        Faturados/Perdidos mostrando {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Em negociação/Em banco sempre mostram tudo em aberto, sem filtro de ano.
+        O FATURADO mostra {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Oportunidade, Proposta e Negociação mostram sempre tudo que está de pé, sem filtro de ano. As perdidas têm página própria.
       </p>
       <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} />
     </div>

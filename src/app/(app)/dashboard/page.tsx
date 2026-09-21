@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia, formatCurrency, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
-import { criarCategorizadorColunas } from "@/lib/pipeline";
+import { criarCategorizadorColunas, ehFunilAberto } from "@/lib/pipeline";
 import { FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
 import { NoticiasSetor } from "@/components/NoticiasSetor";
@@ -107,10 +107,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const resumo = resumoVendas(vendasFaturadas, anoSel, META_ANUAL_VENDAS);
   const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
 
-  const novosNegociosSemana = negociosCriadosSemana.filter((n) => {
-    const cat = categorizarColunaPorTitulo(n.estagio);
-    return cat === "em_negociacao" || cat === "banco";
-  }).length;
+  const novosNegociosSemana = negociosCriadosSemana.filter((n) =>
+    ehFunilAberto(categorizarColunaPorTitulo(n.estagio))
+  ).length;
 
   const em30Dias = new Date(hoje);
   em30Dias.setDate(em30Dias.getDate() + 30);
@@ -194,9 +193,56 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   const cidadesTop = resumo.pontosMapa.slice(0, 8).map((p) => ({ nome: p.nome, qtd: p.vendas }));
 
+  // ── O FUNIL AGORA, coluna por coluna ──────────────────────────────────
+  //
+  // "todas as colunas precisam ser atualizadas no dashboard (...) de acordo
+  //  com as informações que elas vão fornecer"
+  //
+  // Cada fase responde uma pergunta diferente, então cada uma mostra um número
+  // diferente: a entrada mostra se está ENTRANDO gente nova; a proposta mostra
+  // se está PARANDO em cima da mesa; a negociação mostra o dinheiro mais perto
+  // de entrar; o faturado mostra o que já entrou no mês.
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const somaValor = (l: { valor: number | null }[]) => l.reduce((s, n) => s + (n.valor ?? 0), 0);
+  const diasParado = (d: Date) => Math.floor((hoje.getTime() - d.getTime()) / 86_400_000);
+
+  const oportunidades = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "em_negociacao");
+  const propostas = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "banco");
+  // NEGOCIAÇÃO é fase ABERTA: crédito aprovado ainda não é máquina faturada.
+  const emFechamento = negociacoes.filter((n) => categorizarColunaPorTitulo(n.estagio) === "negociacao");
+
+  const oportunidadesNovasMes = oportunidades.filter((n) => n.criadoEm >= inicioMes).length;
+  const mediaDiasProposta = propostas.length
+    ? Math.round(propostas.reduce((s, n) => s + diasParado(n.atualizadoEm), 0) / propostas.length)
+    : 0;
+  const faturadasMes = vendasFaturadas.filter((v) => v.faturadoEm >= inicioMes);
+
+  const funilAgora = [
+    {
+      rotulo: "Oportunidade", qtd: oportunidades.length, valor: somaValor(oportunidades),
+      nota: oportunidadesNovasMes ? `${oportunidadesNovasMes} nova(s) neste mês` : "nenhuma nova neste mês",
+      cor: "var(--funil-oportunidade)",
+    },
+    {
+      rotulo: "Proposta", qtd: propostas.length, valor: somaValor(propostas),
+      nota: propostas.length ? `${mediaDiasProposta} dia(s) parada, em média` : "nenhuma na rua",
+      cor: "var(--funil-proposta)",
+    },
+    {
+      rotulo: "Negociação", qtd: emFechamento.length, valor: somaValor(emFechamento),
+      nota: emFechamento.length ? "crédito aprovado ou quase fechando" : "nada em fechamento",
+      cor: "var(--funil-negociacao)",
+    },
+    {
+      rotulo: "Faturado no mês", qtd: faturadasMes.length, valor: somaValor(faturadasMes),
+      nota: hoje.toLocaleDateString("pt-BR", { month: "long" }),
+      cor: "var(--funil-faturado)",
+    },
+  ];
+
   const termometro = [
-    { rotulo: "Em negociação", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
-    { rotulo: "Em banco", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
+    { rotulo: "Oportunidades", valor: emNegociacaoCount, cor: T.violeta, icone: Handshake, href: "/negociacoes" },
+    { rotulo: "Propostas na rua", valor: emBancoCount, cor: T.ciano, icone: Landmark, href: "/negociacoes" },
     { rotulo: "30+ dias sem contato", valor: total30DiasSemContato, cor: T.amarelo, icone: Snowflake, href: "/alertas?grupo=semcontato" },
     { rotulo: "Demandas de hoje", valor: demandasHoje, cor: T.verde, icone: ListTodo, href: "/pipeline" },
   ];
@@ -295,6 +341,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </ul>
         </Painel>
       </div>
+
+      {/* ── O funil agora ── */}
+      <Painel titulo="O funil agora" subtitulo="cada coluna com o número que ela responde">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {funilAgora.map((f) => (
+            <Link
+              key={f.rotulo}
+              href={f.rotulo.startsWith("Faturado") ? "/financeiro" : "/negociacoes"}
+              className="min-w-0 rounded-xl p-3 transition-opacity hover:opacity-80"
+              style={{ background: T.sobre, borderLeft: `3px solid ${f.cor}` }}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-[11px] font-bold uppercase tracking-wide" style={{ color: T.texto2 }}>{f.rotulo}</span>
+                <span className="shrink-0 text-sm font-black tabular-nums" style={{ color: f.cor }}>{f.qtd}</span>
+              </div>
+              <div className="mt-1 truncate text-base font-black tabular-nums" style={{ color: T.texto }}>{formatCurrency(f.valor)}</div>
+              <div className="mt-0.5 truncate text-[10.5px]" style={{ color: T.mudo }}>{f.nota}</div>
+            </Link>
+          ))}
+        </div>
+      </Painel>
 
       {/* ── Ritmo para bater a meta (metas e cotas) ── */}
       {ritmo && anoSel === anoAtual && (

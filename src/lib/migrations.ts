@@ -3,6 +3,7 @@ import { RENOMEAR_DYNAPAC, DYNAPAC_FORA_DE_LINHA } from "./dynapac-catalogo";
 import { NOMES_MUNICIPIOS_ES } from "./municipios-es";
 import { ehLidWhatsApp } from "./telefone-valido";
 import { mesmoTelefone } from "./conversa-identidade";
+import { FUNIL_CANONICO, papelDaColuna } from "./pipeline";
 
 let applied = false;
 
@@ -847,4 +848,72 @@ export async function marcarVinculosManuaisAntigos(): Promise<{ marcados: number
     console.error("[migracoes] marcarVinculosManuaisAntigos:", e);
     return { marcados: 0 };
   }
+}
+
+/**
+ * v42 — O FUNIL VIRA OPORTUNIDADE → PROPOSTA → NEGOCIAÇÃO → FATURADO.
+ *
+ * "no lugar da coluna EM NEGOCIAÇÃO será OPORTUNIDADE (...) a coluna PROPOSTA
+ *  no lugar de EM BANCO (...) depois a coluna NEGOCIAÇÃO (...) a coluna
+ *  faturados você vai deixar intacta, a venda perdida vamos deixar em uma
+ *  sessão separada"
+ *
+ * Três armadilhas resolvidas aqui, e cada uma já quebraria o funil sozinha:
+ *
+ *   1. Negociacao.estagio guarda o TÍTULO da coluna, não o id. Renomear a
+ *      coluna sem migrar os estágios deixaria toda negociação órfã — some do
+ *      quadro e para de contar em qualquer lugar. Por isso o rename e o
+ *      updateMany andam juntos, sempre.
+ *   2. O padrão antigo criava TRÊS colunas com papel "em_negociacao"
+ *      (Primeiro contato, Visitas pendentes, Visita realizada). Agora é uma
+ *      só, então as sobrantes são consolidadas: as negociações vão para a
+ *      coluna que fica, e só depois a vazia é apagada.
+ *   3. É idempotente de propósito: roda a cada manutenção e, com o funil já
+ *      no formato novo, não faz nada. Sem isso, uma segunda passada renomearia
+ *      coluna já renomeada e perderia estágio.
+ */
+export async function reestruturarFunilOportunidade(): Promise<{ renomeadas: number; criadas: number; consolidadas: number }> {
+  const r = { renomeadas: 0, criadas: 0, consolidadas: 0 };
+  try {
+    const existentes = await db.colunaFunil.findMany({ orderBy: { ordem: "asc" } });
+
+    for (const alvo of FUNIL_CANONICO) {
+      // Colunas que hoje cumprem este papel, da mais antiga para a mais nova.
+      const doPapel = existentes.filter((c) => papelDaColuna(c) === alvo.papel);
+      const principal = doPapel[0];
+
+      if (!principal) {
+        await db.colunaFunil.create({
+          data: {
+            titulo: alvo.titulo, ordem: alvo.ordem, probabilidade: alvo.probabilidade,
+            papel: alvo.papel, fixa: true, cor: "border-t-slate-400",
+          },
+        });
+        r.criadas++;
+        continue;
+      }
+
+      // Renomeia a principal, levando os estágios junto.
+      if (principal.titulo !== alvo.titulo) {
+        await db.negociacao.updateMany({ where: { estagio: principal.titulo }, data: { estagio: alvo.titulo } });
+        r.renomeadas++;
+      }
+      await db.colunaFunil.update({
+        where: { id: principal.id },
+        data: { titulo: alvo.titulo, ordem: alvo.ordem, probabilidade: alvo.probabilidade, papel: alvo.papel, fixa: true },
+      });
+
+      // Consolida as sobrantes do mesmo papel: primeiro as negociações mudam
+      // de coluna, só então a coluna vazia é apagada. Nessa ordem, uma falha
+      // no meio deixa coluna duplicada (inofensivo) em vez de card órfão.
+      for (const extra of doPapel.slice(1)) {
+        await db.negociacao.updateMany({ where: { estagio: extra.titulo }, data: { estagio: alvo.titulo } });
+        await db.colunaFunil.delete({ where: { id: extra.id } }).catch(() => {});
+        r.consolidadas++;
+      }
+    }
+  } catch (e) {
+    console.error("[migracoes] reestruturarFunilOportunidade:", e);
+  }
+  return r;
 }

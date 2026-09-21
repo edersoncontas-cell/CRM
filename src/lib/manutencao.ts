@@ -8,7 +8,7 @@
 // barato (memoizado por request com React.cache) para checar a chave.
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos } from "@/lib/migrations";
+import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos, reestruturarFunilOportunidade } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { aplicarCorteInicialWhatsApp } from "@/lib/whatsapp-corte";
@@ -82,12 +82,17 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // grande sair em ondas. Sem ela, a lista que não cabe numa rodada era fechada
 // como "enviado" pela metade, e o resto dos clientes não recebia nada.
 //
+// v42: o funil vira OPORTUNIDADE → PROPOSTA → NEGOCIAÇÃO → FATURADO, com a
+// venda perdida fora do quadro (página própria). Renomeia as colunas E migra
+// os estágios junto — Negociacao.estagio guarda o título, então sem esta
+// migração toda negociação viraria órfã e sumiria do funil.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v41";
+export const CHAVE_MANUTENCAO = "manutencao.v42";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -101,6 +106,7 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
     ["Limpeza de contatos bloqueados (contabilidade, bancos, hotéis…)", async () => { await limparContatosIndesejados(); }],
     ["Data de corte do WhatsApp (conversas antigas)", async () => { await aplicarCorteInicialWhatsApp(); }],
     ["Colunas do funil de negociações", async () => { await garantirColunasFunil(); }],
+    ["Funil novo: Oportunidade → Proposta → Negociação → Faturado", async () => { await reestruturarFunilOportunidade(); }],
     ["Cidades inventadas pela IA (fora do ES)", async () => { await limparMunicipiosInventados(); }],
     ["Identificador do WhatsApp no lugar do telefone", async () => { await limparTelefonesFalsos(); }],
     ["Conversas ligadas a outro cadastro (nome do contato de volta)", async () => { await marcarVinculosManuaisAntigos(); }],

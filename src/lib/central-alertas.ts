@@ -9,7 +9,7 @@ import { obterLicitacoes, type LicitacoesGuardadas } from "@/lib/licitacoes";
 import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
 import { calcularRitmoMetas } from "@/lib/metas";
-import { criarCategorizadorColunas } from "@/lib/pipeline";
+import { criarCategorizadorColunas, ehFunilAberto } from "@/lib/pipeline";
 import { estaResolvido } from "@/lib/alerta-chave";
 
 export type SeveridadeAlerta = "alta" | "media" | "baixa";
@@ -132,7 +132,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
   const chavesOcultas = new Set(ocultos.map((o) => o.chave));
-  const precisamDeVisita = negAbertas.filter((n) => { const cat = categorizar(n.estagio); return cat === "em_negociacao" || cat === "banco"; });
+  const precisamDeVisita = negAbertas.filter((n) => ehFunilAberto(categorizar(n.estagio)));
   const diasSem = (d: Date | null) => (d ? Math.floor((Date.now() - d.getTime()) / (24 * HORA)) : null);
   const catorzeDias = new Date(Date.now() - 14 * 24 * HORA);
   const [alertasRecentes, telefones] = await Promise.all([
