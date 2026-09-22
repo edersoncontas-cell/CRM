@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +37,10 @@ export const GRUPOS: GrupoMenu[] = [
   {
     label: "Treinamento",
     links: [
+      // Vem ANTES da Academia de propósito: primeiro o diagnóstico (o que eu
+      // preciso melhorar), depois o estudo. Não confundir com o "Orientador de
+      // Vendas", que olha o CLIENTE — este olha o vendedor.
+      { href: "/como-voce-vende", label: "Como você vende", icon: UserRound },
       { href: "/academia", label: "Academia de Vendas", icon: GraduationCap },
     ],
   },
