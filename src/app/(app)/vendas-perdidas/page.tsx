@@ -6,6 +6,7 @@ import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { MOTIVOS_PERDA, rotuloMotivoPerda } from "@/lib/pipeline";
 import { TrendingDown, Hash, Calculator, AlertTriangle, ChevronRight } from "lucide-react";
+import { PerdasSemMotivo, type PerdaSemMotivo } from "@/components/PerdasSemMotivo";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,20 @@ export default async function VendasPerdidasPage({
   const comValor = doAno.filter((n) => (n.valor ?? 0) > 0);
   const ticket = comValor.length ? Math.round(total / comValor.length) : 0;
 
+  // "se não tiver uma justificativa o sistema tem que acusar quais não
+  // tiveram justificativa". Vale tanto para o campo vazio quanto para o que
+  // tem só os dois-pontos e a nota, sem a chave do motivo — os dois acabam no
+  // ranking como "Não informado" e não ensinam nada.
+  const semMotivo: PerdaSemMotivo[] = doAno
+    .filter((n) => chaveMotivo(n.motivoPerda) === "nao_informado")
+    .map((n) => ({
+      id: n.id,
+      cliente: n.cliente.nome,
+      maquina: n.maquinaModelo,
+      valor: n.valor ?? 0,
+      quando: n.atualizadoEm.toISOString(),
+    }));
+
   // Quanto escapou por motivo, do que mais dói para o que menos dói.
   const porMotivo = new Map<string, { qtd: number; valor: number }>();
   for (const n of doAno) {
@@ -96,6 +111,8 @@ export default async function VendasPerdidasPage({
         subtitulo={`O que escapou ${periodo}, e por quê. Saiu do funil porque perdida não é fase de venda — é coisa de estudar.`}
         acao={<SeletorAno basePath="/vendas-perdidas" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
       />
+
+      <PerdasSemMotivo perdas={semMotivo} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi icone={<TrendingDown size={18} />} rotulo="Valor perdido" valor={formatCurrency(total)} sub={`${doAno.length} negociação(ões)`} tom="perda" />
@@ -199,7 +216,13 @@ export default async function VendasPerdidasPage({
                         {n.maquinaModelo && <span className="font-semibold text-slate-600">{n.maquinaModelo}</span>}
                         <span>{formatDate(n.atualizadoEm)}</span>
                       </div>
-                      <div className="mt-1 text-[11px] text-red-600">{rotuloMotivoPerda(n.motivoPerda)}</div>
+                      {chaveMotivo(n.motivoPerda) === "nao_informado" ? (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold text-amber-800">
+                          <AlertTriangle size={10} /> Sem justificativa
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-red-600">{rotuloMotivoPerda(n.motivoPerda)}</div>
+                      )}
                     </div>
                     <span className="shrink-0 text-sm font-bold tabular-nums text-slate-700">{formatCurrency(n.valor ?? 0)}</span>
                     <ChevronRight size={15} className="shrink-0 text-slate-300" />

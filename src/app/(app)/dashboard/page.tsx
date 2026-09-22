@@ -55,12 +55,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const fimMesCal = new Date(anoAtual, hoje.getMonth() + 1, 1);
 
   const [
-    negociacoes, futuros, demandasHoje,
+    negociacoes, perdidasAno, futuros, demandasHoje,
     visitasSemanaAgendadas, negociosCriadosSemana,
     total30DiasSemContato, colunasFunil,
     vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
+    // As perdidas do ano escolhido. O funil só desenha o que está aberto, mas
+    // o Dashboard tem que mostrar o outro lado: sem ele, quem olha a tela vê
+    // só o que deu certo e não sabe quanto escapou.
+    db.negociacao.findMany({
+      where: {
+        status: "perdida",
+        atualizadoEm: { gte: new Date(anoSel, 0, 1), lt: new Date(anoSel + 1, 0, 1) },
+      },
+      select: { valor: true, motivoPerda: true },
+    }),
     db.cliente.findMany({
       where: { interesseFuturo: true },
       orderBy: { interesseFuturoData: "asc" },
@@ -217,6 +227,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     : 0;
   const faturadasMes = vendasFaturadas.filter((v) => v.faturadoEm >= inicioMes);
 
+  // Perdidas do ano: quanto escapou e quantas dessas ninguém justificou.
+  // A chave do motivo é o que vem antes dos dois-pontos ("preco: comprou da
+  // concorrente" → "preco"); sem chave conhecida, a perda não entra em
+  // ranking nenhum e não ensina nada.
+  const valorPerdidoAno = somaValor(perdidasAno);
+  const perdidasSemMotivo = perdidasAno.filter((n) => !(n.motivoPerda ?? "").split(":")[0].trim()).length;
+
   const funilAgora = [
     {
       rotulo: "Oportunidade", qtd: oportunidades.length, valor: somaValor(oportunidades),
@@ -237,6 +254,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       rotulo: "Faturado no mês", qtd: faturadasMes.length, valor: somaValor(faturadasMes),
       nota: hoje.toLocaleDateString("pt-BR", { month: "long" }),
       cor: "var(--funil-faturado)",
+    },
+    {
+      rotulo: `Perdidas em ${anoSel}`, qtd: perdidasAno.length, valor: valorPerdidoAno,
+      nota: perdidasSemMotivo
+        ? `${perdidasSemMotivo} sem justificativa`
+        : perdidasAno.length ? "todas com motivo registrado" : "nenhuma perda no ano",
+      cor: "var(--funil-perdida)",
+      href: "/vendas-perdidas",
+      alerta: perdidasSemMotivo > 0,
     },
   ];
 
@@ -343,12 +369,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       {/* ── O funil agora ── */}
-      <Painel titulo="O funil agora" subtitulo="cada coluna com o número que ela responde">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Painel titulo="O funil agora" subtitulo="cada coluna com o número que ela responde · a última é o que escapou">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           {funilAgora.map((f) => (
             <Link
               key={f.rotulo}
-              href={f.rotulo.startsWith("Faturado") ? "/financeiro" : "/negociacoes"}
+              href={f.href ?? (f.rotulo.startsWith("Faturado") ? "/financeiro" : "/negociacoes")}
               className="min-w-0 rounded-xl p-3 transition-opacity hover:opacity-80"
               style={{ background: T.sobre, borderLeft: `3px solid ${f.cor}` }}
             >
@@ -357,7 +383,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 <span className="shrink-0 text-sm font-black tabular-nums" style={{ color: f.cor }}>{f.qtd}</span>
               </div>
               <div className="mt-1 truncate text-base font-black tabular-nums" style={{ color: T.texto }}>{formatCurrency(f.valor)}</div>
-              <div className="mt-0.5 truncate text-[10.5px]" style={{ color: T.mudo }}>{f.nota}</div>
+              <div className="mt-0.5 truncate text-[10.5px]" style={{ color: f.alerta ? T.amarelo : T.mudo }}>
+                {f.alerta && "⚠ "}{f.nota}
+              </div>
             </Link>
           ))}
         </div>

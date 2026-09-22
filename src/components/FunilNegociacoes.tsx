@@ -22,7 +22,7 @@ import {
   Plus, X, Pencil, Trophy, Calendar, Trash2,
   DollarSign, Target, ChevronRight, Flame, Snowflake,
   CheckCircle2, Clock, BarChart3, MoreVertical, Check,
-  FileText, Percent, Repeat,
+  FileText, Percent, Repeat, TrendingDown,
 } from "lucide-react";
 
 interface CardData {
@@ -105,6 +105,12 @@ export function FunilNegociacoes({
   // coluna continua existindo no banco, porque é para onde a negociação vai
   // quando é marcada como perdida — ela só não é desenhada aqui.
   const colunasNoQuadro = colunas.filter((c) => papelDaColuna(c) !== "perdida");
+  // Para onde a negociação vai ao ser marcada como perdida. É o TÍTULO da
+  // coluna de papel "perdida", porque Negociacao.estagio guarda o título e não
+  // o id. A reserva existe para o banco que ainda não rodou a manutenção: o
+  // servidor resolve a coluna pelo papel de qualquer jeito, e sem ela o menu
+  // ficaria morto justamente onde a migração não passou.
+  const estagioPerdida = colunas.find((c) => papelDaColuna(c) === "perdida")?.titulo ?? "VENDA PERDIDA";
 
   // Sensors com movimento suave: delay de 200ms no mouse, 250ms no toque
   const sensors = useSensors(
@@ -296,6 +302,7 @@ export function FunilNegociacoes({
                     await excluirColunaFunil(col.id);
                   }}
                   onNovaAntiga={() => { setEstagioPreSelecionado(col.titulo); setNovaNegociacaoAberta(true); }}
+                  onPerder={(card) => setConfirmPerda({ cardId: card.id, cliente: card.cliente, estagio: estagioPerdida })}
                 />
               );
             })}
@@ -388,7 +395,14 @@ export function FunilNegociacoes({
   );
 }
 
-// ── Pop-up do motivo da perda (ao arrastar para a coluna "perdida") ──────────
+// ── Pop-up do motivo da perda ───────────────────────────────────────────────
+//
+// Abre por dois caminhos: pelos 3 pontinhos do card e (para quem ainda enxerga
+// a coluna) ao arrastar para a coluna de papel "perdida".
+//
+// O motivo é OBRIGATÓRIO aqui de propósito — já vem um selecionado e não dá
+// para confirmar sem escolher. Perda sem motivo não vira aprendizado nenhum:
+// é só um número que caiu do funil.
 function PopupMotivoPerda({ cliente, onFechar, onConfirmar }: {
   cliente: string;
   onFechar: () => void;
@@ -401,7 +415,7 @@ function PopupMotivoPerda({ cliente, onFechar, onConfirmar }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onFechar}>
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-base font-bold text-slate-900">Por que perdemos {cliente}?</h3>
-        <p className="mt-1 text-xs text-slate-500">O motivo entra no relatório “Por que perdemos”, na aba Perdidos. Escolha o principal.</p>
+        <p className="mt-1 text-xs text-slate-500">Ao confirmar, a negociação sai do funil e vai para <b>Vendas Perdidas</b>, com o motivo no ranking. Escolha o principal.</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {MOTIVOS_PERDA.map((m) => (
             <button
@@ -591,13 +605,14 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, periodoRotulo, onEditar, onRenomear, onExcluir, onNovaAntiga, onPapel,
+  coluna, cards, total, periodoRotulo, onEditar, onPerder, onRenomear, onExcluir, onNovaAntiga, onPapel,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
   periodoRotulo: string;
   onEditar: (c: CardData) => void;
+  onPerder: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
   onNovaAntiga: () => void;
@@ -758,7 +773,16 @@ function ColunaFunilView({
       {/* Cards com animação de entrada — rolagem própria da coluna, não da página */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
         {cards.map((c) => (
-          <NegCardView key={c.id} card={c} cor={corDaColuna(coluna)} onEditar={() => onEditar(c)} />
+          <NegCardView
+            key={c.id}
+            card={c}
+            cor={corDaColuna(coluna)}
+            onEditar={() => onEditar(c)}
+            /* Só negociação ABERTA pode virar perdida. Máquina já faturada não
+               se "perde" — desfazer faturamento é outra conversa, e oferecer
+               aqui só daria chance de zerar uma venda real por engano. */
+            onPerder={c.status === "aberta" ? () => onPerder(c) : undefined}
+          />
         ))}
         {cards.length === 0 && (
           // Vazia por falta de movimento no período é diferente de vazia por
@@ -776,8 +800,9 @@ function ColunaFunilView({
 }
 
 // ── Card de negociação ───────────────────────────────────────────────────
-function NegCardView({ card, cor, arrastando, onEditar }: { card: CardData; cor?: string; arrastando?: boolean; onEditar?: () => void }) {
+function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: CardData; cor?: string; arrastando?: boolean; onEditar?: () => void; onPerder?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
+  const [menu, setMenu] = useState(false);
 
   // Movimento suave: transição CSS apenas quando não está arrastando
   const style: React.CSSProperties = transform
@@ -806,6 +831,44 @@ function NegCardView({ card, cor, arrastando, onEditar }: { card: CardData; cor?
         (isDragging || arrastando) && "opacity-60 shadow-2xl ring-2 ring-agro-400 scale-105 z-50"
       )}
     >
+      {/* 3 pontinhos do CARD. Fora da área de arrasto, por cima dela.
+          Sem eles não existe mais NENHUM jeito de marcar perda: o único
+          caminho era arrastar para a coluna Perdidas, e ela saiu do quadro
+          quando virou seção própria. */}
+      {!arrastando && onPerder && (
+        <div className="absolute right-1.5 top-1.5 z-20">
+          <button
+            type="button"
+            aria-label="Opções da negociação"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={() => setMenu((v) => !v)}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <MoreVertical size={14} />
+          </button>
+          {menu && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onPointerDown={(e) => { e.stopPropagation(); setMenu(false); }}
+              />
+              <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-slate-700 bg-slate-800 py-1 shadow-2xl">
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => { setMenu(false); onPerder(); }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-semibold text-red-400 transition-colors hover:bg-slate-700"
+                >
+                  <TrendingDown size={13} /> Venda perdida
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div {...listeners} {...attributes}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <Link
@@ -815,7 +878,11 @@ function NegCardView({ card, cor, arrastando, onEditar }: { card: CardData; cor?
           >
             {card.cliente}
           </Link>
-          {iconeCalor(card.termometro)}
+          {/* Espaço reservado para os 3 pontinhos, que flutuam por cima: o
+              botão não pode morar aqui dentro porque este bloco é a área de
+              arrasto e o dnd-kit a marca como role="button" — botão dentro de
+              botão come o clique e confunde leitor de tela. */}
+          <span className={cn("shrink-0", onPerder && !arrastando && "mr-7")}>{iconeCalor(card.termometro)}</span>
         </div>
         {card.municipio && <div className="text-xs text-slate-400 mb-1.5">{card.municipio}</div>}
         {card.maquina && (

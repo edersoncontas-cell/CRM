@@ -8,7 +8,7 @@ import { lerDataFaturamento } from "./data-faturamento";
 import { PERIODOS_ORIENTADOR, corteDoPeriodo, type PeriodoOrientador } from "./orientador-periodos";
 import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from "./zeus/pipeline";
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, FUNIL_CANONICO, type PapelColuna } from "./pipeline";
+import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, FUNIL_CANONICO, type PapelColuna, rotuloMotivoPerda } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
@@ -863,10 +863,22 @@ export async function moverNegociacao(id: string, estagio: string, motivoPerda?:
   const papel: PapelColuna = col?.papel ?? "em_negociacao";
 
   if (papel === "perdida") {
-    await db.negociacao.update({
+    const neg = await db.negociacao.update({
       where: { id },
       data: { status: "perdida", estagio: tituloFinal, ultimoContato: new Date(), ...(motivoPerda ? { motivoPerda } : {}) },
+      include: { cliente: { select: { id: true, nome: true } } },
     });
+    // A perda vira registro, não só um card que sumiu. O Orientador lê a
+    // auditoria, e "por que perdemos" sem histórico não ensina nada.
+    await registrarAudit({
+      acao: "negociacao_perdida",
+      origem: "usuario",
+      descricao: `Venda perdida: ${neg.maquinaModelo ?? "máquina"} para ${neg.cliente.nome}${motivoPerda ? ` — ${rotuloMotivoPerda(motivoPerda)}` : " (sem motivo informado)"}`,
+      entidade: "Negociacao",
+      entidadeId: id,
+      clienteId: neg.clienteId,
+      extra: { maquina: neg.maquinaModelo ?? null, valor: neg.valor ?? null, motivo: motivoPerda ?? null },
+    }).catch(() => {});
   } else if (papel === "faturado") {
     // FATURADO: marca como ganha, registra faturadoEm, atualiza cliente
     const neg = await db.negociacao.update({
@@ -902,6 +914,10 @@ export async function moverNegociacao(id: string, estagio: string, motivoPerda?:
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  // Sem esta linha a negociação vira perdida no banco e a seção Vendas
+  // Perdidas continua mostrando a lista velha até a página ser recarregada do
+  // zero — "some do funil e não aparece em lugar nenhum".
+  revalidatePath("/vendas-perdidas");
 }
 
 export async function excluirNegociacao(id: string) {
