@@ -258,19 +258,49 @@ implantação R$ 9.000 + (8 × R$ 200) = R$ 1.600/mês + manutenção R$ 2.000/m
 **Com o desconto de 30% por ser da casa:**
 implantação **R$ 6.300** e mensalidade **R$ 2.520/mês**.
 
-### 7.3 Um assunto que precisa ser resolvido ANTES do preço
+### 7.3 O CRM é do vendedor — o que isso muda na proposta
 
-**De quem é o CRM?**
+O CRM foi construído por ele, e é dele. Isso define a **forma** do negócio:
+não é entrega de um sistema à empresa, é **licença de uso**. A diferença é
+prática e precisa estar escrita no acordo.
 
-Se ele foi construído no seu tempo, com seus recursos, para resolver o seu
-trabalho, ele é seu. Se foi construído em horário de trabalho ou com recurso da
-empresa, a empresa pode reivindicar. Esta conversa precisa acontecer **antes**
-de você falar em preço com a diretoria — depois, qualquer valor que você pedir
-soa como cobrança por algo que já é deles.
+**O que a licença estabelece:**
 
-Não é assunto técnico e eu não sou a pessoa certa para resolver. Mas ignorar
-isso é o erro mais caro possível nesta história. **Vale conversar com um
-advogado antes da apresentação.**
+| Ponto | Por que importa |
+|---|---|
+| É licença, não venda | a empresa passa a usar; o código continua dele |
+| Quantos usuários cobre | o preço é por vendedor, e o acordo diz quantos |
+| Prazo e reajuste | evita renegociar do zero todo ano |
+| Manutenção: o que inclui | correção de erro sim; tela nova é escopo à parte |
+| O que acontece ao encerrar | a empresa sai com o dado dela; o código fica com ele |
+
+**A infraestrutura fica na conta dele.** Hospedagem, banco e domínio no nome
+do vendedor é o que torna a licença real na prática — se tudo estiver na conta
+da empresa, "licença" vira só uma palavra no papel.
+
+### 7.4 O dado do cliente NÃO é do vendedor
+
+Esta é a contrapartida, e ela é tão firme quanto a anterior: **o código é dele,
+mas a carteira de clientes da concessionária é da concessionária.** Nome,
+telefone, conversa de WhatsApp e histórico de negociação são dados da empresa
+(e dos clientes dela), não do sistema que os guarda.
+
+Três consequências práticas:
+
+1. **LGPD.** Com vários vendedores usando, ele passa a tratar dado pessoal de
+   terceiros em nome da empresa. O acordo precisa dizer que a empresa é a
+   controladora do dado e ele o operador.
+2. **Saída sem refém.** Se a relação terminar, a empresa leva o dado dela. Isso
+   não é concessão: é o que faz a diretoria assinar sem medo. O CRM **já tem
+   exportação** (`/api/exportar/…` cobre clientes, negociações, visitas,
+   mensagens e pós-venda) — vale transformar isso em botão na tela e citar na
+   apresentação.
+3. **Argumento a favor.** "O sistema é meu, o dado é de vocês, e vocês saem com
+   ele quando quiserem" é uma frase que derruba a principal objeção de comprar
+   de um funcionário.
+
+> Este documento descreve a forma comercial, não substitui contrato. Quem
+> redige o acordo é advogado.
 
 ---
 
