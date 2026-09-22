@@ -3,6 +3,7 @@ import { Card, PageHeader } from "@/components/ui";
 import { contarFatosVendedor, MESES_JANELA } from "@/lib/orientador-vendedor-dados";
 import { analisarVendedor, passagens, planoDeEstudo, DIAS_PARADA, type Gravidade } from "@/lib/orientador-vendedor";
 import { PlanoDeEstudo } from "@/components/PlanoDeEstudo";
+import { LeituraVendedorIA } from "@/components/LeituraVendedorIA";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { formatCurrency } from "@/lib/utils";
 import { UserRound, AlertTriangle, TriangleAlert, CheckCircle2, ArrowRight, Filter } from "lucide-react";
@@ -132,6 +133,9 @@ export default async function ComoVoceVendePage() {
               ))}
             </ul>
           </Card>
+
+          {/* ── A leitura com IA, por cima do que já foi medido ── */}
+          <LeituraVendedorIA />
 
           {/* ── O plano ── */}
           <PlanoDeEstudo modulos={plano.modulos} etapas={plano.etapas} />
