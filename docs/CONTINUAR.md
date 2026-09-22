@@ -12,12 +12,45 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit: **`6bc0a59`** — "Marketing só com mensagem para clientes, agora
-com envio programado". **895 testes passando** (79 arquivos), lint e build
-limpos. `CHAVE_MANUTENCAO = "manutencao.v40"`.
+Último commit: **`76b1d09`** — "Parabéns automático passa pelas mesmas travas".
+**967 testes passando** (82 arquivos), lint e build limpos.
+`CHAVE_MANUTENCAO = "manutencao.v43"`.
 
 > Ao retomar, confira o estado real antes de confiar nestes números:
 > `git log --oneline -5`, `npx vitest run`, `grep -n "CHAVE_MANUTENCAO = " src/lib/manutencao.ts`.
+
+### ⚠ Falta ele rodar a manutenção
+
+Depois do deploy: **Configurações → Manutenção do sistema**. As migrações v42
+(funil novo) e v43 (`Cliente.naoPerturbe`) só entram quando essa rotina roda.
+Sem ela, a tela que lê a coluna nova quebra inteira.
+
+### As travas de envio (o assunto da vez)
+
+A Meta restringiu o WhatsApp dele por 24h depois de um disparo para 1.298
+contatos. O que fecha isso agora:
+
+- `lib/envio-limites.ts` — módulo **puro e testado**: janela (8h–18h de
+  Brasília), teto do dia (80, somando TUDO que sai), pausa de 12–25s, rodapé
+  com a saída da lista e o detector de "SAIR" em duas camadas.
+- `lib/envio-guarda.ts` — o lado do banco: quanto já saiu hoje, quem pediu para
+  sair, **quem nunca falou com a gente**. A peneira de contato frio é a trava
+  que mais importa: denúncia derruba número muito mais rápido que volume.
+- `lib/mensagem-clientes-actions.ts` — **o funil único**. Os dois caminhos de
+  envio em massa (o "enviar agora" da tela e o despachante do programado)
+  passam por `enviarMensagemClientesAction`, e é por isso que as travas moram
+  lá dentro. Trava que só existe em um dos caminhos não é trava — o botão da
+  tela não tinha nenhuma, e era ele o caminho que derrubou o número.
+- `lib/aniversario-automatico.ts` — o parabéns respeita `naoPerturbe`, janela e
+  teto. Não aplica a peneira de contato frio, **de propósito**: são 3 ou 4 por
+  dia, com o nome da pessoa, e cortar custaria relacionamento sem proteger o
+  número.
+- Em Configurações, o card **"Travas de envio do WhatsApp"** mostra quanto já
+  saiu hoje contra o teto e deixa mudar teto e horário.
+
+Se for mexer nisso: a tela **não pode prometer número que não vai cumprir**.
+`checarEnvioAgoraAction` confere a relação no servidor e devolve os ids, para o
+botão dizer quantos realmente recebem e o laço percorrer só esses.
 
 ## Regras que não se negociam
 
@@ -28,7 +61,7 @@ limpos. `CHAVE_MANUTENCAO = "manutencao.v40"`.
    git push origin claude/projeto-zeus-merge-deploy-jc6p7x:claude/relaxed-cori-5c3g4l
    ```
 
-   As duas remotas estão em `6bc0a59`. A branch **local** `relaxed-cori` está
+   As duas remotas estão em `76b1d09`. A branch **local** `relaxed-cori` está
    148 commits atrasada e é lixo — nunca faça checkout nela nem empurre a
    partir dela; use sempre o refspec acima.
 
@@ -119,6 +152,24 @@ limpos. `CHAVE_MANUTENCAO = "manutencao.v40"`.
 - **Nunca foi respondida** a pergunta dele sobre "memória": memória de conversa
   por cliente × o CRM aprender o jeito dele de vender. Se ele retomar, vale
   abrir.
+
+## O pacote de produto (pedido dele, ainda aberto)
+
+Ele pediu um pacote para levar à diretoria e **nada disso foi feito ainda** —
+está fora do que dava para fazer sem ele acordado:
+
+- **Multiusuário**: login próprio, WhatsApp próprio e cidades próprias por
+  vendedor. **Não comecei de propósito**: é onde um erro vaza a carteira de um
+  vendedor para outro. Precisa de decisão dele sobre o que é compartilhado
+  (catálogo, fichas) e o que é isolado (clientes, negociações, conversas).
+- **Orientador novo**, que analisa o VENDEDOR (perfil, abordagem, onde ele mais
+  perde no funil) e alimenta a Academia. O Orientador de dentro do Atendimento
+  continua como está.
+- **Auditoria seção por seção** (objetivo, integrações, ganhos, o que remover).
+- **3 textos que se revezam** no envio em massa — mensagem idêntica para muita
+  gente é assinatura de disparo.
+
+Já escritos: `docs/CRM-PRODUTO.md` e `docs/PROMPT-APRESENTACAO.md`.
 
 ## Como ele trabalha
 
