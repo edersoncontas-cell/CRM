@@ -46,6 +46,14 @@ model Cliente {
   interesseFuturoData DateTime?
   interesseFuturoNota String?
   status          String    @default("potencial")
+  // Pediu para não receber mais mensagem em massa (respondeu SAIR, ou o
+  // vendedor marcou na mão). Campanha NUNCA envia para quem está marcado —
+  // é a trava que mais protege o número, porque denúncia derruba WhatsApp
+  // muito mais rápido que volume. Conversa individual continua liberada:
+  // ele pediu para sair da lista, não para parar de ser atendido.
+  naoPerturbe     Boolean   @default(false)
+  naoPerturbeEm   DateTime?
+  naoPerturbeMotivo String?
   proximaVisita   DateTime?
   proximaVisitaNota String?
   resumoMaquinas  String?

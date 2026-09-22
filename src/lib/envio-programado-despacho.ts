@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
 import { enviarMensagemClientesAction } from "@/lib/mensagem-clientes-actions";
 import { registrarAudit } from "@/lib/audit";
-import {
-  TAMANHO_LOTE, PAUSA_ENTRE_LOTES_MS, PRAZO_RODADA_MS, fecharRodada,
-} from "@/lib/envio-programado";
+import { PRAZO_RODADA_MS, fecharRodada } from "@/lib/envio-programado";
+import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs } from "@/lib/envio-limites";
+import { lerLimitesEnvio, enviadasHoje } from "@/lib/envio-guarda";
 
 // O DESPACHANTE das mensagens programadas.
 //
@@ -33,6 +33,11 @@ import {
 // cursor gravado, sem remandar para quem já recebeu.
 const TRAVA_PRESA_MS = 10 * 60_000;
 
+// Uma mensagem por vez. Antes eram 5 a cada 0,7s — foi parte do que restringiu
+// o número do vendedor por 24h. Ninguém digita cinco mensagens em sete
+// décimos de segundo.
+const POR_VEZ = 1;
+
 export type ResultadoDespacho = {
   processados: number;
   enviados: number;
@@ -40,10 +45,14 @@ export type ResultadoDespacho = {
   pendentes: number;
   /** Envios que ficaram pela metade e continuam na próxima rodada. */
   continuam: number;
+  /** Contatos pulados por saída da lista, contato frio ou falta de telefone. */
+  pulados: number;
+  /** Por que a rodada não mandou nada (janela, fim de semana, teto do dia). */
+  bloqueio?: string;
 };
 
 export async function despacharEnviosProgramados(agora: Date = new Date()): Promise<ResultadoDespacho> {
-  const saida: ResultadoDespacho = { processados: 0, enviados: 0, falhas: 0, pendentes: 0, continuam: 0 };
+  const saida: ResultadoDespacho = { processados: 0, enviados: 0, falhas: 0, pendentes: 0, continuam: 0, pulados: 0 };
   try {
     const travaVencida = new Date(agora.getTime() - TRAVA_PRESA_MS);
     const devidos = await db.envioProgramado.findMany({
@@ -61,6 +70,19 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
     });
     saida.pendentes = devidos.length;
     if (!devidos.length) return saida;
+
+    // As travas de envio, lidas uma vez por rodada.
+    const lim = await lerLimitesEnvio();
+    let jaHoje = await enviadasHoje(agora);
+    const bloqueio = porQueNaoEnviar(agora, jaHoje, lim);
+    if (bloqueio) {
+      // Não é erro: é a trava funcionando. O envio continua pendente e a
+      // rodada seguinte tenta de novo — dentro da janela, e amanhã se o teto
+      // do dia já tiver estourado.
+      saida.bloqueio = explicarBloqueio(bloqueio, lim);
+      saida.continuam = devidos.length;
+      return saida;
+    }
 
     const limite = Date.now() + PRAZO_RODADA_MS;
     for (const envio of devidos) {
@@ -88,23 +110,45 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
       // acumulado do envio a cada rodada contaria o mesmo cliente de novo.
       let enviadosRodada = 0;
       let falhasRodada = 0;
+      let pulados = 0;
       let erroFatal: string | null = null;
+
+      // O rodapé com a saída da lista é colado pela action, uma vez só.
+      const texto = envio.texto;
 
       try {
         while (cursor < total) {
           if (Date.now() > limite) break;
-          const lote = envio.clienteIds.slice(cursor, cursor + TAMANHO_LOTE);
-          const r = await enviarMensagemClientesAction(lote, envio.texto, envio.midiaId);
+          // O teto do dia é conferido a CADA mensagem, não uma vez por rodada:
+          // a resposta automática e o vendedor também estão mandando enquanto
+          // isto roda, e o WhatsApp conta o número, não o motivo.
+          if (porQueNaoEnviar(new Date(), jaHoje, lim)) break;
+
+          const lote = envio.clienteIds.slice(cursor, cursor + POR_VEZ);
+          // A peneira e o rodapé moram dentro da action — ela é o funil por
+          // onde passa TODO envio em massa do CRM, e trava que só existe em um
+          // dos caminhos não é trava. Aqui só se lê o que ela reporta.
+          //
+          // Peneirar de novo agora, e não só na hora de montar a lista, é o
+          // ponto: o envio pode ter sido programado dias antes, e nesse
+          // meio-tempo alguém respondeu SAIR.
+          const r = await enviarMensagemClientesAction(lote, texto, envio.midiaId);
+          // Trava batida no meio da rodada (o teto do dia estourou com a
+          // resposta automática mandando junto): para SEM andar o cursor, para
+          // a próxima rodada retomar exatamente daqui.
+          if (r.bloqueio) { saida.bloqueio = r.bloqueio; break; }
           enviados += r.enviados.length;
           falhas += r.falhas.length;
           enviadosRodada += r.enviados.length;
           falhasRodada += r.falhas.length;
-          // O cursor anda pelo lote inteiro, inclusive quem falhou: quem não
-          // recebeu por número errado não recebe na próxima rodada também, e
-          // repetir o lote mandaria de novo para quem já recebeu.
+          jaHoje += r.enviados.length;
+          pulados += (r.pulados?.frios ?? 0) + (r.pulados?.pediramSaida ?? 0) + (r.pulados?.semTelefone ?? 0);
+          // O cursor anda pelo lote inteiro, inclusive quem falhou ou foi
+          // pulado: quem não recebeu por número errado não recebe na próxima
+          // rodada também, e repetir mandaria de novo para quem já recebeu.
           cursor += lote.length;
-          if (cursor < total) {
-            await new Promise((ok) => setTimeout(ok, PAUSA_ENTRE_LOTES_MS));
+          if (cursor < total && r.enviados.length) {
+            await new Promise((ok) => setTimeout(ok, pausaHumanaMs(lim)));
           }
         }
       } catch (e) {
@@ -138,6 +182,7 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
       saida.processados += 1;
       saida.enviados += enviadosRodada;
       saida.falhas += falhasRodada;
+      saida.pulados += pulados;
     }
   } catch (e) {
     console.error("[envio-programado] despacho:", e);

@@ -12,11 +12,12 @@ import {
 } from "@/lib/envio-programado-actions";
 import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia, MAX_CLIENTES_POR_ENVIO, cabemPorRodada, ondasEstimadas } from "@/lib/envio-programado";
 import {
-  listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
+  listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, checarEnvioAgoraAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
   type ClienteAlvo,
 } from "@/lib/mensagem-clientes-actions";
 import type { ConfigAniversario } from "@/lib/aniversario-automatico";
 import { personalizarTexto, dividirEmLotes } from "@/lib/abordagem-cidade-regra";
+import { motivosDeFora } from "@/lib/envio-limites";
 import {
   TIPOS_MENSAGEM, datasPorProximidade, rotuloDataComemorativa, publicosDoTipo, publicoPadrao, validarAnexo, BASES_ARTE, LIMITE_ANEXO_BYTES, JANELAS_ANIVERSARIO,
   type TipoMensagem, type Publico, type BaseArte, type TipoMidia,
@@ -95,6 +96,12 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [pickerEnvio, setPickerEnvio] = useState<"data" | "hora" | null>(null);
   const [erroAgenda, setErroAgenda] = useState<string | null>(null);
   const [agendado, setAgendado] = useState<string | null>(null);
+  const [avisoPublico, setAvisoPublico] = useState<string | null>(null);
+  // Quem REALMENTE vai receber, conferido no servidor assim que a relação
+  // muda. Serve para o botão dizer o número verdadeiro ANTES do clique: ler
+  // "Enviar para 1298" e receber 8 é o tipo de mentira que faz ele parar de
+  // confiar na tela e voltar a mandar na mão.
+  const [previa, setPrevia] = useState<{ liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string } | null>(null);
   const [programados, setProgramados] = useState<EnvioProgramadoLista[]>([]);
   const [progresso, setProgresso] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ enviados: number; falhas: { nome: string; erro: string }[] } | null>(null);
@@ -201,7 +208,28 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const comTelefone = naLista.filter((c) => c.telefone);
   const semTelefone = naLista.filter((c) => !c.telefone);
   const exemplo = comTelefone[0] ?? naLista[0];
-  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && (texto.trim() !== "" || !!anexo);
+  // A prévia só DESABILITA quando ela já respondeu e o resultado é zero:
+  // enquanto não respondeu, o botão continua vivo — travar por causa de uma
+  // consulta lenta seria pior que deixar o servidor recusar depois.
+  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && (texto.trim() !== "" || !!anexo);
+
+  // Confere a relação no servidor sempre que ela muda (trocou o público,
+  // tirou alguém da lista). A chave é a lista de ids: sem ela o efeito
+  // rodaria a cada render e faria a mesma conta sem parar.
+  const chaveRelacao = comTelefone.map((c) => c.id).join(",");
+  useEffect(() => {
+    let vivo = true;
+    if (!chaveRelacao) { setPrevia(null); return; }
+    checarEnvioAgoraAction(chaveRelacao.split(","))
+      .then((r) => { if (vivo) setPrevia(r); })
+      .catch(() => { if (vivo) setPrevia(null); });
+    return () => { vivo = false; };
+  }, [chaveRelacao]);
+
+  // O número do botão é o do servidor quando ele já respondeu. Enquanto não
+  // respondeu, o da tela — nunca um número inventado.
+  const vaoReceber = previa ? previa.liberados : comTelefone.length;
+  const foraDaCampanha = previa ? motivosDeFora(previa) : "";
 
   // "deixa a opção de programar a postagem, com a data e a hora padrão horário
   // de brasilia." Os seletores já são os do CRM (roda de dia/hora), e a regra
@@ -219,6 +247,9 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     setEnviando(false);
     if (!r.ok) { setErroAgenda(r.erro ?? "Não deu para programar."); return; }
     setAgendado(("quandoTexto" in r && r.quandoTexto) || quandoPorExtenso(check.quando));
+    // Quem ficou de fora, e por quê. Sem isto ele escolhe 1.298, lê
+    // "programado" e acha que os 1.298 vão receber.
+    setAvisoPublico(("aviso" in r && r.aviso) || null);
     setProgramados(await listarEnviosProgramadosAction().catch(() => []));
   }
 
@@ -230,15 +261,38 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
 
   async function enviar() {
     if (!podeEnviar) return;
-    const previa = texto.trim() ? personalizarTexto(texto, exemplo?.nome ?? "") : "(só o anexo)";
-    const ok = confirm(`Mandar pelo WhatsApp para ${comTelefone.length} cliente(s) (${titulo})?${anexo ? `\n\nCom anexo: ${anexo.nome}` : ""}\n\n${previa}`);
+    // Pergunta ao servidor quem REALMENTE vai receber antes de perguntar a
+    // ele. Sem isto a confirmação diz "1.298 cliente(s)", ele confirma e 8
+    // recebem — o CRM teria acertado e mentido ao mesmo tempo.
+    setEnviando(true);
+    setAvisoPublico(null);
+    const check = await checarEnvioAgoraAction(comTelefone.map((c) => c.id)).catch(() => null);
+    setEnviando(false);
+    if (check?.bloqueio) { setAvisoPublico(check.bloqueio); return; }
+    if (check && !check.liberados) {
+      setAvisoPublico(`Ninguém desta lista pode receber campanha agora: ${motivosDeFora(check)}.`);
+      return;
+    }
+    // Só os liberados entram no laço. Percorrer os 1.298 em lotes de 3 para
+    // mandar para 7 seriam 433 idas ao servidor que não mandam nada, com ele
+    // olhando "Enviando… 12/1298" andar por minutos.
+    const alvos = check ? check.ids : comTelefone.map((c) => c.id);
+    const alvo = alvos.length;
+    const deFora = check ? motivosDeFora(check) : "";
+    const amostra = texto.trim() ? personalizarTexto(texto, exemplo?.nome ?? "") : "(só o anexo)";
+    const ok = confirm(
+      `Mandar pelo WhatsApp para ${alvo} cliente(s) (${titulo})?` +
+      (deFora ? `\n\nFicam de fora: ${deFora}.` : "") +
+      (anexo ? `\n\nCom anexo: ${anexo.nome}` : "") + `\n\n${amostra}`
+    );
     if (!ok) return;
     setEnviando(true);
     setResultado(null);
+    if (deFora) setAvisoPublico(`${alvo} ${alvo === 1 ? "vai" : "vão"} receber. Ficam de fora ${deFora}.`);
     const total = { enviados: 0, falhas: [] as { nome: string; erro: string }[] };
     let feitos = 0;
-    for (const lote of dividirEmLotes(comTelefone.map((c) => c.id), 3)) {
-      setProgresso(`Enviando… ${feitos}/${comTelefone.length}`);
+    for (const lote of dividirEmLotes(alvos, 3)) {
+      setProgresso(`Enviando… ${feitos}/${alvo}`);
       const r = await enviarMensagemClientesAction(lote, texto, anexo?.id ?? null).catch((e) => ({
         enviados: [] as string[],
         falhas: lote.map((id) => ({ id, nome: comTelefone.find((c) => c.id === id)?.nome ?? id, erro: e instanceof Error ? e.message : "falha" })),
@@ -246,6 +300,9 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
       total.enviados += r.enviados.length;
       total.falhas.push(...r.falhas.map((f) => ({ nome: f.nome, erro: f.erro })));
       feitos += lote.length;
+      // A trava do dia pode bater no meio da lista: parar aqui e avisar é
+      // melhor que continuar batendo na porta do WhatsApp.
+      if ("bloqueio" in r && r.bloqueio) { setAvisoPublico(r.bloqueio); break; }
     }
     setProgresso(null);
     setEnviando(false);
@@ -536,6 +593,24 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
             </div>
           )}
 
+          {avisoPublico && !agendado && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+              <AlertTriangle size={15} className="mt-px shrink-0" />
+              <span>{avisoPublico}</span>
+            </div>
+          )}
+
+          {/* Quem fica de fora, dito ANTES do clique e sem susto: o motivo
+              (“nunca falaram com você”) é o que faz ele concordar com o corte
+              em vez de achar que o CRM comeu os contatos. */}
+          {!avisoPublico && !agendado && previa && foraDaCampanha && (
+            <p className="mt-2 text-xs text-slate-500">
+              {previa.liberados
+                ? <>De {comTelefone.length}, <b className="text-slate-700">{previa.liberados}</b> recebem. Ficam de fora {foraDaCampanha} — mandar para quem nunca falou com você é o que derruba o número.</>
+                : <>Ninguém desta relação pode receber campanha: {foraDaCampanha}.</>}
+            </p>
+          )}
+
           <button
             type="button"
             onClick={quando === "depois" ? programar : enviar}
@@ -544,13 +619,14 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
           >
             {enviando ? <Loader2 size={15} className="animate-spin" /> : quando === "depois" ? <CalendarClock size={15} /> : <Send size={15} />}
             {progresso ?? (quando === "depois"
-              ? (comTelefone.length ? `Programar para ${comTelefone.length} cliente(s)` : "Programar envio")
-              : (comTelefone.length ? `Enviar para ${comTelefone.length} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp"))}
+              ? (vaoReceber ? `Programar para ${vaoReceber} cliente(s)` : "Programar envio")
+              : (vaoReceber ? `Enviar para ${vaoReceber} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp"))}
           </button>
 
           {agendado && (
             <div className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-800">
               <div className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={15} /> Programado para {agendado}</div>
+              {avisoPublico && <p className="mt-1.5 text-xs font-semibold">{avisoPublico}</p>}
               <p className="mt-1 text-xs opacity-80">Você pode cancelar na lista abaixo enquanto não sair.</p>
             </div>
           )}

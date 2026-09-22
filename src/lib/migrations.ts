@@ -655,6 +655,14 @@ export async function aplicarMigracoes(): Promise<void> {
     // meio do caminho e o resto da lista nunca recebia nada.
     await db.$executeRawUnsafe(`ALTER TABLE "EnvioProgramado" ADD COLUMN IF NOT EXISTS "enviadosAte" INTEGER NOT NULL DEFAULT 0`);
 
+    // v43: saída da lista de campanha. Sem esta coluna, quem responde SAIR
+    // continua recebendo — e quem não consegue sair denuncia, que é o que
+    // derruba o número.
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "naoPerturbe" BOOLEAN NOT NULL DEFAULT false`);
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "naoPerturbeEm" TIMESTAMP WITH TIME ZONE`);
+    await db.$executeRawUnsafe(`ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "naoPerturbeMotivo" TEXT`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Cliente_naoPerturbe_idx" ON "Cliente" ("naoPerturbe")`);
+
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 

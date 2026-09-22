@@ -17,6 +17,8 @@ import { semCodigoPais, diasDesde } from "@/lib/utils";
 import { personalizarTexto, periodoSemanaQueVem } from "@/lib/abordagem-cidade-regra";
 import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversario-regra";
 import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
+import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, comRodapeDeSaida } from "@/lib/envio-limites";
+import { lerLimitesEnvio, enviadasHoje, separarElegiveis } from "@/lib/envio-guarda";
 import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
 import {
   DATAS_COMEMORATIVAS, modeloPadrao, legendaDaMidia, type Publico, type TipoMensagem,
@@ -139,7 +141,14 @@ No máximo um emoji, sem título, sem aspas, sem assinatura além do nome ${vend
   }
 }
 
-export type ResultadoEnvio = { enviados: string[]; falhas: { id: string; nome: string; erro: string }[] };
+export type ResultadoEnvio = {
+  enviados: string[];
+  falhas: { id: string; nome: string; erro: string }[];
+  /** Quem a guarda tirou do caminho: saiu da lista, contato frio, sem telefone. */
+  pulados?: { frios: number; pediramSaida: number; semTelefone: number };
+  /** Por que nada saiu: fora da janela, fim de semana, teto do dia estourado. */
+  bloqueio?: string;
+};
 
 async function enviarComMidia(cliente: { id: string; nome: string; telefone: string | null }, midia: MidiaGuardada, legenda: string): Promise<{ ok: boolean; erro?: string }> {
   if (!cliente.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
@@ -172,8 +181,23 @@ async function enviarComMidia(cliente: { id: string; nome: string; telefone: str
 }
 
 // Manda para um LOTE de clientes (a tela chama em lotes pequenos). Cada um
-// recebe o texto com o próprio nome; com anexo, o texto vai de legenda. Uma
-// pausa curta entre envios, para não parecer disparo automático.
+// recebe o texto com o próprio nome; com anexo, o texto vai de legenda.
+//
+// ESTE É O FUNIL ÚNICO de toda mensagem em massa do CRM: a tela de Marketing
+// no "enviar agora" e o despachante do envio programado passam os dois por
+// aqui. Por isso as travas moram AQUI dentro e não em quem chama — a trava que
+// só existe em um dos caminhos não é trava, é decoração. O botão "Enviar
+// pelo WhatsApp" da tela não tinha nenhuma, e é o caminho que restringiu o
+// número do vendedor por 24h.
+//
+// São quatro, nesta ordem:
+//   1. janela e teto do dia — fora do horário ou passado do teto, não sai nada;
+//   2. peneira — quem pediu para sair e quem NUNCA falou com a gente ficam de
+//      fora (contato frio é o que vira denúncia, e denúncia derruba número
+//      muito mais rápido que volume);
+//   3. rodapé com a saída da lista, para quem não quer receber ter um botão
+//      que não seja o de denunciar;
+//   4. pausa de gente entre uma mensagem e outra, no lugar dos 0,7s fixos.
 export async function enviarMensagemClientesAction(clienteIds: string[], texto: string, midiaId: string | null): Promise<ResultadoEnvio> {
   const base = texto.trim();
   const r: ResultadoEnvio = { enviados: [], falhas: [] };
@@ -182,21 +206,72 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
     return { enviados: [], falhas: clienteIds.map((id) => ({ id, nome: id, erro: "O anexo expirou — escolha o arquivo de novo." })) };
   }
   if (!base && !midia) return r;
-  const ids = Array.from(new Set(clienteIds)).slice(0, 5);
+
+  const lim = await lerLimitesEnvio();
+  let jaHoje = await enviadasHoje();
+  const trava = porQueNaoEnviar(new Date(), jaHoje, lim);
+  if (trava) return { ...r, bloqueio: explicarBloqueio(trava, lim) };
+
+  const pedidos = Array.from(new Set(clienteIds)).slice(0, 5);
+  const elegiveis = await separarElegiveis(pedidos);
+  r.pulados = {
+    frios: elegiveis.frios.length,
+    pediramSaida: elegiveis.pediramSaida.length,
+    semTelefone: elegiveis.semTelefone.length,
+  };
+  const ids = elegiveis.liberados;
+  if (!ids.length) return r;
+
+  // O rodapé entra uma vez só: comRodapeDeSaida não repete se o texto já
+  // falar em SAIR (o despachante também chama, e texto com dois rodapés é
+  // pior que texto sem nenhum).
+  const corpo = comRodapeDeSaida(base);
   const clientes = await db.cliente.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, telefone: true } });
   const porId = new Map(clientes.map((c) => [c.id, c]));
   for (let i = 0; i < ids.length; i++) {
+    // O teto é conferido a cada mensagem: a resposta automática está mandando
+    // ao mesmo tempo, e o WhatsApp conta o número, não o motivo.
+    if (porQueNaoEnviar(new Date(), jaHoje, lim)) break;
     const c = porId.get(ids[i]);
     if (!c) { r.falhas.push({ id: ids[i], nome: ids[i], erro: "Cliente não encontrado." }); continue; }
     try {
-      const pessoal = personalizarTexto(base, c.nome);
+      const pessoal = personalizarTexto(corpo, c.nome);
       const res = midia ? await enviarComMidia(c, midia, pessoal) : await enviarResposta(c.id, pessoal);
-      if (res.ok) r.enviados.push(c.id);
+      if (res.ok) { r.enviados.push(c.id); jaHoje += 1; }
       else r.falhas.push({ id: c.id, nome: c.nome, erro: res.erro ?? "Falha ao enviar." });
     } catch (e) {
       r.falhas.push({ id: c.id, nome: c.nome, erro: e instanceof Error ? e.message : String(e) });
     }
-    if (i < ids.length - 1) await new Promise((ok) => setTimeout(ok, 700));
+    if (i < ids.length - 1) await new Promise((ok) => setTimeout(ok, pausaHumanaMs(lim)));
   }
   return r;
+}
+
+/**
+ * O que vai acontecer se ele apertar "enviar agora", ANTES de apertar.
+ *
+ * A tela precisa disto para a pergunta de confirmação dizer o número
+ * verdadeiro. Sem ela, ele marca 1.298, lê "enviar para 1.298 cliente(s)",
+ * confirma — e 8 recebem. O CRM teria acertado e mentido ao mesmo tempo.
+ */
+export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
+  /** Os ids que podem receber — a tela manda só para estes. */
+  ids: string[];
+  liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string;
+}> {
+  const lim = await lerLimitesEnvio();
+  const trava = porQueNaoEnviar(new Date(), await enviadasHoje(), lim);
+  const e = await separarElegiveis(Array.from(new Set(clienteIds)).filter(Boolean));
+  return {
+    // Devolver os ids, e não só a contagem, é o que evita a tela percorrer
+    // 1.298 cadastros em lotes de 3 para mandar para 7: 433 idas ao servidor
+    // que não mandam nada, com o vendedor olhando "Enviando… 12/1298" andar
+    // por minutos.
+    ids: e.liberados,
+    liberados: e.liberados.length,
+    frios: e.frios.length,
+    pediramSaida: e.pediramSaida.length,
+    semTelefone: e.semTelefone.length,
+    bloqueio: trava ? explicarBloqueio(trava, lim) : undefined,
+  };
 }

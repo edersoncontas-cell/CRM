@@ -87,12 +87,17 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // os estágios junto — Negociacao.estagio guarda o título, então sem esta
 // migração toda negociação viraria órfã e sumiria do funil.
 //
+// v43: Cliente.naoPerturbe — a saída da lista de campanha ("responda SAIR").
+// Veio depois de a Meta restringir o WhatsApp do vendedor por 24h: quem não
+// consegue sair da lista denuncia, e denúncia derruba número muito mais rápido
+// que volume.
+//
 // ATENÇÃO, e o motivo desta linha existir: TODA migração nova exige subir
 // este número. A manutenção só roda quando a chave ainda NÃO está gravada no
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v42";
+export const CHAVE_MANUTENCAO = "manutencao.v43";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { checarAgendamento, quandoPorExtenso, MAX_CLIENTES_POR_ENVIO } from "@/lib/envio-programado";
 import { registrarAudit } from "@/lib/audit";
+import { separarElegiveis } from "@/lib/envio-guarda";
+import { motivosDeFora } from "@/lib/envio-limites";
 
 // Agendar, listar e cancelar a mensagem em massa marcada para sair mais tarde.
 // A regra de data/hora (fuso de Brasília) e o teto da lista moram em
@@ -30,10 +32,28 @@ export async function programarEnvioAction(
   midiaId: string | null,
   diaISO: string,
   horaHM: string,
-): Promise<{ ok: boolean; erro?: string; quandoTexto?: string }> {
+): Promise<{ ok: boolean; erro?: string; quandoTexto?: string; aviso?: string }> {
   const ids = Array.from(new Set(clienteIds)).filter(Boolean);
   if (!ids.length) return { ok: false, erro: "Nenhum cliente selecionado." };
   if (ids.length > MAX_CLIENTES_POR_ENVIO) return { ok: false, erro: `No máximo ${MAX_CLIENTES_POR_ENVIO} clientes por envio.` };
+
+  // A peneira acontece AQUI, antes de gravar: o envio guarda só quem pode
+  // receber. Deixar contato frio na lista para pular depois daria um envio que
+  // "saiu para 1.298" e entregou 400 — e o número do vendedor pagaria a conta.
+  //
+  // Quem nunca mandou mensagem é o maior gatilho de denúncia, e denúncia
+  // derruba WhatsApp muito mais rápido que volume. Foi o que restringiu o
+  // número por 24h.
+  const elegiveis = await separarElegiveis(ids);
+  const cortados = elegiveis.frios.length + elegiveis.pediramSaida.length + elegiveis.semTelefone.length;
+  if (!elegiveis.liberados.length) {
+    const partes = motivosDeFora({
+      frios: elegiveis.frios.length,
+      pediramSaida: elegiveis.pediramSaida.length,
+      semTelefone: elegiveis.semTelefone.length,
+    });
+    return { ok: false, erro: `Ninguém desta lista pode receber campanha: ${partes}.` };
+  }
   const corpo = (texto ?? "").trim();
   if (!corpo && !midiaId) return { ok: false, erro: "Escreva a mensagem ou anexe um arquivo." };
 
@@ -42,7 +62,7 @@ export async function programarEnvioAction(
 
   try {
     await db.envioProgramado.create({
-      data: { quando: check.quando, texto: corpo, clienteIds: ids, midiaId: midiaId || null },
+      data: { quando: check.quando, texto: corpo, clienteIds: elegiveis.liberados, midiaId: midiaId || null },
     });
   } catch (e) {
     console.error("[envio-programado] gravar:", e);
@@ -51,11 +71,21 @@ export async function programarEnvioAction(
 
   await registrarAudit({
     acao: "mensagem_enviada", origem: "usuario",
-    descricao: `Mensagem programada para ${ids.length} cliente(s) em ${quandoPorExtenso(check.quando)}.`,
+    descricao: `Mensagem programada para ${elegiveis.liberados.length} cliente(s) em ${quandoPorExtenso(check.quando)}${cortados ? ` (${cortados} fora da campanha)` : ""}.`,
   }).catch(() => {});
 
   revalidatePath("/marketing");
-  return { ok: true, quandoTexto: quandoPorExtenso(check.quando) };
+  // O aviso não é enfeite: sem ele o vendedor escolhe 1.298, vê "programado" e
+  // acha que os 1.298 vão receber.
+  const aviso = cortados
+    ? `${elegiveis.liberados.length} ${elegiveis.liberados.length === 1 ? "vai" : "vão"} receber. `
+      + `Ficam de fora ${motivosDeFora({
+          frios: elegiveis.frios.length,
+          pediramSaida: elegiveis.pediramSaida.length,
+          semTelefone: elegiveis.semTelefone.length,
+        })} — mandar para quem nunca falou com você é o que derruba o número.`
+    : undefined;
+  return { ok: true, quandoTexto: quandoPorExtenso(check.quando), aviso };
 }
 
 export async function listarEnviosProgramadosAction(): Promise<EnvioProgramadoLista[]> {

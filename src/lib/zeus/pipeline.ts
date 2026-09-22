@@ -14,6 +14,8 @@ import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { deveAbrirNegociacao } from "@/lib/zeus/regra-negociacao";
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
 import { registrarAudit } from "@/lib/audit";
+import { ehPedidoDeSaida } from "@/lib/envio-limites";
+import { marcarNaoPerturbe } from "@/lib/envio-guarda";
 import { enviarPushNotificacao } from "@/lib/push";
 import { baixarAudio } from "@/lib/zapi";
 import { zeusReport } from "@/lib/zeus/eventos";
@@ -241,6 +243,27 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
   } else {
     const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } });
     clienteNome = cliente?.nome ?? null;
+  }
+
+  // 1.5) "SAIR" — o cliente pedindo para não receber mais campanha.
+  //
+  // É conferido AQUI, antes da transcrição e da IA, por dois motivos: é a
+  // resposta mais barata de reconhecer (não gasta chamada de IA) e é a mais
+  // urgente de obedecer. Quem pede para sair e continua recebendo denuncia — e
+  // denúncia derruba número de WhatsApp muito mais rápido que volume.
+  //
+  // Marca só a CAMPANHA. A conversa individual segue normal: ele pediu para
+  // sair da lista de promoção, não para parar de ser atendido.
+  if (clienteId && ehPedidoDeSaida(msg.body)) {
+    await marcarNaoPerturbe(clienteId, "respondeu SAIR no WhatsApp");
+    await registrarAudit({
+      acao: "cliente_atualizado",
+      origem: "zeus",
+      descricao: `${clienteNome ?? "Cliente"} pediu para sair da lista de mensagens. Não recebe mais campanha; a conversa individual continua.`,
+      entidade: "Cliente",
+      entidadeId: clienteId,
+      clienteId,
+    }).catch(() => {});
   }
 
   // 2) Transcrição de áudio (fallback — o webhook já tenta em tempo real).
