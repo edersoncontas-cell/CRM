@@ -140,19 +140,21 @@ O que é bom saber antes de abrir:
 
 ## O pacote de produto (pedido dele, ainda aberto)
 
-Ele pediu um pacote para levar à diretoria e **nada disso foi feito ainda** —
-está fora do que dava para fazer sem ele acordado:
+Ele pediu um pacote para levar à diretoria. O Orientador do vendedor saiu; o
+resto continua aberto:
 
 - **Multiusuário**: login próprio, WhatsApp próprio e cidades próprias por
   vendedor. **Não comecei de propósito**: é onde um erro vaza a carteira de um
   vendedor para outro. Precisa de decisão dele sobre o que é compartilhado
   (catálogo, fichas) e o que é isolado (clientes, negociações, conversas).
-- **Orientador novo**, que analisa o VENDEDOR (perfil, abordagem, onde ele mais
-  perde no funil) e alimenta a Academia. O Orientador de dentro do Atendimento
-  continua como está.
+- ~~**Orientador novo**, que analisa o VENDEDOR~~ — **FEITO.** É a seção "Como
+  você vende" (`/como-voce-vende`), com a leitura opcional por IA e a aba
+  "Feito para você" na Academia. O Orientador do Atendimento continua como
+  estava.
 - **Auditoria seção por seção** (objetivo, integrações, ganhos, o que remover).
 - **3 textos que se revezam** no envio em massa — mensagem idêntica para muita
-  gente é assinatura de disparo.
+  gente é assinatura de disparo. Ganhou urgência: é a última peça que falta da
+  proteção do número, e vale ANTES de ele liberar o envio de novo.
 
 Já escritos: `docs/CRM-PRODUTO.md` e `docs/PROMPT-APRESENTACAO.md`.
 
