@@ -166,11 +166,6 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
 npx tsc --noEmit && npx eslint src tests --ext .ts,.tsx && npx vitest run && npm run build
 ```
 
-E a conferência de tela da regra 7, em PRODUÇÃO (`scripts/conferir-telas.mjs`):
-varre todas as telas no PC e no celular olhando código HTTP, "Algo deu errado",
-erro no navegador e desvio de endereço. Em dev o empacotamento é outro — o
-funil caído com o Prisma no navegador só apareceu no build de produção.
-
 Lint e tipos passando não provam nada sobre comportamento — os três defeitos do
 bloqueio do WhatsApp passaram nos quatro. O que prova é a regra 1, a 2 e a 7.
 
@@ -187,12 +182,5 @@ bloqueio do WhatsApp passaram nos quatro. O que prova é a regra 1, a 2 e a 7.
   o bloco como `role="button"`, e botão dentro de botão come o evento.
 - `:where()` zera especificidade — é a correção para regra global de CSS vencer
   classe de componente sem querer (já custou o arrastar do menu no celular).
-- **Tela não pode alcançar `lib/db.ts`.** Dezenas de componentes de tela
-  importam uma constante de um arquivo que, lá no fundo da corrente, toca o
-  banco — e o empacotador leva o banco inteiro para o celular dele. O Prisma
-  não roda no navegador: a tela cai em "Algo deu errado" (foi assim que o funil
-  quebrou). O `next.config.mjs` troca `lib/db.ts` e `node:async_hooks` por
-  versões de navegador — inertes ao importar, com erro claro ao usar. É rede de
-  proteção, não conserto: o certo continua sendo a tela não alcançar o banco.
 - Fuso: servidor em UTC, vendedor em Brasília (UTC−3 o ano todo).
 - `npx prisma generate` exige `DATABASE_URL_UNPOOLED` no ambiente.

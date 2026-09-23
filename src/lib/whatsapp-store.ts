@@ -49,9 +49,7 @@ export async function acharConversa(phone: string, lid: string | null, isGroup: 
 // Namespace das travas, para não esbarrar em outro advisory lock do sistema.
 const TRAVA_CONVERSA = 0x5747;
 
-// Ver a nota igual em clientes-duplicados.ts: o tipo sai do próprio db, que
-// é estendido com o filtro por vendedor.
-type ClientePrisma = Parameters<Parameters<typeof db.$transaction>[0]>[0] | typeof db;
+type ClientePrisma = Prisma.TransactionClient | typeof db;
 
 export async function acharOuCriarConversa(args: {
   phone: string; lid: string | null; isGroup: boolean;

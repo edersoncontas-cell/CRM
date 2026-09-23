@@ -4,8 +4,6 @@ import { NOMES_MUNICIPIOS_ES } from "./municipios-es";
 import { ehLidWhatsApp } from "./telefone-valido";
 import { mesmoTelefone } from "./conversa-identidade";
 import { FUNIL_CANONICO, papelDaColuna } from "./pipeline";
-import { hashSenha } from "./senha";
-import { lerParametros } from "./parametros";
 
 let applied = false;
 
@@ -952,64 +950,4 @@ export async function pararEnviosEmMassa(): Promise<void> {
     update: {},
     create: { chave: "whatsapp.pausa.v1", valor: "pausado" },
   }).catch(() => {});
-}
-
-
-/**
- * Multiusuário: cria as colunas de dono e CARIMBA tudo que já existe no
- * primeiro usuário (o Ederson).
- *
- * O carimbo é a parte que não pode falhar. Sem ele, as linhas ficam com
- * vendedorId nulo, o filtro automático não casa com nada — e ele abriria o
- * CRM no dia seguinte com a carteira VAZIA. Base existente sem dono não é
- * "de todo mundo": é de quem já usava.
- */
-export async function multiusuarioInicial(): Promise<void> {
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Usuario" (
-      "id" TEXT PRIMARY KEY,
-      "nome" TEXT NOT NULL,
-      "login" TEXT NOT NULL UNIQUE,
-      "senhaHash" TEXT NOT NULL,
-      "papel" TEXT NOT NULL DEFAULT 'vendedor',
-      "ativo" BOOLEAN NOT NULL DEFAULT true,
-      "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "ultimoAcesso" TIMESTAMP(3)
-    )`);
-
-  const donos = ["Cliente", "Negociacao", "Visita", "WhatsAppConversation",
-    "WhatsAppMessage", "TarefaKanban", "Evento", "EnvioProgramado"];
-  for (const t of donos) {
-    await db.$executeRawUnsafe(`ALTER TABLE "${t}" ADD COLUMN IF NOT EXISTS "vendedorId" TEXT`).catch(() => {});
-    // Índice: TODA consulta do CRM passa a filtrar por esta coluna.
-    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "${t}_vendedorId_idx" ON "${t}" ("vendedorId")`).catch(() => {});
-  }
-
-  // O primeiro usuário é o dono da base que já existe. A senha vem da
-  // APP_PASSWORD que ele já usa — assim nada muda para ele no dia do deploy.
-  // Sem APP_PASSWORD (dev), fica um marcador que nenhuma senha satisfaz: é
-  // melhor não entrar do que entrar sem senha.
-  const atual = await db.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM "Usuario" ORDER BY "criadoEm" ASC LIMIT 1`);
-  let donoId = atual[0]?.id;
-  if (!donoId) {
-    donoId = `usr_${Date.now().toString(36)}`;
-    const senha = process.env.APP_PASSWORD ?? "";
-    const hash = senha ? await hashSenha(senha) : "sem-senha-definida";
-    const nome = (await lerParametros().catch(() => null))?.nomeVendedor || "Vendedor";
-    await db.$executeRawUnsafe(
-      `INSERT INTO "Usuario" ("id","nome","login","senhaHash","papel","ativo") VALUES ($1,$2,$3,$4,'gerente',true)
-       ON CONFLICT ("login") DO NOTHING`,
-      donoId, nome, "admin", hash,
-    );
-    const criado = await db.$queryRawUnsafe<{ id: string }[]>(`SELECT "id" FROM "Usuario" WHERE "login" = 'admin' LIMIT 1`);
-    donoId = criado[0]?.id ?? donoId;
-  }
-
-  // Carimba o que ainda não tem dono. Idempotente: roda de novo sem estragar.
-  let carimbadas = 0;
-  for (const t of donos) {
-    const n = await db.$executeRawUnsafe(`UPDATE "${t}" SET "vendedorId" = $1 WHERE "vendedorId" IS NULL`, donoId).catch(() => 0);
-    carimbadas += Number(n) || 0;
-  }
-  if (carimbadas) console.warn(`[migracoes] multiusuário: ${carimbadas} linha(s) carimbada(s) no primeiro usuário.`);
 }
