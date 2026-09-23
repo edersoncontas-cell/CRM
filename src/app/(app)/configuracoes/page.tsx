@@ -27,6 +27,7 @@ import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 import { ExportarDadosCard } from "@/components/ExportarDadosCard";
 import { TravasEnvioCard } from "@/components/TravasEnvioCard";
+import { PausaEnvioCard } from "@/components/PausaEnvioCard";
 import { SeletorTema } from "@/components/SeletorTema";
 import { modoAtual } from "@/lib/tema-servidor";
 import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
@@ -81,6 +82,10 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         titulo="Configurações"
         subtitulo="Ative as integrações conforme você obtiver as credenciais"
       />
+
+      {/* A trava geral abre a tela: quando o número está em risco, é a
+          primeira coisa que ele precisa achar. */}
+      <PausaEnvioCard />
 
       <ParametrosNegocioForm p={parametros} />
 

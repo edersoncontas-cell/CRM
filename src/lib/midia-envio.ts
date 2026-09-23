@@ -14,8 +14,12 @@ export async function guardarMidiaEnvio(m: { base64: string; mimeType: string; n
   // saiu. Sem isto, marcar uma promoção com arte para dali a uma semana daria
   // "O anexo expirou" na hora de disparar — e a mensagem sairia sem a imagem,
   // ou não sairia.
+  // "enviando" TAMBÉM conta. O envio em ondas passa o dia nesse estado entre
+  // uma rodada e outra; olhando só para "pendente", a faxina apagava o anexo
+  // de um envio que estava no meio da lista — e o resto dos clientes recebia a
+  // promoção SEM A IMAGEM, ou não recebia. Foi o que aconteceu.
   const presos = await db.envioProgramado
-    .findMany({ where: { status: "pendente", midiaId: { not: null } }, select: { midiaId: true } })
+    .findMany({ where: { status: { in: ["pendente", "enviando"] }, midiaId: { not: null } }, select: { midiaId: true } })
     .then((rs) => rs.map((r) => r.midiaId!).filter(Boolean))
     .catch(() => [] as string[]);
   await db.midiaEnvio.deleteMany({

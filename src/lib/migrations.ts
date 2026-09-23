@@ -925,3 +925,29 @@ export async function reestruturarFunilOportunidade(): Promise<{ renomeadas: num
   }
   return r;
 }
+
+/**
+ * Cancela TODO envio em massa que não terminou, e deixa a trava geral em
+ * PAUSADO.
+ *
+ * Roda uma vez, na manutenção. Veio do segundo bloqueio do número: o
+ * cancelamento pela tela não pegava envio em "enviando", então a fila do dia
+ * continuou saindo. Com a trava geral nada sai — mas a fila continuaria lá,
+ * pronta para retomar do zero no instante em que ele liberasse. Isto esvazia
+ * a fila antes que isso possa acontecer.
+ */
+export async function pararEnviosEmMassa(): Promise<void> {
+  const r = await db.envioProgramado.updateMany({
+    where: { status: { in: ["pendente", "enviando"] } },
+    data: { status: "cancelado", processadoEm: new Date() },
+  }).catch(() => ({ count: 0 }));
+  if (r.count) console.warn(`[migracoes] ${r.count} envio(s) em massa cancelado(s) pela trava geral.`);
+  // A chave ausente já significa "pausado" (ver lib/whatsapp-pausa.ts). Grava
+  // explícito assim mesmo: a tela mostra o estado, e "pausado" escrito é mais
+  // fácil de entender do que a ausência de linha nenhuma.
+  await db.configuracao.upsert({
+    where: { chave: "whatsapp.pausa.v1" },
+    update: {},
+    create: { chave: "whatsapp.pausa.v1", valor: "pausado" },
+  }).catch(() => {});
+}

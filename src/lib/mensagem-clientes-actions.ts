@@ -19,6 +19,7 @@ import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversar
 import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
 import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, comRodapeDeSaida } from "@/lib/envio-limites";
 import { lerLimitesEnvio, enviadasHoje, separarElegiveis } from "@/lib/envio-guarda";
+import { envioPausado } from "@/lib/whatsapp-pausa";
 import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
 import {
   DATAS_COMEMORATIVAS, modeloPadrao, legendaDaMidia, type Publico, type TipoMensagem,
@@ -207,6 +208,14 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
   }
   if (!base && !midia) return r;
 
+  // A TRAVA GERAL vem antes de tudo. E devolve "bloqueio", nunca "falhas":
+  // marcar todo mundo como falha faria o despachante ANDAR o cursor pela lista
+  // inteira com o envio pausado — e quando fosse liberado, os clientes que
+  // "falharam" nunca mais receberiam.
+  if (await envioPausado()) {
+    return { ...r, bloqueio: "Envio de WhatsApp está PAUSADO no CRM. Libere em Configurações → Envio de mensagens." };
+  }
+
   const lim = await lerLimitesEnvio();
   let jaHoje = await enviadasHoje();
   const trava = porQueNaoEnviar(new Date(), jaHoje, lim);
@@ -260,7 +269,8 @@ export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
   liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string;
 }> {
   const lim = await lerLimitesEnvio();
-  const trava = porQueNaoEnviar(new Date(), await enviadasHoje(), lim);
+  const pausado = await envioPausado();
+  const trava = pausado ? null : porQueNaoEnviar(new Date(), await enviadasHoje(), lim);
   const e = await separarElegiveis(Array.from(new Set(clienteIds)).filter(Boolean));
   return {
     // Devolver os ids, e não só a contagem, é o que evita a tela percorrer
@@ -272,6 +282,8 @@ export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
     frios: e.frios.length,
     pediramSaida: e.pediramSaida.length,
     semTelefone: e.semTelefone.length,
-    bloqueio: trava ? explicarBloqueio(trava, lim) : undefined,
+    bloqueio: pausado
+      ? "Envio de WhatsApp está PAUSADO no CRM. Libere em Configurações → Envio de mensagens."
+      : trava ? explicarBloqueio(trava, lim) : undefined,
   };
 }

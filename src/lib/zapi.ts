@@ -1,3 +1,4 @@
+import { exigirEnvioLiberado } from "@/lib/whatsapp-pausa";
 // Camada de WhatsApp — abstrai o PROVEDOR de envio/conexão:
 //   • Evolution API (open source, GRÁTIS, self-hosted) — env EVOLUTION_API_URL,
 //     EVOLUTION_API_KEY e EVOLUTION_INSTANCE. Tem prioridade quando configurada.
@@ -171,6 +172,10 @@ export function normalizePhone(phone: string): string {
 }
 
 // ---------- Envio ----------
+//
+// TODA função daqui para baixo começa por exigirEnvioLiberado(): é a trava
+// geral, e ela fica aqui embaixo de propósito. Trava em regra de negócio já
+// falhou duas vezes; nesta porta não tem desvio.
 
 function extractMessageId(data: Record<string, unknown>): string | null {
   const key = data.key as Record<string, unknown> | undefined;
@@ -192,6 +197,7 @@ export class EnvioNaoConfirmadoError extends Error {
 // rótulos internos (ex.: "*Cérebro:*"). Esses rótulos ficam só em
 // WhatsAppMessage.operatorDisplayName, visível apenas dentro do CRM.
 export async function sendText(phone: string, message: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendText/${evoInstancia()}`, {
       number: evoDestino(phone), text: message, delay: 1200,
@@ -207,6 +213,7 @@ export async function sendText(phone: string, message: string): Promise<string> 
 }
 
 export async function sendImage(phone: string, imageUrl: string, caption?: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
       number: evoDestino(phone), mediatype: "image", media: imageUrl, caption: caption ?? "",
@@ -218,6 +225,7 @@ export async function sendImage(phone: string, imageUrl: string, caption?: strin
 }
 
 export async function sendAudio(phone: string, audioUrl: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendWhatsAppAudio/${evoInstancia()}`, {
       number: evoDestino(phone), audio: audioUrl,
@@ -231,6 +239,7 @@ export async function sendAudio(phone: string, audioUrl: string): Promise<string
 // Envia um documento gerado no servidor (PDF) sem precisar hospedar o arquivo:
 // Z-API aceita data URL base64 no campo `document`; Evolution aceita base64 puro em `media`.
 export async function sendDocumentBase64(phone: string, base64: string, fileName: string, mimeType = "application/pdf", caption?: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
       number: evoDestino(phone), mediatype: "document", mimetype: mimeType, media: base64, fileName, caption: caption ?? "",
@@ -246,6 +255,7 @@ export async function sendDocumentBase64(phone: string, base64: string, fileName
 
 // Foto enviada a partir do CRM (base64 puro, sem hospedar).
 export async function sendImageBase64(phone: string, base64: string, mimeType: string, caption?: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
       number: evoDestino(phone), mediatype: "image", mimetype: mimeType, media: base64, caption: caption ?? "", fileName: "foto.jpg",
@@ -258,6 +268,7 @@ export async function sendImageBase64(phone: string, base64: string, mimeType: s
 
 // Vídeo enviado a partir do CRM (base64) — promoção/divulgação em massa.
 export async function sendVideoBase64(phone: string, base64: string, mimeType: string, caption?: string, fileName = "video.mp4"): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
       number: evoDestino(phone), mediatype: "video", mimetype: mimeType, media: base64, caption: caption ?? "", fileName,
@@ -271,6 +282,7 @@ export async function sendVideoBase64(phone: string, base64: string, mimeType: s
 // Áudio gravado no CRM (base64). A Evolution converte para o formato de
 // mensagem de voz do WhatsApp; a Z-API aceita data URL.
 export async function sendAudioBase64(phone: string, base64: string, mimeType: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendWhatsAppAudio/${evoInstancia()}`, {
       number: evoDestino(phone), audio: base64, encoding: true,
@@ -304,6 +316,7 @@ export async function baixarMidiaEvolution(messageId: string): Promise<{ base64:
 }
 
 export async function sendDocument(phone: string, docUrl: string, fileName: string): Promise<string> {
+  await exigirEnvioLiberado();
   if (provedorWhatsApp() === "evolution") {
     const data = await evoFetch("POST", `/message/sendMedia/${evoInstancia()}`, {
       number: evoDestino(phone), mediatype: "document", media: docUrl, fileName,

@@ -4,6 +4,7 @@ import { registrarAudit } from "@/lib/audit";
 import { PRAZO_RODADA_MS, fecharRodada } from "@/lib/envio-programado";
 import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs } from "@/lib/envio-limites";
 import { lerLimitesEnvio, enviadasHoje } from "@/lib/envio-guarda";
+import { envioPausado } from "@/lib/whatsapp-pausa";
 
 // O DESPACHANTE das mensagens programadas.
 //
@@ -70,6 +71,14 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
     });
     saida.pendentes = devidos.length;
     if (!devidos.length) return saida;
+
+    // A trava geral corta a rodada inteira antes de qualquer coisa. Os envios
+    // ficam como estão — nada avança, nada é marcado como falha.
+    if (await envioPausado()) {
+      saida.bloqueio = "Envio de WhatsApp PAUSADO no CRM.";
+      saida.continuam = devidos.length;
+      return saida;
+    }
 
     // As travas de envio, lidas uma vez por rodada.
     const lim = await lerLimitesEnvio();

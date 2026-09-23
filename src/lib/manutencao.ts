@@ -8,7 +8,7 @@
 // barato (memoizado por request com React.cache) para checar a chave.
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos, reestruturarFunilOportunidade } from "@/lib/migrations";
+import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos, reestruturarFunilOportunidade, pararEnviosEmMassa } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
 import { aplicarCorteInicialWhatsApp } from "@/lib/whatsapp-corte";
@@ -97,7 +97,10 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // banco; com a chave antiga já em "ok", ela é pulada, a coluna nova nunca é
 // criada e a tela que lê aquela coluna quebra inteira — foi exatamente o que
 // aconteceu com a notaVendedor no Orientador.
-export const CHAVE_MANUTENCAO = "manutencao.v43";
+// v44: a TRAVA GERAL de envio. Depois do segundo bloqueio do número, nenhuma
+// mensagem sai do CRM até ele liberar na tela — e a fila de envios em massa
+// que sobrou do dia é cancelada, para não retomar sozinha quando ele liberar.
+export const CHAVE_MANUTENCAO = "manutencao.v44";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
@@ -107,6 +110,7 @@ export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 export async function rodarManutencao(): Promise<EtapaManutencao[]> {
   const etapas: [string, () => Promise<void>][] = [
     ["Migrações de schema", aplicarMigracoes],
+    ["Parar envios em massa (trava geral do WhatsApp)", pararEnviosEmMassa],
     ["Regiões e municípios", garantirRegioes],
     ["Limpeza de contatos bloqueados (contabilidade, bancos, hotéis…)", async () => { await limparContatosIndesejados(); }],
     ["Data de corte do WhatsApp (conversas antigas)", async () => { await aplicarCorteInicialWhatsApp(); }],

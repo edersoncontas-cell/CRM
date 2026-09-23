@@ -211,7 +211,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   // A prévia só DESABILITA quando ela já respondeu e o resultado é zero:
   // enquanto não respondeu, o botão continua vivo — travar por causa de uma
   // consulta lenta seria pior que deixar o servidor recusar depois.
-  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && (texto.trim() !== "" || !!anexo);
+  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && !previa?.bloqueio && (texto.trim() !== "" || !!anexo);
 
   // Confere a relação no servidor sempre que ela muda (trocou o público,
   // tirou alguém da lista). A chave é a lista de ids: sem ela o efeito
@@ -590,6 +590,17 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
                 <p className="mt-1 text-xs text-red-600">No máximo {MAX_CLIENTES_POR_ENVIO} clientes por envio.</p>
               )}
               {erroAgenda && <p className="mt-1 text-xs text-red-600">{erroAgenda}</p>}
+            </div>
+          )}
+
+          {/* O bloqueio (trava geral, fora de horário, teto do dia) aparece
+              ANTES de ele tentar. Só no clique, ele escreve a mensagem
+              inteira, aperta e só então descobre — foi assim que ele passou
+              um dia achando que tinha cancelado envio que continuava saindo. */}
+          {!avisoPublico && !agendado && previa?.bloqueio && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800">
+              <AlertTriangle size={15} className="mt-px shrink-0" />
+              <span>{previa.bloqueio}</span>
             </div>
           )}
 

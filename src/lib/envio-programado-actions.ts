@@ -113,13 +113,43 @@ export async function listarEnviosProgramadosAction(): Promise<EnvioProgramadoLi
   }
 }
 
-/** Cancelar só vale para o que ainda não saiu — mensagem enviada não volta. */
+/**
+ * Cancelar. Vale para o que ainda não saiu E para o que está saindo.
+ *
+ * Isto é a correção do defeito que custou o segundo bloqueio do número: o
+ * cancelamento só pegava status "pendente", e um envio grande passa o dia em
+ * "enviando" entre uma onda e outra. O vendedor clicava em cancelar, a tela
+ * respondia "este envio já saiu" — e a rodada seguinte continuava mandando,
+ * porque a retomada de trava presa reassume justamente o que está em
+ * "enviando". Cancelar não cancelava nada.
+ *
+ * O que já foi entregue não volta; o que falta da lista para de sair.
+ */
 export async function cancelarEnvioProgramadoAction(id: string): Promise<{ ok: boolean; erro?: string }> {
   const r = await db.envioProgramado.updateMany({
-    where: { id, status: "pendente" },
+    where: { id, status: { in: ["pendente", "enviando"] } },
     data: { status: "cancelado", processadoEm: new Date() },
   }).catch(() => ({ count: 0 }));
-  if (!r.count) return { ok: false, erro: "Este envio já saiu ou já estava cancelado." };
+  if (!r.count) return { ok: false, erro: "Este envio já terminou ou já estava cancelado." };
   revalidatePath("/marketing");
   return { ok: true };
+}
+
+/**
+ * O botão de pânico: cancela TODOS os envios que ainda não terminaram.
+ *
+ * Existe porque, no dia do bloqueio, cancelar um por um não adiantou — e
+ * quando o número está caindo não é hora de caçar item por item numa lista.
+ */
+export async function cancelarTodosEnviosAction(): Promise<{ ok: boolean; cancelados: number }> {
+  const r = await db.envioProgramado.updateMany({
+    where: { status: { in: ["pendente", "enviando"] } },
+    data: { status: "cancelado", processadoEm: new Date() },
+  }).catch(() => ({ count: 0 }));
+  await registrarAudit({
+    acao: "mensagem_enviada", origem: "usuario",
+    descricao: `Envios em massa cancelados de uma vez: ${r.count} envio(s) interrompido(s).`,
+  }).catch(() => {});
+  revalidatePath("/marketing");
+  return { ok: true, cancelados: r.count };
 }
