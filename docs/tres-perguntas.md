@@ -54,6 +54,27 @@ substituto**. Nunca apresentar como conferido o que não foi.
 
 ---
 
+## As três TRAZEM A SOLUÇÃO
+
+Regra que o vendedor acrescentou depois de ver a primeira entrega no padrão
+novo: **identificar não basta — o que dá para resolver, resolve.**
+
+- Pergunta 1 achou dependência quebrada → conserta no mesmo commit.
+- Pergunta 2 achou caminho ruim que falha em silêncio → põe o aviso na tela.
+- Pergunta 3 não conseguiu conferir → constrói o substituto (provedor falso
+  local, dado simulado) ou deixa na TELA o número que responde a dúvida, em
+  vez de devolver a pergunta para ele.
+
+Vira pendência só o que depende de decisão dele ou de acesso que eu não tenho
+(o banco de produção, o Safari do iPhone dele, a rede de saída). E, mesmo aí,
+a entrega diz o que foi feito para cobrir — não só o que faltou.
+
+**Exemplo do que NÃO fazer:** "não conferi o seu banco". **O que fazer:** "não
+alcanço o seu banco daqui, então a tela mostra a contagem antes de você
+clicar — é ela que diz a verdade sobre os seus dados".
+
+---
+
 ## O bloco que fecha toda entrega
 
 Vai no fim da resposta, curto, sempre nesta ordem. Ele lê no celular, na rua:
@@ -62,7 +83,7 @@ Vai no fim da resposta, curto, sempre nesta ordem. Ele lê no celular, na rua:
 Conferência
 · Depende disso: <o que o grep achou> — todos no mesmo commit
 · Quando dá errado: <o que a tela faz>
-· Não conferi: <o que ficou de fora, ou "nada">
+· Não conferi: <o que ficou de fora> — e o que foi feito para cobrir
 ```
 
 Quando a alteração for pequena demais para ter o que dizer, o bloco continua —

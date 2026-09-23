@@ -6,6 +6,7 @@
 // posicionamento fixo (nada de margens negativas), então nunca "desenquadra".
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { apagarMensagemAction } from "@/lib/apagar-mensagem-actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -246,6 +247,41 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
   const [excluindoSelecao, setExcluindoSelecao] = useState(false);
   const [flags, setFlags] = useState<Record<string, Partial<{ aiActive: boolean; contactName: string; clienteId: string | null }>>>({});
   const [menuAberto, setMenuAberto] = useState(false);
+
+  // Apagar UMA mensagem, como no WhatsApp: segurar apertado no celular, passar
+  // o mouse no computador. Guarda o id da que está com o menu aberto.
+  const [msgMenu, setMsgMenu] = useState<string | null>(null);
+  const [apagando, setApagando] = useState<string | null>(null);
+  const toqueLongo = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function comecarToqueLongo(id: string) {
+    cancelarToqueLongo();
+    toqueLongo.current = setTimeout(() => setMsgMenu(id), 450);
+  }
+  function cancelarToqueLongo() {
+    if (toqueLongo.current) { clearTimeout(toqueLongo.current); toqueLongo.current = null; }
+  }
+
+  async function apagarMensagem(m: Mensagem) {
+    setMsgMenu(null);
+    // O texto da confirmação MUDA conforme o caso, porque a consequência é
+    // diferente. Falhou: nunca saiu, some e acabou. Entregue: o cliente já
+    // tem, some só do CRM — prometer "apagar para todos" seria mentira, o
+    // CRM não alcança o aparelho dele.
+    const aviso =
+      m.sendStatus === "FAILED"
+        ? "Esta mensagem NÃO chegou ao cliente (falhou no envio). Apagar tira ela do CRM e da fila de reenvio."
+        : m.direction === "OUT"
+        ? "O cliente JÁ RECEBEU esta mensagem. Apagar tira ela só do CRM — no WhatsApp dele continua."
+        : "Esta mensagem foi o cliente que mandou. Apagar tira ela só do CRM.";
+    if (!window.confirm(`Apagar esta mensagem?\n\n${aviso}\n\nNão tem volta.`)) return;
+    setApagando(m.id);
+    const r = await apagarMensagemAction(m.id).catch(() => ({ ok: false, erro: "Falha ao apagar." }));
+    setApagando(null);
+    if (!r.ok) { window.alert(r.erro ?? "Não deu para apagar."); return; }
+    setMensagens((p) => p.filter((x) => x.id !== m.id));
+  }
+
   const [vincularConv, setVincularConv] = useState<ConvLista | null>(null);
   const [painelAberto, setPainelAberto] = useState(false);
   const [contexto, setContexto] = useState<ContextoConversa | null>(null);
@@ -971,9 +1007,63 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
                       );
                     }
                     const meu = m.direction === "OUT";
+                    const falhou = m.sendStatus === "FAILED";
                     return (
-                      <div key={m.id} className={cn("mb-1.5 flex", meu ? "justify-end" : "justify-start")}>
-                        <div className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm sm:max-w-[70%]", meu ? "rounded-tr-sm bg-agro-400/15 text-agro-50 ring-1 ring-agro-400/20" : "rounded-tl-sm bg-brand-800 text-brand-50")}>
+                      <div key={m.id} className={cn("group mb-1.5 flex", meu ? "justify-end" : "justify-start")}>
+                        <div
+                          className={cn(
+                            "relative max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm sm:max-w-[70%]",
+                            meu ? "rounded-tr-sm bg-agro-400/15 text-agro-50 ring-1 ring-agro-400/20" : "rounded-tl-sm bg-brand-800 text-brand-50",
+                            apagando === m.id && "opacity-40",
+                            // A que falhou fica marcada: é ela que ele veio
+                            // apagar, e ela não existe no celular dele.
+                            falhou && "ring-1 ring-red-500/40"
+                          )}
+                          // Segurar apertado abre o menu, como no WhatsApp. O
+                          // timer morre em qualquer movimento: sem isso, rolar
+                          // a conversa com o dedo abriria menu a cada rolagem.
+                          onPointerDown={() => comecarToqueLongo(m.id)}
+                          onPointerUp={cancelarToqueLongo}
+                          onPointerMove={cancelarToqueLongo}
+                          onPointerCancel={cancelarToqueLongo}
+                          onContextMenu={(e) => { e.preventDefault(); setMsgMenu(m.id); }}
+                        >
+                          {/* No computador não existe "segurar apertado": o
+                              botão aparece ao passar o mouse. */}
+                          <button
+                            type="button"
+                            aria-label="Opções da mensagem"
+                            onClick={(e) => { e.stopPropagation(); setMsgMenu(msgMenu === m.id ? null : m.id); }}
+                            className={cn(
+                              "absolute -top-1 hidden rounded-full bg-brand-900/90 p-1 text-brand-300 shadow ring-1 ring-white/10 hover:text-white sm:block",
+                              // "invisible", não "opacity-0": com opacidade zero
+                              // o botão continua CLICÁVEL, e um botão invisível
+                              // no canto de toda bolha pega clique por engano.
+                              "invisible group-hover:visible focus:visible",
+                              meu ? "-left-2" : "-right-2"
+                            )}
+                          >
+                            <MoreVertical size={13} />
+                          </button>
+
+                          {msgMenu === m.id && (
+                            <>
+                              <div className="fixed inset-0 z-40" onPointerDown={(e) => { e.stopPropagation(); setMsgMenu(null); }} />
+                              <div className={cn("absolute top-6 z-50 w-48 overflow-hidden rounded-xl border border-brand-700 bg-brand-800 py-1 shadow-2xl", meu ? "right-0" : "left-0")}>
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => apagarMensagem(m)}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-semibold text-red-300 hover:bg-brand-700"
+                                >
+                                  <Trash2 size={13} /> Apagar mensagem
+                                </button>
+                                <p className="px-3 py-1.5 text-[10px] leading-snug text-brand-400">
+                                  {falhou ? "Não chegou ao cliente." : meu ? "Some só do CRM; o cliente já recebeu." : "Some só do CRM."}
+                                </p>
+                              </div>
+                            </>
+                          )}
                           {!meu && sel.isGroup && m.senderName && <div className="text-[11px] font-bold text-agro-300">{m.senderName}</div>}
                           {meu && m.operatorDisplayName && m.operatorDisplayName !== "Você" && <div className="text-[10px] font-semibold text-agro-300/80">{m.operatorDisplayName}</div>}
                           {m.mediaType === "image" && m.mediaUrl && (

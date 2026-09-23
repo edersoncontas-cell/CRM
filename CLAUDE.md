@@ -20,13 +20,20 @@ repositório** (não para pergunta, explicação ou leitura de código).
 3. **"O que você não conseguiu conferir?"** — NO FIM. Separar o que passou pela
    tela do que ficou suposto.
 
+**As três TRAZEM A SOLUÇÃO, não só o diagnóstico.** Achou dependência quebrada,
+conserta no mesmo commit. Achou caminho ruim sem aviso, põe o aviso. Não
+conseguiu conferir, constrói o substituto (provedor falso, dado simulado) ou
+deixa na tela o número que responde a dúvida — em vez de empurrar a pergunta
+para ele. Só vira pendência o que dependa de decisão dele ou de acesso que eu
+não tenho.
+
 **A resposta das três é VISÍVEL, no fim de toda entrega:**
 
 ```
 Conferência
 · Depende disso: <o que o grep achou> — todos no mesmo commit
 · Quando dá errado: <o que a tela faz>
-· Não conferi: <o que ficou de fora, ou "nada">
+· Não conferi: <o que ficou de fora> — e o que foi feito para cobrir
 ```
 
 O bloco nunca some — nem em mudança pequena, onde ele vira "nada mais depende /
