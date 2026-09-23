@@ -176,8 +176,10 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
           <Wrench size={18} className="text-brand-600" /> Manutenção do sistema
         </div>
         <p className="mb-3 text-sm text-slate-600">
-          Aplica migrações de schema pendentes e reexecuta as rotinas de manutenção (regiões, colunas do funil/demandas,
-          catálogo de máquinas, fichas verificadas) sem esperar o próximo carregamento de página.
+          O CRM já aplica as migrações sozinho ao abrir qualquer tela — este botão é a rede de segurança para quando
+          alguma etapa falha. Ele reexecuta tudo (schema, regiões, colunas do funil/demandas, catálogo de máquinas,
+          fichas verificadas) e mostra o que passou e o que não passou. Rodar com tudo em dia não faz mal: as rotinas
+          são idempotentes.
         </p>
         <BotaoManutencao />
       </Card>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Wrench, CheckCircle2, XCircle } from "lucide-react";
 
 type Etapa = { etapa: string; ok: boolean; erro?: string };
@@ -12,6 +12,18 @@ export function BotaoManutencao() {
   const [pending, startTransition] = useTransition();
   const [relatorio, setRelatorio] = useState<Etapa[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // O estado de verdade, lido do banco. Antes a tela não dizia se a
+  // manutenção desta versão já tinha rodado, e a única forma de saber era
+  // apertar o botão — o que fazia parecer obrigatório um passo que, na
+  // prática, o CRM já faz sozinho ao abrir qualquer tela.
+  const [estado, setEstado] = useState<{ emDia: boolean; chave: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/manutencao")
+      .then((r) => r.json())
+      .then((r) => setEstado({ emDia: !!r.emDia, chave: String(r.chave ?? "") }))
+      .catch(() => setEstado(null));
+  }, []);
 
   function rodar() {
     setErro(null);
@@ -20,6 +32,10 @@ export function BotaoManutencao() {
       try {
         const r = await fetch("/api/admin/manutencao", { method: "POST" }).then((res) => res.json());
         setRelatorio(r.relatorio ?? []);
+        await fetch("/api/admin/manutencao")
+          .then((res) => res.json())
+          .then((e) => setEstado({ emDia: !!e.emDia, chave: String(e.chave ?? "") }))
+          .catch(() => {});
       } catch (e) {
         setErro("Falha ao rodar manutenção: " + String(e));
       }
@@ -28,6 +44,23 @@ export function BotaoManutencao() {
 
   return (
     <div>
+      {estado && (
+        <div
+          className={`mb-3 flex items-start gap-2 rounded-xl border p-3 text-sm ${
+            estado.emDia ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          {estado.emDia ? <CheckCircle2 size={16} className="mt-px shrink-0" /> : <Wrench size={16} className="mt-px shrink-0" />}
+          <span>
+            <b>{estado.emDia ? "Tudo em dia." : "Falta rodar."}</b>{" "}
+            {estado.emDia
+              ? "As migrações desta versão já foram aplicadas neste banco. Rodar de novo não faz mal, mas não é preciso."
+              : "As migrações desta versão ainda não foram aplicadas. Normalmente isso acontece sozinho ao abrir qualquer tela — se este aviso continuar, aperte o botão."}
+            <span className="ml-1 opacity-60">({estado.chave})</span>
+          </span>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={rodar}
