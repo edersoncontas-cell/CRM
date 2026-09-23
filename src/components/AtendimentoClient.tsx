@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { apagarMensagemAction } from "@/lib/apagar-mensagem-actions";
+import { excluirConversasAction } from "@/lib/excluir-conversas-actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,7 +15,7 @@ import {
   DownloadCloud, Loader2, Brain, Trash2, X, FileText, Handshake, Link2, ListChecks,
   CheckCircle2, Compass, Flame, ThermometerSun, Snowflake, Calendar, Repeat,
   ChevronUp, PanelRightOpen, Sparkles, AlertTriangle, MapPin, Wallet, Bell,
-  Paperclip, Mic, Square, Zap, RefreshCw, FileDown, Plus,
+  Paperclip, Mic, Square, CheckSquare, Zap, RefreshCw, FileDown, Plus,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -344,10 +345,21 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
 
   async function excluirConversa(c: ConvLista) {
     const nome = nomeConv(c, curr(c).contactName);
-    if (!window.confirm(`Excluir a conversa com "${nome}"? Todas as mensagens serão apagadas do CRM.`)) return;
+    if (!window.confirm(
+      `Excluir a conversa com "${nome}"?\n\n` +
+      `Todas as mensagens dela somem do CRM — inclusive as que falharam e estão esperando para ser reenviadas. ` +
+      `Este cliente também sai dos envios em massa que ainda não terminaram.\n\nNão tem volta.`
+    )) return;
     setMenuAberto(false);
-    const r = await fetch(`/api/conversations/${c.id}`, { method: "DELETE" }).then((res) => res.json()).catch(() => null);
-    if (!r?.ok) { window.alert("Não foi possível excluir a conversa."); return; }
+    // Passa pela MESMA ação da exclusão em lote. Antes esta ia por um caminho
+    // próprio que não tirava o cliente dos envios pendentes: apagar uma
+    // conversa não parava nada, apagar várias parava. Mesma tela, dois
+    // comportamentos — o tipo de diferença que ninguém descobre até doer.
+    const r = await excluirConversasAction([c.id]).catch(() => null);
+    if (!r?.ok) { window.alert(r?.erro ?? "Não foi possível excluir a conversa."); return; }
+    if (r.tiradosDeEnvio > 0) {
+      window.alert(`Conversa excluída. Este cliente saiu de ${r.tiradosDeEnvio} envio(s) em massa que ainda não tinham terminado — para ele, nada mais sai.`);
+    }
     if (selId === c.id) { setSelId(null); setMensagens([]); }
     router.refresh();
   }
@@ -358,13 +370,26 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
 
   async function excluirSelecionadas() {
     if (!selecionadas.size || excluindoSelecao) return;
-    if (!window.confirm(`Excluir ${selecionadas.size} conversa(s) selecionada(s)? Todas as mensagens serão apagadas do CRM.`)) return;
+    if (!window.confirm(
+      `Excluir ${selecionadas.size} conversa(s) selecionada(s)?\n\n` +
+      `Todas as mensagens delas somem do CRM — inclusive as que falharam e estão esperando para ser reenviadas. ` +
+      `Quem estiver nelas também sai dos envios em massa que ainda não terminaram, para nada continuar saindo depois.\n\n` +
+      `Não tem volta.`
+    )) return;
     setExcluindoSelecao(true);
     const ids = Array.from(selecionadas);
-    await Promise.all(ids.map((id) => fetch(`/api/conversations/${id}`, { method: "DELETE" }).catch(() => null)));
+    // Uma chamada só, em lotes no servidor. Antes era um DELETE por conversa,
+    // todos em paralelo — com "selecionar todas" isso viraria centenas de
+    // requisições ao mesmo tempo e parte sumiria sem ninguém saber quais.
+    const r = await excluirConversasAction(ids).catch(() => null);
     setExcluindoSelecao(false);
+    if (!r?.ok) { window.alert(r?.erro ?? "Não foi possível excluir as conversas."); return; }
+    if (r.tiradosDeEnvio > 0) {
+      window.alert(`${r.excluidas} conversa(s) excluída(s).\n\n${r.tiradosDeEnvio} cliente(s) saíram de envios em massa que ainda não tinham terminado — para eles, nada mais sai.`);
+    }
     if (selId && ids.includes(selId)) { setSelId(null); setMensagens([]); }
     setSelecionadas(new Set());
+    setModoSelecao(false);
     setModoSelecao(false);
     router.refresh();
   }
@@ -812,6 +837,24 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
               {modoSelecao ? (
                 <>
                   <span className="px-1 text-[11px] text-brand-300">{selecionadas.size > 0 ? `${selecionadas.size} selecionada(s)` : "toque para selecionar"}</span>
+                  {/* Marca TODAS as conversas da lista como ela está agora —
+                      respeitando o filtro e a busca. Sem isso, "selecionar
+                      todas" com um filtro ligado pegaria conversa que nem
+                      aparece na tela, e ele apagaria o que não viu. */}
+                  <button
+                    onClick={() => {
+                      const ids = filtradas.map((c) => c.id);
+                      const todasMarcadas = ids.length > 0 && ids.every((id) => selecionadas.has(id));
+                      setSelecionadas(todasMarcadas ? new Set() : new Set(ids));
+                    }}
+                    disabled={excluindoSelecao || filtradas.length === 0}
+                    title={filtradas.length && filtradas.every((c) => selecionadas.has(c.id)) ? "Desmarcar todas" : `Selecionar todas (${filtradas.length})`}
+                    className={botaoIcone}
+                  >
+                    {filtradas.length > 0 && filtradas.every((c) => selecionadas.has(c.id))
+                      ? <Square size={17} />
+                      : <CheckSquare size={17} />}
+                  </button>
                   {selecionadas.size > 0 && (
                     <button onClick={excluirSelecionadas} disabled={excluindoSelecao} title="Excluir selecionadas" className={botaoIcone}>
                       {excluindoSelecao ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} className="text-red-400" />}
