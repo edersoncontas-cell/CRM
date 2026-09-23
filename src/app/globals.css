@@ -27,6 +27,46 @@
        próxima ação ganharem o palco. A cor fica só no trilho e no contador. */
     --funil-card: #16213a;
     --funil-card-borda: rgba(148, 163, 184, 0.16);
+
+    /* ── A CASCA do CRM ───────────────────────────────────────────────────
+       Fundo da página, menu lateral e topo do celular. Os CARDS não estão
+       aqui: eles já são claros em quase toda tela (ver Card em ui.tsx), e é
+       por isso que o tema claro é o barato e o escuro de verdade seria o
+       caro. O que o tema troca é o que fica em volta deles.
+
+       O menu tem variáveis próprias em vez de usar a escala "brand" do
+       Tailwind: brand é usada como cor de destaque em 63 outros arquivos
+       (text-brand-600 dentro de card branco, por exemplo), e inverter a
+       escala apagaria todos eles. */
+    --pagina-fundo: linear-gradient(160deg, #161b23 0%, #0f1319 55%, #0a0d12 100%);
+    --pagina-texto: #e2e8f0;
+    --curvas-cor: #ffffff;
+    --curvas-opacidade: 0.07;
+
+    --menu-fundo: #141416;
+    --menu-fundo2: #0a0a0b;
+    --menu-texto: #ffffff;
+    --menu-texto2: #b4b4ba;
+    --menu-mudo: #85858d;
+    --menu-mudo2: #62626a;
+    --menu-borda: #1c1c1f;
+    --menu-hover: rgba(255, 255, 255, 0.10);
+    --menu-ativo: rgba(255, 255, 255, 0.15);
+    --menu-pressionado: rgba(255, 255, 255, 0.20);
+    --menu-destaque: #ffcb2d;
+
+    /* Texto que fica SOBRE o fundo da página, fora de card: título de tela,
+       subtítulo, quadro do funil. Dentro de card o texto é escuro nos dois
+       temas e não passa por aqui. */
+    --sobre-fundo-titulo: #ffffff;
+    --sobre-fundo-texto: #cbd5e1;
+    --sobre-fundo-mudo: #94a3b8;
+    /* O quadro do funil: coluna, cabeçalho e caixas de edição. */
+    --funil-coluna: #0f172a;
+    --funil-coluna2: #1e293b;
+    --funil-coluna-borda: rgba(148, 163, 184, 0.18);
+    --funil-card-texto: #ffffff;
+    --funil-card-texto2: #94a3b8;
 }
 
 /* Tema claro do funil — mesmos tons, degrau escolhido para o fundo claro.
@@ -39,6 +79,37 @@
     --funil-perdida: #e34948;
     --funil-card: #ffffff;
     --funil-card-borda: rgba(15, 23, 42, 0.1);
+
+    /* A casca no claro. O fundo NÃO é branco: os cards são brancos, e branco
+       sobre branco apaga a borda de cada um e a tela vira uma folha só. Um
+       cinza-azulado de fundo é o que faz o card existir. */
+    --pagina-fundo: linear-gradient(160deg, #f3f5f9 0%, #eef1f6 55%, #e8ecf3 100%);
+    --pagina-texto: #334155;
+    --curvas-cor: #0f172a;
+    --curvas-opacidade: 0.05;
+
+    --menu-fundo: #ffffff;
+    --menu-fundo2: #f6f7f9;
+    --menu-texto: #0f172a;
+    --menu-texto2: #334155;
+    --menu-mudo: #64748b;
+    --menu-mudo2: #94a3b8;
+    --menu-borda: #e2e8f0;
+    --menu-hover: rgba(15, 23, 42, 0.05);
+    --menu-ativo: rgba(15, 23, 42, 0.08);
+    --menu-pressionado: rgba(15, 23, 42, 0.12);
+    /* O amarelo New Holland sobre branco não se lê. No claro o destaque do
+       item ativo vira o grafite da marca, e o amarelo fica só no logo. */
+    --menu-destaque: #1c1c1f;
+
+    --sobre-fundo-titulo: #0f172a;
+    --sobre-fundo-texto: #475569;
+    --sobre-fundo-mudo: #64748b;
+    --funil-coluna: #e7ebf2;
+    --funil-coluna2: #f1f5f9;
+    --funil-coluna-borda: rgba(15, 23, 42, 0.10);
+    --funil-card-texto: #0f172a;
+    --funil-card-texto2: #64748b;
 }
 
 /* ── Performance mobile: remove delay de 300ms em taps ── */
@@ -70,11 +141,12 @@ html {
 }
 
 body {
-    /* Fundo escuro do CRM, igual ao da tela de abertura. O texto claro vale
-       para o que fica SOBRE o fundo; dentro dos cards brancos o texto escuro
-       é fixado no próprio Card (ver components/ui.tsx). */
-    @apply text-slate-200 antialiased;
-    background: linear-gradient(160deg, #161b23 0%, #0f1319 55%, #0a0d12 100%);
+    /* O fundo vem da variável, que o tema troca. O texto daqui vale para o
+       que fica SOBRE o fundo; dentro dos cards o texto escuro é fixado no
+       próprio Card (ver components/ui.tsx) e não muda com o tema. */
+    @apply antialiased;
+    color: var(--pagina-texto);
+    background: var(--pagina-fundo);
     background-attachment: fixed;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     /* Evita render extra ao rolar */

@@ -3,10 +3,12 @@
 
 import { obterNoticias } from "@/lib/noticias";
 import { Painel } from "@/components/dashboard-ui";
-import { T } from "@/lib/dash-tema";
+import type { TemaDash } from "@/lib/dash-tema";
+import { temaDashAtual } from "@/lib/tema-servidor";
 import { Newspaper, ExternalLink } from "lucide-react";
 
-const COR_TEMA: Record<string, string> = { Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde };
+const corTema = (T: TemaDash): Record<string, string> =>
+  ({ Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde });
 
 function quando(iso: string | null): string {
   if (!iso) return "";
@@ -19,6 +21,7 @@ function quando(iso: string | null): string {
 }
 
 export async function NoticiasSetor() {
+  const T = temaDashAtual();
   const { itens, atualizadoEm } = await obterNoticias();
   return (
     <Painel
@@ -32,7 +35,7 @@ export async function NoticiasSetor() {
           {itens.slice(0, 10).map((n, i) => (
             <li key={i}>
               <a href={n.link} target="_blank" rel="noreferrer" className="flex items-start gap-2 rounded-xl px-3 py-2 text-sm transition hover:brightness-125" style={{ background: T.sobre }}>
-                <span className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${COR_TEMA[n.tema] ?? T.violeta}22`, color: COR_TEMA[n.tema] ?? T.violeta }}>{n.tema}</span>
+                <span className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide" style={{ background: `${corTema(T)[n.tema] ?? T.violeta}22`, color: corTema(T)[n.tema] ?? T.violeta }}>{n.tema}</span>
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-2 font-semibold" style={{ color: T.texto }}>{n.titulo}</span>
                   <span className="text-[11px]" style={{ color: T.mudo }}>{n.fonte ?? "Google Notícias"}{n.publicadoEm ? ` · ${quando(n.publicadoEm)}` : ""}</span>

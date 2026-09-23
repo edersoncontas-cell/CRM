@@ -37,7 +37,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Mesma textura da tela de abertura, agora no CRM inteiro: fica presa
           na viewport (não rola junto) e atrás de tudo. Sai na impressão para
           não sujar relatório em PDF. */}
-      <CurvasDeNivel className="fixed inset-0 -z-10 h-full w-full text-white opacity-[0.07] print:hidden" />
+      {/* As curvas de nível do fundo: brancas no escuro, grafite no claro —
+          fixas em branco elas sumiriam sobre o fundo claro. */}
+      <CurvasDeNivel className="fixed inset-0 -z-10 h-full w-full text-[var(--curvas-cor)] opacity-[var(--curvas-opacidade)] print:hidden" />
       <Sidebar nome={parametros?.nomeCrm} sub={parametros?.nomeEmpresa} />
       <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8" style={{ paddingBottom: "calc(var(--rodape-mercado) + 1rem)" }}>{children}</main>
       <InstalarIOS />

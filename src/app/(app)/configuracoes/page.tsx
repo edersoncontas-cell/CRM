@@ -27,6 +27,8 @@ import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 import { ExportarDadosCard } from "@/components/ExportarDadosCard";
 import { TravasEnvioCard } from "@/components/TravasEnvioCard";
+import { SeletorTema } from "@/components/SeletorTema";
+import { modoAtual } from "@/lib/tema-servidor";
 import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
 import { lerRegrasNegocio } from "@/lib/contexto-negocio";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
@@ -83,6 +85,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       <ParametrosNegocioForm p={parametros} />
 
       <RealidadeNegocioCard inicial={await lerRegrasNegocio().catch(() => [])} temIA={iaHabilitada()} />
+
+      <SeletorTema atual={modoAtual()} />
 
       <TravasEnvioCard />
 

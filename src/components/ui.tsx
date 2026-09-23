@@ -16,9 +16,9 @@ export function PageHeader({
   return (
     <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{titulo}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--sobre-fundo-titulo)] sm:text-3xl">{titulo}</h1>
         {subtitulo && (
-          <p className="mt-1 text-sm text-slate-400">{subtitulo}</p>
+          <p className="mt-1 text-sm text-[var(--sobre-fundo-texto)]">{subtitulo}</p>
         )}
       </div>
       {acao && <div className="flex max-w-full flex-wrap items-center gap-2">{acao}</div>}

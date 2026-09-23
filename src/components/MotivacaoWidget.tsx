@@ -3,10 +3,11 @@
 // no navegador, então não há risco de erro de hidratação.
 
 import { obterFraseDoDia } from "@/lib/frase-dia";
-import { T } from "@/lib/dash-tema";
+import { temaDashAtual } from "@/lib/tema-servidor";
 import { Sparkles } from "lucide-react";
 
 export async function FraseMotivacional() {
+  const T = temaDashAtual();
   const f = await obterFraseDoDia();
   return (
     <div

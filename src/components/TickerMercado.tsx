@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
-import { T } from "@/lib/dash-tema";
+import type { TemaDash } from "@/lib/dash-tema";
+import { useTemaDash } from "@/components/TemaDashProvider";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import { Coffee, DollarSign, Newspaper, RefreshCw } from "lucide-react";
 
@@ -15,6 +16,7 @@ const fmtBRL = (v: number | null, casas = 2) =>
 // Seta + percentual. Só some quando não há variação calculável (pct null);
 // 0% aparece como "• 0,00%" para o vendedor saber que o preço não mexeu.
 function Variacao({ pct, base }: { pct: number | null | undefined; base?: string | null }) {
+  const T = useTemaDash();
   if (pct == null) return null;
   const cor = pct > 0 ? T.verde : pct < 0 ? T.vermelho : T.texto2;
   const seta = pct > 0 ? "▲" : pct < 0 ? "▼" : "•";
@@ -22,7 +24,8 @@ function Variacao({ pct, base }: { pct: number | null | undefined; base?: string
   return <span className="text-[11px] font-bold" style={{ color: cor }} title={titulo}>{seta} {Math.abs(pct).toFixed(2).replace(".", ",")}%</span>;
 }
 
-const COR_TEMA: Record<string, string> = { Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde };
+const corTema = (T: TemaDash): Record<string, string> =>
+  ({ Café: T.amarelo, Crédito: T.verde, Obras: T.laranja, Máquinas: T.ciano, Marcas: T.violeta, Agro: T.verde });
 
 function quando(iso: string | null | undefined, agora: number): string {
   if (!iso) return "";
@@ -43,6 +46,7 @@ function quando(iso: string | null | undefined, agora: number): string {
 // /api/mercado/ticker toda vez que a tela abre, volta ao foco, a cada 60 s e
 // quando o botão "Atualizar" é clicado.
 export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
+  const T = useTemaDash();
   const [dados, setDados] = useState<DadosTicker>(inicial);
   const [atualizando, setAtualizando] = useState(false);
   // Relógio para o "lido há X min" andar mesmo sem dado novo.

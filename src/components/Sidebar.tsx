@@ -50,7 +50,7 @@ function ItemArrastavel({ item, ativo, fechar }: { item: ItemMenu; ativo: boolea
         // select-none: sem isto, segurar o dedo na linha para arrastar começa a
         // selecionar o texto do item em vez de mover.
         "group flex select-none items-center gap-2 rounded-xl px-2 py-1 text-sm font-medium",
-        ativo ? "bg-white/15 text-white" : "text-brand-300"
+        ativo ? "bg-[var(--menu-ativo)] text-[var(--menu-texto)]" : "text-[var(--menu-texto2)]"
       )}
     >
       {/* A alça tinha 23px — abaixo do mínimo de 48 que o dedo acerta, e ele
@@ -60,11 +60,11 @@ function ItemArrastavel({ item, ativo, fechar }: { item: ItemMenu; ativo: boolea
         {...attributes}
         {...listeners}
         aria-label={`Arrastar ${item.label}`}
-        className="flex h-12 w-12 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-brand-500 active:cursor-grabbing active:bg-white/10 md:h-8 md:w-8"
+        className="flex h-12 w-12 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-[var(--menu-mudo2)] active:cursor-grabbing active:bg-[var(--menu-hover)] md:h-8 md:w-8"
       >
         <GripVertical size={20} className="md:h-4 md:w-4" />
       </span>
-      <Icon size={17} className="shrink-0 text-brand-400" />
+      <Icon size={17} className="shrink-0 text-[var(--menu-mudo)]" />
       <span className="truncate">{item.label}</span>
     </div>
   );
@@ -167,7 +167,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
   return (
     <>
       {/* Topbar mobile */}
-      <div id="topbar-mobile" className="sticky top-0 z-30 flex items-center justify-between border-b border-brand-800 bg-brand-900 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white md:hidden">
+      <div id="topbar-mobile" className="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--menu-borda)] bg-[var(--menu-fundo)] px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-[var(--menu-texto)] md:hidden">
         <div className="flex items-center gap-2.5 font-bold tracking-tight">
           <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-white">
             <LogoEscavadeira size={28} />
@@ -176,7 +176,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         </div>
         <button
           onClick={() => setAberto((v) => !v)}
-          className="rounded-lg p-1.5 hover:bg-brand-800 active:scale-95 transition-transform"
+          className="rounded-lg p-1.5 hover:bg-[var(--menu-hover)] active:scale-95 transition-transform"
           aria-label="Menu"
         >
           {aberto ? <X size={22} /> : <Menu size={22} />}
@@ -198,10 +198,10 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
           // Layout base
           "fixed inset-y-0 left-0 z-50 flex w-72 flex-col",
           // Visual
-          "bg-brand-900 text-brand-100 shadow-2xl",
+          "bg-[var(--menu-fundo)] text-[var(--menu-texto)] shadow-2xl",
           // Desktop: sticky, com altura travada na viewport para o <nav> interno
           // rolar sozinho (sem isso, o menu rolava junto com a página).
-          "md:sticky md:top-0 md:z-30 md:h-screen md:max-h-screen md:w-64 md:overflow-hidden md:shadow-none md:bg-gradient-to-b md:from-brand-900 md:to-brand-950",
+          "md:sticky md:top-0 md:z-30 md:h-screen md:max-h-screen md:w-64 md:overflow-hidden md:shadow-none md:bg-gradient-to-b md:from-[var(--menu-fundo)] md:to-[var(--menu-fundo2)]",
           // Animação mobile
           "transition-transform duration-300 ease-in-out md:translate-x-0",
           aberto ? "translate-x-0" : "-translate-x-full"
@@ -210,19 +210,19 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         style={{ touchAction: "pan-y" }}
       >
         {/* Cabeçalho mobile dentro do aside — com safe-area */}
-        <div className="flex items-center justify-between border-b border-brand-800 px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] md:hidden">
+        <div className="flex items-center justify-between border-b border-[var(--menu-borda)] px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] md:hidden">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white shadow-md shadow-agro-500/20">
               <LogoEscavadeira size={36} />
             </div>
             <div>
-              <div className="text-sm font-bold leading-none text-white">{nome}</div>
+              <div className="text-sm font-bold leading-none text-[var(--menu-texto)]">{nome}</div>
               <div className="mt-0.5 text-[10px] text-agro-400">{sub}</div>
             </div>
           </div>
           <button
             onClick={fechar}
-            className="rounded-lg p-1.5 text-brand-400 hover:bg-brand-800 hover:text-white active:scale-95 transition-transform"
+            className="rounded-lg p-1.5 text-[var(--menu-mudo)] hover:bg-[var(--menu-hover)] hover:text-[var(--menu-texto)] active:scale-95 transition-transform"
             aria-label="Fechar menu"
           >
             <X size={20} />
@@ -235,13 +235,13 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
             <LogoEscavadeira size={36} />
           </div>
           <div>
-            <div className="text-sm font-bold leading-none text-white">{nome}</div>
+            <div className="text-sm font-bold leading-none text-[var(--menu-texto)]">{nome}</div>
             <div className="mt-0.5 text-[10px] text-agro-400">{sub}</div>
           </div>
         </div>
 
         {/* Divisor desktop */}
-        <div className="mx-4 hidden border-t border-brand-800 md:block" />
+        <div className="mx-4 hidden border-t border-[var(--menu-borda)] md:block" />
 
         {/* Botão de reorganizar menu */}
         <div className="px-4 pt-2">
@@ -249,7 +249,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
             onClick={() => setReorganizando((v) => !v)}
             className={cn(
               "flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-semibold transition-colors",
-              reorganizando ? "bg-agro-400 text-black" : "text-brand-400 hover:bg-white/5 hover:text-white"
+              reorganizando ? "bg-agro-400 text-black" : "text-[var(--menu-mudo)] hover:bg-[var(--menu-hover)] hover:text-[var(--menu-texto)]"
             )}
           >
             {reorganizando ? <Check size={13} /> : <ArrowUpDown size={13} />}
@@ -264,7 +264,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         >
           {reorganizando ? (
             <div className="px-3">
-              <p className="mb-2 px-2 text-[11px] text-brand-400">Arraste pelo ícone para reordenar.</p>
+              <p className="mb-2 px-2 text-[11px] text-[var(--menu-mudo)]">Arraste pelo ícone para reordenar.</p>
               <DndContext id="dnd-sidebar" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={itensOrdenados.map((i) => i.href)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-1">
@@ -287,15 +287,15 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
                     className={cn(
                       "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                       ativo
-                        ? "bg-white/15 text-white"
-                        : "text-brand-300 hover:bg-white/10 hover:text-white active:bg-white/20"
+                        ? "bg-[var(--menu-ativo)] text-[var(--menu-texto)]"
+                        : "text-[var(--menu-texto2)] hover:bg-[var(--menu-hover)] hover:text-[var(--menu-texto)] active:bg-[var(--menu-pressionado)]"
                     )}
                   >
                     <Icon
                       size={17}
                       className={cn(
                         "shrink-0 transition-colors",
-                        ativo ? "text-agro-400" : "text-brand-400 group-hover:text-brand-200"
+                        ativo ? "text-[var(--menu-destaque)]" : "text-[var(--menu-mudo)] group-hover:text-[var(--menu-texto)]"
                       )}
                     />
                     <span className="truncate">{label}</span>
@@ -308,7 +308,7 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
           ) : (
             grupos.map((grupo) => (
               <div key={grupo.label} className="mb-1 px-3">
-                <div className="mb-1 mt-3 px-2 text-[10px] font-bold uppercase tracking-widest text-brand-500">
+                <div className="mb-1 mt-3 px-2 text-[10px] font-bold uppercase tracking-widest text-[var(--menu-mudo2)]">
                   {grupo.label}
                 </div>
                 {grupo.links.map(({ href, label, icon: Icon }) => {
@@ -321,15 +321,15 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
                       className={cn(
                         "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                         ativo
-                          ? "bg-white/15 text-white"
-                          : "text-brand-300 hover:bg-white/10 hover:text-white active:bg-white/20"
+                          ? "bg-[var(--menu-ativo)] text-[var(--menu-texto)]"
+                          : "text-[var(--menu-texto2)] hover:bg-[var(--menu-hover)] hover:text-[var(--menu-texto)] active:bg-[var(--menu-pressionado)]"
                       )}
                     >
                       <Icon
                         size={17}
                         className={cn(
                           "shrink-0 transition-colors",
-                          ativo ? "text-agro-400" : "text-brand-400 group-hover:text-brand-200"
+                          ativo ? "text-[var(--menu-destaque)]" : "text-[var(--menu-mudo)] group-hover:text-[var(--menu-texto)]"
                         )}
                       />
                       <span className="truncate">{label}</span>
@@ -348,8 +348,8 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         </nav>
 
         {/* Rodapé desktop */}
-        <div className="hidden border-t border-brand-800 px-5 py-4 md:block">
-          <div className="text-[10px] text-brand-500">Vendas com IA · Sul do ES</div>
+        <div className="hidden border-t border-[var(--menu-borda)] px-5 py-4 md:block">
+          <div className="text-[10px] text-[var(--menu-mudo2)]">Vendas com IA · Sul do ES</div>
         </div>
       </aside>
     </>

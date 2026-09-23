@@ -8,7 +8,7 @@ import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { CENTRO_ES, LIMITES_ES } from "@/lib/municipios-es";
-import { T } from "@/lib/dash-tema";
+import { useTemaDash } from "@/components/TemaDashProvider";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import type { PontoVenda } from "@/lib/vendas-dashboard";
 
@@ -32,6 +32,7 @@ function iconeCifrao(vendas: number, max: number): L.DivIcon {
 export default function MapaVendasES({
   pontosIniciais, pontosTudoIniciais, ano,
 }: { pontosIniciais: PontoVenda[]; pontosTudoIniciais: PontoVenda[]; ano: number }) {
+  const T = useTemaDash();
   const [modo, setModo] = useState<"ano" | "tudo">("ano");
   const [pontosAno, setPontosAno] = useState(pontosIniciais);
   const [pontosTudo, setPontosTudo] = useState(pontosTudoIniciais);

@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
+import { COOKIE_TEMA, modoValido, corDaBarra } from "@/lib/tema";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { RegistrarSW } from "@/components/RegistrarSW";
@@ -29,20 +31,30 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = {
-  themeColor: "#09090b",
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-};
+// A cor da barra tem que seguir o tema: no app instalado é ela que o iOS
+// pinta em volta da tela. Fixa em preto, o tema claro ganharia uma tarja
+// escura no topo que não combina com nada.
+export function generateViewport(): Viewport {
+  const modo = modoValido(cookies().get(COOKIE_TEMA)?.value);
+  return {
+    themeColor: corDaBarra(modo),
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+  };
+}
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // O tema entra no HTML aqui, no servidor. Guardar a escolha no localStorage
+  // e aplicar depois faria a página nascer escura e clarear no meio do
+  // caminho — o branco que pisca na cara de quem abre o app.
+  const modo = modoValido(cookies().get(COOKIE_TEMA)?.value);
   return (
-    <html lang="pt-BR" className={inter.variable}>
+    <html lang="pt-BR" data-theme={modo === "claro" ? "light" : "dark"} className={inter.variable}>
       <body>
         {children}
         <RegistrarSW />

@@ -1,3 +1,5 @@
+import type { ModoTema } from "@/lib/tema";
+
 // Tema visual do Dashboard. Centralizado aqui para a página, os gráficos, o
 // letreiro e o mapa usarem exatamente a mesma paleta. Para trocar o tema do
 // Dashboard inteiro basta mudar ATIVO (as chaves "rosa", "ciano" etc. são os
@@ -123,8 +125,27 @@ export const TEMAS = {
 
 export type NomeTema = keyof typeof TEMAS;
 
-const ATIVO: NomeTema = "grafite";
+/** O tema do Dashboard para o modo escolhido pelo vendedor. */
+export function temaDash(modo: ModoTema): TemaDash {
+  return modo === "claro" ? TEMAS.claro : TEMAS.grafite;
+}
 
-export const T: TemaDash = TEMAS[ATIVO];
+/**
+ * As cores das séries dos gráficos, derivadas do tema.
+ *
+ * É função, e não constante, porque a paleta agora muda com o tema. Como
+ * constante, ela congelaria as cores do escuro e as fatias do donut sairiam
+ * neon dentro do tema claro.
+ */
+export function coresSerie(T: TemaDash): string[] {
+  return [T.violeta, T.ciano, T.verde, T.rosa, T.amarelo, T.laranja,
+    modoClaro(T) ? "#2563eb" : "#60a5fa",
+    modoClaro(T) ? "#65a30d" : "#a3e635",
+    T.vermelho,
+    modoClaro(T) ? "#9333ea" : "#c084fc"];
+}
 
-export const CORES_SERIE = [T.violeta, T.ciano, T.verde, T.rosa, T.amarelo, T.laranja, "#60a5fa", "#a3e635", T.vermelho, "#c084fc"];
+/** O tema claro é o único com card branco — serve de chave sem passar o modo. */
+function modoClaro(T: TemaDash): boolean {
+  return T.card === "#ffffff";
+}

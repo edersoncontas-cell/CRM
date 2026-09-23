@@ -634,8 +634,8 @@ function ColunaFunilView({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-slate-900/80 backdrop-blur-sm p-3 transition-all duration-200 max-h-[75vh]",
-        isOver && "ring-2 ring-agro-400 bg-slate-800/90 scale-[1.01] shadow-xl"
+        "flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-[var(--funil-coluna)]/85 backdrop-blur-sm p-3 transition-all duration-200 max-h-[75vh]",
+        isOver && "ring-2 ring-agro-400 bg-[var(--funil-coluna2)]/95 scale-[1.01] shadow-xl"
       )}
       // A cor vem do PAPEL, em variável CSS — não da classe gravada em
       // coluna.cor. Assim renomear a coluna não muda a cor de lugar, e a
@@ -658,13 +658,13 @@ function ColunaFunilView({
                 name="titulo"
                 defaultValue={coluna.titulo}
                 autoFocus
-                className="flex-1 min-w-0 rounded-lg bg-slate-800 px-2 py-1 text-sm text-white outline-none ring-1 ring-slate-600 focus:ring-agro-400"
+                className="flex-1 min-w-0 rounded-lg bg-[var(--funil-coluna2)] px-2 py-1 text-sm text-[var(--funil-card-texto)] outline-none ring-1 ring-[var(--funil-coluna-borda)] focus:ring-agro-400"
               />
               <button className="text-green-400 hover:text-green-300"><Check size={14} /></button>
-              <button type="button" onClick={() => setRenomeando(false)} className="text-slate-400 hover:text-slate-200"><X size={14} /></button>
+              <button type="button" onClick={() => setRenomeando(false)} className="text-[var(--funil-card-texto2)] hover:text-[var(--funil-card-texto)]"><X size={14} /></button>
             </form>
           ) : (
-            <span className="truncate text-sm font-bold text-slate-100 flex-1">{coluna.titulo}</span>
+            <span className="truncate text-sm font-bold text-[var(--funil-card-texto)] flex-1">{coluna.titulo}</span>
           )}
 
           <div className="flex items-center gap-1 shrink-0">
@@ -679,23 +679,23 @@ function ColunaFunilView({
             <div className="relative">
               <button
                 onClick={() => setMenu((v) => !v)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+                className="rounded-lg p-1 text-[var(--funil-card-texto2)] hover:bg-[var(--menu-hover)] hover:text-[var(--funil-card-texto)] transition-colors"
               >
                 <MoreVertical size={14} />
               </button>
               {menu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-slate-700 bg-slate-800 py-1 shadow-2xl">
+                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-[var(--funil-coluna-borda)] bg-[var(--funil-coluna2)] py-1 shadow-2xl">
                     <button
                       onClick={() => { setRenomeando(true); setMenu(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 transition-colors"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[var(--funil-card-texto)] hover:bg-[var(--menu-hover)] transition-colors"
                     >
                       <Pencil size={12} /> Renomear
                     </button>
                     <button
                       onClick={() => { setEditandoPapel(true); setMenu(false); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 transition-colors"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[var(--funil-card-texto)] hover:bg-[var(--menu-hover)] transition-colors"
                     >
                       <Percent size={12} /> Papel e chance
                     </button>
@@ -705,7 +705,7 @@ function ColunaFunilView({
                     setMenu(false);
                     onNovaAntiga();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-amber-300 hover:bg-slate-700 transition-colors"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-xs text-amber-600 hover:bg-[var(--menu-hover)] transition-colors dark:text-amber-300"
                 >
                   <Calendar size={12} /> Negociação Antiga
                 </button>
@@ -718,7 +718,7 @@ function ColunaFunilView({
                             startTransition(() => onExcluir());
                           }
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-slate-700 transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-[var(--menu-hover)] transition-colors"
                       >
                         <Trash2 size={12} /> Excluir coluna
                       </button>
@@ -731,7 +731,7 @@ function ColunaFunilView({
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" title="Papel da coluna">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--funil-card-texto2)]" title="Papel da coluna">
             {rotuloPapel(papel)}{papel !== "perdida" && papel !== "faturado" ? ` · ${probabilidade}%` : ""}
           </span>
           {total > 0 && (
@@ -747,24 +747,24 @@ function ColunaFunilView({
               const prob = Math.max(0, Math.min(100, parseInt(probSel, 10) || 0));
               startTransition(async () => { await onPapel(papelSel, prob); setEditandoPapel(false); });
             }}
-            className="mt-2 space-y-1.5 rounded-xl bg-slate-800 p-2 ring-1 ring-slate-600"
+            className="mt-2 space-y-1.5 rounded-xl bg-[var(--funil-coluna2)] p-2 ring-1 ring-[var(--funil-coluna-borda)]"
           >
-            <select value={papelSel} onChange={(e) => setPapelSel(e.target.value as typeof papelSel)} className="w-full rounded-lg bg-slate-900 px-2 py-1 text-xs text-white" aria-label="Papel da coluna">
+            <select value={papelSel} onChange={(e) => setPapelSel(e.target.value as typeof papelSel)} className="w-full rounded-lg bg-[var(--funil-card)] px-2 py-1 text-xs text-[var(--funil-card-texto)]" aria-label="Papel da coluna">
               {PAPEIS_COLUNA.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
-            <p className="text-[10px] text-slate-400">{PAPEIS_COLUNA.find((p) => p.id === papelSel)?.descricao}</p>
-            <label className="flex items-center gap-2 text-[11px] text-slate-300">
+            <p className="text-[10px] text-[var(--funil-card-texto2)]">{PAPEIS_COLUNA.find((p) => p.id === papelSel)?.descricao}</p>
+            <label className="flex items-center gap-2 text-[11px] text-[var(--funil-card-texto)]">
               Chance de fechar
-              <input type="number" min={0} max={100} value={probSel} onChange={(e) => setProbSel(e.target.value)} className="w-16 rounded-lg bg-slate-900 px-2 py-1 text-xs text-white" aria-label="Probabilidade" />%
+              <input type="number" min={0} max={100} value={probSel} onChange={(e) => setProbSel(e.target.value)} className="w-16 rounded-lg bg-[var(--funil-card)] px-2 py-1 text-xs text-[var(--funil-card-texto)]" aria-label="Probabilidade" />%
             </label>
             <div className="flex gap-1">
               <button className="flex-1 rounded-lg bg-agro-400 px-2 py-1 text-xs font-bold text-slate-900">Salvar</button>
-              <button type="button" onClick={() => setEditandoPapel(false)} className="rounded-lg px-2 py-1 text-xs text-slate-300">Cancelar</button>
+              <button type="button" onClick={() => setEditandoPapel(false)} className="rounded-lg px-2 py-1 text-xs text-[var(--funil-card-texto2)]">Cancelar</button>
             </div>
           </form>
         )}
         {!isPerdido && total > 0 && (
-          <div className="mt-2 h-1 w-full rounded-full bg-slate-700">
+          <div className="mt-2 h-1 w-full rounded-full bg-[var(--funil-coluna-borda)]">
             <div className="h-full rounded-full bg-gradient-to-r from-agro-400 to-emerald-500 transition-all duration-500" style={{ width: "100%" }} />
           </div>
         )}
@@ -787,10 +787,10 @@ function ColunaFunilView({
         {cards.length === 0 && (
           // Vazia por falta de movimento no período é diferente de vazia por
           // não ter nada: sem dizer qual das duas, ele acha que sumiu card.
-          <div className="flex flex-col items-center justify-center gap-0.5 py-8 text-center text-xs text-slate-600">
+          <div className="flex flex-col items-center justify-center gap-0.5 py-8 text-center text-xs text-[var(--funil-card-texto2)] opacity-70">
             <ChevronRight size={20} className="mb-1 opacity-30" />
             <span>Nada em {periodoRotulo}</span>
-            <span className="text-[10px] text-slate-700">arraste um card aqui</span>
+            <span className="text-[10px] opacity-70">arraste um card aqui</span>
           </div>
         )}
       </div>
@@ -844,7 +844,7 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
             onClick={() => setMenu((v) => !v)}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-lg p-1.5 text-[var(--funil-card-texto2)] transition-colors hover:bg-[var(--menu-hover)] hover:text-[var(--funil-card-texto)]"
           >
             <MoreVertical size={14} />
           </button>
@@ -854,12 +854,12 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
                 className="fixed inset-0 z-40"
                 onPointerDown={(e) => { e.stopPropagation(); setMenu(false); }}
               />
-              <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-slate-700 bg-slate-800 py-1 shadow-2xl">
+              <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-[var(--funil-coluna-borda)] bg-[var(--funil-coluna2)] py-1 shadow-2xl">
                 <button
                   type="button"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => { setMenu(false); onPerder(); }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-semibold text-red-400 transition-colors hover:bg-slate-700"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-xs font-semibold text-red-500 transition-colors hover:bg-[var(--menu-hover)]"
                 >
                   <TrendingDown size={13} /> Venda perdida
                 </button>
@@ -874,7 +874,7 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
           <Link
             href={`/clientes/${card.clienteId}`}
             onPointerDown={(e) => e.stopPropagation()}
-            className="text-sm font-bold leading-tight text-white hover:text-agro-400 hover:underline transition-colors"
+            className="text-sm font-bold leading-tight text-[var(--funil-card-texto)] hover:text-agro-500 hover:underline transition-colors"
           >
             {card.cliente}
           </Link>
@@ -884,7 +884,7 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
               botão come o clique e confunde leitor de tela. */}
           <span className={cn("shrink-0", onPerder && !arrastando && "mr-7")}>{iconeCalor(card.termometro)}</span>
         </div>
-        {card.municipio && <div className="text-xs text-slate-400 mb-1.5">{card.municipio}</div>}
+        {card.municipio && <div className="text-xs text-[var(--funil-card-texto2)] mb-1.5">{card.municipio}</div>}
         {card.maquina && (
           <div className="inline-flex mb-2 items-center rounded-lg bg-agro-400/20 px-2 py-0.5 text-xs font-bold text-agro-300 border border-agro-400/20">
             {card.maquina}
@@ -922,11 +922,11 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
         )}
       </div>
       {!arrastando && onEditar && (
-        <div className="mt-2.5 flex items-center border-t border-white/10 pt-2">
+        <div className="mt-2.5 flex items-center border-t border-[var(--funil-card-borda)] pt-2">
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={onEditar}
-            className="flex flex-1 items-center justify-center gap-1 text-xs font-medium text-slate-300 hover:text-agro-400 transition-colors"
+            className="flex flex-1 items-center justify-center gap-1 text-xs font-medium text-[var(--funil-card-texto2)] hover:text-agro-500 transition-colors"
           >
             <Pencil size={11} /> Editar
           </button>
@@ -934,7 +934,7 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
             href={`/negociacoes/${card.id}/proposta`}
             onPointerDown={(e) => e.stopPropagation()}
             title="Proposta de uma página + calculadora de custo por hora"
-            className="flex flex-1 items-center justify-center gap-1 border-l border-white/10 text-xs font-medium text-slate-300 hover:text-agro-400 transition-colors"
+            className="flex flex-1 items-center justify-center gap-1 border-l border-[var(--funil-card-borda)] text-xs font-medium text-[var(--funil-card-texto2)] hover:text-agro-500 transition-colors"
           >
             <FileText size={11} /> Proposta
           </Link>

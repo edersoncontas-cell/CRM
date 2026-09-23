@@ -15,7 +15,8 @@ import { lerParametros } from "@/lib/parametros";
 import { calcularRitmoMetas } from "@/lib/metas";
 import { contarClientesConversados } from "@/lib/actions";
 import { PERIODOS_ORIENTADOR, type PeriodoOrientador } from "@/lib/orientador-periodos";
-import { T } from "@/lib/dash-tema";
+import { temaDashAtual } from "@/lib/tema-servidor";
+import { TemaDashProvider } from "@/components/TemaDashProvider";
 // Mesmas funções do calendário da página de Visitas — ver o comentário na
 // expansão dos eventos, abaixo. Duas contas para "que dia é este" foi
 // exatamente o defeito da feira que ia até sábado.
@@ -28,6 +29,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: { searchParams: { ano?: string } }) {
+  // A paleta do Dashboard segue o tema escolhido. Os componentes de servidor
+  // leem o cookie sozinhos; os de cliente (gráficos, mapa, letreiro) recebem
+  // esta mesma paleta pelo TemaDashProvider lá embaixo.
+  const T = temaDashAtual();
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const anoSel = searchParams.ano && /^\d{4}$/.test(searchParams.ano) ? Number(searchParams.ano) : anoAtual;
@@ -278,6 +283,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const coresConversados = [T.rosa, T.violeta, T.ciano, T.verde, T.amarelo, T.laranja];
 
   return (
+    <TemaDashProvider valor={T}>
     <div style={{ background: T.fundo, minHeight: "100%", color: T.texto }} className="-m-4 space-y-4 p-4 md:-m-8 md:p-6">
       {/* ── Cabeçalho ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -580,6 +586,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </Painel>
       )}
     </div>
+    </TemaDashProvider>
   );
 }
 
@@ -590,6 +597,7 @@ function Lista({ children }: { children: React.ReactNode }) {
 }
 
 function Linha({ href, esquerda, titulo, sub, direita }: { href: string; esquerda: React.ReactNode; titulo: string; sub?: string; direita?: React.ReactNode }) {
+  const T = temaDashAtual();
   return (
     <li>
       <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2 transition active:opacity-70" style={{ background: T.sobre }}>

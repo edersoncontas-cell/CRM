@@ -4,11 +4,12 @@
 
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
-import { T } from "@/lib/dash-tema";
+import { temaDashAtual } from "@/lib/tema-servidor";
 
 export function Painel({ titulo, subtitulo, acao, children, className = "", destaque = false }: {
   titulo?: string; subtitulo?: string; acao?: React.ReactNode; children: React.ReactNode; className?: string; destaque?: boolean;
 }) {
+  const T = temaDashAtual();
   return (
     <section
       className={`rounded-2xl p-4 ${className}`}
@@ -32,6 +33,7 @@ export function Painel({ titulo, subtitulo, acao, children, className = "", dest
 export function Anel({ id, valor, max, cor1, cor2, tamanho = 92, espessura = 9, children }: {
   id: string; valor: number; max: number; cor1: string; cor2: string; tamanho?: number; espessura?: number; children?: React.ReactNode;
 }) {
+  const T = temaDashAtual();
   const r = (tamanho - espessura) / 2;
   const c = 2 * Math.PI * r;
   const frac = max > 0 ? Math.max(0, Math.min(1, valor / max)) : 0;
@@ -58,6 +60,7 @@ export function Anel({ id, valor, max, cor1, cor2, tamanho = 92, espessura = 9, 
 }
 
 export function Delta({ valor, sufixo = "%", texto = "vs. ano anterior" }: { valor: number | null; sufixo?: string; texto?: string }) {
+  const T = temaDashAtual();
   if (valor == null) return <span className="text-[11px]" style={{ color: T.mudo }}>sem base de comparação</span>;
   const cor = valor > 0 ? T.verde : valor < 0 ? T.vermelho : T.mudo;
   const Icone = valor > 0 ? ArrowUpRight : valor < 0 ? ArrowDownRight : Minus;
@@ -69,6 +72,7 @@ export function Delta({ valor, sufixo = "%", texto = "vs. ano anterior" }: { val
 }
 
 export function Chip({ ativo, href, children }: { ativo: boolean; href: string; children: React.ReactNode }) {
+  const T = temaDashAtual();
   return (
     <Link
       href={href}
@@ -82,6 +86,7 @@ export function Chip({ ativo, href, children }: { ativo: boolean; href: string; 
 
 // Calendário do mês corrente marcando os dias com visita agendada.
 export function CalendarioVisitas({ ano, mes, diasComVisita, hoje }: { ano: number; mes: number; diasComVisita: Map<number, number>; hoje: number | null }) {
+  const T = temaDashAtual();
   const nomeMes = new Date(ano, mes, 1).toLocaleDateString("pt-BR", { month: "long" });
   const primeiroDia = new Date(ano, mes, 1).getDay();
   const dias = new Date(ano, mes + 1, 0).getDate();
