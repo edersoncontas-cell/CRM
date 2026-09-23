@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { OctagonX, Play, Loader2, AlertTriangle } from "lucide-react";
+import { OctagonX, Play, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui";
 import { lerPausaAction, definirPausaAction, type EstadoPausa } from "@/lib/whatsapp-pausa-actions";
 import { cancelarTodosEnviosAction } from "@/lib/envio-programado-actions";
@@ -21,7 +21,7 @@ export function PausaEnvioCard() {
   useEffect(() => {
     lerPausaAction()
       .then(setE)
-      .catch(() => { setE({ pausado: true, naFila: 0 }); setErro("Não deu para ler o estado. Na dúvida, o CRM considera PAUSADO."); });
+      .catch(() => { setE({ pausado: true, naFila: 0, fila: [] }); setErro("Não deu para ler o estado. Na dúvida, o CRM considera PAUSADO."); });
   }, []);
 
   if (!e) return null;
@@ -62,6 +62,33 @@ export function PausaEnvioCard() {
               ? "Nenhuma mensagem sai do CRM: nem campanha, nem resposta automática do ZEUS, nem parabéns de aniversário, nem o que você escrever na tela do WhatsApp. As conversas continuam CHEGANDO normalmente."
               : "O CRM pode enviar mensagens, dentro das travas de horário e teto diário abaixo."}
           </p>
+
+          {/* O que ainda sairia se ele liberasse. A pergunta "tem outros na
+              fila?" tinha resposta espalhada em cinco lugares — quem precisa
+              somar cinco telas para saber se o número está seguro não soma,
+              arrisca. */}
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              {e.pausado ? "O que sairia se você liberar agora" : "O que está engatilhado"}
+            </div>
+            {e.fila.length === 0 ? (
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                <CheckCircle2 size={13} className="shrink-0" /> Nada na fila. Liberar não dispara nada sozinho.
+              </p>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {e.fila.map((f) => (
+                  <li key={f.o_que} className="flex items-start gap-1.5 text-xs text-slate-700">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                    <span>
+                      {f.o_que}
+                      {f.onde && <> · <a href={f.onde} className="font-semibold underline">ver</a></>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             {e.pausado ? (
