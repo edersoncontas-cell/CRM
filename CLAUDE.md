@@ -141,6 +141,14 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   git push origin claude/projeto-zeus-merge-deploy-jc6p7x:claude/relaxed-cori-5c3g4l
   ```
 - **Toda migração nova exige subir `CHAVE_MANUTENCAO`** em `lib/manutencao.ts`.
+- **Campo novo no `schema.prisma` derruba o CRM se o banco ainda não tiver a
+  coluna.** A partir do deploy, TODA consulta àquele modelo pede a coluna nova
+  — e a manutenção roda dentro de uma requisição, em paralelo com as consultas
+  da página: ela perde a corrida. Já aconteceu, e o CRM parou de funcionar na
+  rua. A coluna tem que existir ANTES da primeira consulta (ver o portão em
+  `lib/db.ts`), nunca depender de um passo de manutenção. E antes de empurrar:
+  **rodar com CÓDIGO NOVO e BANCO VELHO** — derruba a coluna no banco de teste,
+  builda, e a PRIMEIRA requisição tem que passar.
 - **Chave de API é credencial:** nunca mostrar por extenso, nunca em log; a
   auditoria grava o provedor, nunca o valor.
 - **Nada que gere fatura sem dizer o custo na cara e deixar ele escolher.** Ele
@@ -166,6 +174,11 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
 npx tsc --noEmit && npx eslint src tests --ext .ts,.tsx && npx vitest run && npm run build
 ```
 
+E a conferência de tela da regra 7, em PRODUÇÃO (`scripts/conferir-telas.mjs`):
+varre todas as telas no PC e no celular olhando código HTTP, "Algo deu errado",
+erro no navegador e desvio de endereço. Em dev o empacotamento é outro — o
+funil caído com o Prisma no navegador só apareceu no build de produção.
+
 Lint e tipos passando não provam nada sobre comportamento — os três defeitos do
 bloqueio do WhatsApp passaram nos quatro. O que prova é a regra 1, a 2 e a 7.
 
@@ -182,5 +195,12 @@ bloqueio do WhatsApp passaram nos quatro. O que prova é a regra 1, a 2 e a 7.
   o bloco como `role="button"`, e botão dentro de botão come o evento.
 - `:where()` zera especificidade — é a correção para regra global de CSS vencer
   classe de componente sem querer (já custou o arrastar do menu no celular).
+- **Tela não pode alcançar `lib/db.ts`.** Dezenas de componentes de tela
+  importam uma constante de um arquivo que, lá no fundo da corrente, toca o
+  banco — e o empacotador leva o banco inteiro para o celular dele. O Prisma
+  não roda no navegador: a tela cai em "Algo deu errado" (foi assim que o funil
+  quebrou). O `next.config.mjs` troca `lib/db.ts` e `node:async_hooks` por
+  versões de navegador — inertes ao importar, com erro claro ao usar. É rede de
+  proteção, não conserto: o certo continua sendo a tela não alcançar o banco.
 - Fuso: servidor em UTC, vendedor em Brasília (UTC−3 o ano todo).
 - `npx prisma generate` exige `DATABASE_URL_UNPOOLED` no ambiente.
