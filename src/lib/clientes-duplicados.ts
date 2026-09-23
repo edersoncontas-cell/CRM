@@ -10,11 +10,7 @@ import { Prisma } from "@prisma/client";
 import { agruparDuplicados, mesclarCampos, telefoneDoNome, type ClienteParaDedup, type GrupoDuplicados } from "@/lib/clientes-duplicados-regra";
 import { nomeGenerico } from "@/lib/google-contatos-util";
 
-// O cliente dentro de uma transação DO NOSSO db. Tirado dele de propósito:
-// lib/db.ts estende o Prisma para injetar o filtro por vendedor, e o tipo
-// estendido não é o Prisma.TransactionClient cru. Escrever o tipo à mão daria
-// o erro chato de "faltam $connect, $transaction…".
-type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0] | typeof db;
+type Tx = Prisma.TransactionClient;
 type ClienteRow = Prisma.ClienteGetPayload<Record<string, never>>;
 
 const SELECAO_DEDUP = { id: true, nome: true, telefone: true, googleContatoId: true, googleSincronizadoEm: true, origem: true, criadoEm: true } as const;

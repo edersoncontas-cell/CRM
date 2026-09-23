@@ -7,92 +7,87 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model Municipio {
-  id         String    @id @default(cuid())
-  nome       String    @unique
-  regiao     String    @default("Sul do Espírito Santo")
-  lat        Float?
-  lng        Float?
-  foraDeArea Boolean   @default(false)
-  clientes   Cliente[]
+  id       String  @id @default(cuid())
+  nome     String  @unique
+  regiao   String  @default("Sul do Espírito Santo")
+  lat      Float?
+  lng      Float?
+  foraDeArea Boolean @default(false)
+  clientes Cliente[]
 }
 
 model Cliente {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId            String?
-  id                    String                @id @default(cuid())
-  nome                  String
-  telefone              String?
-  email                 String?
-  endereco              String?
-  municipio             Municipio?            @relation(fields: [municipioId], references: [id])
-  municipioId           String?
-  perfilIA              String?
-  origem                String?
-  jaComprou             Boolean               @default(false)
-  visitado              Boolean               @default(false)
-  fotoUrl               String?
-  observacoes           String?
-  ultimoContato         DateTime?
-  aguardandoResposta    Boolean               @default(false)
-  perfilDISC            String?
-  abordagemIA           String?
-  dataCompra            DateTime?
-  maquinaComprada       String?
-  interesseFuturo       Boolean               @default(false)
-  interesseFuturoData   DateTime?
-  interesseFuturoNota   String?
-  status                String                @default("potencial")
+  id              String    @id @default(cuid())
+  nome            String
+  telefone        String?
+  email           String?
+  endereco        String?
+  municipio       Municipio? @relation(fields: [municipioId], references: [id])
+  municipioId     String?
+  perfilIA        String?
+  origem          String?
+  jaComprou       Boolean   @default(false)
+  visitado        Boolean   @default(false)
+  fotoUrl         String?
+  observacoes     String?
+  ultimoContato   DateTime?
+  aguardandoResposta Boolean @default(false)
+  perfilDISC      String?
+  abordagemIA     String?
+  dataCompra      DateTime?
+  maquinaComprada String?
+  interesseFuturo Boolean   @default(false)
+  interesseFuturoData DateTime?
+  interesseFuturoNota String?
+  status          String    @default("potencial")
   // Pediu para não receber mais mensagem em massa (respondeu SAIR, ou o
   // vendedor marcou na mão). Campanha NUNCA envia para quem está marcado —
   // é a trava que mais protege o número, porque denúncia derruba WhatsApp
   // muito mais rápido que volume. Conversa individual continua liberada:
   // ele pediu para sair da lista, não para parar de ser atendido.
-  naoPerturbe           Boolean               @default(false)
-  naoPerturbeEm         DateTime?
-  naoPerturbeMotivo     String?
-  proximaVisita         DateTime?
-  proximaVisitaNota     String?
-  resumoMaquinas        String?
-  resumoValor           Float?
-  resumoEntrada         Float?
-  resumoCondicao        String?
-  resumoTexto           String?
-  leadScore             Int                   @default(50) // Fase 5: score 0-100 recalculado pelo ZEUS (recência+sentimento+valor+estágio+sinais de compra)
+  naoPerturbe     Boolean   @default(false)
+  naoPerturbeEm   DateTime?
+  naoPerturbeMotivo String?
+  proximaVisita   DateTime?
+  proximaVisitaNota String?
+  resumoMaquinas  String?
+  resumoValor     Float?
+  resumoEntrada   Float?
+  resumoCondicao  String?
+  resumoTexto     String?
+  leadScore       Int       @default(50) // Fase 5: score 0-100 recalculado pelo ZEUS (recência+sentimento+valor+estágio+sinais de compra)
   leadScoreAtualizadoEm DateTime?
   // Orientador de Vendas: card ocultado (X vermelho ou ✓ negociação criada)
   // nesta data — volta a aparecer quando chega mensagem nova depois dela.
-  orientadorOcultoEm    DateTime?
+  orientadorOcultoEm DateTime?
   // Google Contatos: resourceName ("people/c123") do contato ligado a este
   // cliente e quando foi sincronizado pela última vez.
-  googleContatoId       String?
-  googleSincronizadoEm  DateTime?
+  googleContatoId String?
+  googleSincronizadoEm DateTime?
   // Aniversário: digitado no cadastro ("manual") ou lido pela IA de um
   // documento que o cliente mandou no WhatsApp ("documento:CNH", "documento:contrato"…).
-  dataNascimento        DateTime?
-  dataNascimentoOrigem  String?
-  indicadoPor           Cliente?              @relation("Indicacoes", fields: [indicadoPorId], references: [id])
-  indicadoPorId         String?
-  indicados             Cliente[]             @relation("Indicacoes")
-  criadoEm              DateTime              @default(now())
-  atualizadoEm          DateTime              @updatedAt
-  negociacoes           Negociacao[]
-  alertas               Alerta[]
-  tarefas               TarefaKanban[]
-  visitas               Visita[]
-  frota                 ClienteMaquina[]
-  orientador            OrientadorAnalise?
-  posVendaContatos      PosVendaContato[]
-  cadencias             Cadencia[]
-  notasContexto         NotaContextoCliente[]
-
+  dataNascimento  DateTime?
+  dataNascimentoOrigem String?
+  indicadoPor     Cliente?  @relation("Indicacoes", fields: [indicadoPorId], references: [id])
+  indicadoPorId   String?
+  indicados       Cliente[] @relation("Indicacoes")
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+  negociacoes    Negociacao[]
+  alertas        Alerta[]
+  tarefas        TarefaKanban[]
+  visitas        Visita[]
+  frota          ClienteMaquina[]
+  orientador     OrientadorAnalise?
+  posVendaContatos PosVendaContato[]
+  cadencias      Cadencia[]
+  notasContexto  NotaContextoCliente[]
   @@index([leadScore])
   @@index([googleContatoId])
   @@index([aguardandoResposta, ultimoContato])
@@ -110,35 +105,33 @@ model Cadencia {
   cliente            Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   clienteId          String
   tipo               String    @default("geral") // construtora | pedreira | cafe | prefeitura | locadora | geral
-  toqueAtual         Int       @default(0) // último toque executado (0 = nenhum)
+  toqueAtual         Int       @default(0)       // último toque executado (0 = nenhum)
   proximoToqueEm     DateTime
   ativa              Boolean   @default(true)
   iniciadaEm         DateTime  @default(now())
   encerradaEm        DateTime?
-  motivoEncerramento String? // respondeu | concluida | manual | sem_telefone
-
+  motivoEncerramento String?   // respondeu | concluida | manual | sem_telefone
   @@index([ativa, proximoToqueEm])
   @@index([clienteId])
 }
 
 // Respostas prontas do WhatsApp (modelos por situação, com {nome} e {vendedor}).
 model RespostaPronta {
-  id       String   @id @default(cuid())
-  titulo   String
-  texto    String
-  ordem    Int      @default(0)
-  criadoEm DateTime @default(now())
+  id        String   @id @default(cuid())
+  titulo    String
+  texto     String
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
 }
 
 model PosVendaContato {
   id        String   @id @default(cuid())
   cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   clienteId String
-  tipo      String // ligacao | visita | whatsapp | manutencao | peca_vendida | indicacao_pedida | ideia_ia | outro
+  tipo      String   // ligacao | visita | whatsapp | manutencao | peca_vendida | indicacao_pedida | ideia_ia | outro
   nota      String
   data      DateTime @default(now())
   criadoEm  DateTime @default(now())
-
   @@index([clienteId, data])
 }
 
@@ -182,54 +175,45 @@ model OrientadorAnalise {
 }
 
 model ClienteMaquina {
-  id        String   @id @default(cuid())
-  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  clienteId String
-  marca     String
-  modelo    String
+  id         String   @id @default(cuid())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String
+  marca      String
+  modelo     String
   criadoEm  DateTime @default(now())
 }
 
 model Visita {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId     String?
-  id             String    @id @default(cuid())
-  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  clienteId      String
-  data           DateTime
-  observacao     String?
+  id         String   @id @default(cuid())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteId  String
+  data       DateTime
+  observacao String?
   // Cidade/local da visita (pode ser diferente do município do cadastro —
   // obra em outra cidade). Usada no mapa da semana.
-  cidade         String?
+  cidade     String?
   // Evento correspondente na Google Agenda (integração OAuth) — para apagar
   // junto quando a visita é removida.
-  googleEventId  String?
+  googleEventId String?
   // agendada | realizada | nao_realizada. A meta de visitas conta só as
   // realizadas (confirmadas pelo vendedor com o ✓).
   status         String    @default("agendada")
   realizadaEm    DateTime?
   // Visita criada ao reagendar outra (aponta para a original não realizada).
   reagendadaDeId String?
-  criadoEm       DateTime  @default(now())
-
+  criadoEm  DateTime @default(now())
   @@index([status, data])
 }
 
 model Negociacao {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId            String?
   id                    String    @id @default(cuid())
   cliente               Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   clienteId             String
-  marca                 String? // New Holland | Dynapac
+  marca                 String?   // New Holland | Dynapac
   maquinaModelo         String?
   valor                 Float?
-  tipoPagamento         String? // avista | financiamento | consorcio | crd_pme | outro
-  condicaoPagamento     String? // legado / texto livre
+  tipoPagamento         String?   // avista | financiamento | consorcio | crd_pme | outro
+  condicaoPagamento     String?   // legado / texto livre
   // Detalhes que mudam a proposta e não cabem nos outros campos: tamanho do
   // braço quando é escavadeira, e se a venda é com Inscrição Estadual (I.E.).
   observacao            String?
@@ -241,7 +225,7 @@ model Negociacao {
   dataPagamentoAvista   DateTime?
   pagamentoNaEntrega    Boolean   @default(false)
   // Campos consórcio
-  consorcioTipo         String? // new_holland | outro
+  consorcioTipo         String?   // new_holland | outro
   consorcioCotas        Int?
   consorcioCredito      Float?
   // Campos CRD PME
@@ -249,7 +233,7 @@ model Negociacao {
   crdParcelaValor       Float?
   // Negociação antiga (vendas históricas)
   negociacaoAntiga      Boolean   @default(false)
-  mesAnoReferencia      String? // formato "YYYY-MM" para vendas antigas
+  mesAnoReferencia      String?   // formato "YYYY-MM" para vendas antigas
   // Controle de estágio e status
   concorrenteMencionado String?
   estagio               String    @default("novo")
@@ -267,16 +251,16 @@ model Negociacao {
   usadaModelo           String?
   usadaAno              Int?
   usadaHorimetro        Int?
-  usadaEstado           String? // seminova | boa | regular
+  usadaEstado           String?   // seminova | boa | regular
   usadaValor            Float?
   usadaObs              String?
   usadaEstoqueId        String?
   // Controle de pagamento da comissão (0,5% sobre o valor faturado)
   comissaoPaga          Boolean   @default(false)
-  comissaoPagaMes       String? // "YYYY-MM" — mês em que a comissão foi paga
+  comissaoPagaMes       String?   // "YYYY-MM" — mês em que a comissão foi paga
   comissaoPagaEm        DateTime? // timestamp de quando foi confirmada
-  criadoEm              DateTime  @default(now())
-  atualizadoEm          DateTime  @updatedAt
+  criadoEm             DateTime  @default(now())
+  atualizadoEm         DateTime  @updatedAt
   proposta              Proposta?
 }
 
@@ -284,37 +268,36 @@ model Negociacao {
 // condição → prova → validade) + calculadora de custo por hora / TCO. Os
 // dados ficam em JSON (`dados`) para evoluir sem migração a cada campo novo.
 model Proposta {
-  id           String     @id @default(cuid())
-  negociacao   Negociacao @relation(fields: [negociacaoId], references: [id], onDelete: Cascade)
-  negociacaoId String     @unique
-  dados        String // JSON: DadosProposta (lib/proposta.ts)
-  enviadaEm    DateTime?
-  criadoEm     DateTime   @default(now())
-  atualizadoEm DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  negociacao    Negociacao @relation(fields: [negociacaoId], references: [id], onDelete: Cascade)
+  negociacaoId  String     @unique
+  dados         String     // JSON: DadosProposta (lib/proposta.ts)
+  enviadaEm     DateTime?
+  criadoEm      DateTime   @default(now())
+  atualizadoEm  DateTime   @updatedAt
 }
 
 model Maquina {
-  id                 String        @id @default(cuid())
-  marca              String        @default("New Holland")
-  modelo             String
-  categoria          String
-  proprio            Boolean       @default(false)
-  maisComercializado Boolean       @default(false)
-  volumeVendas       Int           @default(0)
-  pesoOperacional    Float?
-  potencia           Int?
-  valorInicial       Float?
-  consumoLitrosHora  Float?
-  argumentos         String?
-  descricao          String?
-  especificacoes     String?
-  pontosFortes       String?
-  diferenciais       String?
-  curiosidades       String?
-  imagemUrl          String?
-  aplicacoes         String? // setor de aplicações: nichos/segmentos de mercado e operações que a máquina realiza
-  notas              NotaMaquina[]
-
+  id                String  @id @default(cuid())
+  marca             String  @default("New Holland")
+  modelo            String
+  categoria         String
+  proprio           Boolean @default(false)
+  maisComercializado Boolean @default(false)
+  volumeVendas      Int     @default(0)
+  pesoOperacional   Float?
+  potencia          Int?
+  valorInicial      Float?
+  consumoLitrosHora Float?
+  argumentos        String?
+  descricao         String?
+  especificacoes    String?
+  pontosFortes      String?
+  diferenciais      String?
+  curiosidades      String?
+  imagemUrl         String?
+  aplicacoes        String? // setor de aplicações: nichos/segmentos de mercado e operações que a máquina realiza
+  notas             NotaMaquina[]
   @@unique([marca, modelo])
 }
 
@@ -325,10 +308,9 @@ model NotaMaquina {
   id            String   @id @default(cuid())
   maquina       Maquina  @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
   maquinaId     String
-  concorrenteId String? // opcional: nota específica contra um concorrente
+  concorrenteId String?  // opcional: nota específica contra um concorrente
   texto         String
   criadoEm      DateTime @default(now())
-
   @@index([maquinaId])
 }
 
@@ -336,28 +318,24 @@ model NotaMaquina {
 // coluna: "demandas" (aberta) | "demandas_concluida" (feita) — nome mantido
 // por compatibilidade com dados antigos.
 model TarefaKanban {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId  String?
-  id          String    @id @default(cuid())
-  titulo      String
-  descricao   String?
-  coluna      String    @default("demandas")
-  ordem       Int       @default(0)
-  checklist   String?
-  cliente     Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  clienteId   String?
-  dueDate     DateTime?
-  cidade      String?
-  prioridade  String    @default("normal") // alta | normal | baixa
-  origem      String    @default("manual") // manual | orientador | cadencia | posvenda | cerebro | zeus
-  chave       String? // chave de deduplicação das automáticas (origem:cliente:tipo)
+  id         String    @id @default(cuid())
+  titulo     String
+  descricao  String?
+  coluna     String    @default("demandas")
+  ordem      Int       @default(0)
+  checklist  String?
+  cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId  String?
+  dueDate    DateTime?
+  cidade     String?
+  prioridade String    @default("normal") // alta | normal | baixa
+  origem     String    @default("manual") // manual | orientador | cadencia | posvenda | cerebro | zeus
+  chave      String?   // chave de deduplicação das automáticas (origem:cliente:tipo)
   concluidaEm DateTime?
-  criadoEm    DateTime  @default(now())
-
+  criadoEm  DateTime  @default(now())
   @@index([coluna, dueDate])
 }
+
 
 // Itens da Central de alertas que o vendedor marcou como resolvidos. A chave
 // é o id do item (ex.: "aguardando:<clienteId>"). Quando o cliente manda
@@ -383,10 +361,6 @@ model ContatoBloqueado {
 // Compromisso que não é visita a cliente: feira, convenção, treinamento,
 // viagem. Pode durar vários dias e acontecer fora do ES (daí guardar a UF).
 model Evento {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId String?
   id         String   @id @default(cuid())
   titulo     String
   inicio     DateTime
@@ -396,7 +370,6 @@ model Evento {
   cidade     String?
   observacao String?
   criadoEm   DateTime @default(now())
-
   @@index([inicio, fim])
 }
 
@@ -445,10 +418,6 @@ model LimpezaClientes {
 // fosse refeita na hora do envio, um cliente cadastrado no meio do caminho
 // receberia uma mensagem que ninguém mandou para ele.
 model EnvioProgramado {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId   String?
   id           String    @id @default(cuid())
   // Instante do envio, em UTC. A tela monta a partir do fuso de Brasília.
   quando       DateTime
@@ -468,27 +437,25 @@ model EnvioProgramado {
   // como "enviado" no meio e o resto nunca saía.
   enviadosAte  Int       @default(0)
   erro         String?
-
   @@index([status, quando])
 }
 
 model MidiaEnvio {
-  id       String   @id @default(cuid())
-  criadoEm DateTime @default(now())
-  mimeType String
-  nome     String
-  tipo     String // image | video | document
-  origem   String // upload | gemini
-  base64   String
+  id        String   @id @default(cuid())
+  criadoEm  DateTime @default(now())
+  mimeType  String
+  nome      String
+  tipo      String   // image | video | document
+  origem    String   // upload | gemini
+  base64    String
 }
 
 // Link antigo (/clientes/<id que sumiu>) abre o cadastro que ficou.
 model ClienteRedirecionamento {
-  deId         String   @id
-  paraId       String
-  unificacaoId String
-  criadoEm     DateTime @default(now())
-
+  deId          String   @id
+  paraId        String
+  unificacaoId  String
+  criadoEm      DateTime @default(now())
   @@index([unificacaoId])
 }
 
@@ -500,18 +467,18 @@ model AlertaOculto {
 }
 
 model ColunaFunil {
-  id            String   @id @default(cuid())
-  titulo        String
-  cor           String   @default("border-t-slate-400")
-  ordem         Int      @default(0)
-  fixa          Boolean  @default(false)
+  id        String   @id @default(cuid())
+  titulo    String
+  cor       String   @default("border-t-slate-400")
+  ordem     Int      @default(0)
+  fixa      Boolean  @default(false)
   // Papel da coluna no funil (independe do título, que o usuário pode
   // renomear): em_negociacao | banco | confirmada | faturado | perdida.
-  papel         String?
+  papel     String?
   // Probabilidade de fechamento (0-100) de quem está nesta coluna — base do
   // valor ponderado do funil.
-  probabilidade Int      @default(50)
-  criadoEm      DateTime @default(now())
+  probabilidade Int  @default(50)
+  criadoEm DateTime @default(now())
 }
 
 model MaquinaUsada {
@@ -527,7 +494,7 @@ model MaquinaUsada {
   descricao    String?
   fotoUrl      String?
   status       String   @default("disponivel")
-  criadoEm     DateTime @default(now())
+  criadoEm    DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 }
 
@@ -540,14 +507,14 @@ model Alerta {
   diasDesde  Int      @default(0)
   severidade String   @default("media")
   resolvido  Boolean  @default(false)
-  criadoEm   DateTime @default(now())
+  criadoEm  DateTime @default(now())
 }
 
 model EstiloDeFala {
   id           String   @id @default(cuid())
   guia         String
   exemplos     String?
-  atualizadoEm DateTime @default(now()) @updatedAt
+  atualizadoEm DateTime @updatedAt @default(now())
 }
 
 model Configuracao {
@@ -563,92 +530,82 @@ model EstrategiaVenda {
   conteudo   String
   fonte      String   @default("ia")
   favorito   Boolean  @default(false)
-  criadoEm   DateTime @default(now())
+  criadoEm  DateTime @default(now())
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  acao       String
-  origem     String   @default("ia")
-  descricao  String
-  entidade   String?
-  entidadeId String?
-  clienteId  String?
-  extra      String?
+  id          String   @id @default(cuid())
+  acao        String
+  origem      String   @default("ia")
+  descricao   String
+  entidade    String?
+  entidadeId  String?
+  clienteId   String?
+  extra       String?
   criadoEm   DateTime @default(now())
 }
 
 model WhatsAppConversation {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId           String?
-  id                   String            @id @default(cuid())
-  externalPhone        String
-  lid                  String?
-  contactName          String?
-  isGroup              Boolean           @default(false)
-  groupName            String?
-  status               String            @default("UNASSIGNED")
-  category             String?
-  categoryConfirmed    Boolean           @default(false)
-  aiActive             Boolean           @default(false)
+  id               String    @id @default(cuid())
+  externalPhone    String
+  lid              String?
+  contactName      String?
+  isGroup          Boolean   @default(false)
+  groupName        String?
+  status           String    @default("UNASSIGNED")
+  category         String?
+  categoryConfirmed Boolean  @default(false)
+  aiActive         Boolean   @default(false)
   // "Marcar como respondido": assunto concluído, sem pendência — some das
   // listas/relatórios de pendência do CRM até chegar mensagem nova (enviada
   // ou recebida), quando volta a contar sozinho. Coluna no banco continua
   // "ignored" (era a antiga função de ignorar conversa) para não migrar.
-  encerrada            Boolean           @default(false) @map("ignored")
-  lastMessageAt        DateTime          @default(now())
-  lastAccessedAt       DateTime?
-  contactPhotoUrl      String?
-  agnesScheduledAt     DateTime?
+  encerrada        Boolean   @default(false) @map("ignored")
+  lastMessageAt    DateTime  @default(now())
+  lastAccessedAt   DateTime?
+  contactPhotoUrl  String?
+  agnesScheduledAt DateTime?
   // Relatório de conversas (PDF): resumo IA em cache, válido enquanto
   // resumoRelatorioEm >= lastMessageAt (nova mensagem invalida).
-  resumoRelatorio      String?
-  resumoRelatorioEm    DateTime?
-  clienteId            String?
+  resumoRelatorio   String?
+  resumoRelatorioEm DateTime?
+  clienteId        String?
   // O vendedor ligou esta conversa ao cadastro À MÃO (pop-up "Vincular esta
   // conversa"), e não o ZEUS pelo número. Vínculo manual liga a conversa a
   // OUTRO cadastro de propósito — a negociação que está no nome da empresa, por
   // exemplo — e por isso nunca troca o nome de quem conversa.
-  clienteVinculoManual Boolean           @default(false)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  messages             WhatsAppMessage[]
-
-  @@unique([externalPhone])
+  clienteVinculoManual Boolean @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  messages         WhatsAppMessage[]
   @@index([lid])
   @@index([lastMessageAt])
   @@index([agnesScheduledAt])
+  @@unique([externalPhone])
 }
 
 model WhatsAppMessage {
-  // Dono da linha (multiusuário). Nulo = ainda não carimbado pela migração.
-  // O filtro por vendedor é AUTOMÁTICO no cliente do banco (ver lib/db.ts):
-  // consulta escrita sem pensar continua isolada.
-  vendedorId          String?
-  id                  String               @id @default(cuid())
-  conversationId      String
-  direction           String
-  body                String
-  operatorDisplayName String?
-  senderName          String?
-  mediaUrl            String?
-  mediaType           String?
-  mediaName           String?
-  transcript          String?
-  sentAt              DateTime             @default(now())
-  isDraft             Boolean              @default(false)
-  draftStatus         String?
-  zapiMessageId       String?
-  origin              String?
-  sendStatus          String?
-  retryCount          Int                  @default(0)
-  lastRetryAt         DateTime?
-  lastSendError       String?
-  processedAt         DateTime?
-  conversation        WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
+  id                   String    @id @default(cuid())
+  conversationId       String
+  direction            String
+  body                 String
+  operatorDisplayName  String?
+  senderName           String?
+  mediaUrl             String?
+  mediaType            String?
+  mediaName            String?
+  transcript           String?
+  sentAt               DateTime  @default(now())
+  isDraft              Boolean   @default(false)
+  draftStatus          String?
+  zapiMessageId        String?
+  origin               String?
+  sendStatus           String?
+  retryCount           Int       @default(0)
+  lastRetryAt          DateTime?
+  lastSendError        String?
+  processedAt          DateTime?
+  conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@index([conversationId, sentAt])
   @@index([zapiMessageId])
   @@index([sendStatus])
@@ -656,35 +613,34 @@ model WhatsAppMessage {
 }
 
 model WhatsAppSettings {
-  id             String   @id @default(cuid())
-  instanceId     String   @default("")
-  token          String   @default("")
-  clientToken    String   @default("")
-  apiUrl         String   @default("https://api.z-api.io")
-  isActive       Boolean  @default(false)
-  auditMode      Boolean  @default(true)
+  id           String  @id @default(cuid())
+  instanceId   String  @default("")
+  token        String  @default("")
+  clientToken  String  @default("")
+  apiUrl       String  @default("https://api.z-api.io")
+  isActive     Boolean @default(false)
+  auditMode    Boolean @default(true)
   // Resposta automática: só dentro da janela (hora de Brasília) e até o
   // limite diário — fora disso vira rascunho. Protege a reputação do número.
-  autoHoraInicio Int      @default(7)
-  autoHoraFim    Int      @default(20)
-  autoLimiteDia  Int      @default(40)
-  updatedAt      DateTime @updatedAt
+  autoHoraInicio Int   @default(7)
+  autoHoraFim    Int   @default(20)
+  autoLimiteDia  Int   @default(40)
+  updatedAt    DateTime @updatedAt
 }
 
 // ZEUS (Fase 4): centro de comando autônomo. Substitui o zapi-diag como
 // registro de eventos (health/fix/alerta/acao/erro) — feed do painel /zeus.
 model ZeusEvent {
-  id          String   @id @default(cuid())
-  tipo        String // health | fix | alerta | acao | erro
-  severidade  String   @default("media") // baixa | media | alta | critica
-  titulo      String
-  detalhe     String? // JSON livre
+  id         String   @id @default(cuid())
+  tipo       String   // health | fix | alerta | acao | erro
+  severidade String   @default("media") // baixa | media | alta | critica
+  titulo     String
+  detalhe    String?  // JSON livre
   // Quantas vezes esse MESMO evento (tipo+título) aconteceu seguido — em vez
   // de uma linha nova a cada repetição (ver registrarZeusEvent).
-  ocorrencias Int      @default(1)
-  resolvido   Boolean  @default(false)
-  criadoEm    DateTime @default(now())
-
+  ocorrencias Int     @default(1)
+  resolvido  Boolean  @default(false)
+  criadoEm   DateTime @default(now())
   @@index([tipo, criadoEm])
   @@index([resolvido])
 }
@@ -695,21 +651,20 @@ model ZeusEvent {
 // reconstruir o array `messages` da API a cada nova pergunta sem depender do
 // cliente reenviar o histórico (frágil e sem validação).
 model CerebroSession {
-  id           String           @id @default(cuid())
-  titulo       String?
-  criadoEm     DateTime         @default(now())
-  atualizadoEm DateTime         @updatedAt
-  mensagens    CerebroMessage[]
+  id         String          @id @default(cuid())
+  titulo     String?
+  criadoEm   DateTime        @default(now())
+  atualizadoEm DateTime      @updatedAt
+  mensagens  CerebroMessage[]
 }
 
 model CerebroMessage {
-  id        String         @id @default(cuid())
-  session   CerebroSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  role      String // user | assistant
-  content   String // JSON: string simples ou array de content blocks da Anthropic
-  criadoEm  DateTime       @default(now())
-
+  id         String   @id @default(cuid())
+  session    CerebroSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  role       String   // user | assistant
+  content    String   // JSON: string simples ou array de content blocks da Anthropic
+  criadoEm   DateTime @default(now())
   @@index([sessionId, criadoEm])
 }
 
@@ -719,32 +674,31 @@ model CerebroMessage {
 // de verdade (máquina, modelo, financiamento, proposta…), separando contato
 // novo de cliente da carteira. Um por dia; refeito se pedido de novo.
 model RelatorioDiario {
-  id             String    @id @default(cuid())
-  dia            DateTime  @unique // início do dia (Brasília)
-  criadoEm       DateTime  @default(now())
-  resumo         String // texto pronto (o que vai pro WhatsApp)
-  dados          String // JSON: conversas classificadas, visitas, movimentos do funil
-  totalConversas Int       @default(0)
-  negociacoes    Int       @default(0)
-  novos          Int       @default(0)
-  carteira       Int       @default(0)
+  id             String   @id @default(cuid())
+  dia            DateTime @unique // início do dia (Brasília)
+  criadoEm       DateTime @default(now())
+  resumo         String   // texto pronto (o que vai pro WhatsApp)
+  dados          String   // JSON: conversas classificadas, visitas, movimentos do funil
+  totalConversas Int      @default(0)
+  negociacoes    Int      @default(0)
+  novos          Int      @default(0)
+  carteira       Int      @default(0)
   enviadoEm      DateTime?
 }
 
 // Radar de inovação: ideia encontrada pela pesquisa diária (Gemini + busca)
 // para melhorar uma sessão do CRM — o que é, benefício e ganho esperado.
 model IdeiaInovacao {
-  id        String   @id @default(cuid())
-  criadoEm  DateTime @default(now())
-  sessao    String // id da sessão do CRM (negociacoes, whatsapp, marketing…)
-  titulo    String
-  melhoria  String // o que mudaria no CRM
-  beneficio String // o que o vendedor ganha
-  ganho     String // tamanho do ganho (ex.: "-30 min/dia", "mais conversões")
-  esforco   String   @default("medio") // baixo | medio | alto
-  fonte     String? // URL de onde veio
-  status    String   @default("nova") // nova | aplicar | aplicada | descartada
-
+  id         String   @id @default(cuid())
+  criadoEm   DateTime @default(now())
+  sessao     String   // id da sessão do CRM (negociacoes, whatsapp, marketing…)
+  titulo     String
+  melhoria   String   // o que mudaria no CRM
+  beneficio  String   // o que o vendedor ganha
+  ganho      String   // tamanho do ganho (ex.: "-30 min/dia", "mais conversões")
+  esforco    String   @default("medio") // baixo | medio | alto
+  fonte      String?  // URL de onde veio
+  status     String   @default("nova") // nova | aplicar | aplicada | descartada
   @@index([status, criadoEm])
   @@index([sessao])
 }
@@ -752,20 +706,19 @@ model IdeiaInovacao {
 // Marketing (só Gemini): post pronto (legenda + arte) para redes sociais ou
 // para mandar aos clientes. A arte fica guardada em base64 por até 90 dias.
 model PostMarketing {
-  id           String    @id @default(cuid())
-  criadoEm     DateTime  @default(now())
-  tipo         String // diario | semanal | mensal | campanha | promocao
-  tema         String
-  legenda      String
-  hashtags     String    @default("")
-  maquina      String?
-  imagemBase64 String?
-  imagemMime   String?
-  agendadoPara DateTime?
-  status       String    @default("rascunho") // rascunho | pronto | publicado
-  publicadoEm  DateTime?
-  canal        String? // instagram | facebook | whatsapp | outro
-
+  id            String   @id @default(cuid())
+  criadoEm      DateTime @default(now())
+  tipo          String   // diario | semanal | mensal | campanha | promocao
+  tema          String
+  legenda       String
+  hashtags      String   @default("")
+  maquina       String?
+  imagemBase64  String?
+  imagemMime    String?
+  agendadoPara  DateTime?
+  status        String   @default("rascunho") // rascunho | pronto | publicado
+  publicadoEm   DateTime?
+  canal         String?  // instagram | facebook | whatsapp | outro
   @@index([status, agendadoPara])
   @@index([criadoEm])
 }
@@ -773,13 +726,12 @@ model PostMarketing {
 // Memória ensinada ao Cérebro ("Ensinar algo novo"): texto que o vendedor
 // colou ou arquivo lido; entra no contexto do chat e da busca de memórias.
 model MemoriaCerebro {
-  id       String   @id @default(cuid())
-  criadoEm DateTime @default(now())
-  titulo   String
-  conteudo String
-  origem   String   @default("texto") // texto | arquivo | relatorio | radar
-  sessao   String? // sessão do CRM a que se refere (opcional)
-
+  id        String   @id @default(cuid())
+  criadoEm  DateTime @default(now())
+  titulo    String
+  conteudo  String
+  origem    String   @default("texto") // texto | arquivo | relatorio | radar
+  sessao    String?  // sessão do CRM a que se refere (opcional)
   @@index([criadoEm])
 }
 
@@ -794,24 +746,5 @@ model NotaContextoCliente {
   texto     String
   origem    String   @default("vendedor") // vendedor | orientador | cerebro
   criadoEm  DateTime @default(now())
-
   @@index([clienteId, criadoEm])
-}
-
-// Quem usa o CRM. Nasceu do multiusuário: um login por pessoa, com a carteira
-// de cada vendedor isolada da dos outros.
-//
-// "vendedor" vê SÓ o que é dele. "gerente" vê tudo, mas não edita a carteira
-// alheia nem manda mensagem pelo número de ninguém — a visão existe para a
-// diretoria enxergar o time, não para mexer no trabalho do outro.
-model Usuario {
-  id           String    @id @default(cuid())
-  nome         String
-  // O login. Guardado em minúsculas para "Edy" e "edy" serem a mesma pessoa.
-  login        String    @unique
-  senhaHash    String
-  papel        String    @default("vendedor") // vendedor | gerente
-  ativo        Boolean   @default(true)
-  criadoEm     DateTime  @default(now())
-  ultimoAcesso DateTime?
 }
