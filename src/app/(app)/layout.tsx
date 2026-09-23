@@ -8,6 +8,8 @@ import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
+import { conferirBanco } from "@/lib/saude-banco";
+import { BancoForaDoAr } from "@/components/BancoForaDoAr";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   await carregarChavesIA().catch(() => {});
   const parametros = await lerParametros().catch(() => null);
 
+  // O banco está de pé? Uma consulta só, antes de qualquer tela.
+  //
+  // Sem isto, banco fora vira "Algo deu errado nesta página" em TODAS as
+  // telas, sem motivo nenhum — o Next esconde a mensagem em produção. Foi
+  // exatamente esse silêncio que deixou o vendedor parado um dia inteiro
+  // enquanto eu adivinhava. Agora a tela DIZ o que aconteceu (regra 2), e o
+  // menu continua no lugar para ele não ficar preso.
+  const saude = await conferirBanco();
+
   return (
     // --rodape-mercado: a altura do letreiro fixo. Vira variável CSS porque
     // mais de uma tela precisa dela — o conteúdo afasta o rodapé com um
@@ -41,7 +52,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           fixas em branco elas sumiriam sobre o fundo claro. */}
       <CurvasDeNivel className="fixed inset-0 -z-10 h-full w-full text-[var(--curvas-cor)] opacity-[var(--curvas-opacidade)] print:hidden" />
       <Sidebar nome={parametros?.nomeCrm} sub={parametros?.nomeEmpresa} />
-      <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8" style={{ paddingBottom: "calc(var(--rodape-mercado) + 1rem)" }}>{children}</main>
+      <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8" style={{ paddingBottom: "calc(var(--rodape-mercado) + 1rem)" }}>
+        {saude.ok ? children : <BancoForaDoAr saude={saude} />}
+      </main>
       <InstalarIOS />
       <AuthPersist modo="guardar" />
       <SplashBoot />

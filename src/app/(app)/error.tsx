@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle, RotateCcw, Stethoscope } from "lucide-react";
 
 // Sem isso, qualquer exceção numa página do app virava a tela de erro crua
 // do Next. Mesmo padrão do global-error.tsx: reporta ao ZEUS (via API, pois é
@@ -25,12 +25,24 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           Não foi possível carregar esta tela agora. Você pode tentar de novo — se o problema continuar, avise o suporte.
         </p>
       </div>
-      <button
-        onClick={reset}
-        className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
-      >
-        <RotateCcw size={15} /> Tentar de novo
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          onClick={reset}
+          className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+        >
+          <RotateCcw size={15} /> Tentar de novo
+        </button>
+        {/* O motivo real não chega aqui: o Next esconde a mensagem do servidor
+            em produção. Este atalho leva ao diagnóstico, que mostra o que o
+            banco e os serviços de fora responderam, por extenso. Sem ele, a
+            tela de erro é um beco sem saída — e já custou um dia. */}
+        <a
+          href="/api/diag"
+          className="flex items-center justify-center gap-2 rounded-xl border border-red-300 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+        >
+          <Stethoscope size={15} /> Ver o que aconteceu
+        </a>
+      </div>
       <details className="w-full max-w-lg text-left">
         <summary className="cursor-pointer text-xs font-semibold text-red-700">Detalhes técnicos (para mandar ao suporte)</summary>
         <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-white/70 p-2 text-[11px] text-slate-700">

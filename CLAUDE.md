@@ -141,6 +141,18 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   git push origin claude/projeto-zeus-merge-deploy-jc6p7x:claude/relaxed-cori-5c3g4l
   ```
 - **Toda migração nova exige subir `CHAVE_MANUTENCAO`** em `lib/manutencao.ts`.
+- **Campo novo no `schema.prisma` derruba o CRM se o banco ainda não tiver a
+  coluna.** A partir do deploy, TODA consulta àquele modelo pede a coluna nova
+  — e a manutenção roda dentro de uma requisição, em paralelo com as consultas
+  da página: ela perde a corrida. Já aconteceu, e o vendedor ficou um dia fora
+  do ar. Antes de empurrar, **rodar com CÓDIGO NOVO e BANCO VELHO**: derruba a
+  coluna no banco de teste, builda, e a PRIMEIRA requisição tem que passar.
+- **Tela caída tem que DIZER o motivo.** Em produção o Next esconde a mensagem
+  do servidor, e "Algo deu errado nesta página" não diz nada a ninguém — foi
+  esse silêncio que transformou um defeito de minutos num dia parado. O layout
+  sonda o banco antes das telas (`lib/saude-banco.ts`) e mostra o motivo por
+  extenso; `/api/diag` testa peça por peça. Ao mexer em erro de tela, essas
+  duas saídas continuam existindo.
 - **Chave de API é credencial:** nunca mostrar por extenso, nunca em log; a
   auditoria grava o provedor, nunca o valor.
 - **Nada que gere fatura sem dizer o custo na cara e deixar ele escolher.** Ele
