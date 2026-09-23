@@ -6,6 +6,40 @@ e do que fazer para não repetir. Cada regra existe porque custou alguma coisa.
 
 ---
 
+## 0. AS 3 PERGUNTAS — obrigatórias em toda alteração
+
+Padrão definido pelo vendedor. Vale para **toda alteração que vai para o
+repositório** (não para pergunta, explicação ou leitura de código).
+
+1. **"O que mais depende disso?"** — ANTES de mexer. `grep` pelo que vai mudar,
+   pelos irmãos dele e por quem lê o campo. Achou mais de um lugar? Todos são
+   consertados **no mesmo commit**. Não vale dizer "nada depende" sem procurar.
+2. **"O que acontece quando dá errado?"** — DEPOIS de construir. Os quatro
+   estados de toda tela nova: carregando, vazio, erro e sucesso. Falhou, a tela
+   DIZ que falhou.
+3. **"O que você não conseguiu conferir?"** — NO FIM. Separar o que passou pela
+   tela do que ficou suposto.
+
+**A resposta das três é VISÍVEL, no fim de toda entrega:**
+
+```
+Conferência
+· Depende disso: <o que o grep achou> — todos no mesmo commit
+· Quando dá errado: <o que a tela faz>
+· Não conferi: <o que ficou de fora, ou "nada">
+```
+
+O bloco nunca some — nem em mudança pequena, onde ele vira "nada mais depende /
+não tem tela / nada ficou de fora". **É a ausência dele que denuncia que o
+padrão não rodou.** Regra que só existe na minha cabeça não dá para cobrar;
+esta produz prova, como a de conferir no PC e no celular produz print.
+
+Roteiro completo: `docs/tres-perguntas.md`.
+
+Os itens 1 a 6 abaixo são os casos que deram origem a cada pergunta.
+
+---
+
 ## 1. Estado novo, caminhos antigos
 
 **A falha que mais se repetiu aqui, e a que custou o número do vendedor.**
@@ -110,7 +144,16 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
 - Lista dentro de card é limitada, com rolagem interna de altura fixa. Ele usa
   o CRM no celular, na rua.
 
-## 9. Bateria antes de dar por pronto
+## 9. Comandos que ele usa pelo nome
+
+- **"use a melhoria 10x"** — varredura do CRM inteiro em dez rodadas, cada uma
+  com um objetivo diferente; o que aparece vira correção no mesmo dia ou
+  decisão consciente de não mexer, registrada. Roteiro e histórico em
+  `docs/auditoria-continua.md`.
+- **"cadê as 3 perguntas?"** — cobrança do bloco de Conferência (item 0) quando
+  ele não veio.
+
+## 10. Bateria antes de dar por pronto
 
 ```
 npx tsc --noEmit && npx eslint src tests --ext .ts,.tsx && npx vitest run && npm run build
@@ -119,7 +162,7 @@ npx tsc --noEmit && npx eslint src tests --ext .ts,.tsx && npx vitest run && npm
 Lint e tipos passando não provam nada sobre comportamento — os três defeitos do
 bloqueio do WhatsApp passaram nos quatro. O que prova é a regra 1, a 2 e a 7.
 
-## 10. Armadilhas deste código
+## 11. Armadilhas deste código
 
 - **Prisma: dois `OR` no mesmo objeto se apagam** — o último vence e o filtro
   perdido some sem erro nenhum. Todo filtro novo com `OR` entra como item do

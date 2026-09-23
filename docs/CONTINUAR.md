@@ -12,9 +12,15 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit: **`76b1d09`** — "Parabéns automático passa pelas mesmas travas".
-**967 testes passando** (82 arquivos), lint e build limpos.
-`CHAVE_MANUTENCAO = "manutencao.v43"`.
+Último commit: **`58fa4c6`** — "CLAUDE.md: as regras que saem das falhas".
+**1023 testes passando** (86 arquivos), lint e build limpos.
+`CHAVE_MANUTENCAO = "manutencao.v44"`.
+
+> ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
+> duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
+> campanha, resposta automática, aniversário, mensagem da tela — e nasce
+> pausada. Só ele libera, em Configurações. Não libere por conta própria e não
+> escreva nada que contorne a trava.
 
 > Ao retomar, confira o estado real antes de confiar nestes números:
 > `git log --oneline -5`, `npx vitest run`, `grep -n "CHAVE_MANUTENCAO = " src/lib/manutencao.ts`.
@@ -54,42 +60,21 @@ botão dizer quantos realmente recebem e o laço percorrer só esses.
 
 ## Regras que não se negociam
 
-1. **Empurre para as DUAS branches**, sempre:
+**Elas moram no `CLAUDE.md`, na raiz do repositório, que é lido sozinho no
+começo de toda sessão. Leia de lá — aqui só ficava uma segunda cópia, e duas
+cópias da mesma regra divergem.**
 
-   ```bash
-   git push -u origin claude/projeto-zeus-merge-deploy-jc6p7x
-   git push origin claude/projeto-zeus-merge-deploy-jc6p7x:claude/relaxed-cori-5c3g4l
-   ```
+O que é bom saber antes de abrir:
 
-   As duas remotas estão em `76b1d09`. A branch **local** `relaxed-cori` está
-   148 commits atrasada e é lixo — nunca faça checkout nela nem empurre a
-   partir dela; use sempre o refspec acima.
-
-2. **Verifique na tela antes de dizer que está pronto**, no PC (1440) e no
-   celular (390). Playwright:
-   `executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"`.
-   Cuidado: `getByRole("link", {name:/WhatsApp/})` pega o **menu lateral**, não
-   o botão da página — já me enganou e quase virou caça a um bug inexistente.
-
-3. **Toda migração nova exige subir `CHAVE_MANUTENCAO`** em
-   `src/lib/manutencao.ts`. Sem isso a manutenção é pulada em bancos que já têm
-   a chave antiga, a coluna nova nunca é criada e a tela que a lê quebra
-   inteira. Já aconteceu.
-
-4. **Chave de API é credencial:** nunca mostre por extenso (mascare
-   `AIza••••••••WXYZ`), nunca registre em log, a auditoria grava o provedor e
-   nunca o valor.
-
-5. Ele paga **só o Gemini Plus**. Nunca recomende nada que gere fatura sem
-   dizer o custo na cara e deixá-lo escolher. Já foi recusado (e se mantém):
-   espalhar o CRM em várias contas grátis (viola os termos) e ter acesso
-   permanente à conta Vercel dele.
-
-6. Commits terminam com as linhas de atribuição da sessão. **Nunca** ponha
-   identificador de modelo em nada que vá para o repositório.
-
-7. Lista dentro de card é limitada, com rolagem interna de altura fixa. Ele usa
-   o CRM no celular, na rua.
+- **As 3 perguntas** (item 0 do CLAUDE.md) valem para toda alteração, e a
+  resposta delas vai VISÍVEL no fim de cada entrega. Se faltar o bloco de
+  Conferência, o padrão não rodou.
+- **Empurre para as DUAS branches**, sempre. A branch **local** `relaxed-cori`
+  está 148 commits atrasada e é lixo — nunca faça checkout nela nem empurre a
+  partir dela; use o refspec que está no CLAUDE.md.
+- Armadilha de teste que já me enganou: `getByRole("link", {name:/WhatsApp/})`
+  pega o **menu lateral**, não o botão da página — quase virou caça a um bug
+  inexistente.
 
 ## Armadilhas deste código (aprendidas no couro)
 
