@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { rodarManutencao, CHAVE_MANUTENCAO } from "@/lib/manutencao";
+import { rodarManutencao, CHAVE_MANUTENCAO, situacaoDaManutencao } from "@/lib/manutencao";
+import { marcaDeFalha } from "@/lib/manutencao-retentativa";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +18,19 @@ export const dynamic = "force-dynamic";
 // resposta em lugar nenhum — nem na tela, nem para mim de fora. Sem isto, a
 // única forma de saber era apertar o botão e ver o que acontecia.
 export async function GET() {
-  const cfg = await db.configuracao.findUnique({ where: { chave: CHAVE_MANUTENCAO } }).catch(() => null);
-  return NextResponse.json({ emDia: cfg?.valor === "ok", chave: CHAVE_MANUTENCAO });
+  const marca = await situacaoDaManutencao();
+  return NextResponse.json({ emDia: marca.estado === "ok", chave: CHAVE_MANUTENCAO, marca });
 }
 
 export async function POST() {
   const relatorio = await rodarManutencao();
-  await db.configuracao
-    .upsert({ where: { chave: CHAVE_MANUTENCAO }, update: { valor: "ok" }, create: { chave: CHAVE_MANUTENCAO, valor: "ok" } })
-    .catch(() => {});
   const ok = relatorio.every((r) => r.ok);
+  // Só grava "ok" se foi ok. Falhou, a marca diz que falhou — assim a tela
+  // não fica dizendo "em dia" para uma migração que não passou.
+  const falhas = relatorio.filter((r) => !r.ok).map((r) => `${r.etapa}: ${r.erro}`).join(" | ");
+  const valor = ok ? "ok" : marcaDeFalha(0, Date.now(), falhas);
+  await db.configuracao
+    .upsert({ where: { chave: CHAVE_MANUTENCAO }, update: { valor }, create: { chave: CHAVE_MANUTENCAO, valor } })
+    .catch(() => {});
   return NextResponse.json({ ok, relatorio });
 }

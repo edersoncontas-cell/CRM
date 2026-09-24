@@ -153,6 +153,19 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   sonda o banco antes das telas (`lib/saude-banco.ts`) e mostra o motivo por
   extenso; `/api/diag` testa peça por peça. Ao mexer em erro de tela, essas
   duas saídas continuam existindo.
+- **Manutenção que falha NÃO roda de novo na tela seguinte.** Ela apagava a
+  marca e rodava tudo de novo a cada clique, por horas — oito tabelas
+  reescritas por requisição. Foi isso que esgotou a cota grátis do Neon e
+  deixou o CRM uma semana fora do ar. Agora a falha fica gravada na marca
+  (`falhou:<vezes>:<quando>:<erro>`), a próxima tentativa espera 5 min → 30 min
+  → 2 h → 1×/dia (`lib/manutencao-retentativa.ts`), e o card em Configurações
+  mostra a falha com o motivo. Passo novo de manutenção tem que ser barato o
+  bastante para rodar nesse calendário sem doer.
+- **O CRM nasce num banco vazio.** `lib/banco-do-zero.ts` cria a estrutura
+  inteira (gerada do schema em `lib/banco-do-zero-ddl.ts`) quando a tabela
+  Configuracao não existe. É o plano de desastre e o que permite um banco
+  temporário grátis em outro provedor. **Mudou o schema.prisma → regerar o
+  DDL** (`scripts/gerar-banco-do-zero.py`), senão o banco novo nasce velho.
 - **Chave de API é credencial:** nunca mostrar por extenso, nunca em log; a
   auditoria grava o provedor, nunca o valor.
 - **Nada que gere fatura sem dizer o custo na cara e deixar ele escolher.** Ele

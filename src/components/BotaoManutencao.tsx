@@ -16,14 +16,16 @@ export function BotaoManutencao() {
   // manutenção desta versão já tinha rodado, e a única forma de saber era
   // apertar o botão — o que fazia parecer obrigatório um passo que, na
   // prática, o CRM já faz sozinho ao abrir qualquer tela.
-  const [estado, setEstado] = useState<{ emDia: boolean; chave: string } | null>(null);
+  type Marca = { estado: "ok" } | { estado: "nunca" } | { estado: "falhou"; vezes: number; em: number; erro: string };
+  const [estado, setEstado] = useState<{ emDia: boolean; chave: string; marca?: Marca } | null>(null);
 
-  useEffect(() => {
+  const lerEstado = () =>
     fetch("/api/admin/manutencao")
       .then((r) => r.json())
-      .then((r) => setEstado({ emDia: !!r.emDia, chave: String(r.chave ?? "") }))
+      .then((r) => setEstado({ emDia: !!r.emDia, chave: String(r.chave ?? ""), marca: r.marca }))
       .catch(() => setEstado(null));
-  }, []);
+
+  useEffect(() => { lerEstado(); }, []);
 
   function rodar() {
     setErro(null);
@@ -32,10 +34,7 @@ export function BotaoManutencao() {
       try {
         const r = await fetch("/api/admin/manutencao", { method: "POST" }).then((res) => res.json());
         setRelatorio(r.relatorio ?? []);
-        await fetch("/api/admin/manutencao")
-          .then((res) => res.json())
-          .then((e) => setEstado({ emDia: !!e.emDia, chave: String(e.chave ?? "") }))
-          .catch(() => {});
+        await lerEstado();
       } catch (e) {
         setErro("Falha ao rodar manutenção: " + String(e));
       }
@@ -47,15 +46,32 @@ export function BotaoManutencao() {
       {estado && (
         <div
           className={`mb-3 flex items-start gap-2 rounded-xl border p-3 text-sm ${
-            estado.emDia ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"
+            estado.emDia
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : estado.marca?.estado === "falhou"
+                ? "border-red-200 bg-red-50 text-red-900"
+                : "border-amber-200 bg-amber-50 text-amber-900"
           }`}
         >
-          {estado.emDia ? <CheckCircle2 size={16} className="mt-px shrink-0" /> : <Wrench size={16} className="mt-px shrink-0" />}
+          {estado.emDia ? <CheckCircle2 size={16} className="mt-px shrink-0" /> : estado.marca?.estado === "falhou" ? <XCircle size={16} className="mt-px shrink-0" /> : <Wrench size={16} className="mt-px shrink-0" />}
           <span>
-            <b>{estado.emDia ? "Tudo em dia." : "Falta rodar."}</b>{" "}
-            {estado.emDia
-              ? "As migrações desta versão já foram aplicadas neste banco. Rodar de novo não faz mal, mas não é preciso."
-              : "As migrações desta versão ainda não foram aplicadas. Normalmente isso acontece sozinho ao abrir qualquer tela — se este aviso continuar, aperte o botão."}
+            {estado.marca?.estado === "falhou" ? (
+              // A falha aparece AQUI, com o motivo. Antes ela era invisível: a
+              // manutenção rodava de novo a cada tela, por horas, e ninguém via
+              // — foi isso que esgotou a cota do banco.
+              <>
+                <b>Falhou {estado.marca.vezes}×.</b> Última tentativa {new Date(estado.marca.em).toLocaleString("pt-BR")}.
+                {" "}A próxima espera sozinha (5 min, 30 min, 2 h, depois 1× por dia) — ou aperte o botão para tentar agora.
+                <span className="mt-1 block break-words font-mono text-[11px] opacity-80">{estado.marca.erro}</span>
+              </>
+            ) : (
+              <>
+                <b>{estado.emDia ? "Tudo em dia." : "Falta rodar."}</b>{" "}
+                {estado.emDia
+                  ? "As migrações desta versão já foram aplicadas neste banco. Rodar de novo não faz mal, mas não é preciso."
+                  : "As migrações desta versão ainda não foram aplicadas. Normalmente isso acontece sozinho ao abrir qualquer tela — se este aviso continuar, aperte o botão."}
+              </>
+            )}
             <span className="ml-1 opacity-60">({estado.chave})</span>
           </span>
         </div>

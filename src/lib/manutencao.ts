@@ -8,6 +8,7 @@
 // barato (memoizado por request com React.cache) para checar a chave.
 import { cache } from "react";
 import { db } from "@/lib/db";
+import { lerMarca, marcaDeFalha, deveRodar } from "@/lib/manutencao-retentativa";
 import { aplicarMigracoes, limparMunicipiosInventados, limparTelefonesFalsos, marcarVinculosManuaisAntigos, reestruturarFunilOportunidade, pararEnviosEmMassa } from "@/lib/migrations";
 import { garantirRegioes } from "@/lib/regioes";
 import { limparContatosIndesejados } from "@/lib/contatos-bloqueados";
@@ -135,25 +136,39 @@ export async function rodarManutencao(): Promise<EtapaManutencao[]> {
   return relatorio;
 }
 
-// Checagem barata (1 SELECT, memoizado por request) de se a manutenção já
-// rodou pelo menos uma vez neste banco.
-const manutencaoJaFeita = cache(async (): Promise<boolean> => {
+// A marca desta versão no banco: "ok", nada, ou "falhou:<vezes>:<quando>:<erro>".
+// Um SELECT, memoizado por request.
+const marcaAtual = cache(async () => {
   const cfg = await db.configuracao.findUnique({ where: { chave: CHAVE_MANUTENCAO } }).catch(() => null);
-  return cfg?.valor === "ok";
+  return lerMarca(cfg?.valor);
 });
 
-// Chamado no topo das páginas pesadas. Faz no máximo 1 SELECT quando a
+// Chamado no layout, antes de qualquer tela. Faz no máximo 1 SELECT quando a
 // manutenção já rodou (caso normal). Na primeira vez em um banco novo, grava
 // a chave ANTES de rodar (lock otimista — evita duas lambdas rodando juntas
 // ao mesmo tempo) e então executa a manutenção completa uma única vez.
+//
+// Falhou? A marca guarda a falha e a PRÓXIMA tentativa espera: 5 min, 30 min,
+// 2 h, depois 1 vez por dia. Antes ela apagava a marca e rodava tudo de novo
+// na tela seguinte — por horas, oito tabelas reescritas a cada clique. Foi
+// isso que esgotou a cota do banco e deixou o CRM uma semana fora do ar.
 export async function garantirManutencaoSeNecessario(): Promise<void> {
-  if (await manutencaoJaFeita()) return;
+  const marca = await marcaAtual();
+  if (!deveRodar(marca, Date.now())) return;
+  const vezesAntes = marca.estado === "falhou" ? marca.vezes : 0;
   try {
-    await db.configuracao.upsert({
-      where: { chave: CHAVE_MANUTENCAO },
-      update: {},
-      create: { chave: CHAVE_MANUTENCAO, valor: "ok" },
-    });
+    // O lock: quem consegue gravar "ok" primeiro, roda. As outras lambdas
+    // leem "ok" e seguem. Se a rodada falhar, o "ok" é trocado pela falha.
+    if (marca.estado === "nunca") {
+      await db.configuracao.create({ data: { chave: CHAVE_MANUTENCAO, valor: "ok" } });
+    } else {
+      // Já existe (falhou antes): só ganha o lock quem trocar o valor ANTIGO.
+      const r = await db.configuracao.updateMany({
+        where: { chave: CHAVE_MANUTENCAO, valor: { startsWith: "falhou:" } },
+        data: { valor: "ok" },
+      });
+      if (r.count === 0) return; // outra lambda já pegou
+    }
   } catch {
     return; // outra lambda já está cuidando disso ou o banco não está pronto
   }
@@ -161,13 +176,17 @@ export async function garantirManutencaoSeNecessario(): Promise<void> {
     console.error("[manutencao] falhou inteira:", e);
     return [{ etapa: "geral", ok: false, erro: String(e) }] as EtapaManutencao[];
   });
-  // Se alguma etapa falhou, APAGA a marca para tentar de novo na próxima
-  // carga. Sem isto, a marca gravada antes de rodar (o lock que evita duas
-  // lambdas juntas) ficava dizendo "já fiz" para sempre, e a migração que
-  // não passou nunca mais teria uma segunda chance.
   const falhou = relatorio.filter((e) => !e.ok);
   if (falhou.length) {
-    console.error("[manutencao] etapas com erro:", falhou.map((e) => `${e.etapa}: ${e.erro}`).join(" | "));
-    await db.configuracao.delete({ where: { chave: CHAVE_MANUTENCAO } }).catch(() => {});
+    const resumo = falhou.map((e) => `${e.etapa}: ${e.erro}`).join(" | ");
+    console.error("[manutencao] etapas com erro:", resumo);
+    await db.configuracao
+      .update({ where: { chave: CHAVE_MANUTENCAO }, data: { valor: marcaDeFalha(vezesAntes, Date.now(), resumo) } })
+      .catch(() => {});
   }
+}
+
+/** Para a tela: em dia, nunca rodou, ou falhou (quantas vezes, quando, por quê). */
+export async function situacaoDaManutencao() {
+  return marcaAtual();
 }
