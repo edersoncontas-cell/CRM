@@ -7,6 +7,7 @@ import { NoticiasSetor } from "@/components/NoticiasSetor";
 import { obterCotacoes } from "@/lib/mercado";
 import { obterNoticias } from "@/lib/noticias";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { RecarregarNoDiaNovo } from "@/components/RecarregarNoDiaNovo";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
 import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
@@ -307,6 +308,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* Logo abaixo dos preços do café, os dois: a motivação do dia (é a
           primeira coisa que ele lê de manhã, não faz sentido no pé da página)
           e a prefeitura das cidades da área comprando máquina. */}
+      {/* Voltou ao app num dia novo: a motivação e a saudação de ontem não ficam na tela. */}
+      <RecarregarNoDiaNovo dia={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(hoje)} />
       <FraseMotivacional />
 
 

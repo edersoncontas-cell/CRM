@@ -1,12 +1,19 @@
 // Frase do dia do Dashboard: um texto motivacional curto + uma citação,
 // gerados pela IA UMA vez por dia (fuso de Brasília) e guardados em
-// Configuracao. Um histórico das citações já usadas é enviado à IA para
-// nunca repetir; sem IA (ou se falhar), cai numa lista fixa grande, também
-// respeitando o histórico.
+// Configuracao. Sem IA (ou se ela repetir), cai numa lista fixa, que passa
+// pela mesma conferência.
+//
+// A regra de "o que conta como repetido" e o tema de cada dia moram em
+// lib/frase-dia-regra.ts (puro, testado). Ver lá o defeito que ela resolve:
+// a mesma mensagem voltando em dias diferentes.
 
 import { db } from "@/lib/db";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { lerParametros } from "@/lib/parametros";
+import {
+  temaDoDia, lerHistorico, motivoDeRecusa, registroDe, escolherDaReserva, aberturaDoTexto,
+  DIAS_SEM_REPETIR_AUTOR, DIAS_SEM_REPETIR_ABERTURA, type Registro, type Candidata,
+} from "@/lib/frase-dia-regra";
 
 export type FraseDoDia = { data: string; texto: string; frase: string; autor: string };
 
@@ -60,42 +67,59 @@ async function gravarConfig(chave: string, valor: string): Promise<void> {
   await db.configuracao.upsert({ where: { chave }, update: { valor }, create: { chave, valor } }).catch(() => {});
 }
 
-const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-
-async function gerarComIA(usadas: string[]): Promise<{ texto: string; frase: string; autor: string } | null> {
+// Uma chamada à IA. O pedido leva o TEMA do dia (é o que faz o texto variar
+// de verdade) e o que não pode voltar: as citações já usadas, os autores e as
+// aberturas recentes. "recusa" é o motivo da tentativa anterior, quando houve.
+async function pedirAIA(hoje: string, historico: Registro[], recusa: string | null): Promise<Candidata | null> {
   const param = await lerParametros();
-  if (!iaHabilitada()) return null;
-  try {
-    const raw = await llmTexto(
-      `Você escreve a "Frase do dia" do painel de um vendedor de máquinas pesadas (${param.marcas}) no ${param.regiao}.
+  const citacoes = historico.slice(-120).map((h) => `"${h.f}"`).join(", ") || "(nenhuma ainda)";
+  const autores = [...new Set(historico.slice(-DIAS_SEM_REPETIR_AUTOR).map((h) => h.a).filter(Boolean))].join(", ") || "(nenhum)";
+  const aberturas = [...new Set(historico.slice(-DIAS_SEM_REPETIR_ABERTURA).map((h) => h.t).filter(Boolean))].map((t) => `"${t}…"`).join(", ") || "(nenhuma)";
+  const raw = await llmTexto(
+    `Você escreve a "Frase do dia" do painel de um vendedor de máquinas pesadas (${param.marcas}) no ${param.regiao}.
 Devolva SOMENTE um JSON válido com as chaves:
 { "texto": string, "frase": string, "autor": string }
-- "texto": 2 a 3 frases motivacionais, em português do Brasil, tom direto e humano, ligadas ao dia a dia de vendas (visitas, propostas, obra, cliente, persistência). Sem emojis.
-- "frase": uma citação curta e inspiradora (máx. 20 palavras). Pode ser de autor real e conhecido, com atribuição correta; se não tiver certeza da autoria, use "Sabedoria de vendas".
+- "texto": 2 a 3 frases motivacionais, em português do Brasil, tom direto e humano, SOBRE O TEMA DE HOJE: ${temaDoDia(hoje)}. Concreto, do dia a dia dele. Sem emojis.
+- "frase": uma citação curta e inspiradora (máx. 20 palavras) que combine com o tema. Pode ser de autor real e conhecido, com atribuição correta; se não tiver certeza da autoria, use "Sabedoria de vendas".
 - "autor": nome do autor.
-NUNCA repita nenhuma destas citações já usadas: ${usadas.slice(-120).map((u) => `"${u}"`).join(", ") || "(nenhuma ainda)"}.`,
-      `Gere a frase do dia de ${hojeBrasilia()}.`,
-      { maxTokens: 350, json: true }
-    );
-    const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
-    const p = JSON.parse(json) as { texto?: string; frase?: string; autor?: string };
-    if (!p.texto || !p.frase) return null;
-    const frase = p.frase.trim().replace(/^["“]|["”]$/g, "");
-    if (usadas.some((u) => normalizar(u) === normalizar(frase))) return null;
-    return { texto: p.texto.trim(), frase, autor: (p.autor ?? "").trim() || "Sabedoria de vendas" };
-  } catch (e) {
-    console.error("[frase-dia] IA falhou:", e instanceof Error ? e.message : e);
-    return null;
-  }
+PROIBIDO repetir, nem com outras palavras:
+- estas citações já usadas: ${citacoes};
+- estes autores (usados nas últimas semanas): ${autores};
+- começar o texto como estes (últimos dias): ${aberturas}.${recusa ? `\nA tentativa anterior foi recusada porque ${recusa}. Escolha outra citação e outro começo.` : ""}`,
+    `Gere a frase do dia de ${hoje}.`,
+    { maxTokens: 350, json: true }
+  );
+  const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+  const p = JSON.parse(json) as { texto?: string; frase?: string; autor?: string };
+  if (!p.texto || !p.frase) return null;
+  return {
+    texto: p.texto.trim(),
+    frase: p.frase.trim().replace(/^["“]|["”]$/g, ""),
+    autor: (p.autor ?? "").trim() || "Sabedoria de vendas",
+  };
 }
 
-function daReserva(usadas: string[]): { texto: string; frase: string; autor: string } {
-  const usadasNorm = new Set(usadas.map(normalizar));
-  const inedita = RESERVA.find((r) => !usadasNorm.has(normalizar(r.frase)));
-  if (inedita) return inedita;
-  // Todas já usadas: escolhe a usada há mais tempo (nunca repete em sequência).
-  const ordem = new Map(usadas.map((u, i) => [normalizar(u), i]));
-  return [...RESERVA].sort((a, b) => (ordem.get(normalizar(a.frase)) ?? -1) - (ordem.get(normalizar(b.frase)) ?? -1))[0];
+/**
+ * A IA escreve; a regra confere. Repetiu, ela tenta UMA vez mais sabendo o
+ * motivo — duas chamadas no máximo, porque a cota grátis de IA é curta e o
+ * Orientador precisa dela o dia todo. Repetiu de novo, entra a reserva.
+ */
+async function gerarComIA(hoje: string, historico: Registro[]): Promise<Candidata | null> {
+  if (!iaHabilitada()) return null;
+  let recusa: string | null = null;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const c = await pedirAIA(hoje, historico, recusa);
+      if (!c) return null;
+      recusa = motivoDeRecusa(c, historico);
+      if (!recusa) return c;
+      console.warn(`[frase-dia] IA repetiu (tentativa ${tentativa + 1}): ${recusa}`);
+    } catch (e) {
+      console.error("[frase-dia] IA falhou:", e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+  return null;
 }
 
 export async function obterFraseDoDia(): Promise<FraseDoDia> {
@@ -108,12 +132,24 @@ export async function obterFraseDoDia(): Promise<FraseDoDia> {
     } catch {}
   }
 
-  let usadas: string[] = [];
-  try { usadas = JSON.parse((await lerConfig(CHAVE_HISTORICO)) ?? "[]"); } catch { usadas = []; }
+  let historico: Registro[] = [];
+  try { historico = lerHistorico(JSON.parse((await lerConfig(CHAVE_HISTORICO)) ?? "[]")); } catch { historico = []; }
+  // A de ontem completa o registro dela no histórico: o formato antigo
+  // guardava só a citação, e é a abertura e o autor de ontem que não podem
+  // voltar hoje.
+  if (atualRaw) {
+    try {
+      const ontem = JSON.parse(atualRaw) as FraseDoDia;
+      const ultimo = historico[historico.length - 1];
+      const completo: Registro = { d: ontem.data, f: ontem.frase, a: ontem.autor, t: aberturaDoTexto(ontem.texto ?? "") };
+      if (ontem.frase && (!ultimo || ultimo.f !== ontem.frase)) historico.push(completo);
+      else if (ultimo && ultimo.f === ontem.frase && !ultimo.t) historico[historico.length - 1] = completo;
+    } catch {}
+  }
 
-  const escolhida = (await gerarComIA(usadas)) ?? daReserva(usadas);
+  const escolhida = (await gerarComIA(hoje, historico)) ?? escolherDaReserva(RESERVA, historico);
   const nova: FraseDoDia = { data: hoje, ...escolhida };
   await gravarConfig(CHAVE_ATUAL, JSON.stringify(nova));
-  await gravarConfig(CHAVE_HISTORICO, JSON.stringify([...usadas, escolhida.frase].slice(-MAX_HISTORICO)));
+  await gravarConfig(CHAVE_HISTORICO, JSON.stringify([...historico, registroDe(escolhida, hoje)].slice(-MAX_HISTORICO)));
   return nova;
 }
