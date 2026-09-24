@@ -51,16 +51,17 @@ o código atual, mas saiba que existe: tabela `Usuario` (1 linha, login `admin`,
 papel `gerente`), coluna `vendedorId` + índice nas 8 tabelas (carimbada), e as
 chaves `manutencao.v45`/`v46` na Configuracao.
 
-**Saída grátis oferecida (ele decide se roda):** banco temporário no Supabase,
-plano grátis, conta dele. O CRM sobe VAZIO de histórico — cria as 40 tabelas
-sozinho (`lib/banco-do-zero.ts`). O prompt para a extensão do Chrome dele está
-na conversa de 24/09. **Pergunte se ele rodou antes de assumir qualquer coisa.**
+**EM USO DESDE 24/09: banco temporário no Supabase** (plano grátis, conta dele —
+ele confirmou). O CRM subiu VAZIO de histórico e criou as 40 tabelas sozinho
+(`lib/banco-do-zero.ts`). O que ele registrar lá desde então SÓ EXISTE lá: o
+plano grátis do Supabase não tem backup e pausa o projeto depois de 1 semana sem
+uso.
 
 **PENDENTE — no dia em que o Neon voltar:**
 1. Trocar `DATABASE_URL`/`DATABASE_URL_UNPOOLED` de volta para o Neon na Vercel.
 2. Trazer para o Neon o que ele registrou no Supabase durante a semana. O
-   script **ainda não existe** — escreva e prove contra dois Postgres locais
-   antes do dia. Cuidado com ids repetidos (clientes que ele reimportou e que
+   script **ainda não existe e é a PRÓXIMA demanda depois do documento da
+   diretoria** — escreva e prove contra dois Postgres locais antes do dia 1º. Cuidado com ids repetidos (clientes que ele reimportou e que
    já existem no Neon) e com a ordem das chaves estrangeiras.
 3. Só DEPOIS disso retomar o multiusuário.
 

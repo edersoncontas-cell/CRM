@@ -12,8 +12,10 @@ Levantamento feito em 24/09/2026 · câmbio usado: R$ 5,17 por dólar (fechament
 > 2. **Margem da concessionária (seção 4.3).** A conta usa hipóteses de 5%, 10% e 15%.
 >    Se souber a margem real de uma retroescavadeira, troque. É o número que mais convence.
 > 3. **Tamanho do time.** As contas estão para 1, 5 e 10 vendedores. Ajuste ao time real.
-> 4. **Preços marcados "fonte única" no Apêndice A.** O WhatsApp oficial e os CRMs de mercado
->    têm fonte, mas não passaram pela segunda checagem. Abra os links na véspera.
+> 4. **Preços marcados "sem 2ª checagem" no Apêndice A.** O WhatsApp oficial e os CRMs de
+>    mercado têm duas fontes cada, mas não passaram pela segunda checagem. Abra os links na véspera.
+> 5. **Perguntas prováveis (seção 11).** As respostas sobre "e se você sair?" e "por que
+>    licença?" são suas. Revise com as suas palavras antes da reunião.
 
 ---
 
@@ -21,7 +23,7 @@ Levantamento feito em 24/09/2026 · câmbio usado: R$ 5,17 por dólar (fechament
 
 **O que é.** Um CRM feito sob medida para venda de máquina pesada New Holland e
 Dynapac no sul do ES, em uso real pelo vendedor que o construiu. Não é protótipo:
-35 telas, 15 rotinas automáticas, 40 tabelas de dados e 1.057 testes automatizados.
+35 telas, 15 rotinas automáticas, 40 tabelas de dados e 1.094 testes automatizados.
 
 **O que ele faz que os CRMs de prateleira não fazem.** Lê a conversa do WhatsApp e
 **abre ou atualiza a negociação no funil sozinho**. Conhece a linha New Holland e
@@ -79,8 +81,8 @@ Números medidos no próprio código, em 24/09/2026:
 | Telas | 35 |
 | Rotinas automáticas | 15 |
 | Tabelas de dados | 40 |
-| Linhas de código | 71.293 |
-| Testes automatizados | 1.057 |
+| Linhas de código | 71.715 |
+| Testes automatizados | 1.094 |
 
 | Área | O que faz | Para o vendedor | Para a gestão |
 |---|---|---|---|
@@ -174,9 +176,12 @@ não serve, por três motivos com fonte:
    que o plano Hobby é só para uso pessoal e não comercial.
 2. **O banco gratuito desliga quando a cota acaba, e desligou.** O plano grátis do Neon dá
    100 horas de computação por mês. Esgotada a cota, o banco é **suspenso até o próximo
-   ciclo**. Foi o que aconteceu em 23/09/2026.
-3. **A IA gratuita não aguenta um time e usa os dados dos clientes.** O nível grátis do
-   Gemini dá cerca de **20 análises por dia** (medido em setembro de 2026). E, no nível
+   ciclo**. Foi o que aconteceu em 23/09/2026. O consumo que causou isso já foi corrigido,
+   mas o limite continua: um time usando o CRM o dia todo mantém o banco acordado a maior
+   parte do dia, e isso sozinho já encosta nas 100 horas.
+3. **A IA gratuita não aguenta um time e usa os dados dos clientes.** Mesmo no modelo mais
+   econômico, a cota grátis é de cerca de **500 análises por dia para o CRM inteiro**
+   (setembro de 2026). Dez vendedores com 40 conversas por dia já passam disso. E, no nível
    gratuito, **o Google usa as conversas para treinar os modelos**. Com dado de cliente,
    isso pesa contra (LGPD). No pago, não usa.
 
@@ -208,7 +213,7 @@ Ela é **decisão da gestão**, mês a mês. As premissas de cada linha estão n
 | Item | Preço | Observação |
 |---|---|---|
 | Vercel Pro | US$ 20/mês | Um assento só: quem publica o sistema. Os vendedores usam o CRM e não contam como assento. Inclui US$ 20 de uso. |
-| Neon Launch | US$ 0,106 por hora de computação + US$ 0,35 por GB/mês | **Sem mensalidade mínima** desde dez/2025. Restauração de até 7 dias incluída. Sem SLA (só no plano Scale). |
+| Neon Launch | US$ 0,106 por hora de computação + US$ 0,35 por GB/mês | **Sem mensalidade mínima** desde dez/2025. Restauração de até 7 dias disponível, cobrada à parte (US$ 0,20 por GB/mês, centavos no tamanho do CRM). Sem SLA (só no plano Scale). |
 | Gemini 3.8 Flash (pago) | US$ 0,75 por 1 milhão de tokens de entrada e US$ 3,75 de saída | Preço de lançamento até 31/12/2026. **Dobra em 01/01/2027.** No pago, os dados não treinam o modelo. |
 | WhatsApp oficial — marketing | R$ 0,3217 por mensagem entregue | Cobrança em reais desde 01/07/2026. Sem desconto por volume. |
 | WhatsApp oficial — utilidade | R$ 0,035 por mensagem | Confirmação de visita, proposta enviada. |
@@ -272,7 +277,7 @@ que é do nosso negócio:
 
 Os mais baratos (Moskit e Agendor) custam menos porque não fazem nada disso.
 
-*Os preços desta seção são de fonte única (Apêndice A). Conferir nos links antes da reunião.*
+*Os preços desta seção não passaram pela segunda checagem (Apêndice A). Conferir nos links antes da reunião.*
 
 ## 7. Proposta
 
@@ -296,6 +301,10 @@ Para **10 vendedores**:
   pós-venda em planilha.
 - **LGPD.** A empresa é a controladora dos dados dos clientes. Quem mantém o sistema é o
   operador. Isso vai escrito no acordo.
+- **Em nome de quem ficam as contas.** A conta Meta e os números de WhatsApp ficam **no nome
+  da concessionária**: a Meta exige a verificação da empresa, e é isso que faz o número ser da
+  casa. Hospedagem, banco e IA ficam no nome de quem mantém o sistema, e a empresa paga o
+  custo operacional por repasse. Essa divisão é a que torna a licença real.
 - **O acordo diz:** quantos usuários a licença cobre, o prazo e o reajuste, o que a
   manutenção inclui (correção sim; tela nova grande é escopo à parte) e o que acontece
   ao encerrar. Quem redige é advogado.
@@ -306,7 +315,7 @@ Para a diretoria saber exatamente o que está comprando:
 
 | Falta | Por que importa | Estado |
 |---|---|---|
-| **Um acesso por vendedor** (cada um vê só a sua carteira) | Hoje o CRM é de uma pessoa, com uma senha só | Isolamento construído e testado; sai do ar até a reentrada segura (seção 10) |
+| **Um acesso por vendedor** (cada um vê só a sua carteira) | Hoje o CRM é de uma pessoa, com uma senha só | Isolamento construído e testado; foi retirado em 23/09 e volta em duas etapas (seção 10) |
 | **Visão do gerente** (funil do time, comparação entre vendedores) | Sem ela, o objetivo 3 não acontece | A fazer |
 | **WhatsApp oficial, um número por vendedor** | Tira o risco de bloqueio e deixa o número com a empresa | A fazer |
 | **Backup automático fora do banco** | Hoje há exportação manual e a restauração de 7 dias do plano pago | A fazer |
@@ -320,10 +329,10 @@ Para a diretoria saber exatamente o que está comprando:
 | Risco | Já aconteceu? | Como fica tratado |
 |---|---|---|
 | **WhatsApp bloqueado** | Sim, duas vezes (conexão não-oficial e disparo em massa) | API oficial para o time. Travas de envio já no CRM: 80 por dia, horário comercial, só para quem já conversou, "SAIR". Trava geral que nasce pausada. |
-| **CRM fora do ar por plano grátis** | Sim, em 23/09/2026 (banco suspenso por cota) | Plano pago, sem suspensão por cota. Hoje o CRM já diz na tela o motivo quando o banco cai, tenta um segundo endereço sozinho e sabe se recompor num banco novo. |
-| **O modelo de IA usado hoje vai ser desligado** | Anunciado pelo Google para 16 a 20/10/2026 | Troca para o modelo atual antes da data. Faz parte da saída do plano grátis (fase 0). |
+| **CRM fora do ar por plano grátis** | Sim, em 23/09/2026 (banco suspenso por cota) | O consumo que esgotou a cota foi corrigido em 24/09: as telas não consultam mais o banco com a aba escondida, e a manutenção não se repete a cada tela. O CRM já diz na tela o motivo quando o banco cai, tenta um segundo endereço sozinho e se recompõe num banco novo (foi assim que voltou ao ar no mesmo dia, num banco temporário). Com o plano pago, não há suspensão por cota. |
+| **O Google desligar o modelo de IA** | Anunciado para o modelo usado até 24/09 (desligamento em 16 a 20/10/2026) | **Já tratado em 24/09:** o CRM trocou de modelo e passou a usar uma lista. Se um modelo sai do ar, o próximo assume sozinho. |
 | **Preço da IA dobra em 2027** | Anunciado (01/01/2027) | Já calculado na seção 5.2. Alternativa: o modelo econômico (Flash-Lite), a um terço do preço. |
-| **Dependência de uma pessoa** | — | 1.057 testes automatizados, documentação das regras e do histórico de falhas no próprio repositório, e contrato de manutenção. |
+| **Dependência de uma pessoa** | — | 1.094 testes automatizados, documentação das regras e do histórico de falhas no próprio repositório, e contrato de manutenção. |
 | **Dado de cliente (LGPD)** | — | IA paga (não usa os dados para treino), acordo com os papéis de controlador e operador, exportação completa a qualquer momento. |
 | **Câmbio** | — | Cerca de 45% do custo operacional é em dólar. Sensibilidade na seção 5.5. |
 
@@ -331,7 +340,7 @@ Para a diretoria saber exatamente o que está comprando:
 
 | Fase | O que acontece | Prazo | Custo mensal a partir daí |
 |---|---|---|---|
-| **0. Sair do grátis** | Vercel Pro, Neon pago, Gemini pago com teto de gasto, troca do modelo de IA que será desligado | 1 semana | cerca de R$ 220 (1 vendedor, ainda no WhatsApp atual) |
+| **0. Sair do grátis** | Vercel Pro, Neon pago, Gemini pago com teto de gasto por vendedor | 1 semana | cerca de R$ 220 (1 vendedor, ainda no WhatsApp atual) |
 | **1. Um acesso por vendedor** | Login por pessoa, cada um vê só a sua carteira, painel do gerente. Entra em **duas etapas**: primeiro a estrutura no banco, depois o código. | 2 a 3 semanas | igual |
 | **2. WhatsApp oficial** | Verificação da concessionária na Meta, números da empresa, modelos de mensagem aprovados, integração no CRM | 3 a 4 semanas (depende da Meta) | + R$ 142 por vendedor |
 | **3. Piloto** | 2 ou 3 vendedores por 60 dias, medindo a seção 4.4 | 60 dias | seção 5.2, coluna de 5 |
@@ -341,7 +350,54 @@ Para a diretoria saber exatamente o que está comprando:
 testada contra o banco antigo antes de publicar. Em 23/09 uma mudança dessas subiu de uma
 vez e derrubou o CRM.
 
-## 11. O pedido
+### Critério para seguir, definido ANTES do piloto
+
+Proposta, para a diretoria ajustar e aprovar junto com o piloto. O piloto segue para o
+time se, ao fim dos 60 dias, **os vendedores do piloto** tiverem:
+
+1. **100% das vendas perdidas com motivo** registrado;
+2. **negociações esfriando** (10+ dias sem contato) **caindo pela metade** em relação ao
+   primeiro mês;
+3. **a maioria das conversas de venda do WhatsApp registrada como negociação**, medida pelo
+   painel da seção 4.4;
+4. **os próprios vendedores querendo continuar**. Sem adesão de quem usa, nenhum número
+   se sustenta.
+
+### Se o piloto não provar
+
+O CRM para no piloto. O custo fica na fase 0 e nos dois meses de piloto, e a empresa sai
+**com todos os dados em planilha**: clientes, negociações, visitas, mensagens e pós-venda.
+Não há multa nem período mínimo.
+
+## 11. Perguntas que a diretoria vai fazer
+
+**"E se você sair da empresa?"**
+Os dados são da concessionária e saem com ela a qualquer momento, em planilha. Os números
+de WhatsApp são da empresa. O que fica com o autor é o código. O acordo precisa dizer o
+que acontece com a licença nesse caso. *(Resposta sua: continuar mantendo de fora,
+entregar o código mediante valor combinado, ou outra.)*
+
+**"Por que pagar licença a um funcionário?"**
+Porque o sistema foi construído fora do escopo do cargo, com tempo e custo próprios, e
+continua precisando de manutenção. A alternativa de mercado com o mesmo alcance custa o
+mesmo ou mais (seção 6) e não conhece o nosso negócio. *(Revise com as suas palavras.)*
+
+**"Quem dá suporte quando você está na rua?"**
+Correção de erro entra na manutenção, com prazo combinado no acordo. O CRM já avisa na
+tela quando algo cai, e diz o motivo. Na queda de 23/09, o sistema voltou ao ar no mesmo
+dia.
+
+**"Os dados dos clientes estão seguros?"**
+Acesso por senha, com bloqueio depois de 5 tentativas erradas. IA paga, que não usa as
+conversas para treinar modelos. Exportação completa a qualquer momento. E, com o
+multiusuário, cada vendedor vê só a própria carteira.
+
+**"Por que não um CRM de mercado?"**
+Seção 6: no mesmo preço do pacote completo do líder brasileiro, ele faz o que os de
+prateleira não fazem: lê a conversa e abre a negociação, conhece a linha New Holland e
+Dynapac, e calcula diesel, TCO e a comissão do CRD PME.
+
+## 12. O pedido
 
 1. **Aprovar a fase 0 agora**: cerca de R$ 220/mês, para o CRM sair do plano gratuito e
    parar de depender da sorte.
@@ -355,8 +411,8 @@ vez e derrubou o CRM.
 Levantamento de 24/09/2026. O acesso direto aos sites dos fornecedores estava bloqueado
 no ambiente de pesquisa, então cada preço foi buscado em pelo menos duas fontes. Nos
 grupos marcados "conferido", um segundo pesquisador refez a busca de forma independente
-para tentar desmentir o valor. Nos marcados "fonte única", a cota de buscas acabou antes
-da segunda checagem.
+para tentar desmentir o valor. Nos marcados "sem 2ª checagem", a cota de buscas acabou
+antes dela: os valores têm as fontes listadas, mas ninguém tentou desmenti-los.
 
 **Hospedagem e banco — conferido**
 
@@ -379,7 +435,7 @@ da segunda checagem.
 | Gemini 2.5 Flash (modelo usado hoje): desligamento em 16 a 20/10/2026 | — | página de descontinuação do Gemini API e do Google Cloud (via agregadores de 2026) |
 | Google AI Plus (assinatura de uso pessoal) | R$ 24,99/mês — **não dá cota de API** | blog.google/intl/pt-br · tecnoblog.net |
 
-**WhatsApp oficial — fonte única**
+**WhatsApp oficial — sem 2ª checagem**
 
 | Item | Valor | Fontes |
 |---|---|---|
@@ -388,7 +444,7 @@ da segunda checagem.
 | Serviço a partir de 01/10/2026 | 1.000 grátis por número por mês; depois US$ 0,0068 (R$ 0,035) | developers.facebook.com (non-template messages) · sendpulse.com/br · courier.com |
 | Servidor para a conexão não-oficial (Hostinger KVM 2) | R$ 38,99 a R$ 42,99/mês promocional; média de R$ 54,66 em 3 anos | kildaryoliver.com.br · horadecodar.com.br · hostinger.com |
 
-**CRMs de mercado — fonte única**
+**CRMs de mercado — sem 2ª checagem**
 
 | Item | Valor | Fontes |
 |---|---|---|
@@ -399,7 +455,7 @@ da segunda checagem.
 | HubSpot Sales Professional | US$ 100/licença + onboarding de US$ 1.500 (confiança baixa) | docket.io · marketbetter.ai |
 | Salesforce Pro Suite | US$ 100/usuário (anual) | salesforce.com/br/small-business/pro-suite |
 
-**Referências de ganho — fonte única**
+**Referências de ganho — sem 2ª checagem**
 
 | Item | Valor | Fontes |
 |---|---|---|
