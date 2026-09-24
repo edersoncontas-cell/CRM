@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extrairHeuristica, type ExtracaoConversa } from "./heuristics";
 import { agoraBrasiliaExtenso, saudacaoBrasilia } from "@/lib/utils";
-import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODEL, GEMINI_API_BASE, DEEPSEEK_MODEL } from "./config";
+import { MODEL_TAREFA, OPENAI_MODEL, GEMINI_MODELOS_TEXTO, DEEPSEEK_MODEL } from "./config";
+import { gerarConteudoGemini } from "./gemini-modelos";
 import { sugerirProximaAcaoHeuristica, type SinaisProximaAcao } from "@/lib/zeus/nextbestaction";
 import { lerParametros } from "@/lib/parametros";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, erroDeJsonGroq, erroDeCotaGroq, marcarModeloGroqEsgotado, CANDIDATOS_GROQ, GROQ_BASE_URL } from "./groq";
@@ -130,34 +131,24 @@ function deepseekClient() {
   return new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
 }
 
-// Gemini usa um formato de API próprio (REST, sem SDK) — chamada direta via fetch.
+// Gemini usa um formato de API próprio (REST, sem SDK). Os modelos são
+// tentados em lista (ver lib/ai/gemini-modelos.ts): o que sumiu ou esgotou a
+// cota passa a vez ao próximo.
 async function gemini(system: string, user: string, opts?: { maxTokens?: number; json?: boolean; raciocinio?: boolean; apertado?: boolean }): Promise<string> {
-  const res = await fetch(
-    `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: {
-          maxOutputTokens: (opts?.maxTokens ?? 1024) + (opts?.raciocinio ? 2048 : 0),
-          ...(opts?.json ? { responseMimeType: "application/json" } : {}),
-          // Raciocínio antes de responder (Gemini 2.5): melhora muito análise
-          // de conversa e extração; custa alguns segundos a mais.
-          ...(opts?.raciocinio ? { thinkingConfig: { thinkingBudget: 2048 } } : {}),
-        },
-      }),
-    }
-  );
-  if (!res.ok) {
-    const detalhe = await res.text().catch(() => "");
-    throw new Error(`Falha no Gemini (${res.status}): ${detalhe.slice(0, 200)}`);
-  }
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  const { data } = await gerarConteudoGemini(GEMINI_MODELOS_TEXTO, {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: user }] }],
+    generationConfig: {
+      maxOutputTokens: (opts?.maxTokens ?? 1024) + (opts?.raciocinio ? 2048 : 0),
+      ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+      // Raciocínio antes de responder: melhora muito análise de conversa e
+      // extração; custa alguns segundos a mais. Modelo que não aceitar esta
+      // configuração recebe o pedido de novo sem ela (gemini-modelos.ts).
+      ...(opts?.raciocinio ? { thinkingConfig: { thinkingBudget: 2048 } } : {}),
+    },
+  });
+  const d = data as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  return d.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 }
 
 // Executa a chamada de texto num provedor específico — corpo de cada branch
@@ -325,33 +316,22 @@ async function chamarProvedorVisao(
   opts?: { maxTokens?: number; json?: boolean }
 ): Promise<string> {
   if (prov === "gemini") {
-    const res = await fetch(
-      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{
-            role: "user",
-            parts: [
-              { inlineData: { mimeType: arquivo.mediaType, data: arquivo.base64 } },
-              { text: textoUser },
-            ],
-          }],
-          generationConfig: {
-            maxOutputTokens: opts?.maxTokens ?? 1500,
-            ...(opts?.json ? { responseMimeType: "application/json" } : {}),
-          },
-        }),
-      }
-    );
-    if (!res.ok) {
-      const detalhe = await res.text().catch(() => "");
-      throw new Error(`Falha no Gemini (${res.status}): ${detalhe.slice(0, 200)}`);
-    }
-    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+    const { data } = await gerarConteudoGemini(GEMINI_MODELOS_TEXTO, {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: arquivo.mediaType, data: arquivo.base64 } },
+          { text: textoUser },
+        ],
+      }],
+      generationConfig: {
+        maxOutputTokens: opts?.maxTokens ?? 1500,
+        ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+      },
+    });
+    const d = data as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    return d.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   }
 
   if (prov === "openai") {

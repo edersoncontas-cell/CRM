@@ -8,7 +8,8 @@
 // IA, o radar simplesmente não roda (e diz isso na tela).
 
 import { db } from "@/lib/db";
-import { GEMINI_API_BASE, GEMINI_MODEL } from "@/lib/ai/config";
+import { GEMINI_MODELOS_CHAT } from "@/lib/ai/config";
+import { gerarConteudoGemini } from "@/lib/ai/gemini-modelos";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
 import { SESSOES } from "@/lib/cerebro/sessoes";
 import { lerParametros } from "@/lib/parametros";
@@ -52,20 +53,16 @@ Traga de 4 a 8 ideias, cada uma de uma sessão diferente sempre que possível.`;
 // Gemini com busca do Google (grounding). Se a busca não estiver disponível
 // para a chave, a própria API responde sem ela — e o resultado continua útil.
 async function pesquisarComGemini(system: string, pedido: string): Promise<string> {
-  const res = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: pedido }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { maxOutputTokens: 3000, temperature: 0.6 },
-    }),
-    signal: AbortSignal.timeout(55_000),
-  });
-  if (!res.ok) throw new Error(`Gemini (${res.status}): ${(await res.text().catch(() => "")).slice(0, 200)}`);
-  const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  // Lista do CHAT (Flash primeiro): a busca do Google pede o modelo mais
+  // capaz, e o radar roda uma vez por dia — a cota pesa pouco aqui.
+  const { data } = await gerarConteudoGemini(GEMINI_MODELOS_CHAT, {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: pedido }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { maxOutputTokens: 3000, temperature: 0.6 },
+  }, { timeoutMs: 55_000 });
+  const d = data as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  return d.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 }
 
 function extrairIdeias(raw: string): Omit<IdeiaRadar, "id" | "criadoEm" | "sessaoNome" | "status">[] {

@@ -1,4 +1,6 @@
-// Controle da cota gratuita de imagem do Gemini.
+// Controle da cota gratuita de imagem do Gemini — e, desde 24/09/2026, também
+// dos modelos de TEXTO (ver gemini-modelos.ts). A memória é por nome de
+// modelo, então texto e imagem não se misturam.
 //
 // Por que existe: a criação de arte roda na CAMADA GRATUITA da API do Gemini,
 // que tem dois tetos — um por minuto e um por dia. Quando o teto do dia

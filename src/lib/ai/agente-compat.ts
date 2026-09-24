@@ -8,7 +8,9 @@
 
 import OpenAI from "openai";
 import type Anthropic from "@anthropic-ai/sdk";
-import { OPENAI_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL } from "./config";
+import { OPENAI_MODEL, GEMINI_MODELOS_CHAT, GEMINI_API_BASE, DEEPSEEK_MODEL } from "./config";
+import { decidirPeloErro, modeloGeminiDaVez } from "./gemini-modelos";
+import { marcarEsgotado } from "./imagem-cota";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, GROQ_BASE_URL } from "./groq";
 
 type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: boolean };
@@ -17,12 +19,19 @@ type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: bool
 export function provedoresCompat(): ProvedorCompat[] {
   const lista: ProvedorCompat[] = [];
   if (process.env.GEMINI_API_KEY) {
-    lista.push({
-      nome: "gemini",
-      client: new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" }),
-      model: GEMINI_MODEL,
-      visao: true,
-    });
+    // O modelo sai da lista do CHAT (Flash primeiro); o que sumiu ou esgotou a
+    // cota fica de fora (ver gemini-modelos.ts). O endereço vem do
+    // GEMINI_API_BASE, como nas outras chamadas — antes era fixo aqui, e o
+    // servidor falso dos testes não alcançava o chat.
+    const modelo = modeloGeminiDaVez(GEMINI_MODELOS_CHAT);
+    if (modelo) {
+      lista.push({
+        nome: "gemini",
+        client: new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: `${GEMINI_API_BASE}/v1beta/openai/` }),
+        model: modelo,
+        visao: true,
+      });
+    }
   }
   if (process.env.GROQ_API_KEY) {
     lista.push({
@@ -152,6 +161,17 @@ export async function rodadaAgenteCompat(
           break;
         } catch (e) {
           if (p.nome === "groq" && tentativa === 0 && erroDeModeloGroq(e)) { marcarModeloGroqRuim(modelo); modelo = await modeloGroq(); continue; }
+          // Gemini: modelo que sumiu (404) ou esgotou a cota (429) passa a vez
+          // ao próximo da lista do chat, como no resto do CRM.
+          if (p.nome === "gemini" && tentativa < GEMINI_MODELOS_CHAT.length) {
+            const status = (e as { status?: number }).status ?? 0;
+            const decisao = decidirPeloErro(status, e instanceof Error ? e.message : String(e));
+            if (decisao.acao === "proximo-modelo") {
+              marcarEsgotado(modelo, decisao.ate);
+              const proximo = modeloGeminiDaVez(GEMINI_MODELOS_CHAT);
+              if (proximo) { modelo = proximo; continue; }
+            }
+          }
           throw e;
         }
       }
