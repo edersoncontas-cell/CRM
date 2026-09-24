@@ -12,9 +12,9 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit: **`58fa4c6`** — "CLAUDE.md: as regras que saem das falhas".
-**1023 testes passando** (86 arquivos), lint e build limpos.
-`CHAVE_MANUTENCAO = "manutencao.v44"`.
+Último commit em produção: **`7a939c7`** — "Manutenção com espera entre falhas,
+e o CRM nascendo num banco vazio". **1057 testes passando** (91 arquivos),
+lint e build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"`.
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
@@ -25,11 +25,60 @@ Repositório: `edersoncontas-cell/CRM`
 > Ao retomar, confira o estado real antes de confiar nestes números:
 > `git log --oneline -5`, `npx vitest run`, `grep -n "CHAVE_MANUTENCAO = " src/lib/manutencao.ts`.
 
-### ⚠ Falta ele rodar a manutenção
+A manutenção **roda sozinha** no layout, ao abrir qualquer tela — ele NÃO
+precisa apertar botão nenhum. Já afirmei o contrário três vezes; não repita.
+O card em Configurações mostra se está em dia ou se falhou (e por quê).
 
-Depois do deploy: **Configurações → Manutenção do sistema**. As migrações v42
-(funil novo) e v43 (`Cliente.naoPerturbe`) só entram quando essa rotina roda.
-Sem ela, a tela que lê a coluna nova quebra inteira.
+### ⚠ O banco de produção (Neon) está SUSPENSO — 23/09
+
+O que aconteceu, em ordem, e o que é culpa minha:
+
+1. Subi o multiusuário etapa 1 (`5abe681`). O schema ganhou `vendedorId` em 8
+   modelos, mas o banco só ganharia a coluna quando a manutenção rodasse — e
+   ela roda em paralelo com as consultas da página. Toda tela caiu. **Meu.**
+2. Reverti (`a56891b`), consertei com a coluna criada antes da 1ª consulta
+   (`934b3ed`) e reverti de novo (`0403848`) porque o CRM seguia fora.
+3. A causa que sobrou: a manutenção falhava numa etapa, apagava a marca e
+   **rodava inteira de novo a cada tela**, por horas — oito tabelas reescritas
+   por clique. Esgotou a cota grátis do Neon. **Meu também.**
+4. O diagnóstico (`/api/diag`) confirmou: os DOIS endereços do projeto
+   (`ep-gentle-truth-acybwmdr`, sa-east-1, com e sem pooler) não conectam. Não
+   é código. Os dados estão intactos lá; é acesso bloqueado até o ciclo virar
+   (provavelmente dia 1º — o painel do Neon diz a data).
+
+O que ficou no banco do Neon por causa da migração revertida — inofensivo para
+o código atual, mas saiba que existe: tabela `Usuario` (1 linha, login `admin`,
+papel `gerente`), coluna `vendedorId` + índice nas 8 tabelas (carimbada), e as
+chaves `manutencao.v45`/`v46` na Configuracao.
+
+**Saída grátis oferecida (ele decide se roda):** banco temporário no Supabase,
+plano grátis, conta dele. O CRM sobe VAZIO de histórico — cria as 40 tabelas
+sozinho (`lib/banco-do-zero.ts`). O prompt para a extensão do Chrome dele está
+na conversa de 24/09. **Pergunte se ele rodou antes de assumir qualquer coisa.**
+
+**PENDENTE — no dia em que o Neon voltar:**
+1. Trocar `DATABASE_URL`/`DATABASE_URL_UNPOOLED` de volta para o Neon na Vercel.
+2. Trazer para o Neon o que ele registrou no Supabase durante a semana. O
+   script **ainda não existe** — escreva e prove contra dois Postgres locais
+   antes do dia. Cuidado com ids repetidos (clientes que ele reimportou e que
+   já existem no Neon) e com a ordem das chaves estrangeiras.
+3. Só DEPOIS disso retomar o multiusuário.
+
+### O que entrou para isso não se repetir (23–24/09)
+
+- `lib/saude-banco.ts` + `components/BancoForaDoAr.tsx` — o layout sonda o banco
+  antes das telas; banco fora vira uma tela com o MOTIVO por extenso, não
+  "Algo deu errado".
+- `/api/diag` — testa peça por peça (variáveis, conectar, ler, ESCREVER,
+  tamanho, endereço direto, serviços de fora). A tela de erro genérica tem o
+  botão "Ver o que aconteceu" que leva a ele.
+- `lib/db.ts` — endereço de reserva: falha de CONEXÃO no pooler prova o direto
+  (`DATABASE_URL_UNPOOLED`) e segue por ele; tenta voltar ao principal 1×/min.
+  Erro de consulta sobe igual.
+- `lib/manutencao-retentativa.ts` — falhou, a marca guarda `falhou:<vezes>:<quando>:<erro>`
+  e a próxima tentativa espera 5 min → 30 min → 2 h → 1×/dia.
+- `lib/banco-do-zero.ts` + `lib/banco-do-zero-ddl.ts` (gerado) — o CRM nasce num
+  banco vazio. **Mudou o schema → regere o DDL** (`scripts/gerar-banco-do-zero.py`).
 
 ### As travas de envio (o assunto da vez)
 
@@ -98,11 +147,16 @@ O que é bom saber antes de abrir:
 ## Sandbox
 
 - Postgres: `/var/lib/postgresql/crmtest-pg`, porta 5433. **Ele cai sozinho** —
-  religue com:
+  religue com (se reclamar de "another postmaster", apague o
+  `postmaster.pid` antes):
 
   ```bash
-  su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/crmtest-pg -o '-p 5433 -k /tmp' -l /tmp/pg5433.log start"
+  su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/crmtest-pg -o '-p 5433' -l /tmp/pg.log start"
   ```
+
+  Bancos: `crmtest` (1.298 clientes de amostra) e `crmvazio*` (vazios, para
+  provar o banco-do-zero). Para provar o "código novo, banco velho", derrube a
+  coluna no `crmtest` antes de buildar.
 
   Erro de Prisma "Can't reach database server" quase sempre é isso, não o
   código.
@@ -143,10 +197,22 @@ O que é bom saber antes de abrir:
 Ele pediu um pacote para levar à diretoria. O Orientador do vendedor saiu; o
 resto continua aberto:
 
-- **Multiusuário**: login próprio, WhatsApp próprio e cidades próprias por
-  vendedor. **Não comecei de propósito**: é onde um erro vaza a carteira de um
-  vendedor para outro. Precisa de decisão dele sobre o que é compartilhado
-  (catálogo, fichas) e o que é isolado (clientes, negociações, conversas).
+- **Multiusuário** — decisões DELE já tomadas: cada vendedor vê **só os
+  dele**; **gerente vê tudo** (mas não edita carteira alheia nem envia pelo
+  número de ninguém); **WhatsApp por vendedor fica para depois** do isolamento.
+  Etapas: 1/3 isolamento automático no banco · 2/3 login por pessoa e cadastro
+  · 3/3 visão do gerente.
+  A etapa 1 foi construída e provada (nenhum vazamento em findMany, count,
+  updateMany, findUnique, deleteMany), subiu, **derrubou o CRM** e foi
+  revertida — o código está em `934b3ed`, com `lib/tenant.ts` (AsyncLocalStorage),
+  a extensão do Prisma em `lib/db.ts`, `lib/senha.ts` (PBKDF2) e os stubs de
+  navegador no `next.config.mjs`. Para reentrar, **em DOIS deploys**:
+  (1) só SQL — tabela `Usuario`, coluna `vendedorId` + índice, carimbo — SEM
+  mexer no schema.prisma; ele abre o CRM e confirma em Configurações;
+  (2) aí o schema, o tenant e o filtro. Antes de empurrar o (2): rodar com
+  código novo e banco velho (regra do CLAUDE.md). Atenção: o `lib/db.ts` de hoje
+  tem o endereço de reserva — o filtro por vendedor precisa valer nos dois
+  caminhos, não só no principal. E regere o DDL do banco-do-zero.
 - ~~**Orientador novo**, que analisa o VENDEDOR~~ — **FEITO.** É a seção "Como
   você vende" (`/como-voce-vende`), com a leitura opcional por IA e a aba
   "Feito para você" na Academia. O Orientador do Atendimento continua como
