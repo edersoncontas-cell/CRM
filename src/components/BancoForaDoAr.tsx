@@ -47,6 +47,12 @@ export function BancoForaDoAr({ saude }: { saude: Extract<SaudeBanco, { ok: fals
           </ol>
         ) : (
           <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-[13px] text-[var(--sobre-fundo-texto)]">
+            {saude.tentouReserva && (
+              <li>
+                O CRM já tentou o <b>segundo endereço</b> do Neon (o direto, sem pooler) e ele
+                também não respondeu — então não é só o pooler: é o projeto inteiro.
+              </li>
+            )}
             <li>Abra o painel do Neon e veja se o projeto está suspenso ou com aviso de cota.</li>
             <li>Se estiver suspenso, ele acorda sozinho na primeira conexão — recarregue esta página.</li>
             <li>Continuando, abra o diagnóstico abaixo e mande a tela inteira para o Claude.</li>

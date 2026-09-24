@@ -10,11 +10,11 @@
 // importam. Ela roda no layout, antes das telas, e nunca estoura — se ela
 // mesma falhasse, voltaríamos ao silêncio.
 
-import { db } from "@/lib/db";
+import { db, ehFalhaDeConexao, tentarReserva, tentarVoltarAoPrincipal, enderecoAtivo } from "@/lib/db";
 
 export type SaudeBanco =
-  | { ok: true }
-  | { ok: false; titulo: string; motivo: string; somenteLeitura: boolean };
+  | { ok: true; endereco: "principal" | "reserva" }
+  | { ok: false; titulo: string; motivo: string; somenteLeitura: boolean; tentouReserva: boolean };
 
 function recado(e: unknown): string {
   const numaLinha = (t: string) => t.replace(/\s+/g, " ").trim();
@@ -22,7 +22,18 @@ function recado(e: unknown): string {
   return numaLinha(String(e)).slice(0, 400);
 }
 
+async function sondar(): Promise<{ ro: string; tamanho: string } | undefined> {
+  const r = await db.$queryRawUnsafe<{ ro: string; tamanho: string }[]>(
+    `SELECT current_setting('transaction_read_only') AS ro,
+            pg_size_pretty(pg_database_size(current_database())) AS tamanho`,
+  );
+  return r?.[0];
+}
+
 export async function conferirBanco(): Promise<SaudeBanco> {
+  // Na reserva há um tempo? Tenta voltar ao principal (no máximo 1x/min).
+  await tentarVoltarAoPrincipal().catch(() => {});
+  let tentouReserva = false;
   try {
     // Uma consulta, três respostas:
     //  · responde?            → se estourar, o banco está fora
@@ -31,26 +42,33 @@ export async function conferirBanco(): Promise<SaudeBanco> {
     //    qualquer versão do código — foi a suspeita que eu não conseguia
     //    confirmar sem esta sonda.
     //  · tamanho              → para dizer o quanto falta do limite
-    const r = await db.$queryRawUnsafe<{ ro: string; tamanho: string }[]>(
-      `SELECT current_setting('transaction_read_only') AS ro,
-              pg_size_pretty(pg_database_size(current_database())) AS tamanho`,
-    );
-    const linha = r?.[0];
+    let linha = await sondar().catch(async (e) => {
+      // O principal não conectou? O desvio de lib/db.ts já tentou a reserva
+      // por dentro. Se ainda assim caiu, tenta uma vez explicitamente — é a
+      // última chance antes de mostrar a tela de banco fora.
+      if (!ehFalhaDeConexao(e)) throw e;
+      tentouReserva = true;
+      if (!(await tentarReserva())) throw e;
+      return sondar();
+    });
+    linha ??= undefined;
     if (linha?.ro === "on") {
       return {
         ok: false,
         somenteLeitura: true,
+        tentouReserva,
         titulo: "O banco está em modo SÓ LEITURA",
         motivo:
           `O banco responde, mas recusa gravar. É assim que o Neon reage quando a cota do plano ` +
           `grátis estoura. Tamanho atual: ${linha.tamanho ?? "?"} (o limite do plano grátis é 0,5 GB).`,
       };
     }
-    return { ok: true };
+    return { ok: true, endereco: enderecoAtivo() };
   } catch (e) {
     return {
       ok: false,
       somenteLeitura: false,
+      tentouReserva: tentouReserva || ehFalhaDeConexao(e),
       titulo: "O banco de dados não respondeu",
       motivo: recado(e),
     };

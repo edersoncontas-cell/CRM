@@ -70,6 +70,30 @@ export async function GET() {
     });
     return "gravou";
   }));
+  // 2b. O OUTRO endereço do Neon.
+  //
+  // O Neon dá dois: o com "-pooler" (que o CRM usa) e o direto. Eles são
+  // servidos por caminhos diferentes — um pode cair e o outro continuar de pé.
+  // Se o direto responder, o CRM volta trocando UMA variável na Vercel, sem
+  // esperar cota nem pagar plano. Se os dois caírem, o problema é o projeto
+  // inteiro, e isso também é resposta.
+  linhas.push("");
+  linhas.push("— O outro endereço do Neon (o direto, sem pooler)");
+  if (!process.env.DATABASE_URL_UNPOOLED) {
+    linhas.push("   NÃO TEM DATABASE_URL_UNPOOLED configurada — sem ela não dá para testar o endereço direto.");
+  } else {
+    linhas.push(await testar("conectar pelo endereço DIRETO", async () => {
+      const { PrismaClient } = await import("@prisma/client");
+      const solto = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_UNPOOLED } } });
+      try {
+        await solto.$queryRawUnsafe("SELECT 1");
+        return "RESPONDEU — o banco está vivo; quem está fora é só o endereço com pooler. " +
+               "Conserto: trocar DATABASE_URL pelo valor de DATABASE_URL_UNPOOLED na Vercel e republicar.";
+      } finally {
+        await solto.$disconnect().catch(() => {});
+      }
+    }));
+  }
   linhas.push("");
 
   // 3. O que a migração de hoje deixou no banco. O código no ar não usa nada
