@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Dados do letreiro do Dashboard (cotações + notícias). O letreiro chama
-// esta rota ao abrir a tela, ao voltar o foco e a cada 60 s. Se alguma
+// esta rota ao abrir a tela, ao voltar o foco e a cada 15 min com a tela visível
+// (INTERVALO_MERCADO, lib/intervalos-atualizacao.ts). Se alguma
 // leitura estiver velha, ela é REFEITA AQUI, na hora — o preço do café, a
 // bolsa e as notícias se atualizam toda vez que o CRM é aberto/atualizado,
 // sem depender do cron externo. Com ?forcar=1 (botão "Atualizar"), refaz

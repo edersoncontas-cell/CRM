@@ -1,4 +1,5 @@
 import { Card, PageHeader, Badge } from "@/components/ui";
+import { INTERVALO_MERCADO } from "@/lib/intervalos-atualizacao";
 import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as zapi from "@/lib/zapi";
 import * as transcription from "@/lib/integrations/transcription";
@@ -174,7 +175,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         </div>
         <p className="mb-3 text-sm text-slate-600">
           A cotação agora é <b>automática</b>: café arábica (bolsa de Nova York) e conilon/robusta (bolsa de Londres),
-          convertidos para R$/saca pelo dólar do momento e atualizados a cada minuto no letreiro do Dashboard.
+          convertidos para R$/saca pelo dólar do momento e atualizados no letreiro do Dashboard ao abrir a tela e a cada {INTERVALO_MERCADO / 60_000} minutos enquanto ela está aberta.
           Os valores abaixo são só uma <b>reserva</b>, usados se a bolsa ficar indisponível.
           {cotacoes.fonte === "mercado" && cotacoes.cafeAtualizadoEm && (
             <> Última leitura automática: {new Date(cotacoes.cafeAtualizadoEm).toLocaleString("pt-BR")}.</>

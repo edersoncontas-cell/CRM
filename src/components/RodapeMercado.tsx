@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { INTERVALO_MERCADO } from "@/lib/intervalos-atualizacao";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
@@ -130,7 +131,8 @@ export function RodapeMercado() {
       } catch { /* mantém o que já está na tela */ }
     };
     buscar();
-    const id = setInterval(() => buscar(), 60_000);
+    // Aba escondida não chama: a rota consulta o banco (docs/consumo-invocacoes.md).
+    const id = setInterval(() => { if (document.visibilityState === "visible") buscar(); }, INTERVALO_MERCADO);
     const aoFocar = () => { if (document.visibilityState === "visible") buscar(); };
     const aoPedirAtualizacao = () => { buscar(true); };
     window.addEventListener("focus", aoFocar);

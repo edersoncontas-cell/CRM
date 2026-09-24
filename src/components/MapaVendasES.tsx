@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { INTERVALO_MAPA_VENDAS } from "@/lib/intervalos-atualizacao";
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from "react-leaflet";
 import L from "leaflet";
 import type { GeoJsonObject } from "geojson";
@@ -48,7 +49,7 @@ export default function MapaVendasES({
     return () => { ativo = false; };
   }, []);
 
-  // Atualização "ao vivo": a cada 60s e sempre que a aba volta ao foco.
+  // Atualização "ao vivo": a cada 10 min (só com a tela visível) e sempre que a aba volta ao foco.
   useEffect(() => {
     let ativo = true;
     const buscar = async () => {
@@ -63,7 +64,8 @@ export default function MapaVendasES({
         setAtualizadoEm(new Date());
       } catch { /* mantém os pontos atuais */ }
     };
-    const id = setInterval(buscar, 60_000);
+    // Aba escondida não chama: a rota consulta o banco (docs/consumo-invocacoes.md).
+    const id = setInterval(() => { if (document.visibilityState === "visible") buscar(); }, INTERVALO_MAPA_VENDAS);
     const aoFocar = () => { if (document.visibilityState === "visible") buscar(); };
     const aoPedirAtualizacao = (e: Event) => {
       const p = buscar();

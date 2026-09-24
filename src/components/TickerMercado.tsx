@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { INTERVALO_MERCADO } from "@/lib/intervalos-atualizacao";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
 import type { TemaDash } from "@/lib/dash-tema";
@@ -43,7 +44,7 @@ function quando(iso: string | null | undefined, agora: number): string {
 // o rodapé fixo de todas as telas — ver RodapeMercado.tsx. Mantê-lo nos dois
 // lugares deixava a mesma manchete passando duas vezes na mesma tela. Os
 // dados são atualizados pela rota
-// /api/mercado/ticker toda vez que a tela abre, volta ao foco, a cada 60 s e
+// /api/mercado/ticker toda vez que a tela abre, volta ao foco, a cada 15 min (só com a tela visível) e
 // quando o botão "Atualizar" é clicado.
 export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const T = useTemaDash();
@@ -65,7 +66,8 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
       } catch { /* mantém o que tem */ } finally { if (ativo) setAtualizando(false); }
     };
     buscar(); // ao abrir/atualizar a tela
-    const id = setInterval(() => buscar(), 60_000);
+    // Aba escondida não chama: a rota consulta o banco (docs/consumo-invocacoes.md).
+    const id = setInterval(() => { if (document.visibilityState === "visible") buscar(); }, INTERVALO_MERCADO);
     const relogio = setInterval(() => setAgora(Date.now()), 20_000);
     const aoFocar = () => { if (document.visibilityState === "visible") buscar(); };
     const aoPedirAtualizacao = (e: Event) => {

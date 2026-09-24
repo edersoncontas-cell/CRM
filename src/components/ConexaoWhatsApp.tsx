@@ -133,7 +133,10 @@ export function ConexaoWhatsApp() {
     };
 
     loop();
-    const id = setInterval(loop, 5000);
+    // Os 5 s ficam (é o que atualiza o QR enquanto ele conecta), mas com a aba
+    // escondida não chama: a rota de status lê o banco, e 720 chamadas por hora
+    // em segundo plano não deixavam o Neon suspender (docs/consumo-invocacoes.md).
+    const id = setInterval(() => { if (document.visibilityState === "visible") loop(); }, 5000);
     return () => {
       ativo = false;
       clearInterval(id);

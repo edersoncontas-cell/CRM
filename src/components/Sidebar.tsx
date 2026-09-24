@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { INTERVALO_ALERTAS } from "@/lib/intervalos-atualizacao";
 import { usePathname } from "next/navigation";
 import { Menu, X, GripVertical, ArrowUpDown, Check } from "lucide-react";
 import { LogoEscavadeira } from "@/components/icons";
@@ -104,7 +105,8 @@ export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }:
         .catch(() => {});
     };
     carregar();
-    const timer = setInterval(carregar, 60_000);
+    // Aba escondida não chama: a rota consulta o banco (docs/consumo-invocacoes.md).
+    const timer = setInterval(() => { if (document.visibilityState === "visible") carregar(); }, INTERVALO_ALERTAS);
     return () => { ativo = false; clearInterval(timer); };
   }, [pathname]);
 

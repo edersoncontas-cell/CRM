@@ -25,7 +25,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const API_PAINEL = "https://api.coffee-panel.mitrix.online/api/home/information";
 
 // Leitura da API do Painel do Café é barata: vale por 1 min (o letreiro
-// consulta a cada minuto). Leituras das reservas (páginas HTML, às vezes com
+// consulta ao abrir, ao voltar à tela e a cada 15 min com ela visível). Leituras das reservas (páginas HTML, às vezes com
 // IA) valem por 15 min; depois de uma falha, espera 10 min para tentar de
 // novo (não gasta IA à toa).
 const VALIDADE_PAINEL_MS = 60_000;

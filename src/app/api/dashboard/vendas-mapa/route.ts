@@ -4,7 +4,7 @@ import { carregarVendasFaturadas, pontosVendas } from "@/lib/vendas-dashboard";
 export const dynamic = "force-dynamic";
 
 // Pontos do mapa de vendas do Dashboard. O mapa consulta esta rota sozinho
-// (a cada 60s e ao voltar pra aba) — assim uma venda faturada ou um cadastro
+// (a cada 10 min com a tela visível e ao voltar pra aba) — assim uma venda faturada ou um cadastro
 // com município corrigido aparece no mapa sem recarregar a página.
 // Protegida pelo middleware (cookie de login).
 export async function GET(req: NextRequest) {
