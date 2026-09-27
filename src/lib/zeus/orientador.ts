@@ -694,8 +694,24 @@ export async function processarOrientador(args: {
   estilo: string | null;
   aiActive: boolean;
   auditMode: boolean;
-}): Promise<{ respondido: boolean }> {
+}): Promise<{ respondido: boolean; adiado?: boolean }> {
   if (!args.conv.clienteId) return { respondido: false };
+
+  // Teto diário (lib/zeus/teto-orientador.ts): sem vaga hoje, nada de IA —
+  // nem o resumo de quem não é cliente. A conversa continua agendada e é
+  // lida amanhã (as duas rotas de despacho reagendam quando não respondeu).
+  const { reservarAnaliseOrientador } = await import("@/lib/zeus/teto-orientador");
+  const vaga = await reservarAnaliseOrientador();
+  if (!vaga.ok) {
+    const { registrarZeusEvent } = await import("@/lib/zeus/eventos");
+    await registrarZeusEvent({
+      tipo: "alerta", severidade: "media",
+      // O painel do ZEUS mostra só o título: ele tem de se explicar sozinho.
+      titulo: "Teto diário do Orientador atingido — as próximas mensagens de hoje serão lidas amanhã",
+      detalhe: `Hoje já foram ${vaga.teto} análises automáticas de conversa. As próximas mensagens ficam para amanhã (nada se perde: a conversa continua agendada). O botão "Reanalisar" continua funcionando. O teto muda na variável ORIENTADOR_TETO_DIARIO.`,
+    }).catch(() => {});
+    return { respondido: false, adiado: true };
+  }
 
   // Contato marcado como "Não é cliente": só o resumo da conversa, nada de
   // coaching nem de melhor resposta. Sai antes de tudo — inclusive antes de

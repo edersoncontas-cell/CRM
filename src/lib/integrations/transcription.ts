@@ -2,6 +2,8 @@
 // Suporta Groq Whisper (GROQ_API_KEY, grátis) e OpenAI Whisper (OPENAI_API_KEY).
 // Sem chave: lança erro e o áudio fica salvo aguardando transcrição manual.
 
+import { pagoLiberado } from "@/lib/ai/trava-gasto";
+
 type Provedor = { url: string; key: string; model: string };
 
 function provedor(): Provedor | null {
@@ -12,7 +14,8 @@ function provedor(): Provedor | null {
       model: "whisper-large-v3",
     };
   }
-  if (process.env.OPENAI_API_KEY) {
+  // OpenAI Whisper é pago: só com a trava de gasto desligada.
+  if (process.env.OPENAI_API_KEY && pagoLiberado()) {
     return {
       url: "https://api.openai.com/v1/audio/transcriptions",
       key: process.env.OPENAI_API_KEY,

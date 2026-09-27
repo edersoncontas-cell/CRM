@@ -22,6 +22,7 @@
 
 import { db } from "@/lib/db";
 import { CHAVE_PROVEDOR, ORDEM_PROVEDORES, type ProvedorId } from "@/lib/ai/provedores-status";
+import { VAR_SOMENTE_GRATUITOS } from "@/lib/ai/trava-gasto";
 
 /** Prefixo das linhas de Configuracao que guardam chave de IA. */
 const PREFIXO = "ia.chave.";
@@ -172,8 +173,8 @@ export async function origemDasChaves(): Promise<Record<ProvedorId, OrigemChave>
 // fazendo, que é a única forma aceitável de começar a pagar por algo.
 
 export const CHAVE_SOMENTE_GRATUITOS = "ia.somente_gratuitos";
-/** Nome da variável de ambiente que espelha a trava para o código síncrono. */
-export const VAR_SOMENTE_GRATUITOS = "IA_SOMENTE_GRATUITOS";
+/** Nome da variável de ambiente que espelha a trava para o código síncrono (regra em trava-gasto.ts). */
+export { VAR_SOMENTE_GRATUITOS };
 
 /** Lê a trava do banco. Ausente = LIGADA (não gastar é o padrão seguro). */
 export async function lerSomenteGratuitos(): Promise<boolean> {

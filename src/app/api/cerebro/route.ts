@@ -7,6 +7,7 @@ import { agoraBrasiliaExtenso } from "@/lib/utils";
 import { TOOL_DEFS, executarFerramenta, rotuloFerramenta } from "@/lib/zeus/cerebro-tools";
 import { zeusReport } from "@/lib/zeus/eventos";
 import { provedoresCompat, rodadaAgenteCompat } from "@/lib/ai/agente-compat";
+import { pagoLiberado, AVISO_TRAVA_PAGO } from "@/lib/ai/trava-gasto";
 import { lerParametros } from "@/lib/parametros";
 import { regrasParaPrompt } from "@/lib/contexto-negocio";
 
@@ -237,9 +238,13 @@ export async function POST(req: NextRequest) {
     // preferência — a Anthropic (mais cara) só entra se for a única chave, ou
     // como último recurso se todos os outros falharem nesta rodada.
     const temCompat = provedoresCompat().length > 0;
-    const temAnthropic = !!process.env.ANTHROPIC_API_KEY;
+    // Anthropic é paga: só entra com a trava de gasto desligada.
+    const temAnthropic = !!process.env.ANTHROPIC_API_KEY && pagoLiberado();
     if (!temCompat && !temAnthropic) {
-      return new Response(JSON.stringify({ erro: "Nenhuma chave de IA configurada (GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY)." }), { status: 503 });
+      const soPago = !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY);
+      return new Response(JSON.stringify({ erro: soPago
+        ? `O Cérebro precisa do Gemini ou do Groq (grátis): ${AVISO_TRAVA_PAGO}.`
+        : "Nenhuma chave de IA configurada (GEMINI_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY)." }), { status: 503 });
     }
 
     const readable = new ReadableStream({

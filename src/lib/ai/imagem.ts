@@ -18,13 +18,21 @@ import { GEMINI_API_BASE, GEMINI_IMAGE_MODELS } from "./config";
 import { marcarEsgotado, modelosDisponiveis, primeiraLiberacao, proximaViradaDiariaGoogle, quandoVolta } from "./imagem-cota";
 import { ordemDosProvedores, vaiTentarOProximo } from "./imagem-escolha";
 import { gerarImagemOpenAI, openaiImagemHabilitada } from "./imagem-openai";
+import { pagoLiberado, AVISO_TRAVA_PAGO } from "./trava-gasto";
 import type { ImagemGerada, Referencia } from "./imagem-tipos";
 
 export type { ImagemGerada, Referencia } from "./imagem-tipos";
 
 /** Dá para criar arte? Basta UM dos dois provedores estar configurado. */
 export function geracaoDeImagemHabilitada(): boolean {
-  return !!process.env.GEMINI_API_KEY || openaiImagemHabilitada();
+  return !!process.env.GEMINI_API_KEY || (openaiImagemHabilitada() && pagoLiberado());
+}
+
+/** Por que não dá para criar arte agora — para a tela dizer, em vez de só recusar. */
+export function motivoSemImagem(): string {
+  return openaiImagemHabilitada()
+    ? `Criar arte precisa do Gemini (grátis): ${AVISO_TRAVA_PAGO}.`
+    : "Criar arte com IA precisa de GEMINI_API_KEY (grátis) ou OPENAI_API_KEY nas variáveis da Vercel.";
 }
 
 export function geminiImagemHabilitada(): boolean {
@@ -178,10 +186,11 @@ export async function gerarImagemGemini(prompt: string, referencias: Referencia[
 export async function gerarImagem(prompt: string, referencias: Referencia[] = []): Promise<ImagemGerada> {
   const ordem = ordemDosProvedores(process.env.IMAGEM_PROVEDORES, {
     gemini: geminiImagemHabilitada(),
-    openai: openaiImagemHabilitada(),
+    // A arte da OpenAI é paga: só com a trava de gasto desligada.
+    openai: openaiImagemHabilitada() && pagoLiberado(),
   });
   if (!ordem.length) {
-    throw new Error("Criar arte precisa de GEMINI_API_KEY (grátis) ou OPENAI_API_KEY nas variáveis da Vercel.");
+    throw new Error(motivoSemImagem());
   }
 
   let ultimo: unknown = null;

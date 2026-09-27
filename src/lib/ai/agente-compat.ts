@@ -12,6 +12,7 @@ import { OPENAI_MODEL, GEMINI_MODELOS_CHAT, GEMINI_API_BASE, DEEPSEEK_MODEL } fr
 import { decidirPeloErro, modeloGeminiDaVez } from "./gemini-modelos";
 import { marcarEsgotado } from "./imagem-cota";
 import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, GROQ_BASE_URL } from "./groq";
+import { pagoLiberado } from "./trava-gasto";
 
 type ProvedorCompat = { nome: string; client: OpenAI; model: string; visao: boolean };
 
@@ -41,7 +42,8 @@ export function provedoresCompat(): ProvedorCompat[] {
       visao: false,
     });
   }
-  if (process.env.DEEPSEEK_API_KEY) {
+  // DeepSeek e OpenAI são pagos: só com a trava de gasto desligada.
+  if (process.env.DEEPSEEK_API_KEY && pagoLiberado()) {
     lista.push({
       nome: "deepseek",
       client: new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" }),
@@ -49,7 +51,7 @@ export function provedoresCompat(): ProvedorCompat[] {
       visao: false,
     });
   }
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.OPENAI_API_KEY && pagoLiberado()) {
     lista.push({ nome: "openai", client: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }), model: OPENAI_MODEL, visao: true });
   }
   return lista;

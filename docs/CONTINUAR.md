@@ -190,6 +190,17 @@ O que é bom saber antes de abrir:
   daqui. Quando algo depender disso, diga que não verificou, em vez de supor.
   Já houve erro assim: afirmei que o PNCP devolvia 400 e a foto dele provou 429.
 
+## Feito em 27/09 (além da volta para o Neon e das versões do texto)
+
+- **Trava de IA paga sem brecha.** Antes só valia para o texto; imagem/PDF,
+  agente do chat, Cérebro (Anthropic direto), arte da OpenAI e transcrição
+  pela OpenAI passavam por fora. Agora todos perguntam `pagoLiberado()`
+  (`lib/ai/trava-gasto.ts`); a tela diz que é a trava quando recusa.
+- **Teto diário da análise a cada mensagem** (`lib/zeus/teto-orientador.ts`):
+  250 por dia (`ORIENTADOR_TETO_DIARIO`), reserva atômica no banco; acabou, a
+  conversa fica agendada para o dia seguinte e o ZEUS avisa. "Reanalisar" não
+  conta.
+
 ## Em aberto (ofereci, ele não respondeu)
 
 - **Pós-venda:** hoje "Resolvido" é definitivo. Ofereci fazer voltar quando

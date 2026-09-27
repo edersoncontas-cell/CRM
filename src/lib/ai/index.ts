@@ -10,7 +10,8 @@ import { modeloGroq, erroDeModeloGroq, marcarModeloGroqRuim, parametrosGroq, err
 import { esperaDoLimite } from "./cota";
 import { diagnosticoIA, GRATUITO, CHAVE_PROVEDOR, type DiagnosticoIA, type ProvedorId } from "./provedores-status";
 import { janelaDeCaracteres, janelaApertada, modoCompacto } from "./orcamento-prompt";
-import { carregarChavesIA, VAR_SOMENTE_GRATUITOS } from "./chaves";
+import { carregarChavesIA } from "./chaves";
+import { pagoLiberado, AVISO_TRAVA_PAGO } from "./trava-gasto";
 export type { SinaisProximaAcao };
 
 const MODEL = MODEL_TAREFA;
@@ -38,9 +39,7 @@ function provedoresDisponiveis(): ProvedorTexto[] {
   // cascata tenta em ordem, sem esta trava o CRM cairia num provedor pago
   // exatamente nos dias em que os gratuitos batem no limite — gastando sem
   // ninguém pedir. Ligada por padrão: ausência de escolha nunca vira fatura.
-  if (process.env[VAR_SOMENTE_GRATUITOS] !== "off") {
-    return lista.filter((p) => GRATUITO[p as ProvedorId]);
-  }
+  if (!pagoLiberado()) return lista.filter((p) => GRATUITO[p as ProvedorId]);
   return lista;
 }
 
@@ -52,9 +51,20 @@ export function iaHabilitada() {
   return provedorIA() !== null;
 }
 
-// Há provedor que lê imagem/PDF (ver llmVisao)?
+// Há provedor que lê imagem/PDF (ver llmVisao)? OpenAI e Anthropic são
+// pagos: só contam com a trava de gasto desligada.
 export function visaoHabilitada() {
-  return !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+  return provedoresVisao().length > 0;
+}
+
+function provedoresVisao(): ("gemini" | "openai" | "anthropic")[] {
+  const provs: ("gemini" | "openai" | "anthropic")[] = [];
+  if (process.env.GEMINI_API_KEY) provs.push("gemini");
+  if (pagoLiberado()) {
+    if (process.env.OPENAI_API_KEY) provs.push("openai");
+    if (process.env.ANTHROPIC_API_KEY) provs.push("anthropic");
+  }
+  return provs;
 }
 
 /**
@@ -70,7 +80,7 @@ export function diagnosticoDaIA(): DiagnosticoIA {
   // a chave achar que ela não salvou.
   const configurados = (["gemini", "groq", "deepseek", "openai", "anthropic"] as ProvedorId[])
     .filter((p) => !!process.env[CHAVE_PROVEDOR[p]]);
-  return diagnosticoIA(configurados, process.env[VAR_SOMENTE_GRATUITOS] !== "off");
+  return diagnosticoIA(configurados, !pagoLiberado());
 }
 
 /**
@@ -377,12 +387,12 @@ async function llmVisao(
   arquivo: { base64: string; mediaType: string },
   opts?: { maxTokens?: number; json?: boolean }
 ): Promise<string> {
-  const provs: ("gemini" | "openai" | "anthropic")[] = [];
-  if (process.env.GEMINI_API_KEY) provs.push("gemini");
-  if (process.env.OPENAI_API_KEY) provs.push("openai");
-  if (process.env.ANTHROPIC_API_KEY) provs.push("anthropic");
+  const provs = provedoresVisao();
   if (!provs.length) {
-    throw new Error("Nenhum provedor com leitura de PDF/imagem configurado (GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).");
+    const soPago = !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+    throw new Error(soPago
+      ? `Ler PDF/imagem precisa do Gemini (grátis): ${AVISO_TRAVA_PAGO}.`
+      : "Nenhum provedor com leitura de PDF/imagem configurado (GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY).");
   }
 
   let ultimoErro: unknown = null;
@@ -811,8 +821,11 @@ export async function extrairFichaDeArquivoIA(
   const ehImagem = !!arquivo.mediaType?.startsWith("image/");
 
   // PDF/imagem exigem um provedor com visão.
-  if (!ehTexto && !process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-    return { ok: false, erro: "A leitura de PDF/imagem exige GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY." };
+  if (!ehTexto && !visaoHabilitada()) {
+    const soPago = !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+    return { ok: false, erro: soPago
+      ? `A leitura de PDF/imagem precisa do Gemini (grátis): ${AVISO_TRAVA_PAGO}.`
+      : "A leitura de PDF/imagem exige GEMINI_API_KEY, OPENAI_API_KEY ou ANTHROPIC_API_KEY." };
   }
   if (!ehTexto && !ehPdf && !ehImagem) {
     return { ok: false, erro: "Formato não suportado. Envie PDF, imagem (JPG/PNG) ou texto/HTML." };

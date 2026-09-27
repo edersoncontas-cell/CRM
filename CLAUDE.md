@@ -177,7 +177,11 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   auditoria grava o provedor, nunca o valor.
 - **Nada que gere fatura sem dizer o custo na cara e deixar ele escolher.** Ele
   paga só o Gemini Plus. A trava de provedor pago (`IA_SOMENTE_GRATUITOS`) está
-  ligada por padrão e não se desliga sozinha.
+  ligada por padrão e não se desliga sozinha. Ela vale para TODO caminho de IA
+  (texto, imagem/PDF, agente do chat, Cérebro, arte, transcrição): **caminho
+  novo que chama OpenAI, Anthropic ou DeepSeek pergunta `pagoLiberado()`**
+  (`lib/ai/trava-gasto.ts`). A análise a cada mensagem tem teto diário
+  (`lib/zeus/teto-orientador.ts`, `ORIENTADOR_TETO_DIARIO`, padrão 250).
 - Commits terminam com as linhas de atribuição da sessão. **Nunca** pôr
   identificador de modelo em nada que vá para o repositório.
 - Lista dentro de card é limitada, com rolagem interna de altura fixa. Ele usa
