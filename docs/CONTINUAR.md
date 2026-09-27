@@ -198,12 +198,13 @@ O que é bom saber antes de abrir:
 
 `docs/APRESENTACAO-DIRETORIA.md`. O que ele informou e o que decidi por ele:
 
-- **Time real: 17 vendedores**, 6 da linha amarela e 11 da agrícola. **Margem
-  da casa: cerca de 10%** por máquina.
+- **Time: cerca de 26 vendedores**, 6 da linha amarela e **cerca de 20** da agrícola
+  (ele não tem o número exato da agrícola; o documento diz "cerca de" e as contas
+  usam 26). **Margem da casa: cerca de 10%** por máquina.
 - **Ele não sabe o valor da licença e pediu que eu estimasse.** Ficou: licença
   R$ 200 de tabela / R$ 140 de cliente fundador; implantação por hora (R$ 100/h,
-  80 h para o piloto + 80 h para o time, só se o piloto aprovar); manutenção
-  15 h/mês = R$ 1.500, sem desconto; o plano do Claude (Max 5x, US$ 100 + IOF =
+  80 h para o piloto + 90 h para o time, só se o piloto aprovar); manutenção
+  20 h/mês = R$ 2.000, sem desconto; o plano do Claude (Max 5x, US$ 100 + IOF =
   R$ 535) virou linha própria, "ferramenta de manutenção". Método na seção 7.
   Preço do Claude conferido em claude.com/pricing em 27/09 (a página abre daqui).
 - **O CRM hoje é só da linha amarela:** o `schemaInstrucao` em

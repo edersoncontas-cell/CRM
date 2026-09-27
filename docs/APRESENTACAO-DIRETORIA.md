@@ -2,7 +2,7 @@
 
 **Custos, objetivos e ganhos da distribuição do CRM para o time de vendas**
 New Holland (linha amarela e agrícola) · Dynapac — sul do Espírito Santo
-Time de vendas: 17 vendedores, 6 da linha amarela e 11 da agrícola
+Time de vendas: cerca de 26 vendedores, 6 da linha amarela e cerca de 20 da agrícola (número aproximado)
 Levantamento feito em 24/09/2026 e atualizado em 27/09/2026 · câmbio usado: R$ 5,17 por dólar (fechamento de 23/09/2026)
 
 > **ANTES DE APRESENTAR — apague este bloco depois de conferir.**
@@ -10,13 +10,15 @@ Levantamento feito em 24/09/2026 e atualizado em 27/09/2026 · câmbio usado: R$
 > 1. **Os valores da seção 7 são estimativa**, com o método escrito lá: horas a R$ 100,
 >    preço de mercado e valor de uma máquina. Se a diretoria pedir desconto, o espaço está
 >    na **licença**. A manutenção e a ferramenta são custo; abaixo disso, você paga para trabalhar.
-> 2. **Plano do Claude (seções 5.2 e 5.3).** A conta usa o Max 5x (US$ 100/mês). Se o seu
+> 2. **Tamanho do time agrícola.** O número é aproximado: cerca de 20. As contas usam 26 no
+>    total (6 + 20). Se souber o número certo, troque; os valores mudam pouco.
+> 3. **Plano do Claude (seções 5.2 e 5.3).** A conta usa o Max 5x (US$ 100/mês). Se o seu
 >    plano for outro, troque a linha "Ferramenta de manutenção".
-> 3. **Preços marcados "sem 2ª checagem" no Apêndice A.** O WhatsApp oficial e os CRMs de
+> 4. **Preços marcados "sem 2ª checagem" no Apêndice A.** O WhatsApp oficial e os CRMs de
 >    mercado têm duas fontes cada, mas não passaram pela segunda checagem. Abra os links na véspera.
-> 4. **Perguntas prováveis (seção 11).** As respostas sobre "e se você sair?" e "por que
+> 5. **Perguntas prováveis (seção 11).** As respostas sobre "e se você sair?" e "por que
 >    licença?" são suas. Revise com as suas palavras antes da reunião.
-> 5. **Antes de ASSINAR qualquer acordo (não antes de apresentar): advogado.** A Lei do
+> 6. **Antes de ASSINAR qualquer acordo (não antes de apresentar): advogado.** A Lei do
 >    Software (Lei 9.609/98, art. 4º) define quando um programa feito por empregado pertence
 >    ao empregador. A licença **não exclusiva** da seção 7, que mantém o sistema com você,
 >    depende disso.
@@ -28,7 +30,7 @@ Levantamento feito em 24/09/2026 e atualizado em 27/09/2026 · câmbio usado: R$
 **O que é.** Um CRM feito sob medida para venda de máquina pesada New Holland e
 Dynapac no sul do ES, em uso real pelo vendedor que o construiu. Não é protótipo:
 35 telas, 15 rotinas automáticas, 40 tabelas de dados e 1.094 testes automatizados.
-Hoje ele conhece a **linha amarela**. Para os 11 vendedores da agrícola, entra o
+Hoje ele conhece a **linha amarela**. Para os cerca de 20 vendedores da agrícola, entra o
 catálogo agrícola depois do piloto (seção 8).
 
 **O que ele faz que os CRMs de prateleira não fazem.** Lê a conversa do WhatsApp e
@@ -52,16 +54,16 @@ ferramenta de manutenção):
 |---|---:|---:|
 | 1 vendedor | R$ 896 | R$ 896 |
 | 6 vendedores (linha amarela) | R$ 2.079 | R$ 347 |
-| 17 vendedores (time todo) | R$ 4.782 | R$ 281 |
+| cerca de 26 vendedores (time todo) | R$ 6.896 | R$ 265 |
 
-Com implantação, licença e manutenção (seção 7), o primeiro ano completo com os 17
-vendedores fica em **R$ 115.144**.
+Com implantação, licença e manutenção (seção 7), o primeiro ano completo com os cerca
+de 26 vendedores fica em **R$ 162.332**.
 
 **Quanto precisa render para se pagar.** A margem da casa é de cerca de 10% por
-máquina. Com ela, o primeiro ano completo se paga com **R$ 1,15 milhão em vendas a
-mais**: cerca de **4 retroescavadeiras por ano, no time inteiro**. É menos de uma venda
-a mais para cada quatro vendedores. **Uma única retroescavadeira a mais por ano já paga
-a licença do time todo** (seção 7).
+máquina. Com ela, o primeiro ano completo se paga com **R$ 1,62 milhão em vendas a
+mais**: cerca de **6 retroescavadeiras por ano, no time inteiro**. É menos de uma venda
+a mais para cada quatro vendedores. **Duas retroescavadeiras a mais por ano já pagam a
+licença do time todo** (seção 7).
 
 **Riscos, ditos de frente.** O WhatsApp do vendedor já foi bloqueado duas vezes,
 porque a conexão atual não é oficial. Em 23/09 o banco de dados do plano grátis foi
@@ -152,18 +154,19 @@ Cada objetivo tem um número que o CRM mede, e é esse número que o piloto vai 
 
 Conta conservadora. Usa a máquina mais barata da faixa (retroescavadeira nova,
 **R$ 296 mil**, piso de mercado em 2025/2026, Apêndice A), a margem da casa (**cerca de
-10%**) e o custo do primeiro ano inteiro com os 17 vendedores desde o primeiro mês
-(**R$ 115.144**: operação + ferramenta + implantação + licença + manutenção).
+10%**) e o custo do primeiro ano inteiro com os cerca de 26 vendedores desde o primeiro
+mês (**R$ 162.332**: operação + ferramenta + implantação + licença + manutenção).
 
 | Margem por máquina | Ganho por retroescavadeira | Máquinas a mais por ano que pagam o 1º ano |
 |---|---:|---:|
-| **10% (margem da casa)** | **R$ 29.600** | **3,9** |
-| 5% (se a margem apertar) | R$ 14.800 | 7,8 |
-| 15% | R$ 44.400 | 2,6 |
+| **10% (margem da casa)** | **R$ 29.600** | **5,5** |
+| 5% (se a margem apertar) | R$ 14.800 | 11,0 |
+| 15% | R$ 44.400 | 3,7 |
 
-**Leitura:** com a margem da casa, **4 retroescavadeiras a mais por ano, no time de 17**,
-pagam tudo. Vale o mesmo em reais para a agrícola: R$ 1,15 milhão em tratores, colheitadeiras
-e implementos a mais. Com escavadeira de 20 t (acima de R$ 675 mil), bastam 1,7 máquina.
+**Leitura:** com a margem da casa, **cerca de 6 retroescavadeiras a mais por ano, no time
+de cerca de 26**, pagam tudo. Vale o mesmo em reais para a agrícola: R$ 1,62 milhão em
+tratores, colheitadeiras e implementos a mais. Com escavadeira de 20 t (acima de R$ 675 mil),
+bastam 2,4 máquinas.
 A partir do segundo ano sai a implantação, e o número cai.
 
 ### 4.4 O que o piloto vai medir
@@ -197,33 +200,33 @@ não serve, por três motivos com fonte:
    parte do dia, e isso sozinho já encosta nas 100 horas.
 3. **A IA gratuita não aguenta um time e usa os dados dos clientes.** Mesmo no modelo mais
    econômico, a cota grátis é de cerca de **500 análises por dia para o CRM inteiro**
-   (setembro de 2026). Dezessete vendedores com 40 conversas por dia fazem 680 análises:
-   passa disso. E, no nível gratuito, **o Google usa as conversas para treinar os modelos**.
+   (setembro de 2026). Vinte e seis vendedores com 40 conversas por dia fazem 1.040 análises:
+   o dobro da cota. E, no nível gratuito, **o Google usa as conversas para treinar os modelos**.
    Com dado de cliente, isso pesa contra (LGPD). No pago, não usa.
 
 ### 5.2 Custo operacional por tamanho de time
 
-| Item | 1 vendedor | 6 vendedores (linha amarela) | 17 vendedores (time todo) |
+| Item | 1 vendedor | 6 vendedores (linha amarela) | cerca de 26 vendedores (time todo) |
 |---|---:|---:|---:|
 | Hospedagem (Vercel Pro) | R$ 103 | R$ 103 | R$ 103 |
-| Banco de dados (Neon, por uso) | R$ 35 | R$ 121 | R$ 409 |
-| Inteligência artificial do CRM (Gemini, por uso) | R$ 78 | R$ 465 | R$ 1.318 |
-| WhatsApp oficial (Meta, por mensagem) | R$ 142 | R$ 852 | R$ 2.414 |
+| Banco de dados (Neon, por uso) | R$ 35 | R$ 121 | R$ 548 |
+| Inteligência artificial do CRM (Gemini, por uso) | R$ 78 | R$ 465 | R$ 2.016 |
+| WhatsApp oficial (Meta, por mensagem) | R$ 142 | R$ 852 | R$ 3.691 |
 | Domínio próprio (.com.br) | R$ 3 | R$ 3 | R$ 3 |
 | Ferramenta de manutenção (Claude Max) | R$ 535 | R$ 535 | R$ 535 |
-| **Total por mês** | **R$ 896** | **R$ 2.079** | **R$ 4.782** |
-| **Total por ano** | **R$ 10.752** | **R$ 24.948** | **R$ 57.384** |
+| **Total por mês** | **R$ 896** | **R$ 2.079** | **R$ 6.896** |
+| **Total por ano** | **R$ 10.752** | **R$ 24.948** | **R$ 82.752** |
 
 A **ferramenta de manutenção** é a IA com que o CRM é corrigido, atualizado e testado.
 Ela não roda dentro do CRM. É custo fixo: não muda com o tamanho do time.
 
 **O que faz esse número subir ou descer:**
 
-| Cenário | 1 vendedor | 6 vendedores | 17 vendedores |
+| Cenário | 1 vendedor | 6 vendedores | cerca de 26 vendedores |
 |---|---:|---:|---:|
-| Sem campanha de marketing no WhatsApp | R$ 767 | R$ 1.307 | R$ 2.594 |
-| IA com o preço de 2027 (o Google dobra em 01/01/2027) | R$ 974 | R$ 2.544 | R$ 6.100 |
-| IA no modelo mais econômico (Flash-Lite) | R$ 847 | R$ 1.784 | R$ 3.947 |
+| Sem campanha de marketing no WhatsApp | R$ 767 | R$ 1.307 | R$ 3.550 |
+| IA com o preço de 2027 (o Google dobra em 01/01/2027) | R$ 974 | R$ 2.544 | R$ 8.912 |
+| IA no modelo mais econômico (Flash-Lite) | R$ 847 | R$ 1.784 | R$ 5.619 |
 
 A maior linha é a **campanha de marketing no WhatsApp**: R$ 0,32 por mensagem entregue.
 Ela é **decisão da gestão**, mês a mês. As premissas de cada linha estão no Apêndice B.
@@ -246,7 +249,7 @@ Ela é **decisão da gestão**, mês a mês. As premissas de cada linha estão n
 | | Não-oficial (o que o CRM usa hoje) | Oficial (API da Meta) |
 |---|---|---|
 | Custo | Servidor próprio: cerca de R$ 55/mês para o time inteiro | Por mensagem (tabela acima): cerca de R$ 142/mês por vendedor |
-| Bloqueio | **Já bloqueou duas vezes.** Com 17 vendedores, vira rotina. É contra os termos do WhatsApp. | Canal autorizado pela Meta. Não há risco de bloqueio por conexão não-oficial. |
+| Bloqueio | **Já bloqueou duas vezes.** Com cerca de 26 vendedores, vira rotina. É contra os termos do WhatsApp. | Canal autorizado pela Meta. Não há risco de bloqueio por conexão não-oficial. |
 | De quem é o número | Do celular do vendedor | **Da empresa.** Vendedor que sai não leva a carteira. |
 | O que precisa | Nada (já funciona) | Verificação da concessionária na Meta, números da empresa e integração no CRM (seção 8) |
 
@@ -267,26 +270,27 @@ Dito aqui para não aparecer depois como surpresa:
 - **Serviço de e-mail** para recuperar senha e convidar usuário. Provavelmente grátis no
   volume de um time; não foi levantado.
 - **Variação do câmbio.** Hospedagem, banco, IA e a ferramenta de manutenção são cobrados em
-  dólar. A cada R$ 0,50 de alta do dólar, o total de 17 vendedores sobe cerca de R$ 230/mês.
+  dólar. A cada R$ 0,50 de alta do dólar, o total de cerca de 26 vendedores sobe cerca de
+  R$ 310/mês.
 
 ## 6. Comparação com o mercado
 
-Preço por mês para **17 usuários**, sem as tarifas de mensagem da Meta, que valem para
+Preço por mês para **26 usuários**, sem as tarifas de mensagem da Meta, que valem para
 qualquer sistema que use o WhatsApp oficial:
 
-| CRM | Por mês (17 usuários) | WhatsApp |
+| CRM | Por mês (26 usuários) | WhatsApp |
 |---|---:|---|
-| Moskit Professional | R$ 2.533 | Sincronização incluída |
-| Agendor Performance + Agendor Chat | R$ 3.025 | Caixa de WhatsApp paga à parte |
-| Pipedrive Growth | cerca de R$ 4.307 (US$ 49 por usuário) | Integração em beta |
-| RD Station CRM Pro + RD Conversas Pro | R$ 4.926 (+ implantação opcional de R$ 5.798) | API oficial |
-| HubSpot Sales Professional | cerca de R$ 8.789 (US$ 100) + onboarding de US$ 1.500 | Não verificado |
-| Salesforce Pro Suite | cerca de R$ 8.789 (US$ 100, contrato anual) | Não verificado |
-| **Este CRM: operação e ferramenta de manutenção** | **R$ 2.368** | API oficial |
-| **Este CRM: tudo (operação, ferramenta, licença e manutenção)** | **R$ 6.248** | API oficial |
+| Moskit Professional | R$ 3.874 | Sincronização incluída |
+| Agendor Performance + Agendor Chat | R$ 4.609 | Caixa de WhatsApp paga à parte |
+| Pipedrive Growth | cerca de R$ 6.587 (US$ 49 por usuário) | Integração em beta |
+| RD Station CRM Pro + RD Conversas Pro | R$ 6.105 (+ implantação opcional de R$ 5.798) | API oficial |
+| HubSpot Sales Professional | cerca de R$ 13.442 (US$ 100) + onboarding de US$ 1.500 | Não verificado |
+| Salesforce Pro Suite | cerca de R$ 13.442 (US$ 100, contrato anual) | Não verificado |
+| **Este CRM: operação e ferramenta de manutenção** | **R$ 3.205** | API oficial |
+| **Este CRM: tudo (operação, ferramenta, licença e manutenção)** | **R$ 8.845** | API oficial |
 
 **A comparação justa.** Os CRMs de prateleira organizam o funil. Este CRM fica **acima do
-pacote completo do RD Station** e **cerca de 30% abaixo de HubSpot e Salesforce**, e traz o
+pacote completo do RD Station** e **cerca de um terço abaixo de HubSpot e Salesforce**, e traz o
 que é do nosso negócio:
 
 - a leitura da conversa de WhatsApp que abre a negociação sozinha;
@@ -305,28 +309,29 @@ Os mais baratos (Moskit e Agendor) custam menos porque não fazem nada disso.
 | Item | Preço de tabela | Para a casa (cliente fundador) |
 |---|---:|---:|
 | Implantação para o piloto: multiusuário, WhatsApp oficial e treinamento (80 h) | R$ 8.000 | **R$ 5.600** |
-| Implantação para o time: linha agrícola e modo sem sinal (80 h). **Só se o piloto aprovar.** | R$ 8.000 | **R$ 5.600** |
+| Implantação para o time: linha agrícola, modo sem sinal e treinamento da agrícola (90 h). **Só se o piloto aprovar.** | R$ 9.000 | **R$ 6.300** |
 | Licença por vendedor | R$ 200/mês | **R$ 140/mês** |
-| Manutenção: correções, suporte e ajustes pequenos (15 h por mês) | R$ 1.500/mês | **R$ 1.500/mês** |
+| Manutenção: correções, suporte e ajustes pequenos (20 h por mês) | R$ 2.000/mês | **R$ 2.000/mês** |
 
 O desconto de cliente fundador (30%) vale para a licença e a implantação. A manutenção
 não tem desconto porque é hora trabalhada.
 
-Para os **17 vendedores**:
+Para os **cerca de 26 vendedores**:
 
-- Licença e manutenção: R$ 3.880/mês.
-- Com a operação e a ferramenta de manutenção (seção 5.2): **R$ 8.662/mês**.
-- Primeiro ano completo: **R$ 115.144**.
+- Licença e manutenção: R$ 5.640/mês.
+- Com a operação e a ferramenta de manutenção (seção 5.2): **R$ 12.536/mês**.
+- Primeiro ano completo: **R$ 162.332**.
 
 **Como os valores foram estimados:**
 
 - **Implantação e manutenção, por hora**, a R$ 100. Horas previstas: multiusuário 30 h (a
   separação por vendedor já está construída e testada), WhatsApp oficial 40 h, treinamento
-  10 h, linha agrícola 40 h e modo sem sinal 40 h. Manutenção: 15 h por mês para 17 usuários.
-- **Licença, pelo mercado.** Um CRM para 17 usuários custa de R$ 149 a R$ 517 por usuário
+  10 h; linha agrícola 40 h, modo sem sinal 40 h e treinamento da agrícola 10 h.
+  Manutenção: 20 h por mês para cerca de 26 usuários.
+- **Licença, pelo mercado.** Um CRM para 26 usuários custa de R$ 149 a R$ 517 por usuário
   por mês (seção 6). Os R$ 200 de tabela ficam no meio dessa faixa.
-- **Licença, pelo valor.** A licença do time inteiro no ano (17 × R$ 140 × 12 = R$ 28.560)
-  custa menos que a margem de **uma** retroescavadeira (R$ 29.600).
+- **Licença, pelo valor.** A licença do time inteiro no ano (26 × R$ 140 × 12 = R$ 43.680)
+  custa menos que a margem de **duas** retroescavadeiras (R$ 59.200).
 
 **Como funciona a licença:**
 
@@ -356,7 +361,7 @@ Para a diretoria saber exatamente o que está comprando:
 | **Um acesso por vendedor** (cada um vê só a sua carteira) | Hoje o CRM é de uma pessoa, com uma senha só | Isolamento construído e testado; foi retirado em 23/09 e volta em duas etapas (seção 10) |
 | **Visão do gerente** (funil do time, comparação entre vendedores) | Sem ela, o objetivo 3 não acontece | A fazer |
 | **WhatsApp oficial, um número por vendedor** | Tira o risco de bloqueio e deixa o número com a empresa | A fazer |
-| **Linha agrícola** (a IA reconhecer tratores, colheitadeiras e implementos na conversa; fichas e comparativo agrícolas; crédito rural; calendário de safra) | 11 dos 17 vendedores são da agrícola, e hoje a leitura da conversa, as fichas e o comparativo são só da linha amarela | A fazer, depois do piloto |
+| **Linha agrícola** (a IA reconhecer tratores, colheitadeiras e implementos na conversa; fichas e comparativo agrícolas; crédito rural; calendário de safra) | Cerca de 20 dos 26 vendedores são da agrícola, e hoje a leitura da conversa, as fichas e o comparativo são só da linha amarela | A fazer, depois do piloto |
 | **Modo sem sinal** (ver carteira, fichas e agenda; registrar visita e anotação sem internet; enviar quando o sinal volta) | Na fazenda e na obra o celular fica sem sinal | Hoje o CRM mostra, no máximo, a última versão das telas já abertas no aparelho, e não grava nada sem internet. A fazer |
 | **Backup automático fora do banco** | Hoje há exportação manual e a restauração de 7 dias do plano pago | A fazer |
 | **Aviso de queda fora do CRM** | Quando o banco caiu em 23/09, nada avisou de fora | A fazer |
@@ -374,7 +379,7 @@ Para a diretoria saber exatamente o que está comprando:
 | **Preço da IA dobra em 2027** | Anunciado (01/01/2027) | Já calculado na seção 5.2. Alternativa: o modelo econômico (Flash-Lite), a um terço do preço. |
 | **Dependência de uma pessoa** | — | 1.094 testes automatizados, documentação das regras e do histórico de falhas no próprio repositório, e contrato de manutenção. |
 | **Dado de cliente (LGPD)** | — | IA paga (não usa os dados para treino), acordo com os papéis de controlador e operador, exportação completa a qualquer momento. |
-| **Câmbio** | — | Cerca de metade do custo operacional é em dólar. Sensibilidade na seção 5.5. |
+| **Câmbio** | — | Quase metade do custo operacional é em dólar. Sensibilidade na seção 5.5. |
 
 ## 10. Plano de implantação
 
@@ -385,7 +390,7 @@ Para a diretoria saber exatamente o que está comprando:
 | **2. WhatsApp oficial** | Verificação da concessionária na Meta, números da empresa, modelos de mensagem aprovados, integração no CRM | 3 a 4 semanas (depende da Meta) | + R$ 142 por vendedor |
 | **3. Piloto** | 2 ou 3 vendedores **da linha amarela** por 60 dias, medindo a seção 4.4. A linha amarela vai primeiro porque o CRM já conhece essa linha. | 60 dias | seção 5.2 |
 | **4. Linha amarela inteira** | Treinamento e entrada dos 6 vendedores | conforme o piloto | seção 5.2, coluna de 6 |
-| **5. Linha agrícola** | Leitura da conversa, fichas e comparativo agrícolas, modo sem sinal, treinamento e entrada dos 11 vendedores | 4 a 6 semanas | seção 5.2, coluna de 17 |
+| **5. Linha agrícola** | Leitura da conversa, fichas e comparativo agrícolas, modo sem sinal, treinamento e entrada dos cerca de 20 vendedores | 4 a 6 semanas | seção 5.2, coluna de 26 |
 
 **Lição que já está no processo:** mudança na estrutura do banco sobe em duas etapas e é
 testada contra o banco antigo antes de publicar. Em 23/09 uma mudança dessas subiu de uma
@@ -425,7 +430,7 @@ continua precisando de manutenção. A alternativa de mercado com o mesmo alcanc
 mesmo ou mais (seção 6) e não conhece o nosso negócio. *(Revise com as suas palavras.)*
 
 **"Quem dá suporte quando você está na rua?"**
-Correção de erro entra na manutenção (15 h por mês), com prazo combinado no acordo. O CRM
+Correção de erro entra na manutenção (20 h por mês), com prazo combinado no acordo. O CRM
 já avisa na tela quando algo cai, e diz o motivo. Na queda de 23/09, o sistema voltou ao ar
 no mesmo dia.
 
@@ -525,12 +530,12 @@ antes dela: os valores têm as fontes listadas, mas ninguém tentou desmenti-los
 | Linha | Premissa |
 |---|---|
 | Câmbio | R$ 5,17 (fechamento de 23/09/2026) |
-| Time | 17 vendedores: 6 da linha amarela e 11 da agrícola |
+| Time | Cerca de 26 vendedores: 6 da linha amarela e cerca de 20 da agrícola. O número da agrícola é aproximado; as contas usam 26. |
 | Margem | Cerca de 10% por máquina, a margem de referência da casa |
-| Banco (Neon) | 1 vendedor: 8 h/dia acordado a 0,25 CU e 1 GB. 6 vendedores: 14 h/dia a 0,5 CU e 3 GB. 17 vendedores: 16 h/dia a 1,5 CU e 8 GB. Estimativa; o consumo real aparece no painel do Neon no primeiro mês. |
+| Banco (Neon) | 1 vendedor: 8 h/dia acordado a 0,25 CU e 1 GB. 6 vendedores: 14 h/dia a 0,5 CU e 3 GB. 26 vendedores: 16 h/dia a 2 CU e 12 GB. Estimativa; o consumo real aparece no painel do Neon no primeiro mês. |
 | IA do CRM | 1.000 análises por vendedor por mês (40 por dia útil × 22 dias, mais 15% de outras chamadas). Cada análise: cerca de 10 mil tokens de entrada e 2 mil de saída, o tamanho da análise do Orientador. Resultado: US$ 0,015 por análise em 2026. |
 | WhatsApp oficial | Por vendedor por mês: 1.300 respostas a clientes (300 acima da franquia grátis), 80 mensagens de utilidade e 400 de marketing. |
-| Hospedagem | 1 assento Vercel (quem publica). O uso de 17 vendedores deve caber nos US$ 20 incluídos; se passar, o excedente é cobrado com alerta de gasto. |
+| Hospedagem | 1 assento Vercel (quem publica). O uso de cerca de 26 vendedores deve caber nos US$ 20 incluídos; se passar, o excedente é cobrado com alerta de gasto. |
 | Ferramenta de manutenção | Claude Max 5x: US$ 100 × R$ 5,17, mais IOF de 3,5% do cartão internacional = R$ 535/mês. Custo fixo, não muda com o tamanho do time. |
-| Proposta | Implantação e manutenção a R$ 100 por hora (80 h para o piloto, 80 h para o time, 15 h por mês de manutenção). Licença de R$ 200 de tabela. Desconto de cliente fundador de 30% na licença e na implantação. |
-| Ponto de equilíbrio | Retroescavadeira nova a R$ 296 mil (piso da faixa) e margem de 10%. Custo do 1º ano para 17 vendedores = 12 × R$ 8.662 + R$ 11.200 = R$ 115.144. |
+| Proposta | Implantação e manutenção a R$ 100 por hora (80 h para o piloto, 90 h para o time, 20 h por mês de manutenção). Licença de R$ 200 de tabela. Desconto de cliente fundador de 30% na licença e na implantação. |
+| Ponto de equilíbrio | Retroescavadeira nova a R$ 296 mil (piso da faixa) e margem de 10%. Custo do 1º ano para 26 vendedores = 12 × R$ 12.536 + R$ 11.900 = R$ 162.332. |
