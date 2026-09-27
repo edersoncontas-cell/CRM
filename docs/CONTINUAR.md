@@ -203,7 +203,8 @@ O que é bom saber antes de abrir:
   usam 26). **Margem da casa: cerca de 10%** por máquina.
 - **Ele não sabe o valor da licença e pediu que eu estimasse.** Ficou: licença
   R$ 200 de tabela / R$ 140 de cliente fundador; implantação por hora (R$ 100/h,
-  80 h para o piloto + 90 h para o time, só se o piloto aprovar); manutenção
+  100 h para o piloto + 90 h para o time, só se o piloto aprovar; licença e
+  manutenção só começam quando o time entra — decisão minha, avisada no documento); manutenção
   20 h/mês = R$ 2.000, sem desconto; o plano do Claude (Max 5x, US$ 100 + IOF =
   R$ 535) virou linha própria, "ferramenta de manutenção". Método na seção 7.
   Preço do Claude conferido em claude.com/pricing em 27/09 (a página abre daqui).
