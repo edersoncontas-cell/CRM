@@ -11,5 +11,7 @@
         ]
       }
     ]
-  }
+  },
+  "autoCompactEnabled": true,
+  "autoCompactWindow": 500000
 }
