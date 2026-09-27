@@ -2,32 +2,15 @@ import { db } from "@/lib/db";
 import { Card, PageHeader, Badge } from "@/components/ui";
 import { formatDateTime } from "@/lib/utils";
 import Link from "next/link";
+import { ROTULO_ACAO, rotuloAcao, rotuloOrigem, ehOrigemIA, filtroDeOrigem, contarPorGrupo } from "@/lib/auditoria-regra";
 import {
   Bot, User, Cpu, Search, Filter,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-const ROTULO_ACAO: Record<string, string> = {
-  cliente_criado: "Cliente criado",
-  cliente_atualizado: "Cliente atualizado",
-  negociacao_criada: "Negociação criada",
-  negociacao_atualizada: "Negociação atualizada",
-  negociacao_ganha: "Venda fechada",
-  negociacao_perdida: "Venda perdida",
-  visita_detectada: "Visita detectada",
-  conversa_analisada: "Conversa analisada",
-  campanha_enviada: "Campanha enviada",
-  post_gerado: "Post gerado",
-  mensagem_enviada: "Mensagem enviada",
-  perfil_atualizado: "Perfil atualizado",
-};
 
-const COR_ORIGEM: Record<string, "blue" | "slate" | "yellow"> = {
-  ia: "blue",
-  usuario: "slate",
-  sistema: "yellow",
-};
+const corOrigem = (origem: string): "blue" | "slate" | "yellow" => (ehOrigemIA(origem) ? "blue" : origem === "usuario" ? "slate" : "yellow");
 
 const COR_ACAO: Record<string, string> = {
   negociacao_ganha: "bg-green-50 border-green-200",
@@ -44,8 +27,9 @@ export default async function AuditoriaPage({
   const pagina = Number(searchParams.pagina ?? 1);
   const POR_PAG = 50;
 
-  const where: { origem?: string; acao?: string } = {};
-  if (searchParams.origem) where.origem = searchParams.origem;
+  const where: { origem?: string | { in: string[] }; acao?: string } = {};
+  const origem = filtroDeOrigem(searchParams.origem);
+  if (origem) where.origem = origem;
   if (searchParams.acao) where.acao = searchParams.acao;
 
   const [logs, total] = await Promise.all([
@@ -66,9 +50,9 @@ export default async function AuditoriaPage({
     _count: { id: true },
   });
 
-  const contIA = contadores.find((c) => c.origem === "ia")?._count.id ?? 0;
-  const contUser = contadores.find((c) => c.origem === "usuario")?._count.id ?? 0;
-  const contSist = contadores.find((c) => c.origem === "sistema")?._count.id ?? 0;
+  const { ia: contIA, usuario: contUser, sistema: contSist } = contarPorGrupo(
+    contadores.map((c) => ({ origem: c.origem, total: c._count.id })),
+  );
 
   return (
     <div>
@@ -106,7 +90,7 @@ export default async function AuditoriaPage({
             <label className="mb-1 block text-xs font-medium text-slate-600">Origem</label>
             <select name="origem" defaultValue={searchParams.origem ?? ""} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
               <option value="">Todas</option>
-              <option value="ia">IA</option>
+              <option value="ia">IA (inclui ZEUS e Cérebro)</option>
               <option value="usuario">Usuário</option>
               <option value="sistema">Sistema</option>
             </select>
@@ -166,7 +150,7 @@ export default async function AuditoriaPage({
               return (
                 <li key={log.id} className={`flex items-start gap-3 rounded-xl border px-3 py-3 my-1 ${corCard}`}>
                   <div className="mt-0.5 shrink-0">
-                    {log.origem === "ia" ? (
+                    {ehOrigemIA(log.origem) ? (
                       <Bot size={15} className="text-blue-500" />
                     ) : log.origem === "usuario" ? (
                       <User size={15} className="text-slate-500" />
@@ -176,12 +160,8 @@ export default async function AuditoriaPage({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tom={COR_ORIGEM[log.origem] ?? "slate"}>
-                        {log.origem === "ia" ? "IA" : log.origem === "usuario" ? "usuário" : "sistema"}
-                      </Badge>
-                      <span className="text-sm font-semibold text-slate-800">
-                        {ROTULO_ACAO[log.acao] ?? log.acao}
-                      </span>
+                      <Badge tom={corOrigem(log.origem)}>{rotuloOrigem(log.origem)}</Badge>
+                      <span className="text-sm font-semibold text-slate-800">{rotuloAcao(log.acao)}</span>
                       {log.clienteId && (
                         <Link href={`/clientes/${log.clienteId}`} className="text-xs text-brand-600 hover:underline">
                           ver cliente →

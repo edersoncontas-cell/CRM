@@ -194,18 +194,26 @@ export function criarCategorizadorColunas(colunas: ColunaComPapel[]) {
   };
 }
 
+// Probabilidade (0 a 1) da coluna em que a negociação está — a negociação
+// guarda o TÍTULO da coluna em "estagio". null = estágio sem coluna no funil.
+// É a mesma probabilidade que ele ajusta no menu "⋮" da coluna.
+export function criarProbabilidadePorEstagio(colunas: ColunaComPapel[]): (estagio: string | null | undefined) => number | null {
+  const prob = new Map<string, number>();
+  for (const c of colunas) prob.set(c.titulo, probabilidadeDaColuna(c) / 100);
+  return (estagio) => (estagio != null && prob.has(estagio) ? prob.get(estagio)! : null);
+}
+
 // Valor ponderado do funil: soma de valor × probabilidade da coluna, só das
 // negociações abertas. É a previsão "honesta" de quanto vai fechar.
 export function valorPonderado(
   negociacoes: { estagio: string; status: string; valor: number | null }[],
   colunas: ColunaComPapel[]
 ): number {
-  const prob = new Map<string, number>();
-  for (const c of colunas) prob.set(c.titulo, probabilidadeDaColuna(c) / 100);
+  const probDe = criarProbabilidadePorEstagio(colunas);
   let total = 0;
   for (const n of negociacoes) {
     if (n.status !== "aberta") continue;
-    const p = prob.get(n.estagio);
+    const p = probDe(n.estagio);
     if (p == null) continue;
     total += (n.valor ?? 0) * p;
   }

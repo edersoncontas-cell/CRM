@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { calcularMarcoPendente } from "@/lib/pos-venda-marcos";
 import { headers } from "next/headers";
 import { db } from "./db";
 import { analisarConversaIA, aprenderTomIA, buscarProspectosIA, gerarFichaTecnicaIA, gerarAplicacoesMaquinaIA, gerarIdeiasPosVendaIA, gerarBattlecardIA, gerarResumoDiferenciaisIA, gerarComparativoCompletoIA, resumirConversaIA, sugerirAbordagemIA, sugerirProximaAcaoIA, llmTexto } from "./ai";
@@ -2699,17 +2700,8 @@ export async function proximaAcaoViraDemandaAction(clienteId: string, texto: str
 // mais recente — o primeiro que já venceu e ainda não foi registrado como
 // feito é o "marco pendente" do cliente). Registrar um marco como feito é só
 // criar um PosVendaContato com tipo = o próprio marco (ex: "marco_30d").
-const MARCOS_POS_VENDA = [
-  { tipo: "marco_365d", dias: 365, label: "1 ano" },
-  { tipo: "marco_180d", dias: 180, label: "6 meses" },
-  { tipo: "marco_60d", dias: 60, label: "60 dias" },
-  { tipo: "marco_30d", dias: 30, label: "30 dias" },
-] as const;
-
-function calcularMarcoPendente(diasDesdeFaturamento: number, tiposFeitos: Set<string>) {
-  const marco = MARCOS_POS_VENDA.find((m) => diasDesdeFaturamento >= m.dias && !tiposFeitos.has(m.tipo));
-  return marco ? { tipo: marco.tipo, label: marco.label } : null;
-}
+// A tabela dos marcos e a regra do pendente moram em lib/pos-venda-marcos.ts
+// (a Central de Alertas também precisa delas).
 
 // Data efetiva de faturamento de uma negociação ganha: usa `faturadoEm`
 // quando existe; para vendas antigas registradas só com "mês/ano de

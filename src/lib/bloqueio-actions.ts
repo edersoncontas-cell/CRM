@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { limparContatosIndesejados, liberarLapide, type ResultadoLimpeza } from "@/lib/contatos-bloqueados";
+import { limparContatosIndesejados, liberarLapide, clientesComHistorico, type ResultadoLimpeza } from "@/lib/contatos-bloqueados";
+import { podeApagarNaLimpeza } from "@/lib/limpeza-protecao";
 import { listarFiltroContatos, adicionarTermoFiltro, removerTermoFiltro, definirFiltroContatos, type TipoTermoBloqueio } from "@/lib/filtro-contatos";
 import { interpretarComandoFiltro, type MudancaFiltro } from "@/lib/filtro-contatos-ia";
 import { motivoBloqueioComListas } from "@/lib/utils";
@@ -16,7 +17,7 @@ export async function limparContatosIndesejadosAction(): Promise<ResultadoLimpez
   const r = await limparContatosIndesejados();
   await registrarAudit({
     acao: "cliente_atualizado", origem: "usuario",
-    descricao: `Limpeza de contatos que não são clientes: ${r.clientes} cliente(s), ${r.conversas} conversa(s) e ${r.mensagens} mensagem(ns) apagados; ${r.bloqueados} telefone(s) bloqueado(s).`,
+    descricao: `Limpeza de contatos que não são clientes: ${r.clientes} cliente(s), ${r.conversas} conversa(s) e ${r.mensagens} mensagem(ns) apagados; ${r.bloqueados} telefone(s) bloqueado(s)${r.totalPoupados ? `; ${r.totalPoupados} poupado(s) por ter negociação, visita ou compra` : ""}.`,
   }).catch(() => {});
   for (const p of PAGINAS) revalidatePath(p);
   return r;
@@ -61,11 +62,17 @@ async function previaImpacto(novas: MudancaFiltro[]): Promise<{ clientes: number
   const termos = novas.filter((m) => m.tipo === "termo").map((m) => m.valor);
   const palavras = novas.filter((m) => m.tipo === "palavra").map((m) => m.valor);
   const bate = (nome: string | null) => !!nome && motivoBloqueioComListas(nome, termos, palavras) !== null;
-  const [clientes, conversas] = await Promise.all([
-    db.cliente.findMany({ select: { nome: true } }),
-    db.whatsAppConversation.findMany({ where: { isGroup: false }, select: { contactName: true } }),
+  const [clientes, conversas, comHistorico] = await Promise.all([
+    db.cliente.findMany({ select: { id: true, nome: true } }),
+    db.whatsAppConversation.findMany({ where: { isGroup: false }, select: { contactName: true, clienteId: true } }),
+    clientesComHistorico(),
   ]);
-  return { clientes: clientes.filter((c) => bate(c.nome)).length, conversas: conversas.filter((c) => bate(c.contactName)).length };
+  // Mesma regra da limpeza: quem tem negociação/visita/compra não cai por termo.
+  const caem = clientes.filter((c) => bate(c.nome) && podeApagarNaLimpeza({ temHistorico: comHistorico.has(c.id), motivo: motivoBloqueioComListas(c.nome, termos, palavras) }));
+  return {
+    clientes: caem.length,
+    conversas: conversas.filter((c) => bate(c.contactName) && !(c.clienteId && comHistorico.has(c.clienteId))).length,
+  };
 }
 
 export type RespostaAssistenteFiltro = {

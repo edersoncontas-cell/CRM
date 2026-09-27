@@ -203,13 +203,20 @@ O que é bom saber antes de abrir:
 
 ## Em aberto (ofereci, ele não respondeu)
 
-- **Pós-venda:** hoje "Resolvido" é definitivo. Ofereci fazer voltar quando
-  vencer o próximo marco, por data comparada ao `ocultoEm` — e não por chave
-  que se desmancha, que era o bug antigo.
-- **Lista de bloqueio:** os termos `central`, `brasil`, `pme`, `dynapac` e `crm`
-  são largos. "Terraplenagem Central" ou "Construtora Brasil" são apagados com
-  negociação e visita junto. Ofereci tirar esses termos ou fazer uma prévia
-  antes de apagar.
+- ~~**Pós-venda:** "Resolvido" definitivo~~ — **FEITO (27/09):** volta quando
+  vence um marco DEPOIS do clique (`posVendaVoltou`, `lib/pos-venda-marcos.ts`).
+- ~~**Lista de bloqueio** apagando cliente de verdade~~ — **FEITO (27/09):** a
+  limpeza por termo nunca apaga quem tem negociação, visita, pós-venda ou
+  compra (`lib/limpeza-protecao.ts`); só sai assim por decisão dele (asterisco
+  ou excluir à mão). O cartão lista quem ficou. E a limpeza por termo agora
+  guarda recibo (cadastros, conversas, mensagens, lápides) e tem "Desfazer" no
+  histórico de "Cadastros sem identidade"; quem volta pelo desfazer fica em
+  `limpeza.bloqueio.excecoes` e não é apagado de novo na rodada seguinte.
+  Os termos largos (`central`, `brasil`, `dynapac`, `crm`) CONTINUAM na lista
+  dele — não mexi na lista sem ele pedir; o cartão sugere tirar.
+- ~~Lead score com nomes antigos das fases~~ — **FEITO (27/09):** lê a
+  probabilidade da coluna do funil (`criarProbabilidadePorEstagio`).
+- ~~Auditoria sem ZEUS/Cérebro~~ — **FEITO (27/09):** `lib/auditoria-regra.ts`.
 - **IA:** a espera curta do Groq (~8s) e acrescentar Cerebras/Mistral/OpenRouter
   como provedores grátis extras.
 - **Nunca foi respondida** a pergunta dele sobre "memória": memória de conversa

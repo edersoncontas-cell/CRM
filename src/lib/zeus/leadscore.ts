@@ -8,11 +8,17 @@
 
 import { db } from "@/lib/db";
 import { PROB_ESTAGIO } from "@/lib/insights";
+import { criarProbabilidadePorEstagio } from "@/lib/pipeline";
 
 export type FatoresLeadScore = {
   termometro: number | null;
   valor: number | null;
   estagio: string | null;
+  // Probabilidade (0 a 1) da COLUNA onde a negociação está (ColunaFunil). O
+  // mapa PROB_ESTAGIO só conhece os nomes antigos do funil ("primeiro_contato",
+  // "proposta_bcnh"…); as negociações de hoje guardam o título da coluna
+  // ("PROPOSTA", "NEGOCIAÇÃO"), e o estágio contava zero para todo mundo.
+  probEstagio?: number | null;
   diasSemContato: number | null;
   temVisitaAgendada: boolean;
   concorrenteMencionado: boolean;
@@ -41,7 +47,7 @@ export function calcularLeadScore(f: FatoresLeadScore): number {
   else if ((f.valor ?? 0) >= 400_000) score += 15;
   else if ((f.valor ?? 0) >= 150_000) score += 8;
 
-  score += (PROB_ESTAGIO[f.estagio ?? ""] ?? 0) * 20;
+  score += (f.probEstagio ?? PROB_ESTAGIO[f.estagio ?? ""] ?? 0) * 20;
 
   const dias = f.diasSemContato ?? 999;
   if (dias <= 2) score += 15;
@@ -102,12 +108,16 @@ export async function recalcularLeadScores(): Promise<{ atualizados: number }> {
     take: 200,
   });
 
+  const colunas = await db.colunaFunil.findMany({ select: { titulo: true, papel: true, probabilidade: true } }).catch(() => []);
+  const probDe = criarProbabilidadePorEstagio(colunas);
+
   for (const c of ativos) {
     const melhorNeg = c.negociacoes[0] ?? null;
     const score = calcularLeadScore({
       termometro: melhorNeg?.termometro ?? null,
       valor: melhorNeg?.valor ?? null,
       estagio: melhorNeg?.estagio ?? null,
+      probEstagio: probDe(melhorNeg?.estagio),
       diasSemContato: diasEntre(c.ultimoContato),
       temVisitaAgendada: !!(melhorNeg?.dataVisita || c.proximaVisita),
       concorrenteMencionado: !!melhorNeg?.concorrenteMencionado,

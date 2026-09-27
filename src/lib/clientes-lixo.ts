@@ -3,7 +3,8 @@
 // recibo e desfazer.
 
 import { db } from "@/lib/db";
-import type { Prisma, Cliente } from "@prisma/client";
+import type { Prisma, Cliente, WhatsAppConversation, WhatsAppMessage } from "@prisma/client";
+import { adicionarExcecoesLimpeza } from "@/lib/contatos-bloqueados";
 import { decidirLimpeza, DESCRICAO_MOTIVO, type DecisaoLimpeza, type MotivoLimpeza, type ClienteParaLimpeza } from "@/lib/clientes-lixo-regra";
 
 type Candidato = { cliente: Cliente; decisao: DecisaoLimpeza };
@@ -56,6 +57,11 @@ export async function previaLimpeza(limite = 60): Promise<PreviaLimpeza> {
 type Recibo = {
   apagados: Cliente[];
   alterados: { id: string; antes: { nome: string; telefone: string | null } }[];
+  // Só na limpeza por lista de bloqueio (lib/contatos-bloqueados.ts): as
+  // conversas e mensagens que foram junto, e as lápides que ela criou.
+  conversas?: WhatsAppConversation[];
+  mensagens?: WhatsAppMessage[];
+  lapides?: string[];
 };
 
 export type ResultadoLimpezaClientes = { apagados: number; consertados: number; limpezaId: string | null };
@@ -117,6 +123,25 @@ export async function desfazerLimpeza(id: string): Promise<{ restaurados: number
       falhas.push(`${c.nome}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+  // Limpeza por lista de bloqueio: as conversas e mensagens voltam, as
+  // lápides que ela criou saem, e quem voltou fica protegido da próxima
+  // limpeza automática (senão o desfazer duraria até a rodada seguinte).
+  if (recibo.conversas?.length) {
+    const r = await db.whatsAppConversation.createMany({
+      data: recibo.conversas as unknown as Prisma.WhatsAppConversationCreateManyInput[], skipDuplicates: true,
+    }).catch((e) => { falhas.push(`conversas: ${e instanceof Error ? e.message : String(e)}`); return { count: 0 }; });
+    restaurados += r.count;
+  }
+  if (recibo.mensagens?.length) {
+    for (let i = 0; i < recibo.mensagens.length; i += 500) {
+      await db.whatsAppMessage.createMany({
+        data: recibo.mensagens.slice(i, i + 500) as unknown as Prisma.WhatsAppMessageCreateManyInput[], skipDuplicates: true,
+      }).catch((e) => falhas.push(`mensagens: ${e instanceof Error ? e.message : String(e)}`));
+    }
+  }
+  if (recibo.lapides?.length) await db.contatoBloqueado.deleteMany({ where: { id: { in: recibo.lapides } } }).catch(() => {});
+  if (l.origem === "bloqueio") await adicionarExcecoesLimpeza(recibo.apagados.map((c) => c.id)).catch(() => {});
+
   for (const a of recibo.alterados) {
     try {
       await db.cliente.update({ where: { id: a.id }, data: a.antes });

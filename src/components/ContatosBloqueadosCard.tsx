@@ -132,7 +132,21 @@ export function ContatosBloqueadosCard({ termos, palavras, total, recentes }: { 
         <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
           Apagados: {resultado.clientes} cliente(s), {resultado.conversas} conversa(s) e {resultado.mensagens} mensagem(ns) · {resultado.bloqueados} contato(s) barrado(s) agora.
           {resultado.clientes + resultado.conversas === 0 && " Nada a apagar: o CRM já estava limpo."}
+          {resultado.clientes + resultado.conversas > 0 && " Dá para desfazer: o recibo fica no histórico do cartão \"Cadastros sem identidade\", aqui em Configurações."}
         </p>
+      )}
+      {/* Quem a lista pegou mas tem vida comercial: fica (lib/limpeza-protecao.ts). */}
+      {resultado && resultado.totalPoupados > 0 && (
+        <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <b>{resultado.totalPoupados} contato(s) ficaram</b>: batem com a lista de bloqueio, mas têm negociação, visita, pós-venda
+          ou compra. Se algum não é cliente, exclua à mão na lista de Clientes. Se a lista está pegando gente demais, tire o termo largo.
+          <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-xs">
+            {resultado.poupados.map((p, i) => (
+              <li key={i}><b>{p.nome}</b> <span className="text-amber-700/80">— {p.motivo}</span></li>
+            ))}
+            {resultado.totalPoupados > resultado.poupados.length && <li>… e mais {resultado.totalPoupados - resultado.poupados.length}.</li>}
+          </ul>
+        </div>
       )}
       {/* Os últimos contatos barrados — e a saída para o engano. Excluir um
           cadastro é um clique; sem um lugar onde desfazer, o contato errado

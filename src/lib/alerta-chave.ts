@@ -20,11 +20,9 @@
 // A chave guardada passa a ser ESTÁVEL: identifica o assunto e o cliente, não
 // o estado dele naquele segundo. Resolvido é resolvido.
 //
-// A CONSEQUÊNCIA, que é honesta dizer: o pós-venda resolvido não volta sozinho
-// quando vence o marco seguinte. Era esse o efeito colateral que fazia parecer
-// inteligência ("volta quando vencer o próximo") e na prática era o bug. Se o
-// lembrete do próximo marco fizer falta, ele volta como regra escrita — por
-// data de vencimento comparada ao ocultoEm — e não por chave que se desfaz.
+// O lembrete do próximo marco voltou como regra escrita, não por chave que se
+// desfaz: o pós-venda resolvido reaparece quando vence um marco DEPOIS da
+// data do clique (ocultoEm) — ver posVendaVoltou em lib/pos-venda-marcos.ts.
 
 /** O prefixo (assunto) e o resto de uma chave de item da Central. */
 function partes(id: string): { prefixo: string; resto: string[] } {

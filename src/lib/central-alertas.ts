@@ -10,7 +10,8 @@ import { inicioDoDiaBrasilia, formatDateTime } from "@/lib/utils";
 import { listarClientesPosVenda } from "@/lib/actions";
 import { calcularRitmoMetas } from "@/lib/metas";
 import { criarCategorizadorColunas, ehFunilAberto } from "@/lib/pipeline";
-import { estaResolvido } from "@/lib/alerta-chave";
+import { estaResolvido, chaveEstavel } from "@/lib/alerta-chave";
+import { posVendaVoltou } from "@/lib/pos-venda-marcos";
 
 export type SeveridadeAlerta = "alta" | "media" | "baixa";
 
@@ -124,7 +125,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
     // chave de cada item carrega a SITUAÇÃO (marco pendente, período sem
     // contato…), então ele só volta se a situação mudar — antes, qualquer
     // mensagem do cliente reabria tudo e "Resolvido" parecia não pegar.
-    db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000, select: { chave: true } }).catch(() => [] as { chave: string }[]),
+    db.alertaOculto.findMany({ orderBy: { ocultoEm: "desc" }, take: 3000, select: { chave: true, ocultoEm: true } }).catch(() => [] as { chave: string; ocultoEm: Date }[]),
     // Licitações já gravadas pelo robô de mercado. Leitura barata (uma
     // linha em Configuracao) e nunca bate no portal daqui: a Central não
     // pode depender de site externo para abrir.
@@ -132,6 +133,15 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   ]);
   const categorizar = criarCategorizadorColunas(colunasFunil);
   const chavesOcultas = new Set(ocultos.map((o) => o.chave));
+  const ocultoEmPorChave = new Map(ocultos.map((o) => [o.chave, o.ocultoEm] as const));
+  // Resolvido é de vez — menos o pós-venda quando vence um marco novo depois
+  // do clique (lib/pos-venda-marcos.ts: posVendaVoltou).
+  const resolvido = (i: { id: string; posVenda?: { dataCompra: string | null; marcoPendente: { tipo: string } | null } }) => {
+    if (!estaResolvido(i.id, chavesOcultas)) return false;
+    if (!i.posVenda) return true;
+    const quando = ocultoEmPorChave.get(chaveEstavel(i.id)) ?? ocultoEmPorChave.get(i.id) ?? null;
+    return !posVendaVoltou(i.posVenda, quando);
+  };
   const precisamDeVisita = negAbertas.filter((n) => ehFunilAberto(categorizar(n.estagio)));
   const diasSem = (d: Date | null) => (d ? Math.floor((Date.now() - d.getTime()) / (24 * HORA)) : null);
   const catorzeDias = new Date(Date.now() - 14 * 24 * HORA);
@@ -348,7 +358,7 @@ export async function listarCentralAlertas(): Promise<{ grupos: GrupoCentral[]; 
   // clienteId para o "Resolvido" saber quando reabrir).
   const grupos: GrupoCentral[] = gruposBrutos.map((g) => ({
     ...g,
-    itens: g.itens.filter((i) => !estaResolvido(i.id, chavesOcultas)).map((i) => ({ ...i, clienteId: i.clienteId ?? clienteIdDoItem(i) })),
+    itens: g.itens.filter((i) => !resolvido(i)).map((i) => ({ ...i, clienteId: i.clienteId ?? clienteIdDoItem(i) })),
   }));
   const todos = grupos.flatMap((g) => g.itens);
 
