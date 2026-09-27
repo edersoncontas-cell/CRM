@@ -3,6 +3,10 @@
 Documento de trabalho para o teste de um mês e a apresentação à diretoria.
 Escrito em 22/09/2026.
 
+> **Superado nos números.** Os custos, preços e o time real (17 vendedores, 6 da
+> linha amarela e 11 da agrícola) estão em `docs/APRESENTACAO-DIRETORIA.md`
+> (27/09/2026), com fonte para cada valor. Aqui ficam as faixas de 22/09.
+
 > **Sobre os preços deste documento:** o ambiente onde ele foi escrito não tem
 > acesso à internet, então nenhum valor aqui foi consultado na fonte. Todos são
 > **ordens de grandeza** para dimensionar a conversa, e estão marcados com `~`.

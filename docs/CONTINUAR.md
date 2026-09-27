@@ -12,9 +12,10 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit em produção: **`7a939c7`** — "Manutenção com espera entre falhas,
-e o CRM nascendo num banco vazio". **1057 testes passando** (91 arquivos),
-lint e build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"`.
+Último commit com código: **`dbbbfe1`** — "Telas param de consultar o banco
+com a aba em segundo plano". **1.094 testes passando** (94 arquivos), lint e
+build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"`. Os commits depois dele são
+só documentação.
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
@@ -192,6 +193,38 @@ O que é bom saber antes de abrir:
 - **Nunca foi respondida** a pergunta dele sobre "memória": memória de conversa
   por cliente × o CRM aprender o jeito dele de vender. Se ele retomar, vale
   abrir.
+
+## Documento da diretoria — atualizado em 27/09
+
+`docs/APRESENTACAO-DIRETORIA.md`. O que ele informou e o que decidi por ele:
+
+- **Time real: 17 vendedores**, 6 da linha amarela e 11 da agrícola. **Margem
+  da casa: cerca de 10%** por máquina.
+- **Ele não sabe o valor da licença e pediu que eu estimasse.** Ficou: licença
+  R$ 200 de tabela / R$ 140 de cliente fundador; implantação por hora (R$ 100/h,
+  80 h para o piloto + 80 h para o time, só se o piloto aprovar); manutenção
+  15 h/mês = R$ 1.500, sem desconto; o plano do Claude (Max 5x, US$ 100 + IOF =
+  R$ 535) virou linha própria, "ferramenta de manutenção". Método na seção 7.
+  Preço do Claude conferido em claude.com/pricing em 27/09 (a página abre daqui).
+- **O CRM hoje é só da linha amarela:** o `schemaInstrucao` em
+  `src/lib/ai/index.ts` diz à IA que não existe agrícola. A agrícola é a fase 5,
+  depois do piloto.
+- **A fábrica (CNH: New Holland e Case) quer comprar o produto** — mais de 500
+  vendedores, além de outras empresas. Ele disse: "por hora é somente para a
+  diretoria". Não ponha a fábrica no documento da diretoria. O documento diz
+  **licença não exclusiva** e manda ver advogado antes de assinar (Lei
+  9.609/98, art. 4º): é isso que mantém a porta da fábrica aberta. Para vender
+  à fábrica, o CRM precisa virar produto: multiempresa (não só multiusuário),
+  marcas e linhas configuráveis (54 arquivos citam "New Holland" e 33
+  "Dynapac"), linha agrícola e Case, WhatsApp oficial e suporte que não dependa
+  de uma pessoa só.
+- **Ele pediu o CRM funcionando offline** ("preciso que o claude funcione off
+  line"; às vezes ele chama o CRM de "claude"). Hoje o `sw.js` só devolve do
+  cache a última versão das telas já abertas e não grava nada sem rede. Entrou
+  no documento como "modo sem sinal" (fase 5), mas para ele pode vir antes,
+  como demanda própria.
+- `docs/PROMPT-APRESENTACAO.md` usa os mesmos números. `docs/CRM-PRODUTO.md`
+  (22/09) tem as faixas antigas e aponta para o documento novo.
 
 ## O pacote de produto (pedido dele, ainda aberto)
 

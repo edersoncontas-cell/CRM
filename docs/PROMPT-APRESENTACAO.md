@@ -9,7 +9,8 @@ ainda não tem o dado, tire o slide em vez de chutar.
 ---
 
 Monte uma apresentação para a diretoria de uma concessionária de máquinas
-pesadas New Holland Construction e Dynapac, no sul do Espírito Santo.
+New Holland (linha amarela e agrícola) e Dynapac, no sul do Espírito Santo.
+O time de vendas tem 17 vendedores: 6 da linha amarela e 11 da agrícola.
 
 **Quem apresenta:** um vendedor da casa, que construiu um CRM próprio e o usa
 há meses. **Quem assiste:** diretoria, que decide se compra a ideia e distribui
@@ -25,8 +26,9 @@ arquitetura de software. Português do Brasil.
 ## O que o CRM é
 
 Um CRM feito sob medida para venda de máquina pesada, rodando há meses em
-produção. Números reais do sistema: 31 telas, 45 rotas de API, 14 rotinas
-automáticas, 40 tabelas, 67.002 linhas de código e 942 testes automatizados.
+produção. Números reais do sistema (24/09/2026): 35 telas, 15 rotinas
+automáticas, 40 tabelas, 71.715 linhas de código e 1.094 testes automatizados.
+Hoje ele conhece a linha amarela; a linha agrícola entra depois do piloto.
 
 ## O que ele faz que nenhum CRM de prateleira faz
 
@@ -76,11 +78,23 @@ abertas, somando R$ [X] em funil, ao custo de R$ [Y] por mês."
 
 ## Investimento
 
-- Implantação, uma vez: **R$ 6.300** (já com 30% de desconto por ser da casa)
-- Mensalidade para [N] vendedores: **R$ [valor]/mês** (já com os 30%)
-- Comparação: CRM de mercado custa de R$ 50 a R$ 250 por usuário/mês e **não
-  faz nada disso** — não conhece máquina pesada, Banco CNH, nem lê WhatsApp.
-- Enquadramento: **custa menos que a comissão de meia máquina por mês.**
+Use exatamente estes números (fonte: `docs/APRESENTACAO-DIRETORIA.md`, 27/09/2026):
+
+- Fase 0, sair dos planos grátis: **cerca de R$ 755/mês** com 1 vendedor, já
+  com a ferramenta de manutenção.
+- Implantação para o piloto: **R$ 5.600**. Implantação para o time (linha
+  agrícola e modo sem sinal): **R$ 5.600**, só se o piloto aprovar. Os dois já
+  com 30% de desconto de cliente fundador.
+- Licença: **R$ 140 por vendedor/mês**. Manutenção: **R$ 1.500/mês**.
+- Os 17 vendedores, tudo incluído (operação, WhatsApp oficial, licença e
+  manutenção): **R$ 8.662/mês**. Primeiro ano completo: **R$ 115.144**.
+- Comparação, 17 usuários, sem as tarifas da Meta: CRMs de mercado de
+  R$ 2.533 a R$ 8.789/mês. Este fica acima do RD Station e cerca de 30% abaixo
+  de HubSpot e Salesforce, e é o único que conhece máquina pesada, Banco CNH e
+  lê o WhatsApp.
+- Enquadramento: com a margem da casa (cerca de 10%), **4 retroescavadeiras a
+  mais por ano, no time inteiro, pagam o primeiro ano**. Uma só paga a licença
+  do time todo.
 
 ## Riscos, ditos de frente
 
@@ -92,7 +106,8 @@ A diretoria confia mais em quem mostra o risco do que em quem esconde.
 - **Dependência de uma pessoa:** o CRM foi feito por um vendedor. A proposta
   inclui documentação e contrato de manutenção.
 - **Sai das camadas gratuitas:** uso comercial exige planos pagos, já
-  considerados no orçamento.
+  considerados no orçamento. Em 23/09 o banco grátis foi suspenso por cota e
+  o CRM ficou fora do ar; voltou no mesmo dia, num banco temporário.
 
 ## Estrutura de slides
 
