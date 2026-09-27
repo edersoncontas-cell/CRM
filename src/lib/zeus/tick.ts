@@ -22,6 +22,7 @@ import { inicioDoDiaBrasilia } from "@/lib/utils";
 import { calcularRitmoMetas } from "@/lib/metas";
 import { garantirDemandaAutomatica } from "@/lib/demandas";
 import { listarClientesPosVenda } from "@/lib/actions";
+import { anotarEsfriandoDoDia } from "@/lib/piloto";
 
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
@@ -501,6 +502,12 @@ async function diagnosticarErros(): Promise<number> {
 
 // ── Orquestração ─────────────────────────────────────────────────────────────
 export async function executarZeusTick(): Promise<ResumoTick> {
+  // A contagem diária de negociações esfriando (Números do piloto, critério
+  // 2) roda mesmo com o ZEUS pausado: não manda nada a ninguém, e o dia que
+  // não for anotado não dá para reconstruir depois. Uma leitura por passada;
+  // a conta e a escrita só uma vez por dia.
+  await anotarEsfriandoDoDia().catch((e) => console.error("[zeus-tick] esfriando do dia:", e));
+
   const ativo = await zeusAtivo();
   if (!ativo) {
     await tocarHeartbeat("zeus-tick");

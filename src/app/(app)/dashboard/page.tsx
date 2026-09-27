@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia, formatCurrency, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
-import { criarCategorizadorColunas, ehFunilAberto } from "@/lib/pipeline";
+import { criarCategorizadorColunas, ehFunilAberto, chaveMotivoPerda } from "@/lib/pipeline";
 import { FraseMotivacional } from "@/components/MotivacaoWidget";
 import { TickerMercado } from "@/components/TickerMercado";
 import { NoticiasSetor } from "@/components/NoticiasSetor";
@@ -238,7 +238,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // concorrente" → "preco"); sem chave conhecida, a perda não entra em
   // ranking nenhum e não ensina nada.
   const valorPerdidoAno = somaValor(perdidasAno);
-  const perdidasSemMotivo = perdidasAno.filter((n) => !(n.motivoPerda ?? "").split(":")[0].trim()).length;
+  const perdidasSemMotivo = perdidasAno.filter((n) => chaveMotivoPerda(n.motivoPerda) === "nao_informado").length;
 
   const funilAgora = [
     {

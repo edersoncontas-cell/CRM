@@ -4,7 +4,7 @@ import { Card, PageHeader } from "@/components/ui";
 import { SeletorAno } from "@/components/SeletorAno";
 import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { MOTIVOS_PERDA, rotuloMotivoPerda } from "@/lib/pipeline";
+import { MOTIVOS_PERDA, rotuloMotivoPerda, chaveMotivoPerda } from "@/lib/pipeline";
 import { TrendingDown, Hash, Calculator, AlertTriangle, ChevronRight } from "lucide-react";
 import { PerdasSemMotivo, type PerdaSemMotivo } from "@/components/PerdasSemMotivo";
 
@@ -46,7 +46,7 @@ export default async function VendasPerdidasPage({
   const doAno = anoSelecionado === "todos" ? todas : todas.filter((n) => n.atualizadoEm.getFullYear() === anoSelecionado);
 
   // O motivo é gravado como "id" ou "id: nota livre" — a chave é sempre o id.
-  const chaveMotivo = (m: string | null) => (m ?? "").split(":")[0].trim() || "nao_informado";
+  const chaveMotivo = chaveMotivoPerda;
   const filtradas = searchParams.motivo ? doAno.filter((n) => chaveMotivo(n.motivoPerda) === searchParams.motivo) : doAno;
 
   const total = doAno.reduce((s, n) => s + (n.valor ?? 0), 0);

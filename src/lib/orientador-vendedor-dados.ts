@@ -5,7 +5,7 @@
 // muda, e a régua não pode ser refeita junto.
 
 import { db } from "@/lib/db";
-import { criarCategorizadorColunas, ehFunilAberto, type CategoriaColuna } from "@/lib/pipeline";
+import { criarCategorizadorColunas, ehFunilAberto, chaveMotivoPerda, type CategoriaColuna } from "@/lib/pipeline";
 import { DIAS_PARADA, type FatosVendedor } from "@/lib/orientador-vendedor";
 
 /** Janela padrão: um ano fecha o ciclo de sazonalidade da safra e da obra. */
@@ -80,7 +80,7 @@ export async function contarFatosVendedor(agora: Date = new Date()): Promise<Fat
   let perdidasSemMotivo = 0;
   let valorPerdido = 0;
   for (const n of perdidasNoPeriodo) {
-    const chave = (n.motivoPerda ?? "").split(":")[0].trim() || "nao_informado";
+    const chave = chaveMotivoPerda(n.motivoPerda);
     perdidasPorMotivo[chave] = (perdidasPorMotivo[chave] ?? 0) + 1;
     if (chave === "nao_informado") perdidasSemMotivo++;
     valorPerdido += n.valor ?? 0;

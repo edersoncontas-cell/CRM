@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +50,8 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/financeiro", label: "Financeiro", icon: Banknote },
       // Saiu do funil: perdida não é fase de venda, é material de análise.
       { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
+      // O que volta para a diretoria no fim do piloto (proposta, seções 4.4 e 10).
+      { href: "/piloto", label: "Números do piloto", icon: FlaskConical },
     ],
   },
   {

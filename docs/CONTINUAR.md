@@ -201,6 +201,26 @@ O que é bom saber antes de abrir:
   conversa fica agendada para o dia seguinte e o ZEUS avisa. "Reanalisar" não
   conta.
 
+- **Números do piloto** (tela `/piloto`, menu Análise): os três números que a
+  proposta prometia construir (tempo até a 1ª resposta, negociações abertas
+  pela IA, conversas de venda que viraram negociação) e os critérios 1–3 da
+  seção 10. Régua em `lib/piloto-regra.ts` (testada), conta em `lib/piloto.ts`,
+  prova com Postgres em `scripts/provar-numeros-piloto.ts` (25 conferências).
+  - Envio em massa e parabéns automático agora gravam rótulo próprio
+    (`Envio em massa` / `Aniversário automático`) no lugar de "Você" — senão a
+    campanha contava como resposta. O rótulo aparece em cima da mensagem no
+    Atendimento. **Caminho novo de envio automático tem de gravar rótulo**.
+  - Mensagens de massa ANTIGAS continuam como "Você" (não dá para separar):
+    no histórico de antes de 27/09 elas ainda podem fechar uma espera.
+  - O critério 2 precisa do número de antes: o ZEUS anota as negociações
+    esfriando uma vez por dia desde 27/09 (`piloto.esfriando`).
+  - A "conversa de venda" é o palpite da IA (CLIENTE/LEAD). A tela deixa
+    corrigir ("É venda"/"Não é venda") e mostra quantas ele tirou à mão.
+  - **Decisão dele:** o documento da diretoria ainda diz "precisa ser
+    construído" (4.4) e cobra "proteções e números do piloto 20 h" na
+    implantação. Teto de IA e números do piloto estão prontos. Não mexi no
+    documento: atualizar o texto e manter ou baixar as horas é escolha dele.
+
 ## Em aberto (ofereci, ele não respondeu)
 
 - ~~**Pós-venda:** "Resolvido" definitivo~~ — **FEITO (27/09):** volta quando

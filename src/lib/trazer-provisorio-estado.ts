@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { TOTAL_ETAPAS, TABELAS_QUE_NAO_VEM } from "@/lib/trazer-provisorio";
 import { mesmoBanco, provedorDoEndereco } from "@/lib/trazer-provisorio-regra";
+import { limparErro } from "@/lib/erro-legivel";
 
 export const MARCA_VOLTA = "provisorio.volta";
 
@@ -18,15 +19,8 @@ export type EstadoProvisorio = {
   naoVem: readonly string[];
 };
 
-export function limparErro(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e);
-  // Mensagem do Prisma pode trazer o endereço; senha nunca aparece na tela.
-  return msg
-    .replace(/postgres(ql)?:\/\/\S+/gi, "[endereço do banco]")
-    .replace(/Invalid `[^`]+` invocation:?/gi, "")
-    .replace(/Raw query failed\. Code: `?\w+`?\. Message: /gi, "")
-    .replace(/\s+/g, " ").trim().slice(0, 300);
-}
+// Mora em lib/erro-legivel.ts (a tela dos Números do piloto usa também).
+export { limparErro };
 
 export async function lerEstadoProvisorio(): Promise<EstadoProvisorio> {
   const url = process.env.DATABASE_URL_PROVISORIO;

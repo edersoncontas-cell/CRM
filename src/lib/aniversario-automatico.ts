@@ -77,7 +77,7 @@ export async function enviarAniversariosDoDia(hoje = new Date()): Promise<Result
     // pega de onde ficou, dentro da janela.
     if (porQueNaoEnviar(new Date(), jaHoje, lim)) break;
     try {
-      const res = await enviarResposta(c.id, personalizarTexto(cfg.texto, c.nome));
+      const res = await enviarResposta(c.id, personalizarTexto(cfg.texto, c.nome), "aniversario");
       if (!res.ok) { r.falhas.push({ nome: c.nome, erro: res.erro ?? "Falha ao enviar." }); continue; }
       await setConfig(`${PREFIXO_ENVIADO}${c.id}`, String(ano));
       await registrarAudit({

@@ -19,6 +19,7 @@ import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversar
 import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
 import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, comRodapeDeSaida } from "@/lib/envio-limites";
 import { textoParaCliente } from "@/lib/envio-variacoes";
+import { ROTULO_ENVIO_MASSA } from "@/lib/piloto-regra";
 import { lerLimitesEnvio, enviadasHoje, separarElegiveis } from "@/lib/envio-guarda";
 import { envioPausado } from "@/lib/whatsapp-pausa";
 import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
@@ -163,13 +164,13 @@ async function enviarComMidia(cliente: { id: string; nome: string; telefone: str
       midia.tipo === "video" ? await zapi.sendVideoBase64(conv.externalPhone, midia.base64, midia.mimeType, legenda, midia.nome) :
       await zapi.sendDocumentBase64(conv.externalPhone, midia.base64, midia.nome, midia.mimeType, legenda);
     await inserirMensagem(conv.id, {
-      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: "Você",
+      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: ROTULO_ENVIO_MASSA,
       mediaType: midia.tipo, mediaName: midia.nome, zapiMessageId, sendStatus: "SENT",
     });
   } catch (e) {
     const naoConfirmado = e instanceof zapi.EnvioNaoConfirmadoError;
     await inserirMensagem(conv.id, {
-      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: "Você",
+      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: ROTULO_ENVIO_MASSA,
       mediaType: midia.tipo, mediaName: midia.nome, sendStatus: naoConfirmado ? "UNCONFIRMED" : "FAILED",
     });
     if (!naoConfirmado) return { ok: false, erro: `O WhatsApp recusou o envio: ${String(e).slice(0, 160)}` };
@@ -246,7 +247,7 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
     if (!c) { r.falhas.push({ id: ids[i], nome: ids[i], erro: "Cliente não encontrado." }); continue; }
     try {
       const pessoal = textoParaCliente(base, c);
-      const res = midia ? await enviarComMidia(c, midia, pessoal) : await enviarResposta(c.id, pessoal);
+      const res = midia ? await enviarComMidia(c, midia, pessoal) : await enviarResposta(c.id, pessoal, "massa");
       if (res.ok) { r.enviados.push(c.id); jaHoje += 1; }
       else r.falhas.push({ id: c.id, nome: c.nome, erro: res.erro ?? "Falha ao enviar." });
     } catch (e) {

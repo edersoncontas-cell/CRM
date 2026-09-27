@@ -184,6 +184,11 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   (`lib/zeus/teto-orientador.ts`, `ORIENTADOR_TETO_DIARIO`, padrão 250).
 - Commits terminam com as linhas de atribuição da sessão. **Nunca** pôr
   identificador de modelo em nada que vá para o repositório.
+- **Envio automático grava rótulo próprio** em `operatorDisplayName`
+  (`ROTULO_ENVIO_MASSA`, `ROTULO_ANIVERSARIO` em `lib/piloto-regra.ts`). Mensagem
+  automática gravada como "Você" vira resposta do vendedor nos Números do
+  piloto. Caminho novo de envio sozinho: rótulo novo, e ele entra na lista
+  `NAO_E_RESPOSTA`.
 - Lista dentro de card é limitada, com rolagem interna de altura fixa. Ele usa
   o CRM no celular, na rua.
 

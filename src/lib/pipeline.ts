@@ -141,6 +141,15 @@ export const MOTIVOS_PERDA: { id: string; label: string }[] = [
   { id: "outro", label: "Outro" },
 ];
 
+/**
+ * A chave do motivo: ele é gravado como "id" ou "id: nota livre". Vazio, ou só
+ * a nota sem a chave, é "nao_informado" — a perda que o CRM acusa (Vendas
+ * Perdidas, Dashboard, Como você vende e Números do piloto usam esta mesma).
+ */
+export function chaveMotivoPerda(motivo: string | null | undefined): string {
+  return (motivo ?? "").split(":")[0].trim() || "nao_informado";
+}
+
 export function rotuloMotivoPerda(motivo: string | null | undefined): string {
   if (!motivo) return "Não informado";
   const [id, ...resto] = motivo.split(":");
