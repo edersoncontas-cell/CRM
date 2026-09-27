@@ -42,7 +42,7 @@ export async function GET() {
   linhas.push("");
 
   // 1. Configuração. Só a presença, NUNCA o valor: é credencial.
-  const vars = ["DATABASE_URL", "DATABASE_URL_UNPOOLED", "APP_PASSWORD", "AUTH_SECRET", "CRON_SECRET"];
+  const vars = ["DATABASE_URL", "DATABASE_URL_UNPOOLED", "DATABASE_URL_PROVISORIO", "APP_PASSWORD", "AUTH_SECRET", "CRON_SECRET"];
   linhas.push("— Variáveis de ambiente (só se existem, nunca o valor)");
   for (const v of vars) linhas.push(`   ${process.env[v] ? "tem" : "NÃO TEM"}  ${v}`);
   linhas.push(`   deploy: ${(process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 12)}`);
@@ -91,6 +91,32 @@ export async function GET() {
                "Conserto: trocar DATABASE_URL pelo valor de DATABASE_URL_UNPOOLED na Vercel e republicar.";
       } finally {
         await solto.$disconnect().catch(() => {});
+      }
+    }));
+  }
+  linhas.push("");
+
+  // 2c. O banco PROVISÓRIO (quando existe): o CRM rodou num banco temporário
+  //     e o principal voltou. Diz de que provedor é cada um (nunca o endereço)
+  //     e se o provisório ainda responde — é de lá que Configurações traz os
+  //     dados da semana.
+  linhas.push("— Banco provisório (para trazer os dados de volta)");
+  if (!process.env.DATABASE_URL_PROVISORIO) {
+    linhas.push("   não há DATABASE_URL_PROVISORIO — nada a trazer.");
+  } else {
+    const { provedorDoEndereco, mesmoBanco } = await import("@/lib/trazer-provisorio-regra");
+    linhas.push(`   principal: ${provedorDoEndereco(process.env.DATABASE_URL)} · provisório: ${provedorDoEndereco(process.env.DATABASE_URL_PROVISORIO)}`);
+    if (mesmoBanco(process.env.DATABASE_URL, process.env.DATABASE_URL_PROVISORIO)) {
+      linhas.push("   ATENÇÃO: DATABASE_URL ainda aponta para o provisório. Troque para o principal antes de trazer.");
+    }
+    linhas.push(await testar("conectar no provisório", async () => {
+      const { PrismaClient } = await import("@prisma/client");
+      const prov = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_PROVISORIO } } });
+      try {
+        const r = await prov.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM "Cliente"`);
+        return `respondeu — ${r[0]?.n ?? 0} cliente(s) lá`;
+      } finally {
+        await prov.$disconnect().catch(() => {});
       }
     }));
   }

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { ehFalhaDeConexao } from "@/lib/falha-conexao";
 
 // O CLIENTE DO BANCO — com um endereço de reserva.
 //
@@ -32,18 +33,8 @@ let ativo: Cru = principal;
 let ultimaTentativaDeVoltar = 0;
 const INTERVALO_VOLTAR_MS = 60_000;
 
-/** Verdadeiro quando o erro é "não consegui nem chegar no banco" — não erro de consulta. */
-export function ehFalhaDeConexao(e: unknown): boolean {
-  if (!e || typeof e !== "object") return false;
-  const nome = (e as { name?: string }).name ?? "";
-  const codigo = (e as { errorCode?: string; code?: string }).errorCode ?? (e as { code?: string }).code ?? "";
-  const msg = String((e as { message?: string }).message ?? "");
-  return (
-    nome === "PrismaClientInitializationError" ||
-    codigo === "P1001" || codigo === "P1002" || codigo === "P1017" ||
-    /can't reach database server|connection (refused|reset|terminated)|timed out/i.test(msg)
-  );
-}
+/** Verdadeiro quando o erro é "não consegui nem chegar no banco" — não erro de consulta (a regra mora em lib/falha-conexao.ts). */
+export { ehFalhaDeConexao };
 
 /** Qual endereço está em uso agora — para a tela e o diagnóstico dizerem. */
 export function enderecoAtivo(): "principal" | "reserva" {

@@ -19,7 +19,9 @@ export type AcaoAudit =
   | "zeus_ativo_alterado"
   // Chave de provedor de IA ligada/trocada/apagada pela tela do CRM. O
   // registro guarda o FATO e o provedor, nunca o valor da chave.
-  | "chave_ia_alterada";
+  | "chave_ia_alterada"
+  // Volta do banco provisório para o principal (Configurações).
+  | "dados_provisorio_trazidos";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

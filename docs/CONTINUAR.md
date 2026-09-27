@@ -58,13 +58,24 @@ ele confirmou). O CRM subiu VAZIO de histórico e criou as 40 tabelas sozinho
 plano grátis do Supabase não tem backup e pausa o projeto depois de 1 semana sem
 uso.
 
-**PENDENTE — no dia em que o Neon voltar:**
-1. Trocar `DATABASE_URL`/`DATABASE_URL_UNPOOLED` de volta para o Neon na Vercel.
-2. Trazer para o Neon o que ele registrou no Supabase durante a semana. O
-   script **ainda não existe e é a PRÓXIMA demanda depois do documento da
-   diretoria** — escreva e prove contra dois Postgres locais antes do dia 1º. Cuidado com ids repetidos (clientes que ele reimportou e que
-   já existem no Neon) e com a ordem das chaves estrangeiras.
-3. Só DEPOIS disso retomar o multiusuário.
+**A VOLTA PARA O NEON ESTÁ PRONTA (27/09) — falta só o Neon voltar:**
+1. Na Vercel (prompt da extensão em `docs/PROMPT-VOLTA-NEON.md`): criar
+   `DATABASE_URL_PROVISORIO` com o valor ATUAL de `DATABASE_URL` (o Supabase),
+   pôr os endereços do Neon em `DATABASE_URL`/`DATABASE_URL_UNPOOLED` e
+   republicar. `/api/diag` confirma: "principal: Neon · provisório: Supabase".
+2. Ele abre Configurações → "Trazer os dados do banco provisório" → "Ver o que
+   vai ser trazido" → "Trazer". Faz no MESMO dia da troca: parado, o Supabase
+   grátis pausa depois de 1 semana.
+   Como funciona: `lib/trazer-provisorio.ts` (motor) e `-regra.ts` (regras
+   puras). Cliente casa por Google/telefone/nome-sem-telefone; conversa pelo
+   número; mensagem pelo id do WhatsApp; o que é novo entra com o mesmo id
+   (rodar de novo não duplica). Envio pendente chega CANCELADO, mensagem que
+   falhou chega sem tentativas, trava do WhatsApp e de IA paga nunca vêm.
+   Unificações/limpezas feitas no Supabase não vêm (ids de lá).
+   Provado com dois Postgres (`scripts/provar-trazer-provisorio.ts`: 28
+   conferências + mutação) e na tela, PC e celular.
+3. Depois: ele pode apagar `DATABASE_URL_PROVISORIO` quando o card disser
+   "tudo trazido". Só DEPOIS disso retomar o multiusuário.
 
 ### O que entrou para isso não se repetir (23–24/09)
 

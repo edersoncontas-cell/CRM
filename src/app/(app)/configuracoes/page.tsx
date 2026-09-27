@@ -35,11 +35,13 @@ import { modoAtual } from "@/lib/tema-servidor";
 import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
 import { lerRegrasNegocio } from "@/lib/contexto-negocio";
 import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
+import { VoltaProvisorioCard } from "@/components/VoltaProvisorioCard";
+import { lerEstadoProvisorio } from "@/lib/trazer-provisorio-estado";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas, limpeza] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas, limpeza, provisorio] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -52,6 +54,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     lerEstadoDuplicadosAction().catch(() => ({ previa: { totalGrupos: 0, totalSomem: 0, grupos: [] }, historico: [] })),
     lerImportadasAction().catch(() => ({ total: 0, comCliente: 0, semCliente: 0 })),
     lerEstadoLimpezaAction().catch(() => ({ previa: { apagar: 0, consertar: 0, porMotivo: {}, exemplos: [] }, historico: [] })),
+    lerEstadoProvisorio(),
   ]);
 
   const integracoes = [
@@ -196,6 +199,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         </p>
         <BotaoManutencao />
       </Card>
+
+      <VoltaProvisorioCard inicial={provisorio} />
     </div>
   );
 }

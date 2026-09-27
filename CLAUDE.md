@@ -166,6 +166,13 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   Configuracao não existe. É o plano de desastre e o que permite um banco
   temporário grátis em outro provedor. **Mudou o schema.prisma → regerar o
   DDL** (`scripts/gerar-banco-do-zero.py`), senão o banco novo nasce velho.
+- **E volta dele sem perder a semana.** Configurações → "Trazer os dados do
+  banco provisório" (`lib/trazer-provisorio.ts`, variável
+  `DATABASE_URL_PROVISORIO`) soma o provisório ao principal sem duplicar e sem
+  deixar nada sair pelo WhatsApp. **Tabela nova no schema.prisma → decidir se
+  ela vem na volta** (etapa em `ETAPAS` ou `TABELAS_QUE_NAO_VEM`); o teste
+  `tests/trazer-provisorio.test.ts` falha enquanto ninguém decidir. Prova com
+  dois Postgres: `scripts/provar-trazer-provisorio.ts`.
 - **Chave de API é credencial:** nunca mostrar por extenso, nunca em log; a
   auditoria grava o provedor, nunca o valor.
 - **Nada que gere fatura sem dizer o custo na cara e deixar ele escolher.** Ele
