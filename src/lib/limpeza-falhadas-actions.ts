@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { registrarAudit } from "@/lib/audit";
-import { trechoInvariante, ehDoDisparo, type DisparoComFalhas } from "@/lib/limpeza-falhadas";
+import { trechosDoDisparo, ehDeAlgumTrecho, type DisparoComFalhas } from "@/lib/limpeza-falhadas";
+import { resumoDoEnvio } from "@/lib/envio-variacoes";
 
 // Apagar as mensagens que FALHARAM de um disparo.
 //
@@ -23,6 +24,13 @@ export type EstadoFalhadas = {
 };
 
 const LIMITE_LEITURA = 20_000;
+
+// Na tela vai a primeira versão do texto, e quantas outras há — nunca a marca
+// que separa as versões.
+function textoParaTela(texto: string): string {
+  const r = resumoDoEnvio(texto);
+  return r.versoes > 1 ? `${r.principal}\n(+${r.versoes - 1} outra(s) versão(ões) do texto)` : r.principal;
+}
 
 async function falhadasDoBanco() {
   return db.whatsAppMessage.findMany({
@@ -46,14 +54,15 @@ export async function lerFalhadasAction(): Promise<EstadoFalhadas> {
     const casadas = new Set<string>();
     const disparos: DisparoComFalhas[] = [];
     for (const e of envios) {
-      const trecho = trechoInvariante(e.texto);
-      if (!trecho) continue;
-      const minhas = msgs.filter((m) => ehDoDisparo(m.body, trecho));
+      const trechos = trechosDoDisparo(e.texto);
+      if (!trechos.length) continue;
+      const trecho = trechos[0];
+      const minhas = msgs.filter((m) => ehDeAlgumTrecho(m.body, trechos));
       if (!minhas.length) continue;
       for (const m of minhas) casadas.add(m.id);
       disparos.push({
         envioId: e.id,
-        texto: e.texto,
+        texto: textoParaTela(e.texto),
         trecho,
         quando: e.quando.toISOString(),
         status: e.status,
@@ -78,11 +87,11 @@ export async function apagarFalhadasDoDisparoAction(envioId: string): Promise<{ 
   try {
     const envio = await db.envioProgramado.findUnique({ where: { id: envioId }, select: { texto: true } });
     if (!envio) return { ok: false, apagadas: 0, erro: "Disparo não encontrado." };
-    const trecho = trechoInvariante(envio.texto);
-    if (!trecho) return { ok: false, apagadas: 0, erro: "O texto deste disparo é curto demais para separar com segurança." };
+    const trechos = trechosDoDisparo(envio.texto);
+    if (!trechos.length) return { ok: false, apagadas: 0, erro: "O texto deste disparo é curto demais para separar com segurança." };
 
     const msgs = await falhadasDoBanco();
-    const alvo = msgs.filter((m) => ehDoDisparo(m.body, trecho));
+    const alvo = msgs.filter((m) => ehDeAlgumTrecho(m.body, trechos));
     if (!alvo.length) return { ok: true, apagadas: 0 };
 
     const conversas = [...new Set(alvo.map((m) => m.conversationId))];
@@ -104,7 +113,7 @@ export async function apagarFalhadasDoDisparoAction(envioId: string): Promise<{ 
 
     await registrarAudit({
       acao: "mensagem_enviada", origem: "usuario",
-      descricao: `${r.count} mensagem(ns) com erro apagada(s) do disparo "${envio.texto.slice(0, 60)}…" em ${conversas.length} conversa(s).`,
+      descricao: `${r.count} mensagem(ns) com erro apagada(s) do disparo "${resumoDoEnvio(envio.texto).principal.slice(0, 60)}…" em ${conversas.length} conversa(s).`,
     }).catch(() => {});
 
     revalidatePath("/atendimento");

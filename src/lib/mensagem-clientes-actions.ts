@@ -18,6 +18,7 @@ import { personalizarTexto, periodoSemanaQueVem } from "@/lib/abordagem-cidade-r
 import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversario-regra";
 import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
 import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, comRodapeDeSaida } from "@/lib/envio-limites";
+import { textoParaCliente } from "@/lib/envio-variacoes";
 import { lerLimitesEnvio, enviadasHoje, separarElegiveis } from "@/lib/envio-guarda";
 import { envioPausado } from "@/lib/whatsapp-pausa";
 import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
@@ -231,10 +232,10 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
   const ids = elegiveis.liberados;
   if (!ids.length) return r;
 
-  // O rodapé entra uma vez só: comRodapeDeSaida não repete se o texto já
-  // falar em SAIR (o despachante também chama, e texto com dois rodapés é
-  // pior que texto sem nenhum).
-  const corpo = comRodapeDeSaida(base);
+  // O texto pode ter até 3 versões que se revezam (lib/envio-variacoes.ts):
+  // cada cliente recebe sempre a mesma. O rodapé entra em CADA versão, uma
+  // vez só: comRodapeDeSaida não repete se o texto já falar em SAIR (o
+  // despachante também chama, e texto com dois rodapés é pior que nenhum).
   const clientes = await db.cliente.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, telefone: true } });
   const porId = new Map(clientes.map((c) => [c.id, c]));
   for (let i = 0; i < ids.length; i++) {
@@ -244,7 +245,7 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
     const c = porId.get(ids[i]);
     if (!c) { r.falhas.push({ id: ids[i], nome: ids[i], erro: "Cliente não encontrado." }); continue; }
     try {
-      const pessoal = personalizarTexto(corpo, c.nome);
+      const pessoal = textoParaCliente(base, c);
       const res = midia ? await enviarComMidia(c, midia, pessoal) : await enviarResposta(c.id, pessoal);
       if (res.ok) { r.enviados.push(c.id); jaHoje += 1; }
       else r.falhas.push({ id: c.id, nome: c.nome, erro: res.erro ?? "Falha ao enviar." });

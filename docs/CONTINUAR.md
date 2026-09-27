@@ -265,9 +265,11 @@ resto continua aberto:
   "Feito para você" na Academia. O Orientador do Atendimento continua como
   estava.
 - **Auditoria seção por seção** (objetivo, integrações, ganhos, o que remover).
-- **3 textos que se revezam** no envio em massa — mensagem idêntica para muita
-  gente é assinatura de disparo. Ganhou urgência: é a última peça que falta da
-  proteção do número, e vale ANTES de ele liberar o envio de novo.
+- ~~**3 textos que se revezam** no envio em massa~~ — **FEITO (27/09).** Marketing →
+  "+ Revezar com outras versões do texto". As versões moram no mesmo campo
+  `EnvioProgramado.texto`, separadas pela marca ⟪variação⟫ (sem coluna nova);
+  cada cliente recebe sempre a mesma (sorteio pelo id). A limpeza de falhas
+  procura pelas 3 versões. Regras em `lib/envio-variacoes.ts`.
 
 Já escritos: `docs/CRM-PRODUTO.md` e `docs/PROMPT-APRESENTACAO.md`.
 

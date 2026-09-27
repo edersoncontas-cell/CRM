@@ -17,6 +17,7 @@ import {
 } from "@/lib/mensagem-clientes-actions";
 import type { ConfigAniversario } from "@/lib/aniversario-automatico";
 import { personalizarTexto, dividirEmLotes } from "@/lib/abordagem-cidade-regra";
+import { juntarVariacoes, versaoDoCliente, textosDoEnvio, MAX_VARIACOES } from "@/lib/envio-variacoes";
 import { motivosDeFora } from "@/lib/envio-limites";
 import {
   TIPOS_MENSAGEM, datasPorProximidade, rotuloDataComemorativa, publicosDoTipo, publicoPadrao, validarAnexo, BASES_ARTE, LIMITE_ANEXO_BYTES, JANELAS_ANIVERSARIO,
@@ -79,6 +80,10 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [dataId, setDataId] = useState(datas[0].id);
   const [promocao, setPromocao] = useState("");
   const [texto, setTexto] = useState("");
+  // Versões 2 e 3 do texto, que se revezam entre os clientes (opcional).
+  const [versoes, setVersoes] = useState<string[]>(["", ""]);
+  const [mostrarVersoes, setMostrarVersoes] = useState(false);
+  const [gerandoVersao, setGerandoVersao] = useState<number | null>(null);
   const [origemTexto, setOrigemTexto] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
   const [anexo, setAnexo] = useState<Anexo | null>(null);
@@ -157,6 +162,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   function escolherTipo(t: TipoMensagem) {
     setTipo(t);
     setTexto(""); setOrigemTexto(null); setAnexo(null); setErroAnexo(null); setArteAberta(false);
+    setVersoes(["", ""]); setMostrarVersoes(false);
     const p = publicoPadrao(t);
     setPublico(p);
     carregar(p);
@@ -164,6 +170,14 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   function escolherPublico(p: Publico) { setPublico(p); carregar(p); }
   function tirar(id: string) { setRemovidos((s) => new Set(s).add(id)); }
   function devolver(id: string) { setRemovidos((s) => { const n = new Set(s); n.delete(id); return n; }); }
+
+  // Outra versão do texto pela IA, para a vaga i das versões extras.
+  async function gerarVersao(i: number) {
+    setGerandoVersao(i);
+    const r = await gerarTextoMensagemAction({ tipo, cidade: cidadeNome || undefined, dataId, promocao }).catch(() => null);
+    setGerandoVersao(null);
+    if (r) setVersoes((v) => v.map((x, j) => (j === i ? r.texto : x)));
+  }
 
   async function gerar() {
     setGerando(true);
@@ -208,10 +222,16 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const comTelefone = naLista.filter((c) => c.telefone);
   const semTelefone = naLista.filter((c) => !c.telefone);
   const exemplo = comTelefone[0] ?? naLista[0];
+  // O que sai de fato: a mensagem principal e as versões extras, juntas (as
+  // vazias e as repetidas somem — lib/envio-variacoes.ts).
+  const textoFinal = juntarVariacoes([texto, ...versoes]);
+  const totalVersoes = textoFinal ? textosDoEnvio(textoFinal).length : 0;
+  const versaoExemplo = exemplo && textoFinal ? versaoDoCliente(textoFinal, exemplo.id) : null;
+  const extrasPreenchidas = versoes.filter((v) => v.trim()).length;
   // A prévia só DESABILITA quando ela já respondeu e o resultado é zero:
   // enquanto não respondeu, o botão continua vivo — travar por causa de uma
   // consulta lenta seria pior que deixar o servidor recusar depois.
-  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && !previa?.bloqueio && (texto.trim() !== "" || !!anexo);
+  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && !previa?.bloqueio && (textoFinal !== "" || !!anexo);
 
   // Confere a relação no servidor sempre que ela muda (trocou o público,
   // tirou alguém da lista). A chave é a lista de ids: sem ela o efeito
@@ -242,7 +262,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     if (!ok) return;
     setErroAgenda(null);
     setEnviando(true);
-    const r = await programarEnvioAction(comTelefone.map((c) => c.id), texto, anexo?.id ?? null, diaEnvio, horaEnvio)
+    const r = await programarEnvioAction(comTelefone.map((c) => c.id), textoFinal, anexo?.id ?? null, diaEnvio, horaEnvio)
       .catch(() => ({ ok: false, erro: "Falha ao programar." }));
     setEnviando(false);
     if (!r.ok) { setErroAgenda(r.erro ?? "Não deu para programar."); return; }
@@ -279,7 +299,9 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     const alvos = check ? check.ids : comTelefone.map((c) => c.id);
     const alvo = alvos.length;
     const deFora = check ? motivosDeFora(check) : "";
-    const amostra = texto.trim() ? personalizarTexto(texto, exemplo?.nome ?? "") : "(só o anexo)";
+    const amostra = versaoExemplo?.texto
+      ? personalizarTexto(versaoExemplo.texto, exemplo?.nome ?? "") + (totalVersoes > 1 ? `\n\n(esta é a versão ${versaoExemplo.numero} de ${totalVersoes}; cada cliente recebe uma delas)` : "")
+      : "(só o anexo)";
     const ok = confirm(
       `Mandar pelo WhatsApp para ${alvo} cliente(s) (${titulo})?` +
       (deFora ? `\n\nFicam de fora: ${deFora}.` : "") +
@@ -293,7 +315,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     let feitos = 0;
     for (const lote of dividirEmLotes(alvos, 3)) {
       setProgresso(`Enviando… ${feitos}/${alvo}`);
-      const r = await enviarMensagemClientesAction(lote, texto, anexo?.id ?? null).catch((e) => ({
+      const r = await enviarMensagemClientesAction(lote, textoFinal, anexo?.id ?? null).catch((e) => ({
         enviados: [] as string[],
         falhas: lote.map((id) => ({ id, nome: comTelefone.find((c) => c.id === id)?.nome ?? id, erro: e instanceof Error ? e.message : "falha" })),
       }));
@@ -531,15 +553,58 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
           />
           <p className="mt-1 text-[11px] text-slate-400">{origemTexto ?? "Dica: {nome} vira o primeiro nome de cada cliente."}</p>
 
-          {exemplo && (texto.trim() || anexo) && (
+          {/* Versões que se revezam: a mesma mensagem, idêntica, para muita
+              gente é o que o WhatsApp reconhece como disparo. */}
+          {!mostrarVersoes ? (
+            <button type="button" onClick={() => setMostrarVersoes(true)} disabled={enviando}
+              className="mt-2 text-xs font-semibold text-brand-700 hover:underline disabled:opacity-50">
+              + Revezar com outras versões do texto (até {MAX_VARIACOES}) — recomendado para listas grandes
+            </button>
+          ) : (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs leading-snug text-slate-600">
+                  <b className="text-slate-700">Versões que se revezam.</b> Cada cliente recebe uma delas — sempre a mesma, mesmo que a
+                  lista saia em várias ondas. O recado é o mesmo, com outras palavras: texto idêntico para muita gente é o que o
+                  WhatsApp reconhece como disparo.
+                </p>
+                <button type="button" onClick={() => { setMostrarVersoes(false); setVersoes(["", ""]); }} disabled={enviando}
+                  className="shrink-0 text-[11px] font-semibold text-slate-500 hover:underline">tirar</button>
+              </div>
+              {versoes.map((v, i) => (
+                <div key={i} className="mt-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Versão {i + 2}</span>
+                    <button type="button" onClick={() => gerarVersao(i)} disabled={gerandoVersao !== null || enviando || (tipo === "visita" && !cidadeNome)}
+                      className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                      {gerandoVersao === i ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} Gerar com IA
+                    </button>
+                  </div>
+                  <textarea value={v} rows={3} disabled={enviando}
+                    onChange={(e) => setVersoes((vs) => vs.map((x, j) => (j === i ? e.target.value : x)))}
+                    placeholder="Outra forma de dizer o mesmo recado (use {nome} também)."
+                    className={campo} />
+                </div>
+              ))}
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                {texto.trim() && extrasPreenchidas > 0 && totalVersoes < extrasPreenchidas + 1
+                  ? "Alguma versão está igual a outra — as repetidas não contam."
+                  : totalVersoes > 1 ? `${totalVersoes} versões vão se revezar.` : "Preencha pelo menos uma versão extra para revezar."}
+              </p>
+            </div>
+          )}
+
+          {exemplo && (textoFinal || anexo) && (
             <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-              <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Como {exemplo.nome.split(" ")[0]} vai receber</div>
+              <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
+                Como {exemplo.nome.split(" ")[0]} vai receber{versaoExemplo && versaoExemplo.total > 1 ? ` (versão ${versaoExemplo.numero} de ${versaoExemplo.total})` : ""}
+              </div>
               <div className="flex gap-3">
                 {anexo?.preview && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={anexo.preview} alt="" className="h-24 w-24 shrink-0 rounded-lg object-cover" />
                 )}
-                <p className="whitespace-pre-wrap text-sm text-slate-700">{texto.trim() ? personalizarTexto(texto, exemplo.nome) : <span className="text-slate-400">(só o anexo, sem texto)</span>}</p>
+                <p className="whitespace-pre-wrap text-sm text-slate-700">{versaoExemplo?.texto ? personalizarTexto(versaoExemplo.texto, exemplo.nome) : <span className="text-slate-400">(só o anexo, sem texto)</span>}</p>
               </div>
             </div>
           )}

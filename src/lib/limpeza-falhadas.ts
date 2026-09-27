@@ -18,6 +18,8 @@
 // "outras mensagens com erro", para ele ver e decidir. Apagar mensagem é sem
 // volta; palpite meu não vale.
 
+import { textosDoEnvio } from "@/lib/envio-variacoes";
+
 /**
  * O menor trecho que ainda identifica um disparo com segurança. Abaixo disso o
  * pedaço é genérico demais ("responda SAIR.") e pegaria mensagem de outro
@@ -47,6 +49,20 @@ export function trechoInvariante(textoDoDisparo: string): string | null {
   if (!pedacos.length) return null;
   const maior = pedacos.reduce((a, b) => (b.length > a.length ? b : a));
   return maior.length >= MINIMO_TRECHO ? maior : null;
+}
+
+/**
+ * Os trechos invariantes de TODAS as versões do disparo (o texto pode ter até
+ * 3 versões que se revezam — lib/envio-variacoes.ts). Versão curta demais não
+ * entra: as mensagens dela ficam em "outras", e ninguém apaga no palpite.
+ */
+export function trechosDoDisparo(textoDoDisparo: string): string[] {
+  return textosDoEnvio(textoDoDisparo).map(trechoInvariante).filter((t): t is string => !!t);
+}
+
+/** A mensagem gravada saiu deste disparo (de qualquer versão dele)? */
+export function ehDeAlgumTrecho(corpoDaMensagem: string, trechos: readonly string[]): boolean {
+  return trechos.some((t) => ehDoDisparo(corpoDaMensagem, t));
 }
 
 /** A mensagem gravada saiu deste disparo? */
