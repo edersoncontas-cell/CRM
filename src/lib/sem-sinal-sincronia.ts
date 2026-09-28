@@ -14,6 +14,7 @@ import {
 } from "@/lib/sem-sinal-regra";
 import { lerFila, guardarRegistros, apagarRegistros, lerPacote, guardarPacote, EVENTO_SEM_SINAL } from "@/lib/sem-sinal-local";
 import { restaurarSessao } from "@/lib/sessao-local";
+import { telaGuardavel, nomeDaTela, ordenarTelas, TELAS_PRINCIPAIS, type TelaGuardada } from "@/lib/sem-sinal-telas";
 
 export const PAGINA_SEM_SINAL = "/sem-sinal";
 
@@ -205,16 +206,31 @@ export async function descartar(r: RegistroFila): Promise<void> {
 }
 
 /**
- * Pede ao service worker para guardar a tela do modo sem sinal e os arquivos
- * dela. Sem isto, abrir o CRM sem internet cai na página de erro do
- * navegador. Não espera: se o worker ainda não está ativo, fica para a
- * próxima tela.
+ * Pede ao service worker para guardar a tela do modo sem sinal e as cópias
+ * das telas principais (cada uma no máximo 1×/hora — lib/sem-sinal-telas.ts).
+ * Sem isto, abrir o CRM sem internet cai na página de erro do navegador. Não
+ * espera: se o worker ainda não está ativo, fica para a próxima tela. A
+ * resposta chega por mensagem ("sem-sinal-preparado" e "telas-guardadas").
  */
-export function prepararModoSemSinal(): void {
+export function prepararModoSemSinal(forcar = false): void {
   try {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.ready
-      .then((reg) => reg.active?.postMessage({ tipo: "preparar-sem-sinal" }))
+      .then((reg) => reg.active?.postMessage({ tipo: "preparar-sem-sinal", forcar }))
+      .catch(() => {});
+  } catch { /* sem service worker */ }
+}
+
+/**
+ * A tela aberta por dentro do app (sem recarregar) não passa pelo worker como
+ * página inteira: ele pede de novo ao servidor para guardar a cópia — só se a
+ * que houver tiver mais de uma hora. Endereço com filtro (?…) não vira cópia.
+ */
+export function guardarTelaAtual(caminho: string, busca: string): void {
+  try {
+    if (busca || !telaGuardavel(caminho) || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.active?.postMessage({ tipo: "guardar-tela", caminho }))
       .catch(() => {});
   } catch { /* sem service worker */ }
 }
@@ -224,6 +240,36 @@ export async function modoSemSinalGuardado(): Promise<boolean | null> {
   try {
     if (typeof caches === "undefined") return null;
     return Boolean(await caches.match(PAGINA_SEM_SINAL, { ignoreSearch: true }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * As telas do CRM com cópia neste aparelho (lidas direto do cache, sem
+ * depender do worker acordado). null = o aparelho não deixa ler o cache.
+ */
+export async function telasGuardadas(): Promise<TelaGuardada[] | null> {
+  try {
+    if (typeof caches === "undefined") return null;
+    const porCaminho = new Map<string, TelaGuardada>();
+    for (const nome of await caches.keys()) {
+      if (!nome.startsWith("crm-")) continue;
+      const cache = await caches.open(nome);
+      for (const req of await cache.keys()) {
+        const caminho = new URL(req.url).pathname;
+        if (!telaGuardavel(caminho) || /\.[a-z0-9]+$/i.test(caminho)) continue;
+        const res = await cache.match(req);
+        if (!res?.headers.get("x-tela")) continue;
+        const em = Number(res.headers.get("x-guardado-em") ?? 0);
+        const atual = porCaminho.get(caminho);
+        if (atual && atual.guardadaEm >= em) continue;
+        let titulo = "";
+        try { titulo = decodeURIComponent(res.headers.get("x-titulo") ?? ""); } catch { /* título estranho */ }
+        porCaminho.set(caminho, { caminho, nome: nomeDaTela(caminho, titulo), guardadaEm: em, principal: TELAS_PRINCIPAIS.includes(caminho) });
+      }
+    }
+    return ordenarTelas([...porCaminho.values()]);
   } catch {
     return null;
   }

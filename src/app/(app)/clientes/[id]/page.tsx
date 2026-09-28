@@ -114,7 +114,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
           {iniciais(cliente.nome)}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-slate-800">{cliente.nome}</h1>
+          {/* Cor do tema (como o PageHeader): slate-800 fixo sumia no fundo escuro. */}
+          <h1 className="text-2xl font-bold text-[var(--sobre-fundo-titulo)]">{cliente.nome}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             {cliente.telefone && (
               <span className="flex items-center gap-1"><Phone size={14} /> {cliente.telefone}</span>

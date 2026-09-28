@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { PontoVenda } from "@/lib/vendas-dashboard";
+import { SemMapaSemInternet } from "@/components/SemMapaSemInternet";
 
 // Leaflet só funciona no cliente — carrega sem SSR.
 const Mapa = dynamic(() => import("./MapaVendasES"), {
@@ -18,7 +19,10 @@ const Mapa = dynamic(() => import("./MapaVendasES"), {
 export function MapaVendasWrapper(props: { pontosIniciais: PontoVenda[]; pontosTudoIniciais: PontoVenda[]; ano: number }) {
   return (
     <div className="isolate relative z-0">
-      <Mapa {...props} />
+      {/* Sem internet o arquivo do mapa não chega: só ele avisa, a tela fica. */}
+      <SemMapaSemInternet altura={420}>
+        <Mapa {...props} />
+      </SemMapaSemInternet>
     </div>
   );
 }

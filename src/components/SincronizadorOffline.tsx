@@ -1,31 +1,64 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { WifiOff, CloudUpload, AlertTriangle, Loader2 } from "lucide-react";
+import { WifiOff, CloudUpload, AlertTriangle, Loader2, History, RefreshCw } from "lucide-react";
 import { useSemSinal, useOnline, useSincroniaAutomatica } from "@/components/sem-sinal/useSemSinal";
-import { prepararModoSemSinal, PAGINA_SEM_SINAL } from "@/lib/sem-sinal-sincronia";
+import { prepararModoSemSinal, guardarTelaAtual, PAGINA_SEM_SINAL } from "@/lib/sem-sinal-sincronia";
 import { pedirArmazenamentoPersistente } from "@/lib/sem-sinal-local";
 import { contarFila } from "@/lib/sem-sinal-regra";
+import { ehCopia, quandoFoi } from "@/lib/sem-sinal-telas";
+
+// Espera a tela aberta terminar de carregar antes de pedir a cópia dela: o
+// pedido monta a tela de novo no servidor, e não pode disputar com a de agora.
+const ESPERA_COPIA_MS = 4000;
 
 // Em TODA tela do CRM (layout do grupo app):
-//  - pede ao service worker para guardar a tela do modo sem sinal;
+//  - pede ao service worker para guardar a tela do modo sem sinal e as
+//    cópias das telas principais (e da tela aberta, para ler sem sinal);
 //  - baixa o pacote (no máximo a cada 30 min) e sobe o que ficou pendente;
-//  - mostra um aviso pequeno quando a internet cai ("abrir modo sem sinal")
-//    ou quando há registro feito sem sinal que ainda não subiu.
+//  - mostra um aviso pequeno quando a internet cai, quando a tela é a CÓPIA
+//    guardada (e de quando ela é), ou quando há registro feito sem sinal que
+//    ainda não subiu.
 // Sem nada disso, ele só descobriria o modo sem sinal sem internet — que é
 // justamente quando não daria mais para baixar nada.
-export function SincronizadorOffline() {
+export function SincronizadorOffline({ renderizadoEm }: { renderizadoEm: number }) {
   const online = useOnline();
   const { fila, sinc } = useSemSinal();
   useSincroniaAutomatica();
   const caminho = usePathname();
   const c = useMemo(() => contarFila(fila), [fila]);
+  // Cópia: a tela foi montada no servidor bem antes de o aparelho abri-la —
+  // veio do cache do aparelho, não da internet. Decide uma vez, ao abrir.
+  const [copia, setCopia] = useState<number | null>(null);
+
+  useEffect(() => {
+    const aberto = typeof performance !== "undefined" && performance.timeOrigin ? performance.timeOrigin : Date.now();
+    if (ehCopia(renderizadoEm, aberto)) setCopia(renderizadoEm);
+    // Só na abertura: numa troca de tela por dentro do app o layout não é
+    // montado de novo, e num "atualizar" a hora nova não é de cópia.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     prepararModoSemSinal();
     pedirArmazenamentoPersistente();
+    // App que volta do fundo (celular) não recarrega: renova as cópias ao
+    // voltar para a tela. O worker só refaz o que tiver mais de uma hora.
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible" && navigator.onLine !== false) prepararModoSemSinal();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => document.removeEventListener("visibilitychange", aoVoltar);
   }, []);
+
+  // A tela aberta por dentro do app vira cópia também (a ficha do cliente
+  // que ele viu de manhã abre sem sinal à tarde).
+  useEffect(() => {
+    if (copia || !caminho || !online) return;
+    const t = window.setTimeout(() => guardarTelaAtual(window.location.pathname, window.location.search), ESPERA_COPIA_MS);
+    return () => window.clearTimeout(t);
+  }, [caminho, copia, online]);
 
   const destino = (aba?: string) => `${PAGINA_SEM_SINAL}?de=${encodeURIComponent(caminho ?? "/dashboard")}${aba ? `&aba=${aba}` : ""}`;
 
@@ -35,7 +68,30 @@ export function SincronizadorOffline() {
   const discreto = Boolean(caminho?.startsWith("/atendimento"));
 
   let conteudo: React.ReactNode = null;
-  if (!online) {
+  if (copia && !online) {
+    conteudo = (
+      <a href={destino()} className="flex items-start gap-2 rounded-2xl bg-slate-900 px-3.5 py-2 text-xs font-semibold leading-snug text-white shadow-lg ring-1 ring-white/10">
+        <History size={14} className="mt-px shrink-0 text-agro-400" />
+        <span>
+          Sem internet · esta tela é a cópia guardada {quandoFoi(copia, Date.now())}, só para ler.{" "}
+          <span className="underline">Registrar pelo modo sem sinal</span>
+        </span>
+      </a>
+    );
+  } else if (copia) {
+    // Com internet e ainda assim cópia: o sinal voltou depois de abrir, ou o
+    // CRM não respondeu a tempo (banco acordando, sinal fraco). Atualizar
+    // tenta a tela de agora.
+    conteudo = (
+      <button type="button" onClick={() => window.location.reload()} className="flex items-start gap-2 rounded-2xl bg-amber-400 px-3.5 py-2 text-left text-xs font-semibold leading-snug text-slate-900 shadow-lg">
+        <History size={14} className="mt-px shrink-0" />
+        <span>
+          Esta tela é a cópia guardada {quandoFoi(copia, Date.now())} e pode estar desatualizada.{" "}
+          <span className="inline-flex items-center gap-1 underline"><RefreshCw size={12} /> Atualizar</span>
+        </span>
+      </button>
+    );
+  } else if (!online) {
     conteudo = (
       <a href={destino()} className="flex items-center gap-2 rounded-full bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-lg ring-1 ring-white/10">
         <WifiOff size={14} className="text-agro-400" /> Sem internet · <span className="underline">abrir modo sem sinal</span>
@@ -66,7 +122,7 @@ export function SincronizadorOffline() {
       className="pointer-events-none fixed inset-x-0 z-[90] flex justify-center px-4 print:hidden"
       style={{ bottom: "calc(var(--rodape-mercado, 30px) + 12px + env(safe-area-inset-bottom))" }}
     >
-      <div className="pointer-events-auto max-w-full">{conteudo}</div>
+      <div className="pointer-events-auto max-w-full sm:max-w-xl">{conteudo}</div>
     </div>
   );
 }

@@ -12,9 +12,10 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Modo sem sinal"** (28/09). **1.210 testes
-passando** (103 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
-"manutencao.v44"` (o modo sem sinal não mexeu no schema).
+Último commit com código: **"Telas guardadas para ler sem internet"** (28/09).
+**1.235 testes passando** (106 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
+"manutencao.v44"` (o modo sem sinal e as telas guardadas não mexeram no
+schema).
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
@@ -274,6 +275,44 @@ demais dados assim que a internet chegar tudo atualiza".
   iPhone precisa (Cache, IndexedDB, BroadcastChannel, `navigator.locks`,
   `crypto.randomUUID`) existe do iOS 15.4 em diante; `randomUUID` e a trava
   têm alternativa para aparelho mais velho.
+
+### Mesmo dia, depois do teste dele: "funcionou somente a parte das visitas"
+
+Sem rede, TODA tela ia para o modo sem sinal — ele via as visitas e mais nada
+do CRM. Agora:
+
+- **As outras telas abrem como cópia para ler** (`lib/sem-sinal-telas.ts`;
+  o worker saiu da rota para `lib/sw-codigo.ts`). Tela aberta com internet
+  vira cópia de graça (o servidor já montou); as 6 principais (Dashboard,
+  Negociações, Visitas, Clientes, Alertas, Demandas) são guardadas por trás,
+  no máximo 1×/hora cada (peso no banco grátis); a tela aberta por dentro do
+  app (a ficha do cliente) é pedida de novo ao servidor, também 1×/hora.
+  Teto de 40 cópias. Endereço com filtro (`?…`) não vira cópia. WhatsApp,
+  Conexão, Configurações, Central, ZEUS e Auditoria nunca viram cópia.
+- **A tela diz que é cópia e de quando** ("Sem internet · esta tela é a cópia
+  guardada hoje às 11:02, só para ler") — o layout manda a hora em que montou
+  a tela, e o `SincronizadorOffline` compara com a hora em que o aparelho a
+  abriu (`ehCopia`, folga de 3 min para relógio adiantado).
+- **Tela com erro não vira cópia** (a marca `data-crm-tela="ok"` só sai com o
+  banco de pé; `$RX` ou `<template data-dgst>` que não seja o do mapa = pedaço
+  que caiu). Sem isso, um "banco fora do ar" apagaria a cópia boa.
+- O modo sem sinal ganhou a faixa **"Telas guardadas, para ler"** (atalho para
+  cada cópia, com a hora), o **motivo** quando uma tela veio parar ali ("ainda
+  não tem cópia" / "só funciona com internet"), o motivo quando o preparo
+  falha (antes: "guardando agora" para sempre) e a aba **Clientes mostra a
+  lista sem precisar buscar** (60 primeiros em ordem alfabética).
+- A tela de erro do app, sem internet, diz "Sem internet para isto" e leva ao
+  modo sem sinal, em vez de "Algo deu errado".
+- **Defeito achado no caminho, sem relação com o offline:** a tela
+  **Demandas caía inteira** COM internet ("Algo deu errado nesta página") desde
+  15/09 (`075c231`): `DemandasLista` importava `ROTULO_ORIGEM` de
+  `lib/demandas.ts`, que abre o banco — o Prisma ia para o navegador. O rótulo
+  mudou para `lib/demandas-rotulos.ts`; `tests/cliente-sem-banco.test.ts`
+  varre todo "use client" atrás do mesmo erro (só havia este).
+- **Defeito do próprio modo sem sinal, pego no teste:** a lista de arquivos da
+  tela cortava o nome no parêntese (`app/(app)/…`), e a cópia ficava sem o
+  script dela. `tests/sw-worker.test.ts` roda o worker gerado num navegador
+  de mentira (cache, rede e eventos falsos) — 14 casos, incluindo este.
 
 ## Em aberto (ofereci, ele não respondeu)
 

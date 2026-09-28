@@ -87,8 +87,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           foram sinalizadas (ver lib/visitas-do-dia.ts). */}
       <LembreteVisitasDoDia />
       {/* Modo sem sinal: guarda o que é preciso para abrir sem internet, sobe
-          o que foi feito sem sinal e avisa quando a internet cai. */}
-      <SincronizadorOffline />
+          o que foi feito sem sinal e avisa quando a internet cai. A hora de
+          agora vai junto: aberta de uma cópia guardada, a tela sabe que é
+          cópia (e de quando) comparando com a hora em que o aparelho a abriu. */}
+      <SincronizadorOffline renderizadoEm={Date.now()} />
+      {/* Só tela que o banco respondeu vira cópia para ler sem sinal — a de
+          "banco fora do ar" não pode tomar o lugar de uma cópia boa
+          (lib/sem-sinal-telas.ts, MARCA_TELA_OK). */}
+      {saude.ok && !recemCriado && <span hidden data-crm-tela="ok" />}
     </div>
   );
 }

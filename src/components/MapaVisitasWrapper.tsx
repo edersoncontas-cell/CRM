@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { VisitaMapa, DiaMapa, AgendaProxima } from "./MapaVisitasES";
+import { SemMapaSemInternet } from "@/components/SemMapaSemInternet";
 
 const Mapa = dynamic(() => import("./MapaVisitasES"), {
   ssr: false,
@@ -15,7 +16,10 @@ const Mapa = dynamic(() => import("./MapaVisitasES"), {
 export function MapaVisitasWrapper(props: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[] }) {
   return (
     <div className="isolate relative z-0">
-      <Mapa {...props} />
+      {/* Sem internet o arquivo do mapa não chega: só ele avisa, a tela fica. */}
+      <SemMapaSemInternet altura={460}>
+        <Mapa {...props} />
+      </SemMapaSemInternet>
     </div>
   );
 }

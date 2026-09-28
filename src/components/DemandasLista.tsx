@@ -13,7 +13,8 @@ import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, s
 import { CSS } from "@dnd-kit/utilities";
 import { criarDemandaAction, editarDemandaAction, alternarDemandaAction, excluirTarefa, reordenarDemandasAction } from "@/lib/actions";
 import type { DemandaDTO, GrupoDemandas } from "@/lib/demandas";
-import { ROTULO_ORIGEM } from "@/lib/demandas";
+// Rótulo de arquivo SEM banco: de lib/demandas.ts viria o Prisma junto para o navegador.
+import { ROTULO_ORIGEM } from "@/lib/demandas-rotulos";
 import { cn } from "@/lib/utils";
 import { Plus, Check, Circle, CheckCircle2, MapPin, User, CalendarClock, Trash2, Pencil, X, Loader2, AlertTriangle, Flag, ListChecks, Mic, Square, GripVertical, Sparkles } from "lucide-react";
 

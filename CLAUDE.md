@@ -198,6 +198,16 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   o que foi feito na rua escapa dela. Mudou o formato do pacote → sobe
   `VERSAO_PACOTE`. `/sw.js` e `/manifest.json` ficam FORA do login: worker
   desviado para /login não instala.
+  As demais telas abrem sem sinal como **cópia para ler**
+  (`lib/sem-sinal-telas.ts`, worker em `lib/sw-codigo.ts`). Tela nova ao vivo
+  (conversa, conexão) entra em `TELAS_SEM_COPIA`; tela que gasta IA ou grava
+  ao ser montada NÃO pode estar em `TELAS_PRINCIPAIS` (são remontadas por
+  trás). O worker roda de verdade em `tests/sw-worker.test.ts` — mexeu nele,
+  o teste diz se a cópia ainda abre.
+- **Componente "use client" não importa valor de arquivo que abre o banco**
+  (leva o Prisma para o navegador e a tela cai inteira — derrubou Demandas).
+  Constante que a tela usa mora em arquivo sem banco;
+  `tests/cliente-sem-banco.test.ts` pega.
 
 ## 9. Comandos que ele usa pelo nome
 

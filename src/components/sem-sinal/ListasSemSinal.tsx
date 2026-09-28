@@ -200,6 +200,9 @@ export function VisitasSemSinal({
 
 // ── Clientes ────────────────────────────────────────────────────────────────
 
+/** Quantos aparecem antes de ele escrever na busca. */
+const SEM_BUSCA = 60;
+
 export function ClientesSemSinal({
   clientes, total, onVisita, onNegociacao,
 }: {
@@ -209,7 +212,14 @@ export function ClientesSemSinal({
   onNegociacao: (c: ClienteEscolhido) => void;
 }) {
   const [termo, setTermo] = useState("");
-  const achados = useMemo(() => buscarClientes(clientes, termo, 40), [clientes, termo]);
+  const buscando = termo.trim().length > 0;
+  // Sem nada escrito, a lista já aparece (em ordem alfabética): só a caixa de
+  // busca parecia aba vazia — "os clientes não apareceram".
+  const emOrdem = useMemo(() => [...clientes].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")), [clientes]);
+  const achados = useMemo(
+    () => (buscando ? buscarClientes(clientes, termo, 40) : { itens: emOrdem.slice(0, SEM_BUSCA), total: emOrdem.length }),
+    [buscando, clientes, emOrdem, termo],
+  );
   const escolhido = (c: ClienteVista): ClienteEscolhido => ({ id: c.id, nome: c.nome, telefone: c.telefone, municipio: c.municipio });
   return (
     <section className={`${cartao} p-4`}>
@@ -221,34 +231,36 @@ export function ClientesSemSinal({
         {clientes.length.toLocaleString("pt-BR")} clientes guardados neste aparelho
         {total > clientes.length && <> (de {total.toLocaleString("pt-BR")} no CRM — os demais só com internet)</>}.
       </p>
-      {termo.trim() && (
-        achados.total === 0 ? (
-          <p className="mt-3 rounded-xl bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">Ninguém com “{termo.trim()}” no que está guardado.</p>
-        ) : (
-          <>
-            <ul className={`mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100 ${rolagem}`}>
-              {achados.itens.map((c) => (
-                <li key={c.id} className="px-3 py-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="break-words font-semibold text-slate-900">{c.nome}</span>
-                    <SeloSincronia sync={c.sync} />
-                  </div>
-                  <div className="text-xs text-slate-500">{[c.municipio, c.telefone].filter(Boolean).join(" · ") || "sem cidade e telefone"}</div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {c.telefone && (
-                      <a href={`tel:${c.telefone}`} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Phone size={13} /> Ligar</a>
-                    )}
-                    <button type="button" onClick={() => onVisita(escolhido(c))} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><CalendarPlus size={13} /> Visita</button>
-                    <button type="button" onClick={() => onNegociacao(escolhido(c))} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Handshake size={13} /> Negociação</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {achados.total > achados.itens.length && (
-              <p className="mt-2 text-xs text-slate-500">Mostrando {achados.itens.length} de {achados.total}. Escreva mais para achar.</p>
-            )}
-          </>
-        )
+      {achados.total === 0 ? (
+        <p className="mt-3 rounded-xl bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">
+          {buscando ? <>Ninguém com “{termo.trim()}” no que está guardado.</> : "Nenhum cliente guardado neste aparelho."}
+        </p>
+      ) : (
+        <>
+          <ul className={`mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100 ${rolagem}`}>
+            {achados.itens.map((c) => (
+              <li key={c.id} className="px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="break-words font-semibold text-slate-900">{c.nome}</span>
+                  <SeloSincronia sync={c.sync} />
+                </div>
+                <div className="text-xs text-slate-500">{[c.municipio, c.telefone].filter(Boolean).join(" · ") || "sem cidade e telefone"}</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {c.telefone && (
+                    <a href={`tel:${c.telefone}`} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Phone size={13} /> Ligar</a>
+                  )}
+                  <button type="button" onClick={() => onVisita(escolhido(c))} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><CalendarPlus size={13} /> Visita</button>
+                  <button type="button" onClick={() => onNegociacao(escolhido(c))} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"><Handshake size={13} /> Negociação</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {achados.total > achados.itens.length && (
+            <p className="mt-2 text-xs text-slate-500">
+              Mostrando {achados.itens.length} de {achados.total.toLocaleString("pt-BR")}{buscando ? "" : " em ordem alfabética"}. Escreva {buscando ? "mais " : ""}para achar{buscando ? "" : " os demais"}.
+            </p>
+          )}
+        </>
       )}
     </section>
   );

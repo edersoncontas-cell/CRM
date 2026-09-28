@@ -14,14 +14,8 @@ export type OrigemDemanda = "manual" | "orientador" | "posvenda" | "cerebro" | "
 export const COLUNA_ABERTA = "demandas";
 export const COLUNA_CONCLUIDA = "demandas_concluida";
 
-export const ROTULO_ORIGEM: Record<string, string> = {
-  manual: "Você",
-  audio: "Por áudio",
-  orientador: "Orientador",
-  posvenda: "Pós-venda",
-  cerebro: "Cérebro",
-  zeus: "ZEUS",
-};
+// Os rótulos moram num arquivo sem banco: a tela (navegador) importa de lá.
+export { ROTULO_ORIGEM } from "@/lib/demandas-rotulos";
 
 export function lerChecklist(raw: string | null | undefined): ItemChecklist[] {
   if (!raw) return [];

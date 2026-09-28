@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { WifiOff, Wifi, CalendarPlus, Handshake, Loader2, AlertTriangle, CloudUpload, ArrowLeft, RefreshCw, CheckCircle2 } from "lucide-react";
+import { WifiOff, Wifi, CalendarPlus, Handshake, Loader2, AlertTriangle, CloudUpload, ArrowLeft, RefreshCw, CheckCircle2, History } from "lucide-react";
 import { useSemSinal, useOnline, useSincroniaAutomatica } from "@/components/sem-sinal/useSemSinal";
 import { FormVisitaSemSinal, FormNegociacaoSemSinal } from "@/components/sem-sinal/FormulariosSemSinal";
 import { VisitasSemSinal, ClientesSemSinal, FunilSemSinal, PendentesSemSinal } from "@/components/sem-sinal/ListasSemSinal";
 import type { ClienteEscolhido } from "@/components/sem-sinal/SeletorClienteSemSinal";
 import { guardarRegistros, pedirArmazenamentoPersistente } from "@/lib/sem-sinal-local";
-import { sincronizar, tentarDeNovo, descartar, prepararModoSemSinal, modoSemSinalGuardado } from "@/lib/sem-sinal-sincronia";
+import { sincronizar, tentarDeNovo, descartar, prepararModoSemSinal, modoSemSinalGuardado, telasGuardadas } from "@/lib/sem-sinal-sincronia";
+import { quandoFoi, horaCurta, avisoDoDesvio, nomeDaTela, TELAS_PRINCIPAIS, type TelaGuardada } from "@/lib/sem-sinal-telas";
 import { aplicarPendentes, contarFila, diaBrasilia, novoId, novoRegistro, type OperacaoSemSinal, type VisitaVista } from "@/lib/sem-sinal-regra";
 import { COOKIE_TEMA, modoValido } from "@/lib/tema";
 import { cn } from "@/lib/utils";
@@ -21,21 +22,13 @@ import { cn } from "@/lib/utils";
 //
 // Os quatro estados: carregando (lendo o aparelho), erro (o aparelho não
 // deixa guardar), vazio (nunca baixou nada aqui) e o normal.
+//
+// As OUTRAS telas do CRM (Dashboard, Negociações, Clientes…) abrem sem sinal
+// como cópia para ler (lib/sem-sinal-telas.ts); a faixa "Telas guardadas"
+// daqui leva a elas, e o aviso do topo diz por que uma tela veio parar aqui.
 
 type Aba = "visitas" | "clientes" | "funil" | "pendentes";
 type Painel = null | { tipo: "visita" | "negociacao"; cliente?: ClienteEscolhido };
-
-function quandoFoi(iso: string, agora: number): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "em data desconhecida";
-  const hora = new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-  const dia = diaBrasilia(t);
-  const hoje = diaBrasilia(agora);
-  if (dia === hoje) return `hoje às ${hora}`;
-  const dias = Math.round((Date.parse(`${hoje}T12:00:00Z`) - Date.parse(`${dia}T12:00:00Z`)) / 86_400_000);
-  if (dias === 1) return `ontem às ${hora}`;
-  return `há ${dias} dias (${dia.slice(8, 10)}/${dia.slice(5, 7)} às ${hora})`;
-}
 
 export function ModoSemSinal() {
   const { carregado, falha, pacote, fila, sinc } = useSemSinal();
@@ -47,6 +40,11 @@ export function ModoSemSinal() {
   const [guardado, setGuardado] = useState<boolean | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
   const [agora, setAgora] = useState(() => Date.now());
+  // undefined = lendo; null = o aparelho não deixa ler o cache.
+  const [telas, setTelas] = useState<TelaGuardada[] | null | undefined>(undefined);
+  const [falhaPreparo, setFalhaPreparo] = useState<string | null>(null);
+  const [falhasTelas, setFalhasTelas] = useState<string[]>([]);
+  const [desvio, setDesvio] = useState<string | null>(null);
 
   useEffect(() => {
     // A tela pode ter vindo do cache do aparelho, montada com o tema de
@@ -56,15 +54,30 @@ export function ModoSemSinal() {
 
     const q = new URLSearchParams(window.location.search);
     const origem = q.get("de");
-    if (origem && origem.startsWith("/") && !origem.startsWith("//") && !origem.startsWith("/sem-sinal")) setDe(origem);
+    const deValido = origem && origem.startsWith("/") && !origem.startsWith("//") && !origem.startsWith("/sem-sinal") ? origem : null;
+    if (deValido) setDe(deValido);
+    setDesvio(avisoDoDesvio(q.get("motivo"), deValido));
     const a = q.get("aba");
     if (a === "pendentes" || a === "clientes" || a === "funil") setAba(a);
 
     pedirArmazenamentoPersistente();
     prepararModoSemSinal();
     modoSemSinalGuardado().then(setGuardado);
+    telasGuardadas().then(setTelas);
     const aoResponder = (e: MessageEvent) => {
-      if (e.data?.tipo === "sem-sinal-preparado") modoSemSinalGuardado().then(setGuardado);
+      if (e.data?.tipo === "sem-sinal-preparado") {
+        // Falhou: a tela diz o motivo em vez de "guardando agora" para sempre.
+        setFalhaPreparo(e.data.ok === false ? String(e.data.motivo ?? "motivo desconhecido") : null);
+        modoSemSinalGuardado().then(setGuardado);
+      }
+      if (e.data?.tipo === "telas-guardadas") {
+        // O worker diz "/alertas: motivo"; para ele, o nome do menu.
+        setFalhasTelas(Array.isArray(e.data.falhas) ? e.data.falhas.map((f: unknown) => {
+          const [caminho, ...resto] = String(f).split(": ");
+          return resto.length ? `${nomeDaTela(caminho)}: ${resto.join(": ")}` : String(f);
+        }) : []);
+        telasGuardadas().then(setTelas);
+      }
     };
     navigator.serviceWorker?.addEventListener("message", aoResponder);
     const t = window.setInterval(() => setAgora(Date.now()), 60_000);
@@ -145,7 +158,9 @@ export function ModoSemSinal() {
           )}
           {guardado === false && (
             <p className="mt-1 text-xs font-semibold text-amber-500">
-              Esta tela ainda não ficou guardada no aparelho para abrir sem internet{online ? " — guardando agora." : "."}
+              {falhaPreparo
+                ? `Esta tela não ficou guardada no aparelho para abrir sem internet: ${falhaPreparo.replace(/\.+$/, "")}.`
+                : `Esta tela ainda não ficou guardada no aparelho para abrir sem internet${online ? " — guardando agora." : "."}`}
             </p>
           )}
           {guardado === true && online && !falha && (
@@ -167,18 +182,63 @@ export function ModoSemSinal() {
             {contagem.pendentes ? `Enviar agora (${contagem.pendentes})` : "Baixar de novo"}
           </button>
         )}
-        {online && (
-          <a href={de ?? "/dashboard"} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--menu-borda)] bg-[var(--menu-fundo)] px-3 py-2 text-xs font-semibold text-[var(--menu-texto)]">
-            <ArrowLeft size={14} /> Voltar ao CRM
-          </a>
-        )}
+        {/* Sem internet também: a tela de onde ele veio abre da cópia (ou
+            volta para cá dizendo que não tem cópia). */}
+        <a href={de ?? "/dashboard"} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--menu-borda)] bg-[var(--menu-fundo)] px-3 py-2 text-xs font-semibold text-[var(--menu-texto)]">
+          <ArrowLeft size={14} /> Voltar ao CRM
+        </a>
       </div>
     </header>
+  );
+
+  // ── As outras telas do CRM guardadas neste aparelho (cópia para ler) ──
+  const faixaTelas = (
+    <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-sm" aria-label="Telas guardadas">
+      {desvio && (
+        <p className="mb-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-xs font-semibold text-amber-800">
+          <AlertTriangle size={13} className="mt-px shrink-0" /> {desvio}
+        </p>
+      )}
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><History size={15} className="text-slate-500" /> Telas guardadas, para ler</h2>
+        {telas && telas.length > 0 && <span className="shrink-0 text-[11px] text-slate-500">{telas.length}</span>}
+      </div>
+      {telas === undefined ? (
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500"><Loader2 size={12} className="animate-spin" /> Conferindo o que está guardado…</p>
+      ) : telas === null ? (
+        <p className="mt-1.5 text-xs font-semibold text-red-700">Este aparelho não deixa ler as telas guardadas (aba anônima ou armazenamento bloqueado).</p>
+      ) : telas.length === 0 ? (
+        <p className="mt-1.5 text-xs leading-snug text-slate-500">
+          Nenhuma ainda. Com internet, o CRM guarda sozinho {TELAS_PRINCIPAIS.length} telas principais (Dashboard, Negociações, Visitas, Clientes, Alertas e Demandas) e toda tela que você abrir.
+        </p>
+      ) : (
+        <>
+          {/* 3 linhas e meia: a meia linha mostra que há mais para rolar. */}
+          <div className="mt-2 flex max-h-[8.4rem] flex-wrap gap-1.5 overflow-y-auto">
+            {telas.map((t) => (
+              <a key={t.caminho} href={t.caminho} className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                <span className="truncate">{t.nome}</span>
+                <span className="shrink-0 font-normal tabular-nums text-slate-500">{horaCurta(t.guardadaEm, agora)}</span>
+              </a>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
+            Sem internet, a tela abre como estava na hora marcada. Para agendar, concluir ou abrir negociação, use esta tela.
+          </p>
+        </>
+      )}
+      {falhasTelas.length > 0 && (
+        <p className="mt-1.5 break-words text-[11px] font-semibold text-amber-700">
+          Não guardou agora: {falhasTelas.slice(0, 3).join(" · ")}{falhasTelas.length > 3 ? ` (+${falhasTelas.length - 3})` : ""}.
+        </p>
+      )}
+    </section>
   );
 
   const moldura = (conteudo: React.ReactNode) => (
     <main className="mx-auto min-h-screen max-w-3xl px-4 pb-16 sm:px-6" style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}>
       {cabecalho}
+      {faixaTelas}
       {conteudo}
     </main>
   );
