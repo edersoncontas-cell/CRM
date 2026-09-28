@@ -21,7 +21,9 @@ export type AcaoAudit =
   // registro guarda o FATO e o provedor, nunca o valor da chave.
   | "chave_ia_alterada"
   // Volta do banco provisório para o principal (Configurações).
-  | "dados_provisorio_trazidos";
+  | "dados_provisorio_trazidos"
+  // O que o vendedor fez no modo sem sinal e subiu quando a internet voltou.
+  | "offline_sincronizado";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

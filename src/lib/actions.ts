@@ -11,6 +11,8 @@ import { vincularMunicipio, alimentarNegociacao, registrarVisitaAgenda } from ".
 import { montarContextoCliente } from "./zeus/cerebro-resposta";
 import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA, COL_PERDIDO, ESTAGIOS, papelDaColuna, PAPEIS_COLUNA, FUNIL_CANONICO, type PapelColuna, rotuloMotivoPerda } from "./pipeline";
 import { sincronizarVisitaComAgenda, removerEventoDaVisita } from "./integrations/google";
+import { criarVisitaNoBanco } from "./visita-criar";
+import { ID_VALIDO } from "./sem-sinal-regra";
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
@@ -366,26 +368,16 @@ export async function adicionarVisita(clienteId: string, formData: FormData) {
   if (!dataRaw) return;
   // Campo "data" no formato YYYY-MM-DD + "horario" opcional HH:mm (seletor
   // estilo iOS). Sem horário, mantém meio-dia em Brasília (evita virar o dia
-  // anterior por diferença de fuso ao salvar no banco).
-  const horarioRaw = String(formData.get("horario") ?? "").trim();
-  const horario = /^\d{2}:\d{2}$/.test(horarioRaw) ? horarioRaw : "12:00";
-  const data = new Date(`${dataRaw}T${horario}:00-03:00`);
-  // Cidade da visita: a informada no formulário; senão, o município do cadastro.
-  let cidade = String(formData.get("cidade") ?? "").trim() || null;
-  if (!cidade) {
-    const cli = await db.cliente.findUnique({ where: { id: clienteId }, select: { municipio: { select: { nome: true } } } });
-    cidade = cli?.municipio?.nome ?? null;
-  }
-  const visita = await db.visita.create({
-    data: {
-      clienteId,
-      data,
-      cidade,
-      observacao: String(formData.get("observacao") ?? "") || null,
-    },
+  // anterior por diferença de fuso ao salvar no banco). A conta, a cidade
+  // padrão, a agenda do Google e o "visitado" moram em lib/visita-criar.ts —
+  // o modo sem sinal cria visita pelo mesmo caminho.
+  await criarVisitaNoBanco({
+    clienteId,
+    dia: dataRaw,
+    horario: String(formData.get("horario") ?? "").trim() || null,
+    cidade: String(formData.get("cidade") ?? ""),
+    observacao: String(formData.get("observacao") ?? ""),
   });
-  await sincronizarVisitaComAgenda(visita.id).catch((e) => console.error("[google] visita:", e));
-  await db.cliente.update({ where: { id: clienteId }, data: { visitado: true } });
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
   revalidatePath("/visitas");
@@ -2262,8 +2254,12 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const crdQtdRaw = String(formData.get("crdSaldoParcelasQtd") ?? "");
   const crdParcelaRaw = String(formData.get("crdParcelaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
 
+  // Id vindo de fora só no modo sem sinal: a negociação nasce com o id gerado
+  // no aparelho, e subir duas vezes acha a primeira em vez de duplicar.
+  const idInformado = String(formData.get("id") ?? "").trim();
   const criada = await db.negociacao.create({
     data: {
+      ...(ID_VALIDO.test(idInformado) ? { id: idInformado } : {}),
       clienteId,
       marca: String(formData.get("marca") ?? "") || null,
       maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
@@ -2304,7 +2300,7 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
-  return { ok: true };
+  return { ok: true, id: criada.id };
 }
 
 // Edita uma negociação já existente com o mesmo conjunto completo de campos

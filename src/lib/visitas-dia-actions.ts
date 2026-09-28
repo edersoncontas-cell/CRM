@@ -82,6 +82,9 @@ export async function registrarVisitaDoDiaAction(
   visitaId: string,
   feita: boolean,
   relato: string,
+  // De onde veio a resposta, para a auditoria. O modo sem sinal passa por
+  // aqui também, e "pelo lembrete do dia" seria mentira no registro.
+  via: string = "pelo lembrete do dia",
 ): Promise<{ ok: boolean; erro?: string; resumo?: string; negociacao?: string; colunaMovida?: string; proximaVisita?: string }> {
   const texto = (relato ?? "").trim();
   const visita = await db.visita.findUnique({
@@ -176,7 +179,7 @@ export async function registrarVisitaDoDiaAction(
 
   await registrarAudit({
     acao: "visita_detectada", origem: "usuario",
-    descricao: `Visita de ${visita.cliente.nome} marcada como ${feita ? "realizada" : "não realizada"} pelo lembrete do dia.`,
+    descricao: `Visita de ${visita.cliente.nome} marcada como ${feita ? "realizada" : "não realizada"} ${via}.`,
     entidade: "Visita", entidadeId: visitaId, clienteId: visita.clienteId,
   }).catch(() => {});
 

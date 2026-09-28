@@ -191,6 +191,13 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   `NAO_E_RESPOSTA`.
 - Lista dentro de card é limitada, com rolagem interna de altura fixa. Ele usa
   o CRM no celular, na rua.
+- **Modo sem sinal** (`/sem-sinal`, `lib/sem-sinal-*.ts`): o que ele faz sem
+  internet sobe pelo MESMO caminho da tela com internet (`criarVisitaNoBanco`,
+  `registrarVisitaDoDiaAction`, `criarNegociacaoCompleta`). Regra nova de
+  criar visita ou negociação entra nesses caminhos, nunca numa cópia — senão
+  o que foi feito na rua escapa dela. Mudou o formato do pacote → sobe
+  `VERSAO_PACOTE`. `/sw.js` e `/manifest.json` ficam FORA do login: worker
+  desviado para /login não instala.
 
 ## 9. Comandos que ele usa pelo nome
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-
-const KEY = "crm_token";
+import { guardarToken, restaurarSessao } from "@/lib/sessao-local";
 
 // Reforço de "manter login" para o PWA do iPhone (que às vezes descarta o cookie
 // ao fechar o app):
@@ -15,29 +14,13 @@ export function AuthPersist({ modo }: { modo: "guardar" | "restaurar" }) {
     if (modo === "guardar") {
       fetch("/api/auth/token")
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (d?.token) {
-            try { localStorage.setItem(KEY, d.token); } catch {}
-          }
-        })
+        .then((d) => { if (d?.token) guardarToken(d.token); })
         .catch(() => {});
       return;
     }
 
     // modo "restaurar"
-    let t: string | null = null;
-    try { t = localStorage.getItem(KEY); } catch {}
-    if (!t) return;
-    fetch("/api/auth/restaurar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: t }),
-    })
-      .then((r) => {
-        if (r.ok) window.location.replace("/dashboard");
-        else { try { localStorage.removeItem(KEY); } catch {} }
-      })
-      .catch(() => {});
+    restaurarSessao().then((r) => { if (r === "ok") window.location.replace("/dashboard"); });
   }, [modo]);
 
   return null;

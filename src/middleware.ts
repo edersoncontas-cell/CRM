@@ -12,7 +12,15 @@ export async function middleware(req: NextRequest) {
   // igual às rotas /api/cron/*.
   // As demais rotas /api/zapi/* (status, qr) exigem login — o navegador do
   // Ederson manda o cookie, então funcionam normalmente para ele.
+  // /sw.js e /manifest.json não têm nada de sigiloso e PRECISAM abrir sem
+  // login: o navegador recusa service worker desviado para /login ("script
+  // behind a redirect") e busca o manifesto sem cookie. Atrás do login, o
+  // worker só instalava se a primeira tela carregada já estivesse logada —
+  // depois de entrar pela senha (troca de tela sem recarregar) ele ficava
+  // sem instalar, e sem worker não há modo sem sinal nem notificação.
   const rotaPublica =
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks/zapi") ||

@@ -5,6 +5,7 @@ import { SplashBoot } from "@/components/SplashBoot";
 import { CurvasDeNivel } from "@/components/CurvasDeNivel";
 import { RodapeMercado } from "@/components/RodapeMercado";
 import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
+import { SincronizadorOffline } from "@/components/SincronizadorOffline";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
@@ -85,6 +86,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           de segunda a sexta, antes da primeira visita do dia e quando todas já
           foram sinalizadas (ver lib/visitas-do-dia.ts). */}
       <LembreteVisitasDoDia />
+      {/* Modo sem sinal: guarda o que é preciso para abrir sem internet, sobe
+          o que foi feito sem sinal e avisa quando a internet cai. */}
+      <SincronizadorOffline />
     </div>
   );
 }

@@ -12,10 +12,9 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **`dbbbfe1`** — "Telas param de consultar o banco
-com a aba em segundo plano". **1.094 testes passando** (94 arquivos), lint e
-build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"`. Os commits depois dele são
-só documentação.
+Último commit com código: **"Modo sem sinal"** (28/09). **1.210 testes
+passando** (103 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
+"manutencao.v44"` (o modo sem sinal não mexeu no schema).
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
@@ -156,6 +155,15 @@ O que é bom saber antes de abrir:
 - Fuso: servidor em UTC, vendedor em Brasília (UTC-3 o ano todo). Toda hora que
   ele digita é a hora **dele**.
 - `npx prisma generate` exige `DATABASE_URL_UNPOOLED` no ambiente.
+- **Playwright não corta a rede do service worker** com `context.setOffline`:
+  a página fica "sem internet", mas o worker continua buscando no servidor e
+  tudo parece funcionar. Para testar sem sinal de verdade, derrube o servidor
+  (pelo PID) E ligue o setOffline. E espere `navigator.serviceWorker.controller`
+  antes de cortar: a tela entra no cache já na instalação, mas o worker só
+  assume a página no activate.
+- Camada do aviso do modo sem sinal: `z-[90]` (abaixo das janelas). No
+  Atendimento só aparece o aviso de sem internet — o rodapé ali é a caixa de
+  mensagem.
 
 ## Sandbox
 
@@ -220,6 +228,52 @@ O que é bom saber antes de abrir:
     construído" (4.4) e cobra "proteções e números do piloto 20 h" na
     implantação. Teto de IA e números do piloto estão prontos. Não mexi no
     documento: atualizar o texto e manter ou baixar as horas é escolha dele.
+
+## Feito em 28/09 — modo sem sinal
+
+Pedido: "faça a parte do crm rodar offline, para ter acesso a visitas, e poder
+agendar ou concluir uma visita, inserir uma nova negociação no funil, e os
+demais dados assim que a internet chegar tudo atualiza".
+
+- **Tela `/sem-sinal`** (menu Principal → "Modo sem sinal"; fora do grupo
+  `(app)` porque aquele layout consulta o banco antes de tudo). Abas Visitas,
+  Clientes, Funil e Pendentes; botões Agendar visita e Nova negociação. Lê só o
+  que está no aparelho (IndexedDB, `lib/sem-sinal-local.ts`).
+- **Service worker** (`src/app/sw.js/route.ts`): sem rede, QUALQUER tela do CRM
+  vai para `/sem-sinal?de=<tela>`. Telas normais deixaram de sair do cache
+  (mostravam número velho com botão que não fazia nada). A tela do modo sem
+  sinal e todos os arquivos dela ficam guardados na instalação do worker e a
+  cada 10 min; `/_next/static` sai do cache (nome com versão). Aparelho que
+  nunca guardou vê uma página explicando, não o erro do navegador.
+- **Pacote** (`GET /api/sem-sinal/pacote`, `lib/sem-sinal-servidor.ts`):
+  visitas de 60 dias atrás a 180 à frente, clientes (mesmo recorte da tela de
+  Clientes, teto 20 mil), negociações abertas, colunas, municípios, catálogo.
+  Baixado pelo `SincronizadorOffline` (layout do app) no máximo a cada 30 min
+  com a tela aberta, e sempre que a internet volta.
+- **Fila** (`POST /api/sem-sinal/sincronizar`): agendar, concluir (com relato)
+  e negociação nova sobem em ordem pelo MESMO caminho da tela com internet —
+  `criarVisitaNoBanco` (novo, `lib/visita-criar.ts`, usado também por
+  `adicionarVisita`), `registrarVisitaDoDiaAction` (relato lido pela IA) e
+  `criarNegociacaoCompleta` (aceita `id`). Visita e negociação nascem com o id
+  do aparelho: subir duas vezes acha a primeira. Concluir confere se a visita
+  já está como ele deixou. Cliente novo com telefone que já existe → usa o
+  cadastro existente e avisa. Coluna renomeada no meio → primeira coluna de
+  negociação e avisa. Cliente/visita apagados no meio → recusa com motivo, e a
+  aba Pendentes oferece Tentar de novo / Descartar.
+- Sessão caída ao voltar a internet: repõe pelo token guardado
+  (`lib/sessao-local.ts`, agora usado também por AuthPersist e
+  EntradaAutomatica) e continua.
+- **`/sw.js` e `/manifest.json` saíram de trás do login** (middleware). O
+  worker desviado para /login não instala ("script behind a redirect"): depois
+  de entrar pela senha ele ficava sem instalar até a próxima recarga — sem
+  worker não havia modo sem sinal nem notificação.
+- Auditoria: ação nova `offline_sincronizado` ("Subiu do modo sem sinal: …").
+- Prova: `tests/sem-sinal-regra.test.ts` (30) + roteiro Playwright com servidor
+  derrubado (ver Armadilhas) em 390/1440 e nos dois temas.
+- **Não conferido:** Safari/iPhone de verdade (não há Safari aqui). O que o
+  iPhone precisa (Cache, IndexedDB, BroadcastChannel, `navigator.locks`,
+  `crypto.randomUUID`) existe do iOS 15.4 em diante; `randomUUID` e a trava
+  têm alternativa para aparelho mais velho.
 
 ## Em aberto (ofereci, ele não respondeu)
 

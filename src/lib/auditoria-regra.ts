@@ -60,6 +60,7 @@ export const ROTULO_ACAO: Record<AcaoAudit, string> = {
   zeus_ativo_alterado: "ZEUS ligado/desligado",
   chave_ia_alterada: "Chave de IA alterada",
   dados_provisorio_trazidos: "Dados do banco provisório trazidos",
+  offline_sincronizado: "Subiu do modo sem sinal",
 };
 
 export function rotuloAcao(acao: string): string {

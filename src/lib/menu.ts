@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical, WifiOff,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +21,8 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/pipeline", label: "Demandas", icon: ListTodo },
       { href: "/atendimento", label: "WhatsApp", icon: MessageCircle },
       { href: "/visitas", label: "Visitas", icon: MapPin },
+      // Visitas, clientes e funil guardados no aparelho, para a rua sem sinal.
+      { href: "/sem-sinal", label: "Modo sem sinal", icon: WifiOff },
       { href: "/clientes", label: "Clientes", icon: Users },
       { href: "/marketing", label: "Marketing", icon: Megaphone },
     ],
