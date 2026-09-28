@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { WifiOff, CloudUpload, AlertTriangle, Loader2, History, RefreshCw } from "lucide-react";
 import { useSemSinal, useOnline, useSincroniaAutomatica } from "@/components/sem-sinal/useSemSinal";
-import { prepararModoSemSinal, guardarTelaAtual, PAGINA_SEM_SINAL } from "@/lib/sem-sinal-sincronia";
+import { prepararModoSemSinal, guardarTelaAtual, avisarTelasMudaram, vigiarAcoesQueGravam, PAGINA_SEM_SINAL } from "@/lib/sem-sinal-sincronia";
 import { pedirArmazenamentoPersistente } from "@/lib/sem-sinal-local";
 import { contarFila } from "@/lib/sem-sinal-regra";
 import { ehCopia, quandoFoi } from "@/lib/sem-sinal-telas";
@@ -49,7 +49,14 @@ export function SincronizadorOffline({ renderizadoEm }: { renderizadoEm: number 
       if (document.visibilityState === "visible" && navigator.onLine !== false) prepararModoSemSinal();
     };
     document.addEventListener("visibilitychange", aoVoltar);
-    return () => document.removeEventListener("visibilitychange", aoVoltar);
+    // Ação que gravou (card arrastado, negociação nova): as cópias ficaram
+    // velhas — o worker as renova logo, e não na hora cheia. Ele pode sair
+    // do sinal em seguida.
+    const pararDeVigiar = vigiarAcoesQueGravam(window, () => avisarTelasMudaram([window.location.pathname]));
+    return () => {
+      document.removeEventListener("visibilitychange", aoVoltar);
+      pararDeVigiar();
+    };
   }, []);
 
   // A tela aberta por dentro do app vira cópia também (a ficha do cliente
@@ -59,6 +66,19 @@ export function SincronizadorOffline({ renderizadoEm }: { renderizadoEm: number 
     const t = window.setTimeout(() => guardarTelaAtual(window.location.pathname, window.location.search), ESPERA_COPIA_MS);
     return () => window.clearTimeout(t);
   }, [caminho, copia, online]);
+
+  // Subiu o que foi feito sem sinal: a tela aberta (montada antes) ainda não
+  // tem. Remonta com os dados de agora — a negociação que estava à parte em
+  // "Feitas sem sinal" passa para o funil. Na cópia não: ali a faixa oferece
+  // "Atualizar", e recarregar sozinho tiraria a tela de quem está lendo.
+  const router = useRouter();
+  const vistaAoAbrir = useRef(sinc.ultimo?.quando ?? 0);
+  const ultimaSubida = sinc.ultimo && sinc.ultimo.enviadas > 0 ? sinc.ultimo.quando : 0;
+  useEffect(() => {
+    if (!ultimaSubida || ultimaSubida <= vistaAoAbrir.current || copia) return;
+    vistaAoAbrir.current = ultimaSubida;
+    router.refresh();
+  }, [ultimaSubida, copia, router]);
 
   const destino = (aba?: string) => `${PAGINA_SEM_SINAL}?de=${encodeURIComponent(caminho ?? "/dashboard")}${aba ? `&aba=${aba}` : ""}`;
 

@@ -204,6 +204,16 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   ao ser montada NÃO pode estar em `TELAS_PRINCIPAIS` (são remontadas por
   trás). O worker roda de verdade em `tests/sw-worker.test.ts` — mexeu nele,
   o teste diz se a cópia ainda abre.
+  Mudou dado, as cópias se renovam logo (15 s depois da rajada, no máximo a
+  cada 3 min; a subida do modo sem sinal não espera). Ação da tela (server
+  action) só conta quando a resposta traz `x-action-revalidated` = `[[],1,…]`
+  — **ação nova que grava tem que chamar `revalidatePath`**, senão a cópia
+  fica velha até a hora cheia. Ação que só LÊ não pode contar: o app pede as
+  visitas do dia ao abrir qualquer tela, e cada abertura remontaria as seis
+  telas no servidor. Quem lê a resposta é a tela (`vigiarAcoesQueGravam`);
+  **o worker nunca responde por pedido que grava** — defeito nele não pode
+  impedir o CRM de gravar, e o iPhone não dá para testar aqui. O que ainda não subiu aparece à parte em Negociações e
+  na ficha (`NegociacoesFeitasSemSinal`, `negociacoesForaDaTela`).
 - **Componente "use client" não importa valor de arquivo que abre o banco**
   (leva o Prisma para o navegador e a tela cai inteira — derrubou Demandas).
   Constante que a tela usa mora em arquivo sem banco;

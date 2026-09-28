@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validarOperacao, lerValorBR, dataDaVisita, diaBrasilia, horaBrasilia, rotuloDia, aplicarPendentes, agruparVisitas,
   buscarClientes, colunasParaNovaNegociacao, negociacoesPorColuna, aplicarResultados, proximoLote, registrosParaApagar,
-  resumoDaRodada, pacoteVelho, novoRegistro, novoId, ID_VALIDO, TENTATIVAS_ANTES_DE_ERRO, contarFila,
+  resumoDaRodada, pacoteVelho, novoRegistro, novoId, ID_VALIDO, TENTATIVAS_ANTES_DE_ERRO, contarFila, negociacoesForaDaTela,
   type PacoteSemSinal, type RegistroFila, type OpAgendarVisita, type OpConcluirVisita, type OpCriarNegociacao,
 } from "@/lib/sem-sinal-regra";
 
@@ -288,5 +288,40 @@ describe("sincronia", () => {
 
   it("id gerado no aparelho passa na validação do servidor", () => {
     for (let i = 0; i < 20; i++) expect(ID_VALIDO.test(novoId())).toBe(true);
+  });
+});
+
+describe("negociações feitas sem sinal que a tela ainda não tem", () => {
+  const MONTADA = Date.parse("2026-09-28T15:00:00Z");
+  const neg = (n: number, clienteId: string, criadaEm: string): OpCriarNegociacao => ({
+    tipo: "negociacao.criar", id: ID(n), criadaEm, clienteNome: `Cliente ${n}`, negociacaoId: ID(n + 100), clienteId,
+    marca: "CASE", maquinaModelo: "580N", valor: 450000, estagio: "Primeiro contato", proximaAcao: null,
+  });
+  const reg = (op: RegistroFila["op"], estado: RegistroFila["estado"], enviadoEm: string | null = null): RegistroFila =>
+    ({ ...novoRegistro(op), estado, enviadoEm, erro: estado === "erro" ? "Cliente não existe mais." : null });
+
+  it("mostra as que não subiram, as recusadas e as que subiram depois de a tela ser montada — mais nova primeiro", () => {
+    const fila = [
+      reg(neg(1, ID(10), "2026-09-28T10:00:00Z"), "pendente"),
+      reg(neg(2, ID(10), "2026-09-28T11:00:00Z"), "erro"),
+      // Subiu ANTES de a tela ser montada: já está no funil dela.
+      reg(neg(3, ID(11), "2026-09-28T09:00:00Z"), "enviado", "2026-09-28T14:00:00Z"),
+      // Subiu DEPOIS: a cópia guardada é de antes, não tem.
+      reg(neg(4, ID(11), "2026-09-28T12:00:00Z"), "enviado", "2026-09-28T16:00:00Z"),
+      // Visita não entra.
+      reg({ tipo: "visita.concluir", id: ID(5), criadaEm: "2026-09-28T13:00:00Z", clienteNome: "V", visitaId: ID(6), feita: true, relato: "" }, "pendente"),
+    ];
+    expect(negociacoesForaDaTela(fila, MONTADA).map((r) => r.op.id)).toEqual([ID(4), ID(2), ID(1)]);
+  });
+
+  it("na ficha, só as daquele cliente", () => {
+    const fila = [reg(neg(1, ID(10), "2026-09-28T10:00:00Z"), "pendente"), reg(neg(2, ID(11), "2026-09-28T11:00:00Z"), "pendente")];
+    expect(negociacoesForaDaTela(fila, MONTADA, ID(11)).map((r) => r.op.id)).toEqual([ID(2)]);
+  });
+
+  it("hora de envio estranha: mostra (repetida é melhor que sumida); fila vazia: nada", () => {
+    expect(negociacoesForaDaTela([reg(neg(1, ID(10), "2026-09-28T10:00:00Z"), "enviado", "ontem")], MONTADA)).toHaveLength(1);
+    expect(negociacoesForaDaTela([reg(neg(1, ID(10), "2026-09-28T10:00:00Z"), "enviado", null)], MONTADA)).toHaveLength(1);
+    expect(negociacoesForaDaTela([], MONTADA)).toEqual([]);
   });
 });

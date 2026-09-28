@@ -8,8 +8,9 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import vm from "node:vm";
+import { readFileSync } from "node:fs";
 import { codigoDoWorker } from "@/lib/sw-codigo";
-import { telaGuardavel, telaSaudavel, TELAS_PRINCIPAIS, MAX_TELAS_GUARDADAS, MARCA_TELA_OK } from "@/lib/sem-sinal-telas";
+import { telaGuardavel, telaSaudavel, mudaAsCopias, TELAS_PRINCIPAIS, MAX_TELAS_GUARDADAS, MARCA_TELA_OK } from "@/lib/sem-sinal-telas";
 
 const ORIGEM = "https://crm.teste";
 
@@ -86,10 +87,12 @@ const rede = {
   offline: false,
   pedidos: [] as string[],
   paginas: new Map<string, { html: string; status?: number; redirecionaPara?: string }>(),
-  async buscar(entrada: string | { url: string }): Promise<Response> {
+  async buscar(entrada: string | { url: string; method?: string; headers?: Headers }): Promise<Response> {
     const url = new URL(typeof entrada === "string" ? entrada : entrada.url, ORIGEM);
-    this.pedidos.push(url.pathname + url.search);
+    const post = typeof entrada !== "string" && entrada.method === "POST";
+    this.pedidos.push((post ? "POST " : "") + url.pathname + url.search);
     if (this.offline) throw new TypeError("Failed to fetch");
+    if (post) return new Response("{}", { status: 200 });
     const vestir = (res: Response, final: string, redirected = false) => {
       Object.defineProperty(res, "type", { value: "basic" });
       Object.defineProperty(res, "url", { value: new URL(final, ORIGEM).href });
@@ -154,6 +157,19 @@ function carregarWorker(versao: string, caches: CachesFalso) {
       ouvintes.fetch(e);
       return esperar(e);
     },
+    /** POST saído da tela `de`: uma rota /api, ou (acao) uma ação da tela. */
+    gravar(caminho: string, de: string | null, acao = false) {
+      const headers = new Headers(acao ? { "Next-Action": "abc123" } : {});
+      const e: Evento & Record<string, unknown> = {
+        pendentes: [],
+        request: { url: new URL(caminho, ORIGEM).href, method: "POST", mode: "cors", headers, referrer: de ? new URL(de, ORIGEM).href : "" },
+        respondWith(p: Promise<Response>) { e.resposta = Promise.resolve(p); },
+        waitUntil(p: Promise<unknown>) { e.pendentes.push(p); },
+      };
+      ouvintes.fetch(e);
+      return e;
+    },
+    esperar,
     async mensagem(data: unknown) {
       const respostas: Record<string, unknown>[] = [];
       const e: Evento & Record<string, unknown> = {
@@ -200,6 +216,14 @@ describe("service worker: telas do CRM sem internet", () => {
     const saudavel = sw.ctx.telaSaudavel as (h: string) => boolean;
     for (const c of ["/dashboard", "/clientes/x", "/atendimento", "/atendimento/relatorio", "/zeuss", "/", "/sem-sinal", "/api/x", "/_next/static/a.js", "/login"]) {
       expect(guardavel(c), c).toBe(telaGuardavel(c));
+    }
+    const muda = sw.ctx.mudaAsCopias as (c: string, t: string | null) => boolean;
+    for (const [c, t] of [
+      ["/negociacoes", "/negociacoes"], ["/api/negociacoes/1", "/clientes/x"], ["/api/sem-sinal/sincronizar", "/sem-sinal"],
+      ["/api/conversations/1/messages", "/atendimento"], ["/api/zeus/report-erro", "/dashboard"], ["/api/push/subscribe", "/dashboard"],
+      ["/api/auth/restaurar", "/negociacoes"], ["/configuracoes", null], ["/visitas", null], ["/login", "/login"],
+    ] as [string, string | null][]) {
+      expect(muda(c, t), `${c} de ${t}`).toBe(mudaAsCopias(c, t));
     }
     for (const h of [
       paginaHtml("a"), paginaHtml("a", { marca: false }), paginaHtml("a", { extra: "<script>$RX=1</script>" }),
@@ -394,5 +418,125 @@ describe("service worker: telas do CRM sem internet", () => {
     const r = await sw.mensagem({ tipo: "preparar-sem-sinal" });
     expect(r[1].falhas).toEqual(["/alertas: o servidor respondeu 500"]);
     expect(r[1].guardadas).toBe(TELAS_PRINCIPAIS.length - 1);
+  });
+  // A tela avisa "telas-mudaram" quando uma ação dela gravou (ver
+  // vigiarAcoesQueGravam, tests/sem-sinal-vigia.test.ts).
+  const acaoGravou = (sw: Awaited<ReturnType<typeof workerPronto>>, tela: string) =>
+    sw.mensagem({ tipo: "telas-mudaram", caminhos: [tela] });
+
+  it("mudou dado (card arrastado, negociação nova): as cópias se renovam logo, sem esperar a hora", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    await sw.navegar("/clientes/cl_1");
+    rede.pedidos = [];
+
+    // Duas ações que gravaram em Negociações e um POST de rota na ficha: UMA renovação.
+    rede.paginas.set("/negociacoes", { html: paginaHtml("Negociações com a nova") });
+    rede.paginas.set("/clientes/cl_1", { html: paginaHtml("João com negociação") });
+    const rota = sw.gravar("/api/demandas/audio", "/clientes/cl_1");
+    // O POST segue direto para a rede: o worker não responde por ele.
+    expect(rota.resposta).toBeUndefined();
+    await Promise.all([acaoGravou(sw, "/negociacoes"), acaoGravou(sw, "/negociacoes"), sw.esperar(rota)]);
+    for (const t of [...TELAS_PRINCIPAIS, "/clientes/cl_1"]) {
+      expect(rede.pedidos.filter((p) => p === t), t).toHaveLength(1);
+    }
+
+    rede.offline = true;
+    expect(await (await sw.navegar("/negociacoes"))!.text()).toContain("Negociações com a nova");
+    expect(await (await sw.navegar("/clientes/cl_1"))!.text()).toContain("João com negociação");
+  });
+
+  it("o worker não põe a mão na ação da tela: nem responde por ela, nem renova sozinho", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    rede.pedidos = [];
+    const e = sw.gravar("/dashboard", "/dashboard", true);
+    expect(e.resposta).toBeUndefined();
+    await sw.esperar(e);
+    // Nem a ação (a rede é do navegador) nem renovação: quem decide é a tela.
+    expect(rede.pedidos).toEqual([]);
+  });
+
+  it("a subida do modo sem sinal renova; mensagem do WhatsApp e relatório de erro não", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+
+    rede.pedidos = [];
+    await sw.esperar(sw.gravar("/api/conversations/c1/messages", "/atendimento"));
+    await sw.esperar(sw.gravar("/api/zeus/report-erro", "/dashboard"));
+    await sw.esperar(sw.gravar("/api/push/subscribe", "/negociacoes"));
+    expect(rede.pedidos).toEqual([]);
+
+    rede.paginas.set("/negociacoes", { html: paginaHtml("Com a negociação da rua") });
+    await sw.esperar(sw.gravar("/api/sem-sinal/sincronizar", "/sem-sinal"));
+    expect(rede.pedidos).toContain("/negociacoes");
+    rede.offline = true;
+    expect(await (await sw.navegar("/negociacoes"))!.text()).toContain("Com a negociação da rua");
+  });
+
+  it("ação que grava em Configurações (colunas do funil) também renova — Configurações segue sem cópia", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    rede.pedidos = [];
+    await acaoGravou(sw, "/configuracoes");
+    expect(rede.pedidos).toContain("/negociacoes");
+    expect(rede.pedidos).not.toContain("/configuracoes");
+  });
+
+  it("renovação sem internet: a cópia que havia continua", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    rede.offline = true;
+    await acaoGravou(sw, "/negociacoes");
+    await sw.esperar(sw.gravar("/api/sem-sinal/sincronizar", "/negociacoes"));
+    expect(await (await sw.navegar("/negociacoes"))!.text()).toContain("Tela /negociacoes");
+  });
+
+  it("mudança logo depois de uma renovação não se perde: renova de novo, respeitando o intervalo", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    await acaoGravou(sw, "/negociacoes");
+    rede.pedidos = [];
+    rede.paginas.set("/negociacoes", { html: paginaHtml("Segunda mudança") });
+    await acaoGravou(sw, "/negociacoes");
+    expect(rede.pedidos.filter((p) => p === "/negociacoes")).toHaveLength(1);
+    rede.offline = true;
+    expect(await (await sw.navegar("/negociacoes"))!.text()).toContain("Segunda mudança");
+  });
+
+  it("a subida do modo sem sinal não espera o intervalo entre renovações (o sinal pode cair de novo)", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    await acaoGravou(sw, "/negociacoes");
+    // Logo depois de uma renovação: ação comum espera o intervalo (3 min, aqui 180 ms)…
+    let t = performance.now();
+    await acaoGravou(sw, "/negociacoes");
+    expect(performance.now() - t).toBeGreaterThan(150);
+    // …a subida do modo sem sinal, só a rajada acabar (15 s, aqui 15 ms).
+    rede.pedidos = [];
+    t = performance.now();
+    await sw.esperar(sw.gravar("/api/sem-sinal/sincronizar", "/negociacoes"));
+    expect(performance.now() - t).toBeLessThan(150);
+    expect(rede.pedidos).toContain("/negociacoes");
+  });
+
+  it("a subida avisa as fichas dos clientes: vão na mesma renovação; tela ao vivo e lixo são ignorados", async () => {
+    const sw = await workerPronto();
+    await sw.mensagem({ tipo: "preparar-sem-sinal" });
+    rede.paginas.set("/clientes/cl_1", { html: paginaHtml("João com a negociação da rua") });
+    rede.pedidos = [];
+    const subida = sw.gravar("/api/sem-sinal/sincronizar", "/dashboard");
+    const aviso = sw.mensagem({ tipo: "telas-mudaram", urgente: true, caminhos: ["/clientes/cl_1", "/atendimento", 42, "/api/x"] });
+    await Promise.all([sw.esperar(subida), aviso]);
+    expect(rede.pedidos.filter((p) => p === "/clientes/cl_1")).toHaveLength(1);
+    expect(rede.pedidos.filter((p) => p === "/dashboard")).toHaveLength(1);
+    expect(rede.pedidos).not.toContain("/atendimento");
+    rede.offline = true;
+    expect(await (await sw.navegar("/clientes/cl_1"))!.text()).toContain("João com a negociação da rua");
+  });
+
+  it("o Next instalado ainda diz na resposta da ação se ela mandou refazer telas (formato que o worker lê)", () => {
+    const fonte = readFileSync(require.resolve("next/dist/server/app-render/action-handler.js"), "utf8");
+    expect(fonte).toMatch(/setHeader\("x-action-revalidated", JSON\.stringify\(\[\s*\[\],\s*isTagRevalidated,/);
   });
 });

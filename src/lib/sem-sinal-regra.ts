@@ -583,6 +583,22 @@ export function contarFila(fila: RegistroFila[]): { pendentes: number; erros: nu
   return { pendentes, erros, enviados };
 }
 
+/**
+ * Negociações feitas no modo sem sinal que a tela montada no servidor em
+ * `montadaEm` não tem: as que ainda não subiram (ou foram recusadas) e as que
+ * subiram depois de a tela ser montada — a cópia guardada é de antes. A tela
+ * de Negociações mostra estas à parte; sem isso, a negociação aberta na rua
+ * não aparecia em Negociações até a cópia seguinte.
+ * `clienteId`: só as daquele cliente (a ficha). Mais nova primeiro.
+ */
+export function negociacoesForaDaTela(fila: RegistroFila[], montadaEm: number, clienteId?: string): (RegistroFila & { op: OpCriarNegociacao })[] {
+  return fila
+    .filter((r): r is RegistroFila & { op: OpCriarNegociacao } => r.op.tipo === "negociacao.criar")
+    .filter((r) => !clienteId || r.op.clienteId === clienteId)
+    .filter((r) => r.estado !== "enviado" || !r.enviadoEm || !(Date.parse(r.enviadoEm) <= montadaEm))
+    .sort((a, b) => b.op.criadaEm.localeCompare(a.op.criadaEm));
+}
+
 /** Uma linha para a aba Pendentes. */
 export function descreverOperacao(op: OperacaoSemSinal): string {
   if (op.tipo === "visita.agendar") {

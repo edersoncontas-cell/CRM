@@ -14,6 +14,7 @@
 
 import {
   TELAS_PRINCIPAIS, TELAS_SEM_COPIA, RENOVAR_TELA_MS, MAX_TELAS_GUARDADAS, MARCA_TELA_OK, PEDACO_QUE_CAIU,
+  ESPERA_DEPOIS_DA_MUDANCA_MS, INTERVALO_RENOVACAO_POR_MUDANCA_MS, SUBIDA_SEM_SINAL, GRAVA_SEM_MUDAR_TELA,
 } from "@/lib/sem-sinal-telas";
 
 export function codigoDoWorker(versao: string): string {
@@ -46,6 +47,11 @@ const MARCA_TELA_OK = ${JSON.stringify(MARCA_TELA_OK)};
 // baixar os arquivos dela (eles passam por aqui e ficam guardados) — antes
 // disso, os mesmos arquivos desceriam duas vezes.
 const ESPERA_ANTES_DA_COPIA_MS = 4000;
+// Mudou dado: as cópias se renovam logo (regra em src/lib/sem-sinal-telas.ts).
+const ESPERA_DEPOIS_DA_MUDANCA_MS = ${ESPERA_DEPOIS_DA_MUDANCA_MS};
+const INTERVALO_RENOVACAO_POR_MUDANCA_MS = ${INTERVALO_RENOVACAO_POR_MUDANCA_MS};
+const SUBIDA_SEM_SINAL = ${JSON.stringify(SUBIDA_SEM_SINAL)};
+const GRAVA_SEM_MUDAR_TELA = ${JSON.stringify(GRAVA_SEM_MUDAR_TELA)};
 
 // Sem internet E sem a tela guardada (aparelho que nunca abriu o CRM depois
 // desta versão): em vez da página de erro do navegador, o motivo por extenso.
@@ -55,7 +61,7 @@ const PAGINA_SEM_PREPARO = '<!doctype html><html lang="pt-BR"><head><meta charse
   + 'button{margin-top:8px;border:0;border-radius:12px;background:#2563eb;color:#fff;font-weight:700;font-size:15px;padding:12px 20px}</style></head>'
   + '<body><main><h1>Sem internet agora</h1>'
   + '<p>Este aparelho ainda não guardou o modo sem sinal do CRM, então não há o que mostrar sem conexão.</p>'
-  + '<p>Na próxima vez que você abrir o CRM com internet, ele guarda sozinho — e daí em diante as visitas, os clientes e o funil abrem mesmo sem sinal.</p>'
+  + '<p>Na próxima vez que você abrir o CRM com internet, ele guarda sozinho — e daí em diante as visitas, os clientes e as negociações abrem mesmo sem sinal.</p>'
   + '<button onclick="location.reload()">Tentar de novo</button></main></body></html>';
 
 function comPrazo(promessa, ms) {
@@ -69,10 +75,16 @@ function esperar(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// As mesmas duas regras de src/lib/sem-sinal-telas.ts (o teste confere).
+// As mesmas regras de src/lib/sem-sinal-telas.ts (o teste confere).
 function telaGuardavel(caminho) {
   if (caminho.charAt(0) !== "/" || caminho === "/") return false;
   return !TELAS_SEM_COPIA.some((p) => caminho === p || caminho.indexOf(p + "/") === 0);
+}
+
+function mudaAsCopias(caminhoPedido, tela) {
+  if (GRAVA_SEM_MUDAR_TELA.some((p) => caminhoPedido === p || caminhoPedido.indexOf(p + "/") === 0)) return false;
+  if (caminhoPedido === SUBIDA_SEM_SINAL) return true;
+  return telaGuardavel(tela || caminhoPedido);
 }
 
 const PEDACO_QUE_CAIU = ${PEDACO_QUE_CAIU.toString()};
@@ -274,13 +286,16 @@ async function limparVersoesAntigas() {
   return true;
 }
 
-function renovarPrincipais() {
+// forcar: refaz mesmo a de menos de uma hora (mudou dado). extras: outras
+// telas que também ficaram velhas (a ficha onde a mudança aconteceu).
+function renovarPrincipais(forcar, extras) {
   return naFila(async () => {
     let guardadas = 0;
     const falhas = [];
-    for (const t of TELAS_PRINCIPAIS) {
+    const telas = TELAS_PRINCIPAIS.concat((extras || []).filter((t) => TELAS_PRINCIPAIS.indexOf(t) < 0 && telaGuardavel(t)));
+    for (const t of telas) {
       try {
-        const r = await guardarTela(t, false);
+        const r = await guardarTela(t, Boolean(forcar));
         if (!r.ok) falhas.push(t + ": " + r.motivo);
         else if (!r.pulou) guardadas++;
       } catch (err) {
@@ -289,6 +304,33 @@ function renovarPrincipais() {
     }
     await limparVersoesAntigas().catch(() => false);
     return { guardadas: guardadas, falhas: falhas };
+  });
+}
+
+// Mudou dado: renova quando a rajada acabar, no máximo a cada 3 min. Cada
+// mudança marca a sua vez; só a última da rajada renova (as de antes veem
+// que veio outra depois e saem). Sem internet a renovação falha e a cópia
+// que havia fica — nunca se apaga cópia aqui.
+// A subida do modo sem sinal é urgente: não espera o intervalo — é a hora em
+// que o sinal voltou, e ele pode cair de novo em seguida.
+let mudancas = 0;
+let renovadoPorMudancaEm = 0;
+let urgentePendente = false;
+const telasMudadas = new Set();
+function depoisDaMudanca(tela, urgente) {
+  const minha = ++mudancas;
+  if (urgente) urgentePendente = true;
+  if (tela && telaGuardavel(tela)) telasMudadas.add(tela);
+  const espera = urgentePendente
+    ? ESPERA_DEPOIS_DA_MUDANCA_MS
+    : Math.max(ESPERA_DEPOIS_DA_MUDANCA_MS, renovadoPorMudancaEm + INTERVALO_RENOVACAO_POR_MUDANCA_MS - Date.now());
+  return esperar(espera).then(() => {
+    if (minha !== mudancas) return null;
+    urgentePendente = false;
+    renovadoPorMudancaEm = Date.now();
+    const extras = Array.from(telasMudadas);
+    telasMudadas.clear();
+    return renovarPrincipais(true, extras);
   });
 }
 
@@ -370,6 +412,13 @@ self.addEventListener("message", (e) => {
     );
     return;
   }
+  if (d.tipo === "telas-mudaram" && Array.isArray(d.caminhos)) {
+    // A tela avisa: uma ação dela gravou (a tela onde foi vai junto), ou a
+    // subida do modo sem sinal terminou (urgente, com as fichas dos clientes).
+    d.caminhos.slice(0, 50).forEach((c) => { if (typeof c === "string" && telaGuardavel(c)) telasMudadas.add(c); });
+    e.waitUntil(depoisDaMudanca(null, Boolean(d.urgente)).catch(() => {}));
+    return;
+  }
   if (d.tipo === "guardar-tela" && typeof d.caminho === "string") {
     e.waitUntil(
       naFila(() => guardarTela(d.caminho, false))
@@ -398,7 +447,26 @@ const ARQUIVO_PUBLICO = /\.(?:png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json)$/i;
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  if (req.method !== "GET") return;
+  if (req.method !== "GET") {
+    // Pedido que grava: aqui só se anota que as cópias ficaram velhas.
+    if (req.method === "HEAD") return;
+    const alvo = new URL(req.url);
+    if (alvo.origin !== self.location.origin) return;
+    let tela = null;
+    try {
+      const de = new URL(req.referrer);
+      if (de.origin === self.location.origin) tela = de.pathname;
+    } catch (err) { /* sem referrer */ }
+    // Ação da tela (server action): quem avisa é a própria tela, que vê a
+    // resposta (mensagem "telas-mudaram"). O worker não põe a mão no envio do
+    // que ele grava — um defeito aqui não pode impedir o CRM de gravar.
+    if (req.headers.get("Next-Action")) return;
+    // Rota /api (subida do modo sem sinal, áudio da demanda…): segue direto.
+    if (mudaAsCopias(alvo.pathname, tela)) {
+      e.waitUntil(depoisDaMudanca(tela || alvo.pathname, alvo.pathname === SUBIDA_SEM_SINAL).catch(() => {}));
+    }
+    return;
+  }
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 

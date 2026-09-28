@@ -59,6 +59,7 @@ export function ModoSemSinal() {
     setDesvio(avisoDoDesvio(q.get("motivo"), deValido));
     const a = q.get("aba");
     if (a === "pendentes" || a === "clientes" || a === "funil") setAba(a);
+    else if (a === "negociacoes") setAba("funil");
 
     pedirArmazenamentoPersistente();
     prepararModoSemSinal();
@@ -272,8 +273,8 @@ export function ModoSemSinal() {
         <p className="font-semibold text-slate-700">Nada baixado neste aparelho ainda</p>
         <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
           {online
-            ? sinc.rodando ? "Baixando as visitas, os clientes e o funil…" : "Toque em “Baixar de novo” acima para guardar as visitas, os clientes e o funil."
-            : "Abra o CRM uma vez com internet: ele guarda sozinho as visitas, os clientes e o funil para usar sem sinal."}
+            ? sinc.rodando ? "Baixando as visitas, os clientes e as negociações…" : "Toque em “Baixar de novo” acima para guardar as visitas, os clientes e as negociações."
+            : "Abra o CRM uma vez com internet: ele guarda sozinho as visitas, os clientes e as negociações para usar sem sinal."}
         </p>
         {contagem.pendentes > 0 && <p className="mt-2 text-sm font-semibold text-amber-700">{contagem.pendentes} registro(s) feitos aqui esperando para subir.</p>}
       </div>,
@@ -283,7 +284,7 @@ export function ModoSemSinal() {
   const abas: { id: Aba; rotulo: string; n?: number }[] = [
     { id: "visitas", rotulo: "Visitas" },
     { id: "clientes", rotulo: "Clientes" },
-    { id: "funil", rotulo: "Funil" },
+    { id: "funil", rotulo: "Negociações" },
     { id: "pendentes", rotulo: "Pendentes", n: contagem.pendentes + contagem.erros },
   ];
 
@@ -322,7 +323,9 @@ export function ModoSemSinal() {
             </button>
           </div>
 
-          <nav className="mb-3 grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Seções">
+          {/* "Negociações" é a palavra mais longa: coluna mais larga, senão
+              ela corta no celular (390). */}
+          <nav className="mb-3 grid grid-cols-[1fr_1fr_1.4fr_1fr] gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Seções">
             {abas.map((a) => (
               <button
                 key={a.id}

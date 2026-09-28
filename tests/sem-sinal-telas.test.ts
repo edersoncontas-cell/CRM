@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  telaGuardavel, telaSaudavel, ehCopia, nomeDaTela, ordenarTelas, horaCurta, quandoFoi, avisoDoDesvio,
-  TELAS_PRINCIPAIS, COPIA_DEPOIS_DE_MS, MARCA_TELA_OK,
+  telaGuardavel, telaSaudavel, ehCopia, nomeDaTela, ordenarTelas, horaCurta, quandoFoi, avisoDoDesvio, mudaAsCopias, acaoMudouDado, fichasDoQueSubiu,
+  TELAS_PRINCIPAIS, COPIA_DEPOIS_DE_MS, MARCA_TELA_OK, SUBIDA_SEM_SINAL,
 } from "@/lib/sem-sinal-telas";
+import { novoRegistro, type RegistroFila } from "@/lib/sem-sinal-regra";
 
 const H = 3_600_000;
 // 28/09/2026 15:00 em Brasília (18:00 UTC).
@@ -87,5 +88,48 @@ describe("telas guardadas para ler sem sinal", () => {
     expect(avisoDoDesvio(null, "/clientes")).toBeNull();
     expect(avisoDoDesvio("sem-copia", null)).toBeNull();
     expect(avisoDoDesvio("qualquer", "/clientes")).toBeNull();
+  });
+  it("o que grava numa tela do CRM deixa as cópias velhas; o que grava ao vivo ou só relata, não", () => {
+    // Ação da tela de Negociações (arrastar card) e rota chamada da ficha.
+    expect(mudaAsCopias("/negociacoes", "/negociacoes")).toBe(true);
+    expect(mudaAsCopias("/api/demandas/audio", "/pipeline")).toBe(true);
+    expect(mudaAsCopias("/visitas", null)).toBe(true);
+    // A subida do modo sem sinal sai de /sem-sinal, que não é cópia — e conta.
+    expect(mudaAsCopias(SUBIDA_SEM_SINAL, "/sem-sinal")).toBe(true);
+    expect(mudaAsCopias(SUBIDA_SEM_SINAL, null)).toBe(true);
+    // WhatsApp, Configurações e login: ao vivo, não mexem nas telas guardadas.
+    expect(mudaAsCopias("/api/conversations/1/messages", "/atendimento")).toBe(false);
+    expect(mudaAsCopias("/configuracoes", "/configuracoes")).toBe(false);
+    expect(mudaAsCopias("/login", "/login")).toBe(false);
+    // Relatório de erro, aviso no celular e sessão: gravam, mas não mudam tela.
+    expect(mudaAsCopias("/api/zeus/report-erro", "/dashboard")).toBe(false);
+    expect(mudaAsCopias("/api/push/subscribe", "/dashboard")).toBe(false);
+    expect(mudaAsCopias("/api/auth/restaurar", "/negociacoes")).toBe(false);
+  });
+  it("ação da tela só conta quando o Next diz que ela mandou refazer telas", () => {
+    expect(acaoMudouDado("[[],1,0]")).toBe(true);
+    expect(acaoMudouDado("[[],1,1]")).toBe(true);
+    // Só leu (visitas do dia ao abrir o app) ou só trocou cookie (tema): não.
+    expect(acaoMudouDado("[[],0,0]")).toBe(false);
+    expect(acaoMudouDado("[[],0,1]")).toBe(false);
+    // Sem cabeçalho ou formato desconhecido: fica a renovação de hora em hora.
+    expect(acaoMudouDado(null)).toBe(false);
+    expect(acaoMudouDado("")).toBe(false);
+    expect(acaoMudouDado("lixo")).toBe(false);
+    expect(acaoMudouDado("{\"revalidou\":1}")).toBe(false);
+  });
+  it("depois de subir, as fichas dos clientes do que subiu são renovadas (uma vez cada)", () => {
+    const base = { criadaEm: "2026-09-28T10:00:00Z", clienteNome: "X" };
+    const sub = (r: RegistroFila, estado: RegistroFila["estado"]) => ({ ...r, estado });
+    const fila = [
+      sub(novoRegistro({ ...base, tipo: "negociacao.criar", id: "o1", negociacaoId: "n1", clienteId: "c1", marca: null, maquinaModelo: null, valor: null, estagio: "A", proximaAcao: null }), "enviado"),
+      sub(novoRegistro({ ...base, tipo: "visita.agendar", id: "o2", visitaId: "v1", clienteId: "c1", data: "2026-09-29", horario: null, cidade: null, observacao: null }), "enviado"),
+      sub(novoRegistro({ ...base, tipo: "visita.agendar", id: "o3", visitaId: "v2", clienteId: "c2", data: "2026-09-29", horario: null, cidade: null, observacao: null }), "enviado"),
+      // Recusada não mudou nada no CRM; concluir visita não diz o cliente (Visitas é principal).
+      sub(novoRegistro({ ...base, tipo: "negociacao.criar", id: "o4", negociacaoId: "n2", clienteId: "c3", marca: null, maquinaModelo: null, valor: null, estagio: "A", proximaAcao: null }), "erro"),
+      sub(novoRegistro({ ...base, tipo: "visita.concluir", id: "o5", visitaId: "v1", feita: true, relato: "" }), "enviado"),
+    ];
+    expect(fichasDoQueSubiu(fila)).toEqual(["/clientes/c1", "/clientes/c2"]);
+    expect(fichasDoQueSubiu([])).toEqual([]);
   });
 });

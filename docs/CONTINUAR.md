@@ -12,8 +12,8 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Telas guardadas para ler sem internet"** (28/09).
-**1.235 testes passando** (106 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
+Último commit com código: **"Negociações sempre aparecendo sem internet"**
+(28/09). **1.255 testes passando** (107 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
 "manutencao.v44"` (o modo sem sinal e as telas guardadas não mexeram no
 schema).
 
@@ -313,6 +313,40 @@ do CRM. Agora:
   tela cortava o nome no parêntese (`app/(app)/…`), e a cópia ficava sem o
   script dela. `tests/sw-worker.test.ts` roda o worker gerado num navegador
   de mentira (cache, rede e eventos falsos) — 14 casos, incluindo este.
+
+### Mesmo dia, em seguida: "precisa manter as negociações mostrando"
+
+As negociações JÁ apareciam sem internet (a cópia de Negociações tem o funil
+inteiro — conferido). O que fazia uma negociação sumir:
+
+- **A aberta no modo sem sinal não aparecia em Negociações nem na ficha**
+  até subir e a cópia ser refeita (a cópia é um retrato de antes). Agora as
+  duas telas mostram à parte "Feitas sem sinal neste aparelho", com o estado
+  (esperando sinal / não subiu + motivo / já subiu, mas a tela é de antes) —
+  com e sem internet (`NegociacoesFeitasSemSinal`, regra
+  `negociacoesForaDaTela`: pendente, recusada, ou enviada depois de a tela ser
+  montada — hora do servidor dos dois lados).
+- **Com a internet de volta, a tela aberta não mostrava a que acabou de
+  subir** até recarregar. O `SincronizadorOffline` remonta a tela
+  (`router.refresh`) quando a subida manda alguma coisa — menos na cópia, onde
+  a faixa oferece "Atualizar".
+- **A cópia ficava até 1 hora sem a mudança** (card arrastado, negociação
+  nova): se ele saísse do sinal nesse meio, a cópia não tinha. O worker agora
+  vê o que grava e renova as principais + a tela onde mudou, 15 s depois da
+  rajada, no máximo a cada 3 min; a subida do modo sem sinal não espera o
+  intervalo e ainda avisa as fichas dos clientes que subiram
+  (`fichasDoQueSubiu`, mensagem `telas-mudaram`).
+  **Cuidado que o teste pegou:** o app pede as visitas do dia por uma ação ao
+  abrir QUALQUER tela; contar todo POST faria cada abertura remontar as seis
+  telas no banco. Ação só conta com `x-action-revalidated` = `[[],1,…]`, e
+  quem lê é a TELA (`vigiarAcoesQueGravam`, que só observa o fetch) e avisa o
+  worker (`telas-mudaram`). Primeiro fiz o worker ler a resposta, passando a
+  ação por dentro dele: funcionava no Chromium, mas punha todo o gravar do
+  CRM nas mãos do worker, e no iPhone não dá para provar — desfiz. Rota /api
+  conta pelo caminho (`mudaAsCopias`: nem WhatsApp, nem relatório de erro,
+  nem push).
+- Aba "Funil" do modo sem sinal virou **"Negociações"** (a palavra do menu);
+  coluna mais larga para não cortar no celular.
 
 ## Em aberto (ofereci, ele não respondeu)
 

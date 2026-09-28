@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { anosParaSeletor, anoPlausivel } from "@/lib/anos-seletor";
 import { normalizarEstagio } from "@/lib/pipeline";
 import { FunilNegociacoes } from "@/components/FunilNegociacoes";
+import { NegociacoesFeitasSemSinal } from "@/components/sem-sinal/NegociacoesFeitasSemSinal";
 import { PageHeader } from "@/components/ui";
 import { SeletorPeriodo } from "@/components/SeletorPeriodo";
 import { intervaloDoPeriodo, mesDaUrl, rotuloPeriodo, type Periodo } from "@/lib/periodo-funil";
@@ -126,6 +127,9 @@ export default async function NegociacoesPage({
       <p className="-mt-4 mb-4 text-xs text-slate-400">
         Tudo nesta tela é de {rotuloPeriodo(periodo)}: as colunas abertas mostram o que <b>entrou no funil</b> no período, o FATURADO o que foi <b>faturado</b> nele. Coluna sem movimento no período fica zerada. As perdidas têm página própria.
       </p>
+      {/* O que ele abriu no modo sem sinal e esta tela (ou a cópia guardada
+          dela) ainda não tem. A hora é a do servidor, a mesma do "subiu". */}
+      <NegociacoesFeitasSemSinal montadaEm={Date.now()} />
       <FunilNegociacoes cards={cards} clientes={clientes} colunas={colunas} maquinasProprias={maquinasProprias} periodoRotulo={rotuloPeriodo(periodo)} />
     </div>
   );

@@ -35,6 +35,24 @@ export function useSemSinal() {
   return { carregado, falha, pacote, fila, sinc, recarregar };
 }
 
+/**
+ * Só a fila (o que ele fez sem sinal), sem o pacote — para as telas comuns do
+ * CRM, que não precisam ler milhares de clientes do aparelho a cada abertura.
+ * null enquanto lê, e também se o aparelho não deixar ler: aí nada foi
+ * guardado nele pelo modo sem sinal, e não há o que mostrar.
+ */
+export function useFilaSemSinal(): RegistroFila[] | null {
+  const [fila, setFila] = useState<RegistroFila[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const ler = () => { lerFila().then((f) => { if (vivo) setFila(f); }, () => { if (vivo) setFila(null); }); };
+    ler();
+    const parar = aoMudar(ler);
+    return () => { vivo = false; parar(); };
+  }, []);
+  return fila;
+}
+
 /** Com internet ou sem? Começa pelo que o navegador diz e segue os avisos dele. */
 export function useOnline(): boolean {
   const [online, setOnline] = useState(true);

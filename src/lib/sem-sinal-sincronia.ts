@@ -14,7 +14,7 @@ import {
 } from "@/lib/sem-sinal-regra";
 import { lerFila, guardarRegistros, apagarRegistros, lerPacote, guardarPacote, EVENTO_SEM_SINAL } from "@/lib/sem-sinal-local";
 import { restaurarSessao } from "@/lib/sessao-local";
-import { telaGuardavel, nomeDaTela, ordenarTelas, TELAS_PRINCIPAIS, type TelaGuardada } from "@/lib/sem-sinal-telas";
+import { telaGuardavel, nomeDaTela, ordenarTelas, fichasDoQueSubiu, acaoMudouDado, TELAS_PRINCIPAIS, type TelaGuardada } from "@/lib/sem-sinal-telas";
 
 export const PAGINA_SEM_SINAL = "/sem-sinal";
 
@@ -103,42 +103,49 @@ async function comTrava<T>(f: () => Promise<T>): Promise<T | "ocupado"> {
 
 async function subirFila(): Promise<{ enviadas: number; recusadas: number; problema: Problema | null }> {
   let enviadas = 0, recusadas = 0;
-  // Teto de rodadas: uma fila enorme sobe em partes, e a próxima chamada
-  // continua de onde parou.
-  for (let rodada = 0; rodada < 12; rodada++) {
-    const fila = await lerFila();
-    const lote = proximoLote(fila);
-    if (!lote.length) break;
-    const r = await pedir<RespostaSincronia>("/api/sem-sinal/sincronizar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ops: lote.map((x) => x.op) }),
-    });
-    if (r.tipo !== "ok") {
-      // Erro do servidor na rodada inteira: conta tentativa só na primeira do
-      // lote (é a que o servidor aplica primeiro). Sem isso, uma operação
-      // problemática travaria a fila para sempre; contando em todas, as
-      // inocentes virariam erro junto.
-      if (r.tipo === "servidor") {
-        const [primeira] = lote;
-        const tentativas = primeira.tentativas + 1;
-        await guardarRegistros([{
-          ...primeira, tentativas,
-          ...(tentativas >= TENTATIVAS_ANTES_DE_ERRO ? { estado: "erro" as const } : {}),
-          erro: r.motivo,
-        }]);
+  const subiram: RegistroFila[] = [];
+  try {
+    // Teto de rodadas: uma fila enorme sobe em partes, e a próxima chamada
+    // continua de onde parou.
+    for (let rodada = 0; rodada < 12; rodada++) {
+      const fila = await lerFila();
+      const lote = proximoLote(fila);
+      if (!lote.length) break;
+      const r = await pedir<RespostaSincronia>("/api/sem-sinal/sincronizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ops: lote.map((x) => x.op) }),
+      });
+      if (r.tipo !== "ok") {
+        // Erro do servidor na rodada inteira: conta tentativa só na primeira do
+        // lote (é a que o servidor aplica primeiro). Sem isso, uma operação
+        // problemática travaria a fila para sempre; contando em todas, as
+        // inocentes virariam erro junto.
+        if (r.tipo === "servidor") {
+          const [primeira] = lote;
+          const tentativas = primeira.tentativas + 1;
+          await guardarRegistros([{
+            ...primeira, tentativas,
+            ...(tentativas >= TENTATIVAS_ANTES_DE_ERRO ? { estado: "erro" as const } : {}),
+            erro: r.motivo,
+          }]);
+        }
+        return { enviadas, recusadas, problema: r };
       }
-      return { enviadas, recusadas, problema: r };
+      const mudados = aplicarResultados(fila, r.dados);
+      await guardarRegistros(mudados);
+      subiram.push(...mudados.filter((m) => m.estado === "enviado"));
+      enviadas += mudados.filter((m) => m.estado === "enviado").length;
+      recusadas += mudados.filter((m) => m.estado === "erro").length;
+      // O servidor mandou parar (prazo, falha no meio): fica para a próxima.
+      const parou = r.dados.resultados.find((x) => !x.ok && x.transitorio);
+      if (parou) return { enviadas, recusadas, problema: { tipo: "servidor", motivo: parou.erro ?? "O servidor pediu para continuar depois." } };
     }
-    const mudados = aplicarResultados(fila, r.dados);
-    await guardarRegistros(mudados);
-    enviadas += mudados.filter((m) => m.estado === "enviado").length;
-    recusadas += mudados.filter((m) => m.estado === "erro").length;
-    // O servidor mandou parar (prazo, falha no meio): fica para a próxima.
-    const parou = r.dados.resultados.find((x) => !x.ok && x.transitorio);
-    if (parou) return { enviadas, recusadas, problema: { tipo: "servidor", motivo: parou.erro ?? "O servidor pediu para continuar depois." } };
+    return { enviadas, recusadas, problema: null };
+  } finally {
+    // As fichas dos clientes do que subiu: a cópia delas é de antes.
+    if (subiram.length) avisarTelasMudaram(fichasDoQueSubiu(subiram), true);
   }
-  return { enviadas, recusadas, problema: null };
 }
 
 async function baixarPacote(): Promise<Problema | null> {
@@ -219,6 +226,41 @@ export function prepararModoSemSinal(forcar = false): void {
       .then((reg) => reg.active?.postMessage({ tipo: "preparar-sem-sinal", forcar }))
       .catch(() => {});
   } catch { /* sem service worker */ }
+}
+
+/**
+ * Avisa o worker que o dado mudou e estas telas ficaram velhas (a tela onde
+ * uma ação gravou; as fichas dos clientes do que subiu do modo sem sinal): ele
+ * renova as principais e estas logo em seguida. `urgente` (a subida): não
+ * espera o intervalo entre renovações. Sem worker, fica para a de hora em hora.
+ */
+export function avisarTelasMudaram(caminhos: string[], urgente = false): void {
+  try {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.active?.postMessage({ tipo: "telas-mudaram", caminhos, urgente }))
+      .catch(() => {});
+  } catch { /* sem service worker */ }
+}
+
+/**
+ * Observa as ações da tela (server actions) e chama `aoGravar` quando uma
+ * delas gravou (acaoMudouDado). Só observa: o pedido e a resposta seguem os
+ * mesmos, e qualquer falha daqui é engolida — nunca atrapalha o que grava.
+ * Devolve quem desfaz.
+ */
+export function vigiarAcoesQueGravam(alvo: { fetch: typeof fetch }, aoGravar: () => void): () => void {
+  const original = alvo.fetch;
+  const vigiado: typeof fetch = async (entrada, init) => {
+    const res = await original(entrada, init);
+    try {
+      const cabecalhos = new Headers(init?.headers ?? (entrada instanceof Request ? entrada.headers : undefined));
+      if (cabecalhos.has("Next-Action") && acaoMudouDado(res.headers.get("x-action-revalidated"))) aoGravar();
+    } catch { /* só observa */ }
+    return res;
+  };
+  alvo.fetch = vigiado;
+  return () => { if (alvo.fetch === vigiado) alvo.fetch = original; };
 }
 
 /**

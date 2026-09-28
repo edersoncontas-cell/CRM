@@ -10,13 +10,13 @@
 // visitas e mais nada do CRM ("funcionou somente a parte das visitas").
 //
 // Estas regras valem para DOIS lados: a tela e o service worker. O worker é
-// um texto gerado em src/app/sw.js/route.ts, que recebe estas listas e repete
-// as duas funções pequenas (lá não dá para importar); o teste
-// tests/sem-sinal-telas.test.ts roda o worker gerado e confere que os dois
-// lados decidem igual.
+// um texto gerado em src/lib/sw-codigo.ts, que recebe estas listas e repete
+// as funções pequenas (lá não dá para importar); o teste
+// tests/sw-worker.test.ts roda o worker gerado e confere que os dois lados
+// decidem igual.
 
 import { GRUPOS } from "@/lib/menu";
-import { diaBrasilia } from "@/lib/sem-sinal-regra";
+import { diaBrasilia, type RegistroFila } from "@/lib/sem-sinal-regra";
 
 /**
  * Guardadas e renovadas por trás, sem ele precisar abrir cada uma: são as que
@@ -44,6 +44,75 @@ export const RENOVAR_TELA_MS = 60 * 60 * 1000;
 
 /** Teto de cópias no aparelho; as principais nunca saem, as avulsas mais velhas sim. */
 export const MAX_TELAS_GUARDADAS = 40;
+
+/**
+ * Mudou dado (arrastou um card, abriu negociação, o modo sem sinal subiu o
+ * que foi feito na rua): as cópias ficaram velhas. Esperar a renovação de
+ * hora em hora deixava a negociação de agora fora da cópia — e ele pode sair
+ * do sinal logo em seguida. O worker renova as principais e a tela onde a
+ * mudança aconteceu assim que a rajada acaba (15 s sem mudança), no máximo a
+ * cada 3 min: dez cards arrastados seguidos são UMA renovação, não dez.
+ */
+export const ESPERA_DEPOIS_DA_MUDANCA_MS = 15 * 1000;
+export const INTERVALO_RENOVACAO_POR_MUDANCA_MS = 3 * 60 * 1000;
+
+/**
+ * A subida do que foi feito no modo sem sinal (sai de /sem-sinal, que não é
+ * cópia). Esta não espera o intervalo de 3 min: é a hora em que o sinal
+ * voltou, e ele pode cair de novo logo.
+ */
+export const SUBIDA_SEM_SINAL = "/api/sem-sinal/sincronizar";
+
+/** Gravam, mas não mudam nada que as telas mostram. */
+export const GRAVA_SEM_MUDAR_TELA = ["/api/zeus/report-erro", "/api/push", "/api/auth"];
+
+/**
+ * Este POST numa rota (/api) deixa as cópias velhas? `tela` é a tela de onde
+ * ele saiu. Das telas ao vivo (WhatsApp, Configurações) não conta: mensagem
+ * enviada não muda as telas guardadas, e cada envio viraria uma renovação.
+ * As AÇÕES da tela (server actions) seguem outra regra: acaoMudouDado.
+ */
+export function mudaAsCopias(caminhoPedido: string, tela: string | null): boolean {
+  if (GRAVA_SEM_MUDAR_TELA.some((p) => caminhoPedido === p || caminhoPedido.startsWith(`${p}/`))) return false;
+  if (caminhoPedido === SUBIDA_SEM_SINAL) return true;
+  return telaGuardavel(tela ?? caminhoPedido);
+}
+
+/**
+ * As fichas dos clientes cujo registro feito sem sinal acabou de subir: a
+ * cópia delas (guardada antes) não tem a negociação ou a visita nova. A
+ * subida avisa o worker para renová-las junto com as principais — a ficha não
+ * é principal, e a subida sai de uma tela qualquer.
+ */
+export function fichasDoQueSubiu(registros: RegistroFila[]): string[] {
+  const fichas = new Set<string>();
+  for (const r of registros) {
+    if (r.estado !== "enviado") continue;
+    if (r.op.tipo === "negociacao.criar" || r.op.tipo === "visita.agendar") fichas.add(`/clientes/${r.op.clienteId}`);
+  }
+  return [...fichas].filter(telaGuardavel);
+}
+
+/**
+ * Ação da tela (server action) que gravou. O POST sozinho não diz: o app pede
+ * a lista de visitas do dia por uma ação AO ABRIR QUALQUER TELA — contar isso
+ * faria cada abertura do app remontar as seis telas no servidor. O que diz é
+ * a resposta: o Next manda x-action-revalidated = [[], 1, …] quando a ação
+ * pediu para refazer telas (revalidatePath), e toda ação que grava faz isso
+ * aqui. Formato desconhecido (Next novo) não conta: sobra a renovação de hora
+ * em hora, que é como era — o teste confere o formato na versão instalada.
+ * Quem lê é a própria tela (vigiarAcoesQueGravam), não o worker: o worker
+ * não põe a mão no envio do que o CRM grava.
+ */
+export function acaoMudouDado(cabecalho: string | null): boolean {
+  if (!cabecalho) return false;
+  try {
+    const v: unknown = JSON.parse(cabecalho);
+    return Array.isArray(v) && v[1] === 1;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Montada no servidor mais que isto antes de o aparelho abri-la: é cópia.

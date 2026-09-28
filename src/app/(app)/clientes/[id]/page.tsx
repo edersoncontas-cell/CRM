@@ -6,6 +6,7 @@ import { EditarClienteForm } from "@/components/EditarClienteForm";
 import { VisitasCliente } from "@/components/VisitasCliente";
 import { HistoricoVisitasCliente } from "@/components/HistoricoVisitasCliente";
 import { BotaoNovaNegociacao } from "@/components/BotaoNovaNegociacao";
+import { NegociacoesFeitasSemSinal } from "@/components/sem-sinal/NegociacoesFeitasSemSinal";
 import { AgendarVisitaDialog } from "@/components/AgendarVisitaDialog";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { linhaDoTempoCliente } from "@/lib/linha-tempo";
@@ -378,6 +379,8 @@ export default async function ClienteDetalhe({ params }: { params: { id: string 
             maquinasProprias={maquinas.filter((m) => m.proprio).map((m) => ({ marca: m.marca, modelo: m.modelo }))}
           />
         </div>
+        {/* A deste cliente aberta no modo sem sinal que ainda não está aqui. */}
+        <NegociacoesFeitasSemSinal montadaEm={Date.now()} clienteId={cliente.id} />
         {cliente.negociacoes.length === 0 ? (
           <p className="text-sm text-slate-400">Nenhuma negociação ainda.</p>
         ) : (
