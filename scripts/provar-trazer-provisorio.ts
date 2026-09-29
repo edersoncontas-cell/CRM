@@ -150,6 +150,13 @@ function tabela(etapas: ResultadoEtapa[]) {
 async function main() {
   const csP = await montarPrincipal();
   await montarProvisorio(csP);
+  // O pior caso do Neon: as colunas do "não perturbe" (22/09) nunca chegaram
+  // lá. A volta tem de criá-las antes de comparar os dois bancos, senão a
+  // marca de quem respondeu SAIR fica para trás.
+  if (process.env.SEM_COLUNAS_DE_2209) {
+    await principal.$executeRawUnsafe(`ALTER TABLE "Cliente" DROP COLUMN "naoPerturbe", DROP COLUMN "naoPerturbeEm", DROP COLUMN "naoPerturbeMotivo"`);
+    console.log("(principal SEM as colunas do não perturbe, como o Neon pode estar)");
+  }
   // SO_MONTAR=1: só monta os dois bancos (para conferir a tela com eles).
   if (process.env.SO_MONTAR) {
     console.log("bancos montados");

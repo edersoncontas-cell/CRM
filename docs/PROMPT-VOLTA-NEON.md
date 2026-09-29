@@ -50,5 +50,6 @@ Abra o CRM no endereço de sempre, faça login e depois abra `/api/diag` no mesm
 endereço. Me diga, copiando da tela:
 - a linha que começa com "principal:" (deve dizer "principal: Neon · provisório: Supabase");
 - a linha "conectar no provisório";
-- a linha "LER: contar clientes".
+- a linha "LER: contar clientes";
+- a linha "estrutura: o que o código pede e o banco não tem".
 Essas linhas não têm senha. Não clique em "Trazer" em Configurações — isso eu faço.

@@ -147,6 +147,13 @@ Conferir também nos DOIS temas quando a mudança tiver cor.
   da página: ela perde a corrida. Já aconteceu, e o vendedor ficou um dia fora
   do ar. Antes de empurrar, **rodar com CÓDIGO NOVO e BANCO VELHO**: derruba a
   coluna no banco de teste, builda, e a PRIMEIRA requisição tem que passar.
+  Rede de segurança (não dispensa o teste): consulta que cai com "a coluna não
+  existe" faz o `lib/db.ts` criar as colunas que faltam, com a definição do
+  schema, e repetir UMA vez (`lib/coluna-que-falta.ts`; tabela inteira,
+  coluna obrigatória sem padrão e índice ficam para a migração). Migração que
+  preenche as linhas antigas só quando a coluna NASCE → a coluna entra em
+  `NASCE_PELA_MIGRACAO`, senão o conserto a cria antes e o preenchimento some
+  (o teste lê o `migrations.ts` e pega). `/api/diag` diz o que falta.
 - **Tela caída tem que DIZER o motivo.** Em produção o Next esconde a mensagem
   do servidor, e "Algo deu errado nesta página" não diz nada a ninguém — foi
   esse silêncio que transformou um defeito de minutos num dia parado. O layout

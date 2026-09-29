@@ -12,10 +12,9 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Negociações sempre aparecendo sem internet"**
-(28/09). **1.255 testes passando** (107 arquivos), lint e build limpos. `CHAVE_MANUTENCAO =
-"manutencao.v44"` (o modo sem sinal e as telas guardadas não mexeram no
-schema).
+Último commit com código: **"Volta para o Neon: a 1ª tela não cai se faltar
+coluna lá"** (29/09). **1.278 testes passando** (108 arquivos), lint e build
+limpos. `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
@@ -76,6 +75,31 @@ uso.
    conferências + mutação) e na tela, PC e celular.
 3. Depois: ele pode apagar `DATABASE_URL_PROVISORIO` quando o card disser
    "tudo trazido". Só DEPOIS disso retomar o multiusuário.
+
+**29/09 — "Quero que volte logo para o Neon": o código de hoje no banco de
+23/09.** Não dá para saber daqui em que pé o Neon ficou. Simulei os três
+estados possíveis (cópia do banco de teste com as sobras do multiusuário e a
+marca v45/v46) e rodei o build de produção, processo frio, 10 telas de uma vez
+na 1ª requisição:
+- A — colunas de 22/09 lá, marca v44 ausente (o mais provável): 10/10 — já
+  passava; a manutenção roda uma vez.
+- B — sem as colunas do "não perturbe" (v43): **quebrava 3 de 10** (Dashboard,
+  Visitas, ficha) na 1ª rajada. Agora 10/10.
+- C — sem as colunas E marca v44 "ok" (manutenção não roda): antes **nunca
+  sarava**. Agora 10/10.
+O conserto (`lib/coluna-que-falta.ts` + `lib/db.ts`): consulta que cai com
+"a coluna não existe" cria as colunas que faltam (definição do DDL gerado do
+schema, `ALTER … ADD COLUMN IF NOT EXISTS`, 4 s de espera pela trava) e repete
+UMA vez; um conserto por vez, no máximo 1/min. Em transação não repete (o
+conserto roda e a próxima tela acha a coluna). Tabela, obrigatória sem padrão,
+índice e `NASCE_PELA_MIGRACAO` (Visita.status) ficam para a migração.
+`/api/diag` ganhou a linha "estrutura: o que o código pede e o banco não tem"
+(o prompt da extensão pede essa linha no Passo 5). E a volta
+(`rodarVolta`) completa as colunas do principal ANTES de comparar os bancos —
+sem isso, quem respondeu SAIR no Supabase voltaria sem a marca (provado:
+`SEM_COLUNAS_DE_2209=1` no `provar-trazer-provisorio.ts`; sem o conserto, falha).
+Provado contra Postgres de verdade: rajada, consulta crua, transação em lote
+e interativa, coluna sem como criar, tabela travada (desiste em 4 s).
 
 ### O que entrou para isso não se repetir (23–24/09)
 

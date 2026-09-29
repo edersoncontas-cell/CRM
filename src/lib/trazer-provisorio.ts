@@ -20,6 +20,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { ehFalhaDeConexao } from "@/lib/falha-conexao";
+import { completarColunas } from "@/lib/coluna-que-falta";
 import {
   type Linha, chavesDoClienteNoProvisorio, indiceDeClientes, completarCliente,
   chavesDaConversa, completarConversa, tratarConversaNova, chaveDaMensagem, tratarMensagem,
@@ -523,6 +524,13 @@ export async function rodarVolta(args: {
 }): Promise<ResultadoVolta> {
   const agora = args.agora ?? Date.now;
   const inicio = Math.max(0, args.inicio ?? 0);
+  // O principal que volta de dias parado pode estar sem coluna de uma migração
+  // que não chegou a rodar lá (a do "não perturbe", de 22/09, no Neon). A
+  // volta copia só as colunas que os DOIS bancos têm: sem esta linha, quem
+  // respondeu SAIR no provisório voltaria sem a marca, em silêncio. É
+  // estrutura, nunca dado — o mesmo que o CRM faz na 1ª consulta que pede a
+  // coluna (lib/coluna-que-falta.ts). Não conseguiu, para e diz.
+  await completarColunas(args.destino);
   const ctx: Ctx = { origem: args.origem, destino: args.destino, mapas: new Map(), colunas: new Map() };
   const etapas: ResultadoEtapa[] = [];
   const t0 = agora();

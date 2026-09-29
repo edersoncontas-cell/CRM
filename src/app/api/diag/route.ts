@@ -12,6 +12,7 @@
 // credencial: só diz se a variável existe.
 
 import { db } from "@/lib/db";
+import { colunasDoSchema, oQueFalta, SQL_COLUNAS_DO_BANCO, type ColunaNoBanco } from "@/lib/coluna-que-falta";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,6 +70,27 @@ export async function GET() {
       create: { chave: "diag.ping", valor: new Date().toISOString() },
     });
     return "gravou";
+  }));
+  // O banco tem tudo o que o código de agora pede? Banco que voltou de dias
+  // parado (o Neon, depois de 23/09) pode estar sem coluna de uma migração que
+  // não chegou a rodar. Só lê: quem cria é a manutenção — ou o conserto na
+  // hora, quando uma consulta pede a coluna (lib/coluna-que-falta.ts).
+  linhas.push(await testar("estrutura: o que o código pede e o banco não tem", async () => {
+    const noBanco = await db.$queryRawUnsafe<ColunaNoBanco[]>(SQL_COLUNAS_DO_BANCO);
+    const schema = colunasDoSchema();
+    const tabelas = new Set(noBanco.map((r) => r.tabela));
+    const semTabela = [...schema.keys()].filter((t) => !tabelas.has(t));
+    const { comandos, semComoCriar } = oQueFalta(noBanco, schema);
+    const criaveis = comandos.flatMap((c) => c.colunas.map((col) => `${c.tabela}.${col}`));
+    if (semTabela.length || semComoCriar.length) {
+      throw new Error([
+        semTabela.length ? `tabela(s) que faltam: ${semTabela.join(", ")}` : "",
+        semComoCriar.length ? `coluna(s) que faltam e só a migração cria: ${semComoCriar.join(", ")}` : "",
+        criaveis.length ? `e ${criaveis.length} coluna(s) que o CRM cria sozinho na 1ª consulta que pedir: ${criaveis.join(", ")}` : "",
+      ].filter(Boolean).join(" · ") + " — veja o card Manutenção em Configurações");
+    }
+    if (criaveis.length) return `faltam ${criaveis.length} coluna(s), criadas sozinhas na 1ª consulta que pedir: ${criaveis.join(", ")}`;
+    return `nada — ${schema.size} tabelas, todas as colunas`;
   }));
   // 2b. O OUTRO endereço do Neon.
   //
