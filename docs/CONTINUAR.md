@@ -73,8 +73,11 @@ uso.
    Unificações/limpezas feitas no Supabase não vêm (ids de lá).
    Provado com dois Postgres (`scripts/provar-trazer-provisorio.ts`: 28
    conferências + mutação) e na tela, PC e celular.
-3. Depois: ele pode apagar `DATABASE_URL_PROVISORIO` quando o card disser
-   "tudo trazido". Só DEPOIS disso retomar o multiusuário.
+3. Depois: ele pode apagar `DATABASE_URL_PROVISORIO` (e a cópia
+   `DATABASE_URL_UNPOOLED_PROVISORIO`, que só serve para desfazer a troca)
+   quando o card disser "tudo trazido". Só DEPOIS disso retomar o multiusuário.
+   O prompt (30/09) confere que o deploy de produção é a versão nova antes do
+   Redeploy e tem o Passo 6 — desfazer, se o Neon não conectar.
 
 **29/09 — "Quero que volte logo para o Neon": o código de hoje no banco de
 23/09.** Não dá para saber daqui em que pé o Neon ficou. Simulei os três

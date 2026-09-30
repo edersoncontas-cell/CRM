@@ -27,11 +27,15 @@ Abra https://console.neon.tech, entre no projeto do CRM e veja se ele está ativ
 ainda aparecer suspenso, limite de uso ou data de liberação no futuro, PARE e me diga
 a data que aparece. Não siga adiante.
 
-**Passo 2 — Guardar o endereço do banco provisório.**
+**Passo 2 — Guardar os endereços do banco provisório.**
 Na Vercel, abra o projeto do CRM → Settings → Environment Variables.
-Crie uma variável nova chamada `DATABASE_URL_PROVISORIO`, marcada para Production e
-Preview, com EXATAMENTE o mesmo valor que está hoje em `DATABASE_URL` (copie o valor
-atual de `DATABASE_URL` e cole na nova). Salve.
+- Crie uma variável nova chamada `DATABASE_URL_PROVISORIO`, marcada para Production e
+  Preview, com EXATAMENTE o mesmo valor que está hoje em `DATABASE_URL` (copie o valor
+  atual de `DATABASE_URL` e cole na nova).
+- Crie outra chamada `DATABASE_URL_UNPOOLED_PROVISORIO`, também Production e Preview,
+  com EXATAMENTE o mesmo valor que está hoje em `DATABASE_URL_UNPOOLED`. Ela serve só
+  para poder desfazer a troca (Passo 6).
+Salve as duas.
 
 **Passo 3 — Pôr o Neon de volta.**
 No console do Neon, no projeto do CRM, abra "Connect" (ou "Connection details").
@@ -42,8 +46,12 @@ No console do Neon, no projeto do CRM, abra "Connect" (ou "Connection details").
 Salve as duas.
 
 **Passo 4 — Publicar.**
-Na Vercel, vá em Deployments, abra o deploy de produção mais recente e clique em
-"Redeploy". Espere ficar "Ready".
+Na Vercel, vá em Deployments e ache o deploy de PRODUÇÃO mais recente com status
+"Ready". A mensagem do commit dele deve ser uma destas:
+"Prompt da volta para o Neon: conferir a versão e poder desfazer" ou
+"Volta para o Neon: a 1ª tela não cai se faltar coluna lá".
+Se for outra, PARE e me diga qual é (a versão nova do CRM não está no ar).
+Sendo uma delas, abra esse deploy, clique em "Redeploy" e espere ficar "Ready".
 
 **Passo 5 — Conferir.**
 Abra o CRM no endereço de sempre, faça login e depois abra `/api/diag` no mesmo
@@ -51,5 +59,16 @@ endereço. Me diga, copiando da tela:
 - a linha que começa com "principal:" (deve dizer "principal: Neon · provisório: Supabase");
 - a linha "conectar no provisório";
 - a linha "LER: contar clientes";
+- a linha "conectar e responder (SELECT 1)";
 - a linha "estrutura: o que o código pede e o banco não tem".
 Essas linhas não têm senha. Não clique em "Trazer" em Configurações — isso eu faço.
+
+**Passo 6 — Só se deu errado: desfazer.**
+Se no Passo 5 a linha "conectar e responder (SELECT 1)" disser FALHOU, ou se o CRM
+abrir uma tela dizendo que o banco está fora do ar:
+- na Vercel, ponha em `DATABASE_URL` o mesmo valor de `DATABASE_URL_PROVISORIO`, e em
+  `DATABASE_URL_UNPOOLED` o mesmo valor de `DATABASE_URL_UNPOOLED_PROVISORIO`; salve;
+- faça "Redeploy" do deploy de produção mais recente de novo e espere "Ready";
+- abra `/api/diag` e me diga a linha "conectar e responder (SELECT 1)" (deve dizer
+  [ok]) e, copiada da primeira tentativa, a mensagem de erro que apareceu.
+Não apague nenhuma variável, nem as duas `_PROVISORIO`.
