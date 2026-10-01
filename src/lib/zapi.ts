@@ -563,6 +563,14 @@ export async function tokenDaInstancia(): Promise<string | null> {
 // está configurada na instância) com um evento inofensivo e vê o que volta.
 // É o único jeito de descobrir, sem log da Vercel, se a chamada morre no
 // caminho (tela de login da Vercel, URL errada, chave recusada).
+//
+// E se ela chega a ESTE banco. Responder 200 não bastava: outra publicação
+// do CRM na Vercel (endereço de um deploy antigo, gravando no banco de antes
+// — o provisório, depois da volta para o Neon) também responde 200, e o
+// diagnóstico dizia "tudo certo" com as mensagens caindo em outro lugar. O
+// teste leva uma marca única; o webhook a grava no banco dele
+// (CHAVE_TESTE_WEBHOOK); aqui se confere se ela apareceu no nosso.
+export const CHAVE_TESTE_WEBHOOK = "diag.webhook_teste";
 export type TesteWebhook = { ok: boolean; url: string | null; detalhe: string };
 export async function testarWebhookDeFora(urlConfigurada: string | null): Promise<TesteWebhook> {
   const cfg = evolutionConfig();
@@ -572,17 +580,25 @@ export async function testarWebhookDeFora(urlConfigurada: string | null): Promis
   // O que a Evolution 2.x manda de verdade: a chave no corpo é o token da
   // instância (ou a global, quando a instância foi criada com ela).
   const apikeyNoCorpo = (await tokenDaInstancia()) ?? cfg.apiKey;
+  const marca = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": "crm-teste-webhook" },
-      body: JSON.stringify({ event: "connection.update", instance: cfg.instance, data: { state: "open", teste: true }, apikey: apikeyNoCorpo }),
+      body: JSON.stringify({ event: "connection.update", instance: cfg.instance, data: { state: "open", teste: marca }, apikey: apikeyNoCorpo }),
       cache: "no-store",
       signal: AbortSignal.timeout(TEMPO_TELA_MS),
     });
     const tipo = res.headers.get("content-type") ?? "";
     const texto = await res.text().catch(() => "");
-    if (res.ok && /json/.test(tipo)) return { ok: true, url, detalhe: `respondeu HTTP ${res.status} — a chamada chega e a chave é aceita` };
+    if (res.ok && /json/.test(tipo)) {
+      const chegou = (await getConfig(CHAVE_TESTE_WEBHOOK).catch(() => null)) === marca;
+      if (chegou) return { ok: true, url, detalhe: `respondeu HTTP ${res.status} — a chamada chega a este CRM, neste banco, e a chave é aceita` };
+      return {
+        ok: false, url,
+        detalhe: `respondeu HTTP ${res.status}, mas a chamada NÃO chegou a este banco — esse endereço é outra publicação do CRM (um deploy antigo da Vercel, gravando em outro banco). As mensagens estão caindo lá, não aqui`,
+      };
+    }
     const html = /html/.test(tipo);
     // Quem respondeu? A Vercel carimba o motivo em x-vercel-error
     // (NOT_FOUND, DEPLOYMENT_NOT_FOUND, DEPLOYMENT_PAUSED…) — é isso que
@@ -761,7 +777,15 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
       const teste = await testarWebhookDeFora(w?.enabled ? w.url : null);
       etapas.push({ etapa: "Chamada de teste no webhook", ok: teste.ok, detalhe: teste.detalhe });
       if (teste.ok && ok) return fim("Tudo certo: número pareado, webhook no lugar e a chamada de teste chegou no CRM. Se ainda assim nada aparece, mande uma mensagem de teste e veja \"Últimos eventos\" abaixo.");
-      if (teste.ok) return fim("As chamadas estão chegando, mas o webhook está numa URL diferente da esperada — o CRM corrige sozinho na próxima verificação (ou clique em \"Configurar webhook agora\").");
+      if (teste.ok) {
+        // O endereço da instância ENTREGA neste banco (o teste provou): é ele
+        // que fica. Antes o vigia "corrigia" para o endereço guardado — que,
+        // depois de uma troca de banco, pode ser o de outra época e não
+        // funcionar mais.
+        const base = (w?.url ?? "").replace(/\/api\/webhooks\/evolution.*$/, "");
+        if (base) await confirmarUrlPublica(base).catch(() => {});
+        return fim(`As chamadas estão chegando neste banco pelo endereço ${base || "configurado na instância"} — o CRM passou a usar esse endereço como o certo.`);
+      }
 
       // 4. Não chegou. O endereço pelo qual o vendedor está abrindo o CRM
       // AGORA é, por definição, um endereço público que funciona: testa ele

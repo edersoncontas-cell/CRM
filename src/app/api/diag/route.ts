@@ -27,6 +27,16 @@ function recado(e: unknown): string {
   return um(String(e)).slice(0, 320);
 }
 
+const SQL_ULTIMA_RECEBIDA = `SELECT max("sentAt") AS t FROM "WhatsAppMessage" WHERE direction = 'IN' AND "isDraft" = false`;
+
+// Horário de Brasília, que é o que ele lê.
+function quando(t: Date | string | null): string {
+  if (!t) return "nenhuma";
+  const d = typeof t === "string" ? new Date(t) : t;
+  if (Number.isNaN(d.getTime())) return "data ilegível";
+  return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 async function testar(nome: string, fn: () => Promise<string>): Promise<string> {
   const t0 = Date.now();
   try {
@@ -141,7 +151,44 @@ export async function GET() {
         await prov.$disconnect().catch(() => {});
       }
     }));
+    // O WhatsApp ainda entrega no provisório? Acontece quando o webhook ficou
+    // apontado para um deploy antigo da Vercel (que guarda o banco de quando
+    // foi publicado): a tela do principal fica parada e as mensagens caem lá.
+    linhas.push(await testar("última mensagem recebida — lá × aqui", async () => {
+      const { PrismaClient } = await import("@prisma/client");
+      const prov = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_PROVISORIO } } });
+      try {
+        const [la, aqui] = await Promise.all([
+          prov.$queryRawUnsafe<{ t: Date | null }[]>(SQL_ULTIMA_RECEBIDA),
+          db.$queryRawUnsafe<{ t: Date | null }[]>(SQL_ULTIMA_RECEBIDA),
+        ]);
+        const tl = la[0]?.t ?? null, ta = aqui[0]?.t ?? null;
+        const base = `lá: ${quando(tl)} · aqui: ${quando(ta)}`;
+        if (tl && (!ta || tl > ta)) {
+          return `${base} — ATENÇÃO: o provisório tem mensagem mais nova que o principal. Se ela é de depois da volta, o WhatsApp ainda entrega lá: abra Conexão → Diagnosticar conexão.`;
+        }
+        return `${base} — as novas estão chegando aqui`;
+      } finally {
+        await prov.$disconnect().catch(() => {});
+      }
+    }));
   }
+  linhas.push("");
+
+  // O Atendimento parado: o WhatsApp está entregando neste banco? O webhook
+  // anota cada chamada (lib/zapi-diag.ts) — sem chamada nova, nada chega.
+  linhas.push("— Recebimento do WhatsApp (o que chegou a ESTE banco)");
+  linhas.push(await testar("última chamada do webhook", async () => {
+    const { lerDiag } = await import("@/lib/zapi-diag");
+    const d = await lerDiag();
+    const u = d.ultimos[0];
+    if (!u) return "nenhuma chamada registrada neste banco";
+    return `${quando(u.em)} · ${u.status}${u.texto && u.status !== "recebida" ? ` (${u.texto.slice(0, 60)})` : ""} · ${d.totalChamadas} no total`;
+  }));
+  linhas.push(await testar("última mensagem recebida gravada", async () => {
+    const r = await db.$queryRawUnsafe<{ t: Date | null }[]>(SQL_ULTIMA_RECEBIDA);
+    return quando(r[0]?.t ?? null);
+  }));
   linhas.push("");
 
   // 3. O que a migração de hoje deixou no banco. O código no ar não usa nada

@@ -88,7 +88,10 @@ export function VoltaProvisorioCard({ inicial }: { inicial: EstadoProvisorio }) 
   const gravadas = feito?.reduce((s, e) => s + e.gravadas, 0) ?? 0;
   const completados = feito?.reduce((s, e) => s + e.atualizadas, 0) ?? 0;
 
+  // id: o aviso do Atendimento ("as conversas do provisório ainda não
+  // vieram") traz direto para cá.
   return (
+    <div id="trazer-provisorio" className="scroll-mt-24">
     <Card className="mt-6">
       <div className="mb-1.5 flex items-center gap-2 font-semibold text-slate-700">
         <DatabaseBackup size={18} className="text-brand-600" /> Trazer os dados do banco provisório
@@ -209,5 +212,6 @@ export function VoltaProvisorioCard({ inicial }: { inicial: EstadoProvisorio }) 
 
       {erro && <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</div>}
     </Card>
+    </div>
   );
 }

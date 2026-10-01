@@ -57,12 +57,33 @@ export async function vigiarConexao({ agora = new Date(), forcar = false }: { ag
   let memoria = leitura.memoria;
 
   // Webhook fora do lugar: reaponta na hora, mesmo com a conexão de pé.
+  //
+  // Antes de trocar, confere se o endereço que está na instância já entrega
+  // NESTE banco (o teste deixa uma marca aqui). Se entrega, é ele que vale: o
+  // endereço guardado no banco pode ser de outra época — depois da volta para
+  // o Neon, o vigia trocava um webhook que funcionava pelo endereço que o Neon
+  // tinha guardado em 23/09, sem saber se ele ainda respondia.
   let webhookCorrigido = false;
   if (status.conectado && status.webhookOk === false && urlWebhook) {
-    const r = await zapi.configurarWebhookEvolution(urlWebhook).catch(() => ({ ok: false }));
+    const atual = await zapi.lerWebhookEvolution().catch(() => null);
+    const urlAtual = atual?.enabled ? atual.url ?? "" : "";
+    const baseAtual = urlAtual.replace(/\/api\/webhooks\/evolution.*$/, "");
+    const entregaAqui = !!baseAtual && (await zapi.testarWebhookDeFora(urlAtual).catch(() => null))?.ok === true;
+    let destino = urlWebhook;
+    if (entregaAqui) {
+      await zapi.confirmarUrlPublica(baseAtual).catch(() => {});
+      // Mesmo endereço, só com a chave na URL do jeito que o CRM monta: assim
+      // a próxima leitura já bate e o teste não se repete a cada 5 min.
+      destino = (await zapi.urlWebhookCrm()) ?? urlWebhook;
+    }
+    const r = await zapi.configurarWebhookEvolution(destino).catch(() => ({ ok: false }));
     webhookCorrigido = r.ok === true;
     if (webhookCorrigido) {
-      await registrarZeusEvent({ tipo: "health", titulo: "Webhook do WhatsApp reapontado para o CRM", severidade: "baixa" }).catch(() => {});
+      await registrarZeusEvent({
+        tipo: "health",
+        titulo: entregaAqui ? "Webhook do WhatsApp: o endereço que já entregava aqui passou a ser o oficial" : "Webhook do WhatsApp reapontado para o CRM",
+        severidade: "baixa",
+      }).catch(() => {});
     }
   }
 

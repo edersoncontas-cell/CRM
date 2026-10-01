@@ -144,12 +144,17 @@ export function ConexaoWhatsApp() {
   }, [buscarStatus, buscarQr]);
 
   // Servidor fora do ar: roda o diagnóstico sozinho na primeira falha, para a
-  // tela já dizer o que consertar em vez de só girar.
+  // tela já dizer o que consertar em vez de só girar. Também quando a pessoa
+  // chega pelo aviso do Atendimento ("o recebimento parou"): ?diagnosticar=1.
+  // O diagnóstico testa o webhook de fora e, se ele aponta para o endereço
+  // errado, reaponta para o deste navegador.
   useEffect(() => {
-    if (!status?.erro || diagnostico || diagnosticando || diagnosticoAuto.current) return;
+    if (!status || diagnostico || diagnosticando || diagnosticoAuto.current) return;
+    const pedido = new URLSearchParams(window.location.search).get("diagnosticar") === "1";
+    if (!status.erro && !pedido) return;
     diagnosticoAuto.current = true;
     diagnosticar();
-  }, [status?.erro, diagnostico, diagnosticando, diagnosticar]);
+  }, [status, diagnostico, diagnosticando, diagnosticar]);
 
   if (!status) {
     return (

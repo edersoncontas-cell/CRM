@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evolutionConfig, tokenDaInstancia } from "@/lib/zapi";
+import { evolutionConfig, tokenDaInstancia, CHAVE_TESTE_WEBHOOK } from "@/lib/zapi";
+import { setConfig } from "@/lib/config";
 import { extrairConteudoEvolution, normalizarChaveEvolution, STATUS_EVOLUTION } from "@/lib/evolution";
 import { atualizarStatusEntrega } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
@@ -64,6 +65,15 @@ export async function POST(req: NextRequest) {
   const dados = (Array.isArray(body.data) ? body.data : [body.data]).filter(
     (d): d is Obj => !!d && typeof d === "object"
   );
+
+  // Chamada de teste do diagnóstico (testarWebhookDeFora): grava a marca no
+  // banco DESTA publicação — é como o diagnóstico sabe que a chamada chegou
+  // aqui, e não a outro deploy do CRM gravando em outro banco.
+  const marcaTeste = evento === "connection.update" ? str(dados[0]?.teste) : null;
+  if (marcaTeste) {
+    await setConfig(CHAVE_TESTE_WEBHOOK, marcaTeste.slice(0, 40)).catch(() => {});
+    return NextResponse.json({ ok: true, teste: true });
+  }
 
   // Status de entrega/leitura das mensagens que enviamos.
   if (evento === "messages.update") {

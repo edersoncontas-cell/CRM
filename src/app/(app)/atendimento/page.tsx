@@ -5,6 +5,8 @@ import * as zapi from "@/lib/zapi";
 import { lerParametros } from "@/lib/parametros";
 import { acharOuCriarConversa } from "@/lib/whatsapp-store";
 import { cadastroPodeDarONome, cadastroAoLado } from "@/lib/conversa-identidade";
+import { lerDiag } from "@/lib/zapi-diag";
+import { lerEstadoProvisorio } from "@/lib/trazer-provisorio-estado";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +40,7 @@ export default async function AtendimentoPage({
     redirect(id ? `/atendimento?conversa=${id}` : "/atendimento");
   }
 
-  const [conversas, rascunhos, aguardando, status, parametros] = await Promise.all([
+  const [conversas, rascunhos, aguardando, status, parametros, diag, provisorio] = await Promise.all([
     db.whatsAppConversation.findMany({
       orderBy: { lastMessageAt: "desc" },
       take: 400,
@@ -48,7 +50,18 @@ export default async function AtendimentoPage({
     db.cliente.findMany({ where: { aguardandoResposta: true }, select: { id: true } }),
     zapi.statusConexao().catch(() => null),
     lerParametros(),
+    // As duas leituras abaixo são só para a tela DIZER o que está parado;
+    // falharem não pode derrubar o Atendimento.
+    lerDiag().catch(() => null),
+    lerEstadoProvisorio().catch(() => null),
   ]);
+
+  // Última entrega do WhatsApp a este banco. Chamada sem chave nenhuma é
+  // robô da internet batendo no endereço, não o WhatsApp — não conta.
+  const entrega = diag?.ultimos.find((e) => !(e.status === "chave-recusada" && /sem chave/.test(e.texto))) ?? null;
+  // Volta do banco provisório ainda não terminada: as conversas da semana
+  // estão lá, não aqui.
+  const provisorioPendente = !!provisorio?.configurado && !provisorio.mesmoBanco && !provisorio.ultima?.concluido;
 
   const comRascunho = new Set(rascunhos.map((r) => r.conversationId));
   const clientesAguardando = new Set(aguardando.map((c) => c.id));
@@ -106,6 +119,7 @@ export default async function AtendimentoPage({
     <AtendimentoClient
       conversas={lista}
       conexao={{ configurado: !!status?.configurado, conectado: !!status?.conectado, provedor: status?.provedor ?? null }}
+      recebimento={{ ultimaEntrega: entrega?.em ?? null, ultimoStatus: entrega?.status ?? null, provisorioPendente }}
       convInicial={searchParams.conversa ?? null}
       vendedorNome={parametros.nomeVendedor}
     />

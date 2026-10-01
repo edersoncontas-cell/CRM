@@ -12,9 +12,28 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Letreiro: arábica, conilon e dólar — o dólar com
-reserva e sem repetir café"** (01/10). **1.289 testes passando** (109 arquivos),
-lint e build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
+Último commit com código: **"Atendimento parado: a tela diz quando o
+recebimento para, e a conversa aberta pega mensagem fora de ordem"** (01/10).
+**1.310 testes passando** (111 arquivos), lint e build limpos.
+`CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
+
+**01/10, depois do letreiro — "O atendimento não está atualizando".** Não deu
+para ver produção daqui. O caminho inteiro (webhook → banco → lista → conversa
+aberta) foi provado num banco igual ao do Neon e funciona. O que foi feito:
+- a conversa aberta não perde mais o que entra no banco fora de ordem
+  (áudio transcrito, foto de álbum, webhook repetido) — `lib/conversa-ao-vivo.ts`;
+- o topo do Atendimento diz quando foi a última mensagem que chegou A ESTE
+  banco e avisa quando para (3 h de expediente, chave recusada, erro ao
+  gravar) — `lib/recebimento-regra.ts`; o aviso leva a /conexao?diagnosticar=1;
+- aviso no Atendimento enquanto a volta do provisório não terminou;
+- o teste do webhook agora prova que a chamada chegou a ESTE banco (marca
+  `diag.webhook_teste`) — antes, um deploy antigo da Vercel gravando no
+  provisório respondia 200 e o diagnóstico dizia "tudo certo";
+- o vigia não troca mais um webhook que entrega aqui pelo endereço guardado no
+  banco (`crm.urlPublica` do Neon é de 23/09);
+- /api/diag: "Recebimento do WhatsApp" e "última mensagem recebida — lá × aqui".
+**Não confirmado:** qual era a causa em produção. Perguntar o que o topo do
+Atendimento mostra e as linhas de recebimento do /api/diag.
 
 **01/10 — o CRM VOLTOU para o Neon** (ele rodou o prompt da extensão). Logo depois:
 "no letreiro está repetindo o valor do café conilon, antes era o dolar" e

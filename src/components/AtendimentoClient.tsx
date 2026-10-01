@@ -30,6 +30,7 @@ import {
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
 import { cn, formatCurrency } from "@/lib/utils";
+import { situacaoRecebimento } from "@/lib/recebimento-regra";
 import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao } from "@/lib/negociacao-verificada";
 import { descreverPedido } from "@/lib/orientador-pedidos";
 import { soResumo } from "@/lib/cliente-status";
@@ -76,6 +77,10 @@ type Mensagem = {
 };
 
 type Conexao = { configurado: boolean; conectado: boolean; provedor: "evolution" | "zapi" | null };
+// Última entrega do WhatsApp a este banco (lib/zapi-diag.ts) e a volta do
+// banco provisório por terminar — para a tela dizer quando a lista está
+// parada, em vez de só ficar parada (ver lib/recebimento-regra.ts).
+type Recebimento = { ultimaEntrega: string | null; ultimoStatus: string | null; provisorioPendente: boolean };
 type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo";
 
 // Chips visíveis na barra de filtros — só os dois pedidos pelo Edy. Os demais
@@ -216,13 +221,29 @@ function aplicarPlaceholders(texto: string, nomeContato: string, vendedor: strin
 const botaoIcone = "flex h-9 w-9 items-center justify-center rounded-lg text-brand-300 hover:bg-white/10 hover:text-white transition";
 const chip = (ativo: boolean) => cn("shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition", ativo ? "bg-agro-400 text-black" : "bg-white/5 text-brand-300 hover:bg-white/10");
 
-export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNome = "" }: {
+export function AtendimentoClient({ conversas, conexao, recebimento, convInicial, vendedorNome = "" }: {
   conversas: ConvLista[];
   conexao: Conexao;
+  recebimento?: Recebimento;
   convInicial?: string | null;
   vendedorNome?: string;
 }) {
   const router = useRouter();
+  // Relógio só no navegador: "hoje às 14:32" calculado no servidor (UTC) e
+  // de novo aqui poderia não bater na hidratação.
+  const [agoraTela, setAgoraTela] = useState<number | null>(null);
+  useEffect(() => {
+    setAgoraTela(Date.now());
+    const id = setInterval(() => setAgoraTela(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const situacao = useMemo(
+    () => (agoraTela === null || !recebimento ? null : situacaoRecebimento({
+      configurado: conexao.configurado, conectado: conexao.conectado,
+      ultimaChamada: recebimento.ultimaEntrega, ultimoStatus: recebimento.ultimoStatus, agora: agoraTela,
+    })),
+    [agoraTela, recebimento, conexao.configurado, conexao.conectado],
+  );
   const [selId, setSelIdRaw] = useState<string | null>(convInicial ?? null);
   const [lidas, setLidas] = useState<Set<string>>(() => new Set(convInicial ? [convInicial] : []));
   // Abrir a conversa marca como lida na hora (a bolinha some), sem esperar a
@@ -822,17 +843,27 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
       <aside className={cn("w-full shrink-0 flex-col border-r border-brand-800 bg-brand-900 lg:flex lg:w-[340px]", sel ? "hidden" : "flex")}>
         <div className="shrink-0 border-b border-brand-800 px-4 pt-4 pb-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-agro-400 text-black"><MessageCircle size={17} /></div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-agro-400 text-black"><MessageCircle size={17} /></div>
               <div className="min-w-0">
                 <div className="text-base font-bold leading-tight text-white">WhatsApp</div>
                 <Link href="/conexao" className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-brand-300 hover:text-white" title="Conexão do WhatsApp">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", conexao.conectado ? "bg-emerald-400" : "bg-red-400")} />
                   {conexao.conectado ? (conexao.provedor === "evolution" ? "Evolution API" : "Z-API") : conexao.configurado ? "desconectado" : "sem conexão"}
                 </Link>
+                {/* Linha própria: na mesma linha da conexão, empurrava os
+                    botões do topo para fora da tela no celular. */}
+                {situacao && (
+                  <div
+                    title={situacao.extenso}
+                    className={cn("truncate text-[10px] leading-tight", situacao.nivel === "ok" ? "text-brand-400" : situacao.nivel === "falha" ? "text-red-300" : "text-amber-300")}
+                  >
+                    {situacao.curto}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <input ref={fileRef} type="file" accept=".zip,.txt,.html,.htm" multiple onChange={arquivosEscolhidos} className="hidden" />
               {modoSelecao ? (
                 <>
@@ -882,6 +913,22 @@ export function AtendimentoClient({ conversas, conexao, convInicial, vendedorNom
             </div>
           </div>
           {importMsg && <p className="mt-2 text-[11px] text-agro-300">{importMsg}</p>}
+          {situacao?.aviso && (
+            <div
+              role="alert"
+              className={cn("mt-2 rounded-lg px-3 py-2 text-[11px] leading-snug", situacao.nivel === "falha" ? "bg-red-500/10 text-red-300" : "bg-amber-400/10 text-amber-200")}
+            >
+              {situacao.aviso}{" "}
+              <Link href="/conexao?diagnosticar=1" className="font-bold underline underline-offset-2">Verificar o recebimento</Link>
+            </div>
+          )}
+          {recebimento?.provisorioPendente && (
+            <div className="mt-2 rounded-lg bg-amber-400/10 px-3 py-2 text-[11px] leading-snug text-amber-200">
+              As conversas que entraram no banco provisório ainda não vieram para cá — a lista mostra só o que já estava no
+              principal e o que chegou depois da volta.{" "}
+              <Link href="/configuracoes#trazer-provisorio" className="font-bold underline underline-offset-2">Trazer os dados do banco provisório</Link>
+            </div>
+          )}
           <div className="relative mt-3">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-400" />
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar conversa, telefone ou trecho"
