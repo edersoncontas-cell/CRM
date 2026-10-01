@@ -8,15 +8,12 @@
 // instância continua "open", a tela continua verde, e nada diz por quê.
 //
 // Agora: pede o logout e CONFERE o estado até ele sair de "open". Não saiu,
-// reinicia a instância (a sessão presa volta a obedecer) e pede de novo. Se
-// nem assim, devolve "presa" — e quem chamou (desconectarZapi, em actions.ts)
-// ESCALA na mesma ação: apaga a instância e cria outra, que nasce pedindo QR.
-// Foi o segundo "continua não desconectando" (01/10): a tela parava na caixa
-// "presa" e esperava mais um clique dele. Se nem apagar der, a tela mostra o
-// que a Evolution respondeu e a saída pelo celular.
-//
-// O prazo aqui é CURTO de propósito: a ação inteira (desconectar + apagar +
-// criar) tem de caber nos 60 s da Vercel.
+// reinicia a instância e ESPERA ela assentar (reiniciar deixa a instância
+// "connecting" por alguns segundos, refazendo o socket — isso NÃO é
+// desconectada, é religando) e pede de novo. Se nem assim, devolve "presa" — e
+// a tela ESCALA sozinha: apaga a instância (lib/whatsapp-apagar-instancia.ts)
+// e cria outra, que nasce pedindo QR. Cada etapa é uma ação do servidor com os
+// próprios 60 s da Vercel.
 //
 // Módulo puro (as operações vêm de fora) para ser testado com uma Evolution de
 // mentira — aqui não há rede para a de verdade.
@@ -42,11 +39,11 @@ export type ResultadoDesconexao = {
   passos: string[];
 };
 
-/** Tempo total que a desconexão pode levar — o resto dos 60 s da ação é do apagar+criar. */
-export const PRAZO_DESCONEXAO_MS = 24_000;
+/** Tempo total que a desconexão pode levar (a ação do servidor tem 60 s). */
+export const PRAZO_DESCONEXAO_MS = 40_000;
 const INTERVALO_MS = 1_500;
 const ESPERA_SAIR_MS = 6_000;
-const ESPERA_VOLTAR_MS = 7_000;
+const ESPERA_VOLTAR_MS = 16_000;
 
 const fora = (s: EstadoInstancia | null) => s !== null && s !== "open";
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -78,12 +75,13 @@ export async function desconectarEvolution(ops: OpsDesconexao): Promise<Resultad
   // 2. Continua "open": reinicia a instância e pede de novo.
   if (ops.agora() < fim) {
     try { await ops.reiniciar(); passos.push("reiniciou"); } catch (e) { ultimoErro = msg(e); passos.push(`reiniciar falhou: ${msg(e).slice(0, 160)}`); }
-    // Ela volta "open" (sessão válida, agora obedecendo) ou fica sem par.
-    const depois = await aguardar((s) => s === "open", ESPERA_VOLTAR_MS);
+    // Espera assentar: "open" (socket novo, agora obedecendo) ou "close" /
+    // "inexistente" (precisa de QR). "connecting" é ela religando.
+    const depois = await aguardar((s) => s !== null && s !== "connecting", ESPERA_VOLTAR_MS);
     if (depois === "open" && ops.agora() < fim) {
       await pedirLogout("logout de novo");
       if (fora(await aguardar(fora, ESPERA_SAIR_MS))) return { ok: true, passos };
-    } else if (fora(depois)) {
+    } else if (depois !== null && depois !== "open" && depois !== "connecting") {
       return { ok: true, passos };
     }
   }
@@ -93,6 +91,12 @@ export async function desconectarEvolution(ops: OpsDesconexao): Promise<Resultad
     return {
       ok: false, presa: true, passos,
       erro: `A Evolution continua dizendo que o número está conectado, mesmo depois de reiniciar e pedir para sair duas vezes${ultimoErro ? ` (${ultimoErro})` : ""}.`,
+    };
+  }
+  if (ultimo === "connecting") {
+    return {
+      ok: false, presa: true, passos,
+      erro: "A Evolution reiniciou a conexão, mas ela não terminou de religar a tempo.",
     };
   }
   return { ok: false, passos, erro: ultimoErro ?? "A Evolution não respondeu à consulta do estado da conexão." };

@@ -12,11 +12,17 @@ function evolution(o: {
   /** Depois de reiniciar, a sessão volta a obedecer o logout. */
   reiniciarDestrava?: boolean;
   reiniciarFalha?: string;
+  /** Depois de reiniciar a instância fica N consultas em "connecting" antes de assentar. */
+  reiniciarConectandoPor?: number;
+  /** Onde assenta depois do "connecting" (padrão: open). */
+  reiniciarAssentaEm?: EstadoInstancia;
 }) {
   let t = 0;
   let estado: EstadoInstancia | null = o.estado === undefined ? "open" : o.estado;
   let derrubaEm: number | null = null;
   let destravada = false;
+  let conectando = 0;
+  let assentaEm: EstadoInstancia = "open";
   const chamadas: string[] = [];
   return {
     chamadas,
@@ -25,6 +31,7 @@ function evolution(o: {
     estado: async () => {
       t += 200;
       chamadas.push("estado");
+      if (conectando > 0) { conectando--; if (conectando === 0) estado = assentaEm; return "connecting"; }
       if (derrubaEm !== null && derrubaEm-- <= 0) { estado = "close"; derrubaEm = null; }
       return estado;
     },
@@ -41,6 +48,7 @@ function evolution(o: {
       if (o.reiniciarFalha) throw new Error(o.reiniciarFalha);
       if (o.reiniciarDestrava) destravada = true;
       estado = "open";
+      if (o.reiniciarConectandoPor) { conectando = o.reiniciarConectandoPor; assentaEm = o.reiniciarAssentaEm ?? "open"; }
     },
   };
 }
@@ -64,6 +72,28 @@ describe("desconectar o WhatsApp para ler o QR de novo", () => {
     const r = await desconectarEvolution(ev);
     expect(r.ok).toBe(true);
     expect(r.passos).toEqual(["logout", "reiniciou", "logout de novo"]);
+  });
+
+  it("reiniciar deixa 'connecting' por alguns segundos: isso é religando, NÃO desconectado — espera e pede o logout de novo", async () => {
+    const ev = evolution({ logoutDerrubaApos: Infinity, reiniciarDestrava: true, reiniciarConectandoPor: 4 });
+    const r = await desconectarEvolution(ev);
+    expect(r.ok).toBe(true);
+    expect(r.passos).toEqual(["logout", "reiniciou", "logout de novo"]);
+  });
+
+  it("reiniciar e assentar em 'close': precisa de QR, está desconectado — sem segundo logout", async () => {
+    const ev = evolution({ logoutDerrubaApos: Infinity, reiniciarConectandoPor: 3, reiniciarAssentaEm: "close" });
+    const r = await desconectarEvolution(ev);
+    expect(r.ok).toBe(true);
+    expect(r.passos).toEqual(["logout", "reiniciou"]);
+  });
+
+  it("'connecting' que não termina: devolve 'presa' (a tela segue para apagar e criar), nunca 'desconectado'", async () => {
+    const ev = evolution({ logoutDerrubaApos: Infinity, reiniciarConectandoPor: 10_000 });
+    const r = await desconectarEvolution(ev);
+    expect(r.ok).toBe(false);
+    expect(r.presa).toBe(true);
+    expect(r.erro).toMatch(/não terminou de religar/);
   });
 
   it("logout dando erro na sessão presa: reiniciar destrava", async () => {

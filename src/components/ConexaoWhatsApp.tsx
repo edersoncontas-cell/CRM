@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi, refazerConexaoWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
+import { reiniciarZapi, desconectarZapi, apagarConexaoWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
 } from "lucide-react";
@@ -64,6 +64,9 @@ export function ConexaoWhatsApp() {
   const [avisoSaida, setAvisoSaida] = useState<string | null>(null);
   const webhookCorrigido = useRef(false);
   const diagnosticoAuto = useRef(false);
+  // Enquanto o CRM apaga/cria a conexão, o polling não consulta nem pede QR:
+  // a Evolution está refazendo o socket e uma consulta no meio atrapalha.
+  const saidaOcupada = useRef(false);
 
   useEffect(() => { lerConexaoVigiadaAction().then(setVigia).catch(() => {}); }, [status?.conectado]);
   useEffect(() => { if (status?.conectado) setAvisoSaida(null); }, [status?.conectado]);
@@ -119,12 +122,21 @@ export function ConexaoWhatsApp() {
     }
   }, []);
 
+  // O estado da saída (desconectar / refazer) mora AQUI, não no botão: o botão
+  // fica dentro do painel "conectado", que some assim que a Evolution reinicia
+  // e vira "connecting" — e levava o progresso e o resultado junto.
+  const saida = useSaidaWhatsApp(status?.provedor, async (aviso) => { if (aviso) setAvisoSaida(aviso); await buscarStatus(); });
+  const avisoRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (avisoSaida) avisoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [avisoSaida, status?.conectado]);
+  saidaOcupada.current = saida.ocupado;
+
   // Polling: status a cada 5s. Enquanto precisar de QR, atualiza o QR a cada 20s.
   useEffect(() => {
     let ativo = true;
     let qrTick = 0;
 
     const loop = async () => {
+      if (saidaOcupada.current) return;
       const s = await buscarStatus();
       if (!ativo || !s) return;
       if (s.configurado && !s.conectado) {
@@ -167,6 +179,8 @@ export function ConexaoWhatsApp() {
       </div>
     );
   }
+
+  if (saida.ocupado) return <PainelSaidaEmCurso progresso={saida.progresso} />;
 
   // Nenhum provedor configurado: passo a passo da Evolution API (grátis).
   if (!status.configurado) {
@@ -303,7 +317,7 @@ export function ConexaoWhatsApp() {
             {vigiaMsg && <span className="text-xs text-slate-500">{vigiaMsg}</span>}
           </div>
         </div>
-        <SaidaWhatsApp provedor={status.provedor} aoTerminar={async (aviso) => { if (aviso) setAvisoSaida(aviso); await buscarStatus(); }} />
+        <SaidaWhatsApp provedor={status.provedor} saida={saida} />
       </div>
       </div>
     );
@@ -345,7 +359,7 @@ export function ConexaoWhatsApp() {
     {!status.clientTokenConfigurado && <AvisoClientToken />}
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       {avisoSaida && (
-        <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <div ref={avisoRef} role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
           <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> <span>{avisoSaida}</span>
         </div>
       )}
@@ -423,7 +437,7 @@ export function ConexaoWhatsApp() {
 // tela continuava verde e nada dizia por quê (01/10). Agora a confirmação é
 // na tela, a resposta aparece embaixo do botão, e quando a conexão fica presa
 // a tela dá as duas saídas que sempre funcionam.
-function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | undefined; aoTerminar: (aviso?: string) => Promise<void> }) {
+function useSaidaWhatsApp(provedor: string | null | undefined, aoTerminar: (aviso?: string) => Promise<void>) {
   const [etapa, setEtapa] = useState<"parado" | "confirmando" | "desconectando" | "presa" | "confirmandoRefazer" | "refazendo" | "refazerDireto">("parado");
   // O "refazer do zero" também é aberto direto, sem passar por "presa" (01/10:
   // "continua não recebendo, resolva ou desconecte"). Aí uma falha volta para o
@@ -433,21 +447,54 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
   const [passos, setPassos] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [motivoPresa, setMotivoPresa] = useState<string | null>(null);
+  const [progresso, setProgresso] = useState("");
   const semResposta = "O CRM não respondeu a tempo. Recarregue a página: se aparecer o QR Code, a desconexão funcionou.";
+
+  // Apaga a conexão na Evolution e cria outra, que nasce pedindo QR. São DUAS
+  // ações do servidor, cada uma com os próprios 60 s da Vercel: apagar pode
+  // levar até ~50 s (reinicia e espera a Evolution assentar) e criar vem depois.
+  async function apagarECriar(): Promise<{ ok: true } | { ok: false; erro: string; passos: string[] }> {
+    setProgresso("Apagando a conexão antiga na Evolution… (ela reinicia e espera assentar; pode levar até 50 s)");
+    const a = await apagarConexaoWhatsAppAction("REFAZER");
+    const passosA = a.passos ?? [];
+    if (!a.ok) return { ok: false, erro: a.erro ?? "A Evolution não apagou a instância.", passos: passosA };
+    setProgresso("Criando a conexão nova e o QR Code…");
+    await new Promise((r) => setTimeout(r, 1500));
+    let c = await criarInstanciaEvolutionAction();
+    if (!c.ok) { await new Promise((r) => setTimeout(r, 3000)); c = await criarInstanciaEvolutionAction(); }
+    if (!c.ok) return { ok: false, erro: `a conexão antiga foi apagada, mas a nova não nasceu: ${c.erro ?? "sem motivo"}`, passos: passosA };
+    return { ok: true };
+  }
 
   async function desconectar() {
     setEtapa("desconectando");
+    setProgresso("Desconectando e conferindo se saiu mesmo… (pode levar até 45 s)");
     setMsg(null);
     try {
       const r = await desconectarZapi("DESCONECTAR");
       setPassos(r.passos ?? []);
       if (r.ok) {
-        const texto = r.escalou
-          ? "O WhatsApp não obedeceu ao pedido de sair, então o CRM apagou a conexão na Evolution e criou outra. Leia o QR Code abaixo com o celular."
-          : r.jaEstava ? "O número já estava fora do CRM. Leia o QR Code abaixo com o celular." : "Desconectado. Leia o QR Code abaixo com o celular.";
+        const texto = r.jaEstava ? "O número já estava fora do CRM. Leia o QR Code abaixo com o celular." : "Desconectado. Leia o QR Code abaixo com o celular.";
         setMsg({ tipo: "ok", texto });
         setEtapa("parado");
         await aoTerminar(texto);
+      } else if (r.presa && provedor === "evolution") {
+        // A Evolution não obedeceu. O vendedor já confirmou que quer sair e ler
+        // o QR de novo: segue sozinha para apagar e criar outra conexão, em vez
+        // de parar numa caixa pedindo mais um clique.
+        setEtapa("refazendo");
+        const f = await apagarECriar();
+        if (f.ok) {
+          const texto = "O WhatsApp não obedeceu ao pedido de sair, então o CRM apagou a conexão na Evolution e criou outra. Leia o QR Code abaixo com o celular.";
+          setMsg({ tipo: "ok", texto });
+          setEtapa("parado");
+          await aoTerminar(texto);
+        } else {
+          setPassos([...(r.passos ?? []), ...f.passos]);
+          setMotivoPresa(`${r.erro ?? "A Evolution não desconectou."} Apagar a instância e criar outra também falhou: ${f.erro}`);
+          setDireto(false);
+          setEtapa("presa");
+        }
       } else if (r.presa) {
         setMotivoPresa(r.erro ?? null);
         setDireto(false);
@@ -465,16 +512,18 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
   async function refazer() {
     setEtapa("refazendo");
     setMsg(null);
+    setPassos([]);
     try {
-      const r = await refazerConexaoWhatsAppAction("REFAZER");
-      setPassos(r.passos ?? []);
-      if (r.ok) {
+      const f = await apagarECriar();
+      if (f.ok) {
         const texto = "Conexão refeita do zero. Leia o QR Code abaixo com o celular.";
         setMsg({ tipo: "ok", texto });
         setEtapa("parado");
         await aoTerminar(texto);
       } else {
-        setMsg({ tipo: "erro", texto: `Não deu para refazer: ${r.erro ?? "sem motivo"}.${(r.passos ?? []).length ? ` (${(r.passos ?? []).join(" → ")})` : ""}` });
+        setPassos(f.passos);
+        setMotivoPresa(f.erro);
+        setMsg({ tipo: "erro", texto: `Não deu para refazer: ${f.erro}.${f.passos.length ? ` (${f.passos.join(" → ")})` : ""}` });
         setEtapa(direto ? "parado" : "presa");
       }
     } catch {
@@ -483,6 +532,31 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
     }
   }
 
+  return {
+    etapa, setEtapa, direto, setDireto, passos, msg, setMsg, motivoPresa, progresso, desconectar, refazer,
+    /** Apagando/criando: a tela inteira espera, e o QR do meio do caminho não pode aparecer. */
+    ocupado: etapa === "desconectando" || etapa === "refazendo",
+  };
+}
+
+type SaidaWhatsAppEstado = ReturnType<typeof useSaidaWhatsApp>;
+
+function PainelSaidaEmCurso({ progresso }: { progresso: string }) {
+  // O painel "conectado" é bem mais alto que este: sem levar para cá, a tela
+  // ficaria rolada para um pedaço qualquer mais abaixo e ele não seria visto.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, []);
+  return (
+    <div ref={ref} role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+      <div className="flex items-center gap-2 font-semibold text-amber-800"><Loader2 size={18} className="animate-spin" /> Trabalhando na conexão do WhatsApp…</div>
+      <p className="mt-2 text-sm text-amber-900">{progresso}</p>
+      <p className="mt-2 text-xs text-amber-700">Não feche nem recarregue esta página: o QR Code aparece aqui quando terminar. O QR que a Evolution mostra no meio do caminho é da conexão antiga e deixa de valer — por isso ele fica escondido até o fim.</p>
+    </div>
+  );
+}
+
+function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefined; saida: SaidaWhatsAppEstado }) {
+  const { etapa, setEtapa, setDireto, passos, msg, setMsg, motivoPresa, progresso, desconectar, refazer } = saida;
   const botao = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-60";
   return (
     <div className="mt-4">
@@ -520,7 +594,7 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
       {(etapa === "desconectando" || etapa === "refazendo") && (
         <p className="inline-flex items-center gap-2 text-sm text-slate-600">
           <Loader2 size={14} className="animate-spin" />
-          {etapa === "desconectando" ? "Desconectando e conferindo se saiu mesmo… (se o WhatsApp não obedecer, o CRM apaga e cria a conexão de novo sozinho — pode levar até 50 s)" : "Apagando a instância e criando de novo…"}
+          {progresso}
         </p>
       )}
       {(etapa === "presa" || etapa === "confirmandoRefazer") && (
@@ -532,8 +606,9 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
               O que a Evolution respondeu: {passos.join(" → ")}
             </p>
           )}
-          <p className="mt-2"><b>Saída 1 — pelo celular</b> (a mais rápida): WhatsApp → Configurações → <b>Aparelhos conectados</b> → toque no aparelho do CRM → <b>Desconectar</b>. Em segundos esta tela mostra o QR Code.</p>
+          <p className="mt-2"><b>Saída 1 — pelo celular</b>: WhatsApp → Configurações → <b>Aparelhos conectados</b> → toque no aparelho do CRM → <b>Desconectar</b>. Só adianta se a Evolution ainda estiver ouvindo o WhatsApp; se o motivo acima for &quot;Connection Closed&quot;, ela não está.</p>
           {provedor === "evolution" && <p className="mt-1.5"><b>Saída 2 — refazer do zero</b>: o CRM apaga a instância na Evolution e cria de novo, já com o QR Code. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>}
+          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 3 — outro nome de instância</b> (funciona mesmo com a Evolution travada): na Vercel, troque a variável <code>EVOLUTION_INSTANCE</code> para outro nome (ex.: <code>crm2</code>) e faça um redeploy. O CRM mostra &quot;Falta criar a instância&quot;, cria a nova e mostra o QR Code. A velha fica esquecida na Evolution.</p>}
           {provedor === "evolution" && etapa === "presa" && (
             <button onClick={() => setEtapa("confirmandoRefazer")} className={`${botao} mt-2 bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Refazer do zero</button>
           )}

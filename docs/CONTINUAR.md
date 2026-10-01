@@ -12,29 +12,40 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Desconectar o WhatsApp termina com QR novo num clique
-(escala para apagar e recriar) e mostra o que a Evolution respondeu"** (01/10).
-**1.347 testes passando** (115 arquivos), lint e build limpos.
+Último commit com código: **"Evolution zumbi: esperar assentar depois de reiniciar,
+apagar e recriar conduzidos pela tela, erro legível"** (01/10).
+**1.360 testes passando** (116 arquivos), lint e build limpos.
 
-**01/10 — 3ª vez: "continua não permitindo desconectar, me entregue com QR novo".**
-Daqui NÃO se alcança a Evolution dele (sem URL, sem chave, sem rede) — não dá
-para deixar o número desconectado por ele; só endurecer e provar em Evolution
-falsa. Agora o "Desconectar" termina SOZINHO com QR novo, num clique:
-logout (confere) → reinicia → logout de novo → se ainda "open", ESCALA na mesma
-ação (`desconectarZapi` em `actions.ts`): apaga a instância (`apagarInstanciaEvolution`:
-se a Evolution recusar apagar conectada, faz logout+restart e tenta de novo; só
-dá por feito quando a instância some) e cria outra com o webhook, e o QR aparece.
-O prazo do 1º trecho caiu para 24 s para tudo caber nos 60 s da Vercel (só
-escala com <30 s gastos). A confirmação na tela avisa da escalada. O que a
-Evolution respondeu em cada passo aparece na tela quando nada funciona
-(`passos`) — se ele disser "ainda não foi", é isso que se pede de volta. O aviso
-do que foi feito continua sobre o QR (`avisoSaida`). Provado com a Evolution
-falsa `/tmp/claude-0/shots/evolution-presa.mjs` nos modos presa, recusa
-(delete recusado 1ª vez), assincrono (delete demora a valer), impossivel
-(tudo recusado → tela mostra os passos + saída pelo celular) e normal, via
-`desconectar-e2e.mjs`. **Não confirmado: Evolution de verdade.** Se mesmo assim
-falhar: o passo a passo na tela diz onde; a saída que sempre funciona é
-WhatsApp → Aparelhos conectados → desconectar o aparelho do CRM.
+**01/10 — 3ª e 4ª vez: "continua não permitindo desconectar, me entregue com QR novo".**
+Daqui NÃO se alcança a Evolution dele (sem URL, sem chave, sem rede). O PRINT dele
+(o primeiro dado real) mostrou a causa: o **zumbi da Evolution 2.x** — diz "open"
+mas o socket de dentro está fechado. `logout` → 500 "Error: Connection Closed";
+`delete` → 400 (apagar passa por um logout); `restart` aceita. É também por que
+"não chega mensagem" com tudo verde (e o vigia só vê "open"). O `[object Object]`
+no print era `String(objeto)` da mensagem de erro (`textoDoErroEvolution`).
+O que mudou:
+- **Esperar assentar depois de reiniciar.** Reiniciar deixa "connecting" por
+  alguns segundos (refazendo o socket); o CRM tentava apagar 2 s depois e a
+  recusa se repetia, e `connecting` era tratado como "desconectado" (falso
+  sucesso). Agora espera "open" (socket novo: logout e apagar funcionam) ou
+  "close" (precisa de QR). `lib/whatsapp-desconectar.ts` (40 s) e
+  `lib/whatsapp-apagar-instancia.ts` (45 s, 2 rodadas), ambos puros e testados.
+- **A tela conduz os passos**, cada um uma ação do servidor com os próprios 60 s:
+  `desconectarZapi` → (se "presa") `apagarConexaoWhatsAppAction` →
+  `criarInstanciaEvolutionAction`. O estado mora no hook `useSaidaWhatsApp` no
+  componente PAI: o painel "conectado" desmonta quando a Evolution vira
+  "connecting" e levava o resultado junto, e a tela mostrava o QR da conexão
+  que ia ser apagada. Agora um painel "Trabalhando…" segura tudo e o polling
+  não consulta enquanto isso.
+- Se nada funcionar, a caixa lista o que a Evolution respondeu em cada passo e
+  3 saídas: celular (só adianta se a Evolution ainda ouve o WhatsApp), refazer, e
+  **trocar `EVOLUTION_INSTANCE` na Vercel por outro nome + redeploy** (o CRM
+  cria a instância nova e mostra o QR; a zumbi fica esquecida). Sem código novo.
+Prova com a Evolution falsa `/tmp/claude-0/shots/evolution-presa.mjs`: modos
+presa, recusa, assincrono, impossivel, normal, zumbi-cura (reiniciar cura),
+zumbi-close (reiniciar leva a "close"), zumbi-eterno (nada cura → mostra os
+passos); scripts `desconectar-e2e.mjs` e `refazer-direto.mjs`.
+**Não confirmado: Evolution de verdade** (nem a versão dela).
 
 **01/10 — Configurações enxuta (pedido dele, card por card).** SAÍRAM: "Envio de
 mensagens PAUSADO", "Mensagens com erro esperando envio", "Tema do CRM", "Travas

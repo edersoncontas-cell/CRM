@@ -119,6 +119,26 @@ export function extrairBase64Qr(data: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * Texto de um erro da Evolution. O campo `response.message` vem como texto,
+ * lista de textos OU objeto, conforme a versão — e `String(objeto)` dá
+ * "[object Object]", que foi o que apareceu na tela dele (01/10) no lugar do
+ * motivo da recusa.
+ */
+export function textoDoErroEvolution(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return v.map(textoDoErroEvolution).filter(Boolean).join("; ");
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const dentro = o.message ?? o.error ?? o.msg;
+    if (dentro !== undefined && dentro !== v) return textoDoErroEvolution(dentro);
+    try { return JSON.stringify(v); } catch { return "erro sem texto"; }
+  }
+  return String(v);
+}
+
 export function estadoDaResposta(data: Record<string, unknown>): string {
   const inst = data.instance && typeof data.instance === "object" ? (data.instance as Record<string, unknown>) : undefined;
   return String(inst?.state ?? data.state ?? "");
