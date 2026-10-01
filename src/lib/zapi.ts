@@ -11,6 +11,7 @@ import { exigirEnvioLiberado } from "@/lib/whatsapp-pausa";
 import { db } from "@/lib/db";
 import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta } from "@/lib/evolution";
 import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
+import { desconectarEvolution, type ResultadoDesconexao } from "@/lib/whatsapp-desconectar";
 import { getConfig, setConfig } from "@/lib/config";
 
 export type ZApiConfig = { instanceId: string; token: string; clientToken: string; apiUrl: string };
@@ -978,11 +979,50 @@ export async function reiniciar(): Promise<boolean> {
   try { await zapiGet("restart"); return true; } catch { return false; }
 }
 
-export async function desconectar(): Promise<boolean> {
+// Desconectar: na Evolution, pede o logout e CONFERE até sair de "open"
+// (reiniciando a instância presa) — ver lib/whatsapp-desconectar.ts.
+export async function desconectar(): Promise<ResultadoDesconexao> {
   if (provedorWhatsApp() === "evolution") {
-    try { await evoFetch("DELETE", `/instance/logout/${evoInstancia()}`); return true; } catch { return false; }
+    // O vigia não pode religar a instância no meio da desconexão.
+    await pausarVigia(5).catch(() => {});
+    const inst = evoInstancia();
+    return desconectarEvolution({
+      estado: async () => {
+        try {
+          return estadoDaResposta(await evoFetch("GET", `/instance/connectionState/${inst}`, undefined, 8_000)) || null;
+        } catch (e) {
+          // Algumas versões apagam a instância no logout: sumiu = desconectado.
+          const m = e instanceof Error ? e.message : String(e);
+          return /\(404\)/.test(m) || /does not exist|não existe/i.test(m) ? "inexistente" : null;
+        }
+      },
+      logout: async () => { await evoFetch("DELETE", `/instance/logout/${inst}`, undefined, 10_000); },
+      reiniciar: async () => {
+        // Versões da Evolution divergem no verbo (PUT nas 2.x, POST em outras).
+        try { await evoFetch("PUT", `/instance/restart/${inst}`, undefined, 8_000); } catch { await evoFetch("POST", `/instance/restart/${inst}`, undefined, 8_000); }
+      },
+      esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
+      agora: () => Date.now(),
+    });
   }
-  try { await zapiGet("disconnect"); return true; } catch { return false; }
+  try { await zapiGet("disconnect"); return { ok: true, passos: ["disconnect"] }; } catch (e) { return { ok: false, erro: e instanceof Error ? e.message : String(e), passos: [] }; }
+}
+
+// Último recurso quando a sessão fica presa: apaga a instância na Evolution
+// (quem chama recria em seguida, já com o webhook, e mostra o QR). As
+// conversas do CRM ficam; some só a cópia que a Evolution guarda — o celular
+// manda o histórico de novo ao ler o QR.
+export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: string }> {
+  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
+  await pausarVigia(5).catch(() => {});
+  try {
+    await evoFetch("DELETE", `/instance/delete/${evoInstancia()}`, undefined, 20_000);
+    return { ok: true };
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (/\(404\)/.test(m) || /does not exist|não existe/i.test(m)) return { ok: true };
+    return { ok: false, erro: m };
+  }
 }
 
 export async function baixarAudio(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string } | null> {

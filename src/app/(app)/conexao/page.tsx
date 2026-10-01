@@ -10,6 +10,10 @@ import { diasDesde } from "@/lib/utils";
 import { MessageCircle, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+// As ações da tela (desconectar conferindo o estado, refazer a instância)
+// esperam a Evolution: até 40 s. O padrão da Vercel cortaria no meio e a tela
+// ficaria sem resposta nenhuma.
+export const maxDuration = 60;
 
 function quando(iso: string | null): string {
   if (!iso) return "nunca";

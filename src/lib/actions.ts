@@ -1351,20 +1351,39 @@ export async function criarInstanciaEvolutionAction(): Promise<{ ok: boolean; er
 }
 
 // Desconectar é a ÚNICA coisa no CRM que derruba o pareamento do WhatsApp, e
-// só acontece com confirmação explícita do vendedor (a tela pede o texto
-// "DESCONECTAR"). Fica registrado em auditoria para nunca haver dúvida sobre
-// quem derrubou a conexão — nada automático chega aqui.
-export async function desconectarZapi(confirmacao?: string): Promise<{ ok: boolean; erro?: string }> {
+// só acontece com confirmação explícita do vendedor (a tela pede para
+// confirmar e manda "DESCONECTAR"). Fica registrado em auditoria para nunca
+// haver dúvida sobre quem derrubou a conexão — nada automático chega aqui.
+export async function desconectarZapi(confirmacao?: string): Promise<{ ok: boolean; erro?: string; presa?: boolean; jaEstava?: boolean }> {
   if (confirmacao !== "DESCONECTAR") {
     return { ok: false, erro: "Desconexão não confirmada — nada foi alterado." };
   }
-  const ok = await zapi.desconectar();
+  const r = await zapi.desconectar();
   await registrarAudit({
     acao: "perfil_atualizado", origem: "usuario",
-    descricao: ok ? "WhatsApp desconectado manualmente na tela de Conexão." : "Tentativa de desconectar o WhatsApp falhou.",
+    descricao: r.ok
+      ? `WhatsApp desconectado manualmente na tela de Conexão${r.jaEstava ? " (já estava fora)" : ""} · ${r.passos.join(", ")}.`
+      : `Tentativa de desconectar o WhatsApp falhou${r.presa ? " (sessão presa)" : ""}: ${r.erro ?? "sem motivo"} · ${r.passos.join(", ")}.`,
   }).catch(() => {});
   revalidatePath("/conexao");
-  return { ok };
+  return { ok: r.ok, erro: r.erro, presa: r.presa, jaEstava: r.jaEstava };
+}
+
+// Último recurso, quando desconectar não obedece: apaga a instância na
+// Evolution e cria de novo (com o webhook), e a tela mostra o QR. Pede
+// confirmação própria ("REFAZER") — é mais que desconectar.
+export async function refazerConexaoWhatsAppAction(confirmacao?: string): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
+  if (confirmacao !== "REFAZER") return { ok: false, erro: "Não confirmado — nada foi alterado." };
+  const apagou = await zapi.apagarInstanciaEvolution();
+  if (!apagou.ok) {
+    await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Refazer a conexão do WhatsApp falhou ao apagar a instância: ${apagou.erro ?? "sem motivo"}.` }).catch(() => {});
+    revalidatePath("/conexao");
+    return { ok: false, erro: `A Evolution não apagou a instância: ${apagou.erro ?? "sem motivo"}` };
+  }
+  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: "Conexão do WhatsApp refeita do zero: instância apagada na Evolution para ler o QR de novo." }).catch(() => {});
+  // A Evolution leva um instante para liberar o nome da instância.
+  await new Promise((r) => setTimeout(r, 1500));
+  return criarInstanciaEvolutionAction();
 }
 
 // "Verificar e religar agora": o mesmo vigia que roda de 5 em 5 minutos.

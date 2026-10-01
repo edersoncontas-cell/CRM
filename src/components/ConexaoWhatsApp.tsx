@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
+import { reiniciarZapi, desconectarZapi, refazerConexaoWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
 } from "lucide-react";
@@ -299,20 +299,7 @@ export function ConexaoWhatsApp() {
             {vigiaMsg && <span className="text-xs text-slate-500">{vigiaMsg}</span>}
           </div>
         </div>
-        <button
-          onClick={() => startTransition(async () => {
-            const texto = window.prompt('Isso derruba o WhatsApp do CRM e você terá que escanear o QR de novo.\n\nSe é isso mesmo, digite DESCONECTAR:');
-            if (texto === null) return;
-            const r = await desconectarZapi(texto.trim().toUpperCase());
-            if (!r.ok) { setVigiaMsg(r.erro ?? "Nada foi alterado."); return; }
-            setVigiaMsg("WhatsApp desconectado por você.");
-            await buscarStatus();
-          })}
-          disabled={pending}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-red-600 ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-60"
-        >
-          {pending ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Desconectar
-        </button>
+        <SaidaWhatsApp provedor={status.provedor} aoTerminar={async () => { await buscarStatus(); }} />
       </div>
       </div>
     );
@@ -414,6 +401,108 @@ export function ConexaoWhatsApp() {
       </div>
       {(vigiaMsg || vigia) && <p className="mt-2 text-xs text-slate-500">{vigiaMsg ?? vigia?.descricao}</p>}
     </div>
+    </div>
+  );
+}
+
+// O botão Desconectar e o que vem depois dele. Fica fora do componente
+// principal para ter o próprio "ocupado" (não trava os outros botões) e para
+// não ser remontado a cada consulta de status.
+//
+// Antes: window.prompt pedindo para digitar DESCONECTAR, um pedido só à
+// Evolution, e o resultado numa linha cinza lá em cima — com a sessão presa a
+// tela continuava verde e nada dizia por quê (01/10). Agora a confirmação é
+// na tela, a resposta aparece embaixo do botão, e quando a conexão fica presa
+// a tela dá as duas saídas que sempre funcionam.
+function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | undefined; aoTerminar: () => Promise<void> }) {
+  const [etapa, setEtapa] = useState<"parado" | "confirmando" | "desconectando" | "presa" | "confirmandoRefazer" | "refazendo">("parado");
+  const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  const [motivoPresa, setMotivoPresa] = useState<string | null>(null);
+  const semResposta = "O CRM não respondeu a tempo. Recarregue a página: se aparecer o QR Code, a desconexão funcionou.";
+
+  async function desconectar() {
+    setEtapa("desconectando");
+    setMsg(null);
+    try {
+      const r = await desconectarZapi("DESCONECTAR");
+      if (r.ok) {
+        setMsg({ tipo: "ok", texto: r.jaEstava ? "O número já estava fora do CRM — o QR Code aparece aqui em instantes." : "Desconectado. O QR Code aparece aqui em instantes." });
+        setEtapa("parado");
+        await aoTerminar();
+      } else if (r.presa) {
+        setMotivoPresa(r.erro ?? null);
+        setEtapa("presa");
+      } else {
+        setMsg({ tipo: "erro", texto: `Não desconectou: ${r.erro ?? "a Evolution não disse o motivo"}.` });
+        setEtapa("parado");
+      }
+    } catch {
+      setMsg({ tipo: "erro", texto: semResposta });
+      setEtapa("parado");
+    }
+  }
+
+  async function refazer() {
+    setEtapa("refazendo");
+    setMsg(null);
+    try {
+      const r = await refazerConexaoWhatsAppAction("REFAZER");
+      if (r.ok) {
+        setMsg({ tipo: "ok", texto: "Conexão refeita. O QR Code aparece aqui em instantes." });
+        setEtapa("parado");
+        await aoTerminar();
+      } else {
+        setMsg({ tipo: "erro", texto: `Não deu para refazer: ${r.erro ?? "sem motivo"}.` });
+        setEtapa("presa");
+      }
+    } catch {
+      setMsg({ tipo: "erro", texto: semResposta });
+      setEtapa("presa");
+    }
+  }
+
+  const botao = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-60";
+  return (
+    <div className="mt-4">
+      {etapa === "parado" && (
+        <button onClick={() => { setMsg(null); setEtapa("confirmando"); }} className={`${botao} bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50`}>
+          <LogOut size={14} /> Desconectar
+        </button>
+      )}
+      {etapa === "confirmando" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <p>Isso tira o WhatsApp do CRM e você vai ler o QR Code de novo. As conversas que já estão no CRM ficam.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={desconectar} className={`${botao} bg-red-600 text-white hover:bg-red-700`}><LogOut size={14} /> Sim, desconectar</button>
+            <button onClick={() => setEtapa("parado")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {(etapa === "desconectando" || etapa === "refazendo") && (
+        <p className="inline-flex items-center gap-2 text-sm text-slate-600">
+          <Loader2 size={14} className="animate-spin" />
+          {etapa === "desconectando" ? "Desconectando e conferindo se saiu mesmo… (pode levar até 40 s)" : "Apagando a instância e criando de novo…"}
+        </p>
+      )}
+      {(etapa === "presa" || etapa === "confirmandoRefazer") && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-semibold">A conexão ficou presa: a Evolution não deixou desconectar.</p>
+          {motivoPresa && <p className="mt-0.5 text-xs text-amber-800">{motivoPresa}</p>}
+          <p className="mt-2"><b>Saída 1 — pelo celular</b> (a mais rápida): WhatsApp → Configurações → <b>Aparelhos conectados</b> → toque no aparelho do CRM → <b>Desconectar</b>. Em segundos esta tela mostra o QR Code.</p>
+          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 2 — refazer do zero</b>: o CRM apaga a instância na Evolution e cria de novo, já com o QR Code. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>}
+          {provedor === "evolution" && etapa === "presa" && (
+            <button onClick={() => setEtapa("confirmandoRefazer")} className={`${botao} mt-2 bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Refazer do zero</button>
+          )}
+          {etapa === "confirmandoRefazer" && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button onClick={refazer} className={`${botao} bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Sim, refazer do zero</button>
+              <button onClick={() => setEtapa("presa")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
+            </div>
+          )}
+          <button onClick={desconectar} className="mt-2 block text-xs font-semibold text-amber-800 underline">Tentar desconectar de novo</button>
+        </div>
+      )}
+      {msg && <p role="status" className={`mt-2 text-sm ${msg.tipo === "ok" ? "text-green-700" : "text-red-700"}`}>{msg.texto}</p>}
     </div>
   );
 }

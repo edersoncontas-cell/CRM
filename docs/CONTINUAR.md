@@ -12,9 +12,18 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Arábica sem 0% travado, filtro de contatos só
-com palavras inteiras, dois cards a menos em Configurações"** (01/10).
-**1.327 testes passando** (114 arquivos), lint e build limpos.
+Último commit com código: **"Desconectar o WhatsApp confere se saiu, destrava
+a sessão presa e mostra a saída"** (01/10).
+**1.335 testes passando** (114 arquivos), lint e build limpos.
+
+**01/10 — "desconectar não está indo".** O botão mandava UM logout e
+acreditava nele; com a sessão presa a Evolution diz "logged out" e continua
+"open". Agora `lib/whatsapp-desconectar.ts` confere o estado, reinicia e pede
+de novo; se nem assim, a tela mostra "presa" com duas saídas (Aparelhos
+conectados no celular, ou "Refazer do zero" = apaga e recria a instância).
+Sem `window.prompt` (confirmação na tela). `/conexao` com `maxDuration = 60`.
+Prova com a Evolution falsa: `/tmp/claude-0/shots/evolution-presa.mjs`
+(MODO=normal para a que obedece) — não é a Evolution de verdade.
 `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
 
 **01/10 — arábica 0,00% e Configurações.** O arábica do ES que a fonte da vez
