@@ -12,9 +12,29 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Configurações enxuta: 5 cards a menos, 2 vão para a
-Central Inteligente, sol/lua fixo, WhatsApp com 'refazer do zero' direto"** (01/10).
-**1.346 testes passando** (115 arquivos), lint e build limpos.
+Último commit com código: **"Desconectar o WhatsApp termina com QR novo num clique
+(escala para apagar e recriar) e mostra o que a Evolution respondeu"** (01/10).
+**1.347 testes passando** (115 arquivos), lint e build limpos.
+
+**01/10 — 3ª vez: "continua não permitindo desconectar, me entregue com QR novo".**
+Daqui NÃO se alcança a Evolution dele (sem URL, sem chave, sem rede) — não dá
+para deixar o número desconectado por ele; só endurecer e provar em Evolution
+falsa. Agora o "Desconectar" termina SOZINHO com QR novo, num clique:
+logout (confere) → reinicia → logout de novo → se ainda "open", ESCALA na mesma
+ação (`desconectarZapi` em `actions.ts`): apaga a instância (`apagarInstanciaEvolution`:
+se a Evolution recusar apagar conectada, faz logout+restart e tenta de novo; só
+dá por feito quando a instância some) e cria outra com o webhook, e o QR aparece.
+O prazo do 1º trecho caiu para 24 s para tudo caber nos 60 s da Vercel (só
+escala com <30 s gastos). A confirmação na tela avisa da escalada. O que a
+Evolution respondeu em cada passo aparece na tela quando nada funciona
+(`passos`) — se ele disser "ainda não foi", é isso que se pede de volta. O aviso
+do que foi feito continua sobre o QR (`avisoSaida`). Provado com a Evolution
+falsa `/tmp/claude-0/shots/evolution-presa.mjs` nos modos presa, recusa
+(delete recusado 1ª vez), assincrono (delete demora a valer), impossivel
+(tudo recusado → tela mostra os passos + saída pelo celular) e normal, via
+`desconectar-e2e.mjs`. **Não confirmado: Evolution de verdade.** Se mesmo assim
+falhar: o passo a passo na tela diz onde; a saída que sempre funciona é
+WhatsApp → Aparelhos conectados → desconectar o aparelho do CRM.
 
 **01/10 — Configurações enxuta (pedido dele, card por card).** SAÍRAM: "Envio de
 mensagens PAUSADO", "Mensagens com erro esperando envio", "Tema do CRM", "Travas

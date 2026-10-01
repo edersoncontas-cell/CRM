@@ -59,10 +59,14 @@ export function ConexaoWhatsApp() {
   const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
   const [vigia, setVigia] = useState<{ descricao: string; reconexoes: number } | null>(null);
   const [vigiaMsg, setVigiaMsg] = useState<string | null>(null);
+  // O que a saída do WhatsApp fez, para continuar na tela depois que o painel
+  // "conectado" some e o QR aparece (o botão que explicou desmonta junto).
+  const [avisoSaida, setAvisoSaida] = useState<string | null>(null);
   const webhookCorrigido = useRef(false);
   const diagnosticoAuto = useRef(false);
 
   useEffect(() => { lerConexaoVigiadaAction().then(setVigia).catch(() => {}); }, [status?.conectado]);
+  useEffect(() => { if (status?.conectado) setAvisoSaida(null); }, [status?.conectado]);
 
   // Webhook fora do lugar (ou desligado): o CRM aponta para si mesmo sozinho,
   // uma vez por visita à página. Sem isso as mensagens não chegam.
@@ -299,7 +303,7 @@ export function ConexaoWhatsApp() {
             {vigiaMsg && <span className="text-xs text-slate-500">{vigiaMsg}</span>}
           </div>
         </div>
-        <SaidaWhatsApp provedor={status.provedor} aoTerminar={async () => { await buscarStatus(); }} />
+        <SaidaWhatsApp provedor={status.provedor} aoTerminar={async (aviso) => { if (aviso) setAvisoSaida(aviso); await buscarStatus(); }} />
       </div>
       </div>
     );
@@ -340,6 +344,11 @@ export function ConexaoWhatsApp() {
     <div>
     {!status.clientTokenConfigurado && <AvisoClientToken />}
     <div className="rounded-xl border border-slate-200 bg-white p-5">
+      {avisoSaida && (
+        <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> <span>{avisoSaida}</span>
+        </div>
+      )}
       <div className="mb-3 flex items-center gap-2 font-semibold text-slate-700">
         <QrCode size={18} className="text-brand-600" /> Escaneie para conectar
       </div>
@@ -414,12 +423,14 @@ export function ConexaoWhatsApp() {
 // tela continuava verde e nada dizia por quê (01/10). Agora a confirmação é
 // na tela, a resposta aparece embaixo do botão, e quando a conexão fica presa
 // a tela dá as duas saídas que sempre funcionam.
-function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | undefined; aoTerminar: () => Promise<void> }) {
+function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | undefined; aoTerminar: (aviso?: string) => Promise<void> }) {
   const [etapa, setEtapa] = useState<"parado" | "confirmando" | "desconectando" | "presa" | "confirmandoRefazer" | "refazendo" | "refazerDireto">("parado");
   // O "refazer do zero" também é aberto direto, sem passar por "presa" (01/10:
   // "continua não recebendo, resolva ou desconecte"). Aí uma falha volta para o
   // começo — dizer que "a conexão ficou presa" seria dizer o que não foi visto.
   const [direto, setDireto] = useState(false);
+  // O que a Evolution respondeu em cada passo — fica na tela quando nada deu certo.
+  const [passos, setPassos] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [motivoPresa, setMotivoPresa] = useState<string | null>(null);
   const semResposta = "O CRM não respondeu a tempo. Recarregue a página: se aparecer o QR Code, a desconexão funcionou.";
@@ -429,10 +440,14 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
     setMsg(null);
     try {
       const r = await desconectarZapi("DESCONECTAR");
+      setPassos(r.passos ?? []);
       if (r.ok) {
-        setMsg({ tipo: "ok", texto: r.jaEstava ? "O número já estava fora do CRM — o QR Code aparece aqui em instantes." : "Desconectado. O QR Code aparece aqui em instantes." });
+        const texto = r.escalou
+          ? "O WhatsApp não obedeceu ao pedido de sair, então o CRM apagou a conexão na Evolution e criou outra. Leia o QR Code abaixo com o celular."
+          : r.jaEstava ? "O número já estava fora do CRM. Leia o QR Code abaixo com o celular." : "Desconectado. Leia o QR Code abaixo com o celular.";
+        setMsg({ tipo: "ok", texto });
         setEtapa("parado");
-        await aoTerminar();
+        await aoTerminar(texto);
       } else if (r.presa) {
         setMotivoPresa(r.erro ?? null);
         setDireto(false);
@@ -452,12 +467,14 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
     setMsg(null);
     try {
       const r = await refazerConexaoWhatsAppAction("REFAZER");
+      setPassos(r.passos ?? []);
       if (r.ok) {
-        setMsg({ tipo: "ok", texto: "Conexão refeita. O QR Code aparece aqui em instantes." });
+        const texto = "Conexão refeita do zero. Leia o QR Code abaixo com o celular.";
+        setMsg({ tipo: "ok", texto });
         setEtapa("parado");
-        await aoTerminar();
+        await aoTerminar(texto);
       } else {
-        setMsg({ tipo: "erro", texto: `Não deu para refazer: ${r.erro ?? "sem motivo"}.` });
+        setMsg({ tipo: "erro", texto: `Não deu para refazer: ${r.erro ?? "sem motivo"}.${(r.passos ?? []).length ? ` (${(r.passos ?? []).join(" → ")})` : ""}` });
         setEtapa(direto ? "parado" : "presa");
       }
     } catch {
@@ -493,6 +510,7 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
       {etapa === "confirmando" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <p>Isso tira o WhatsApp do CRM e você vai ler o QR Code de novo. As conversas que já estão no CRM ficam.</p>
+          {provedor === "evolution" && <p className="mt-1 text-xs text-red-700">Se o WhatsApp não obedecer ao pedido de sair, o CRM apaga a conexão na Evolution e cria outra, já com o QR Code — tudo neste mesmo clique.</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             <button onClick={desconectar} className={`${botao} bg-red-600 text-white hover:bg-red-700`}><LogOut size={14} /> Sim, desconectar</button>
             <button onClick={() => setEtapa("parado")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
@@ -502,13 +520,18 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
       {(etapa === "desconectando" || etapa === "refazendo") && (
         <p className="inline-flex items-center gap-2 text-sm text-slate-600">
           <Loader2 size={14} className="animate-spin" />
-          {etapa === "desconectando" ? "Desconectando e conferindo se saiu mesmo… (pode levar até 40 s)" : "Apagando a instância e criando de novo…"}
+          {etapa === "desconectando" ? "Desconectando e conferindo se saiu mesmo… (se o WhatsApp não obedecer, o CRM apaga e cria a conexão de novo sozinho — pode levar até 50 s)" : "Apagando a instância e criando de novo…"}
         </p>
       )}
       {(etapa === "presa" || etapa === "confirmandoRefazer") && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <p className="font-semibold">A conexão ficou presa: a Evolution não deixou desconectar.</p>
           {motivoPresa && <p className="mt-0.5 text-xs text-amber-800">{motivoPresa}</p>}
+          {passos.length > 0 && (
+            <p className="mt-1 break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-[11px] leading-snug text-amber-900">
+              O que a Evolution respondeu: {passos.join(" → ")}
+            </p>
+          )}
           <p className="mt-2"><b>Saída 1 — pelo celular</b> (a mais rápida): WhatsApp → Configurações → <b>Aparelhos conectados</b> → toque no aparelho do CRM → <b>Desconectar</b>. Em segundos esta tela mostra o QR Code.</p>
           {provedor === "evolution" && <p className="mt-1.5"><b>Saída 2 — refazer do zero</b>: o CRM apaga a instância na Evolution e cria de novo, já com o QR Code. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>}
           {provedor === "evolution" && etapa === "presa" && (

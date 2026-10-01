@@ -1012,17 +1012,60 @@ export async function desconectar(): Promise<ResultadoDesconexao> {
 // (quem chama recria em seguida, já com o webhook, e mostra o QR). As
 // conversas do CRM ficam; some só a cópia que a Evolution guarda — o celular
 // manda o histórico de novo ao ler o QR.
-export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: string }> {
-  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
+//
+// As versões da Evolution divergem: umas apagam a instância mesmo conectada,
+// outras RECUSAM ("precisa estar desconectada"), e a resposta de "apagou" pode
+// vir antes de ela sumir. Por isso: se recusar, pede o logout, reinicia e tenta
+// de novo; e só dá por feito quando a instância some (ou deixa de estar
+// "open") — criar outra com o nome ainda ocupado devolveria a velha, presa,
+// e a tela ficaria sem QR.
+export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: string; passos: string[] }> {
+  const passos: string[] = [];
+  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada.", passos };
   await pausarVigia(5).catch(() => {});
-  try {
-    await evoFetch("DELETE", `/instance/delete/${evoInstancia()}`, undefined, 20_000);
-    return { ok: true };
-  } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    if (/\(404\)/.test(m) || /does not exist|não existe/i.test(m)) return { ok: true };
-    return { ok: false, erro: m };
+  const inst = evoInstancia();
+  const texto = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  const sumiu = (m: string) => /\(404\)/.test(m) || /does not exist|não existe/i.test(m);
+  const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const estado = async (): Promise<string | null> => {
+    try { return estadoDaResposta(await evoFetch("GET", `/instance/connectionState/${inst}`, undefined, 6_000)) || null; }
+    catch (e) { return sumiu(texto(e)) ? "inexistente" : null; }
+  };
+  // null = apagou (ou já não existia); texto = o que a Evolution respondeu.
+  const apagar = async (rotulo: string): Promise<string | null> => {
+    try { await evoFetch("DELETE", `/instance/delete/${inst}`, undefined, 15_000); passos.push(rotulo); return null; }
+    catch (e) {
+      const m = texto(e);
+      if (sumiu(m)) { passos.push(`${rotulo} (já não existia)`); return null; }
+      passos.push(`${rotulo} recusado: ${m.slice(0, 160)}`);
+      return m;
+    }
+  };
+
+  let recusa = await apagar("apagou a instância");
+  if (recusa) {
+    try { await evoFetch("DELETE", `/instance/logout/${inst}`, undefined, 8_000); passos.push("logout antes de apagar"); }
+    catch (e) { passos.push(`logout falhou: ${texto(e).slice(0, 160)}`); }
+    try { await evoFetch("PUT", `/instance/restart/${inst}`, undefined, 8_000); passos.push("reiniciou"); }
+    catch { try { await evoFetch("POST", `/instance/restart/${inst}`, undefined, 8_000); passos.push("reiniciou"); } catch (e) { passos.push(`reiniciar falhou: ${texto(e).slice(0, 160)}`); } }
+    await dormir(2_000);
+    recusa = await apagar("apagou de novo");
   }
+  if (recusa) return { ok: false, erro: `A Evolution recusou apagar a instância: ${recusa.slice(0, 200)}`, passos };
+
+  // Confere que ela saiu do ar antes de criar outra.
+  let ultimo: string | null = null;
+  for (let i = 0; i < 4; i++) {
+    ultimo = await estado();
+    if (ultimo === "inexistente" || (ultimo !== null && ultimo !== "open")) return { ok: true, passos };
+    await dormir(1_500);
+  }
+  if (ultimo === "open") {
+    passos.push("depois de apagar, a instância continua open");
+    return { ok: false, erro: "A Evolution disse que apagou, mas a instância continua conectada.", passos };
+  }
+  // Sem resposta na conferência: a Evolution aceitou o pedido; criar outra mostra o resto.
+  return { ok: true, passos };
 }
 
 export async function baixarAudio(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string } | null> {

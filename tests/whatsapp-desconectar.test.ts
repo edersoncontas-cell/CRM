@@ -81,6 +81,14 @@ describe("desconectar o WhatsApp para ler o QR de novo", () => {
     expect(r.erro).toMatch(/Connection Closed/);
   });
 
+  it("quando nada destrava, os passos dizem o que a Evolution respondeu e o estado final", async () => {
+    const ev = evolution({ logoutFalha: "Evolution API /instance/logout/crm falhou (500): Connection Closed", reiniciarFalha: "Evolution API /instance/restart/crm falhou (404): rota" });
+    const r = await desconectarEvolution(ev);
+    expect(r.passos.join(" | ")).toMatch(/logout falhou: .*Connection Closed/);
+    expect(r.passos.join(" | ")).toMatch(/reiniciar falhou: .*rota/);
+    expect(r.passos[r.passos.length - 1]).toBe("estado no fim: open");
+  });
+
   it("já estava desconectado (ou a instância sumiu): é só ler o QR", async () => {
     for (const e of ["close", "connecting", "inexistente"] as const) {
       const ev = evolution({ estado: e });

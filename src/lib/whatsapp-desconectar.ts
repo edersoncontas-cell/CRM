@@ -9,9 +9,14 @@
 //
 // Agora: pede o logout e CONFERE o estado até ele sair de "open". Não saiu,
 // reinicia a instância (a sessão presa volta a obedecer) e pede de novo. Se
-// nem assim, devolve "presa" — a tela mostra o motivo e as duas saídas que
-// sempre funcionam: desconectar o aparelho pelo celular, ou refazer a
-// instância do zero.
+// nem assim, devolve "presa" — e quem chamou (desconectarZapi, em actions.ts)
+// ESCALA na mesma ação: apaga a instância e cria outra, que nasce pedindo QR.
+// Foi o segundo "continua não desconectando" (01/10): a tela parava na caixa
+// "presa" e esperava mais um clique dele. Se nem apagar der, a tela mostra o
+// que a Evolution respondeu e a saída pelo celular.
+//
+// O prazo aqui é CURTO de propósito: a ação inteira (desconectar + apagar +
+// criar) tem de caber nos 60 s da Vercel.
 //
 // Módulo puro (as operações vêm de fora) para ser testado com uma Evolution de
 // mentira — aqui não há rede para a de verdade.
@@ -37,11 +42,11 @@ export type ResultadoDesconexao = {
   passos: string[];
 };
 
-/** Tempo total que a desconexão pode levar (a ação do servidor tem 60 s). */
-export const PRAZO_DESCONEXAO_MS = 40_000;
+/** Tempo total que a desconexão pode levar — o resto dos 60 s da ação é do apagar+criar. */
+export const PRAZO_DESCONEXAO_MS = 24_000;
 const INTERVALO_MS = 1_500;
-const ESPERA_SAIR_MS = 8_000;
-const ESPERA_VOLTAR_MS = 10_000;
+const ESPERA_SAIR_MS = 6_000;
+const ESPERA_VOLTAR_MS = 7_000;
 
 const fora = (s: EstadoInstancia | null) => s !== null && s !== "open";
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -63,7 +68,7 @@ export async function desconectarEvolution(ops: OpsDesconexao): Promise<Resultad
     }
   };
   const pedirLogout = async (rotulo: string) => {
-    try { await ops.logout(); passos.push(rotulo); } catch (e) { ultimoErro = msg(e); passos.push(`${rotulo} falhou`); }
+    try { await ops.logout(); passos.push(rotulo); } catch (e) { ultimoErro = msg(e); passos.push(`${rotulo} falhou: ${msg(e).slice(0, 160)}`); }
   };
 
   // 1. O caminho normal: pede e confere.
@@ -72,7 +77,7 @@ export async function desconectarEvolution(ops: OpsDesconexao): Promise<Resultad
 
   // 2. Continua "open": reinicia a instância e pede de novo.
   if (ops.agora() < fim) {
-    try { await ops.reiniciar(); passos.push("reiniciou"); } catch (e) { ultimoErro = msg(e); passos.push("reiniciar falhou"); }
+    try { await ops.reiniciar(); passos.push("reiniciou"); } catch (e) { ultimoErro = msg(e); passos.push(`reiniciar falhou: ${msg(e).slice(0, 160)}`); }
     // Ela volta "open" (sessão válida, agora obedecendo) ou fica sem par.
     const depois = await aguardar((s) => s === "open", ESPERA_VOLTAR_MS);
     if (depois === "open" && ops.agora() < fim) {
@@ -83,6 +88,7 @@ export async function desconectarEvolution(ops: OpsDesconexao): Promise<Resultad
     }
   }
 
+  passos.push(`estado no fim: ${ultimo ?? "sem resposta"}`);
   if (ultimo === "open") {
     return {
       ok: false, presa: true, passos,
