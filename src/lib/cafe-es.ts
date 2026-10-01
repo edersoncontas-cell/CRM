@@ -15,7 +15,7 @@
 
 import { getConfig, setConfig } from "@/lib/config";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
-import { htmlParaTexto, trechosRelevantes, lerDireto, lerTabelaCCCV, lerNoticiasAgricolasConilon, lerJsonPainelDoCafe, valido, variacaoDiaria, hojeBrasilia, type Leitura, type PontoHistoricoCafe } from "@/lib/cafe-parsers";
+import { htmlParaTexto, trechosRelevantes, lerDireto, lerTabelaCCCV, lerNoticiasAgricolasConilon, lerJsonPainelDoCafe, valido, variacaoDiaria, arabicaDaLeitura, hojeBrasilia, type Leitura, type PontoHistoricoCafe } from "@/lib/cafe-parsers";
 
 const CHAVE_HISTORICO = "cafe.es.historico";
 const CHAVE_ULTIMO = "cafe.es.ultimo";
@@ -41,6 +41,9 @@ export type CotacaoCafeES = {
   atualizadoEm: string;        // ISO da leitura
   variacaoConilonPct: number | null; // vs. último dia diferente do histórico (ou vs. leitura anterior)
   variacaoArabicaPct?: number | null;
+  // Quando o arábica foi lido DE VERDADE (a fonte da vez pode não trazer
+  // arábica, e aí o anterior é repetido por no máximo 6 h — ver arabicaDaLeitura).
+  arabicaLidaEm?: string | null;
   variacaoBase?: string | null;      // contra o que a variação foi calculada (ex.: "dia 14/09/2026")
   // Extras do Painel do Café
   dolar?: number | null;
@@ -174,27 +177,30 @@ export async function atualizarCafeES(): Promise<{ ok: boolean; fonte: string | 
   // Histórico: um ponto por DIA DE LEITURA (a data da fonte pode ser a do
   // pregão anterior e travar o dia; por isso a chave é o dia de hoje).
   const hist = await lerHistoricoCafeES();
-  const chave = hojeBrasilia();
-  const arabica = achado.arabica ?? anterior?.arabica ?? null;
+  const agora = new Date();
+  const chave = hojeBrasilia(agora);
   const vc = variacaoDiaria(hist, chave, "conilon", achado.conilon, anterior?.conilon);
-  const va = variacaoDiaria(hist, chave, "arabica", arabica, anterior?.arabica);
+  const ar = arabicaDaLeitura({ achado, anterior, hist, chaveHoje: chave, agora });
   const novo: CotacaoCafeES = {
     conilon: achado.conilon,
-    arabica,
+    arabica: ar.arabica,
     dataReferencia: achado.dataReferencia ?? null,
     fonte: achado.fonte,
     praca: achado.praca ?? null,
-    atualizadoEm: new Date().toISOString(),
+    atualizadoEm: agora.toISOString(),
     variacaoConilonPct: achado.variacaoConilonPct ?? vc.pct,
-    variacaoArabicaPct: achado.variacaoArabicaPct ?? va.pct,
-    variacaoBase: vc.base ?? va.base,
+    variacaoArabicaPct: ar.pct,
+    arabicaLidaEm: ar.lidaEm,
+    variacaoBase: vc.base ?? ar.base,
     dolar: achado.dolar ?? null,
     londres: achado.londres ?? null,
     novaYork: achado.novaYork ?? null,
   };
   await setConfig(CHAVE_ULTIMO, JSON.stringify(novo));
   const semDup = hist.filter((h) => h.data !== chave);
-  semDup.push({ data: chave, conilon: novo.conilon, arabica: novo.arabica, fonte: novo.fonte, dataReferencia: novo.dataReferencia });
+  // No histórico, só arábica lido hoje de verdade — o repetido viraria a base
+  // de amanhã e a variação zeraria de novo.
+  semDup.push({ data: chave, conilon: novo.conilon, arabica: ar.noHistorico, fonte: novo.fonte, dataReferencia: novo.dataReferencia });
   await setConfig(CHAVE_HISTORICO, JSON.stringify(semDup.slice(-400)));
   return { ok: true, fonte: novo.fonte, conilon: novo.conilon };
 }

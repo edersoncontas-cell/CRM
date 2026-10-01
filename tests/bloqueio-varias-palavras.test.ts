@@ -20,9 +20,8 @@ const PALAVRAS = [
   "prefeitura", "crm", "central", "new holland", "credito", "consultoria",
   "transportadora", "frete",
 ];
-const TERMOS = ["financeiro"];
-
-const motivo = (nome: string) => motivoBloqueioComListas(nome, TERMOS, PALAVRAS);
+// Desde 01/10 não há mais lista de pedaços: só estas palavras inteiras.
+const motivo = (nome: string) => motivoBloqueioComListas(nome, [], PALAVRAS);
 
 describe("termo de duas palavras — o que estava escapando", () => {
   it("'new holland' agora pega os nomes que tinham de pegar", () => {
@@ -60,8 +59,9 @@ describe("o que já funcionava continua igual", () => {
     expect(motivo("Escritório Souza")).toBe("escritório");
   });
 
-  it("pedaço de palavra continua pegando dentro da palavra", () => {
-    expect(motivoBloqueioComListas("Refinanceiro Ltda", ["financeir"], [])).toBe("financeir");
+  it("sem a lista de pedaços, 'financeiro' não pega mais dentro de outra palavra", () => {
+    expect(motivo("Financeiro Loja")).toBe("financeiro");
+    expect(motivo("Refinanceiro Ltda")).toBeNull();
   });
 
   it("asterisco no nome vale mais que a lista", () => {

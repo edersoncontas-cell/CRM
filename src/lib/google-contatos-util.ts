@@ -9,14 +9,15 @@
 // sempre trocado pelo nome real.
 
 import { phoneLookupVariants } from "@/lib/whatsapp-routing";
-import { motivoBloqueioComListas, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO } from "@/lib/utils";
+import { motivoBloqueioComListas, PALAVRAS_BLOQUEIO_PADRAO } from "@/lib/utils";
 
-// Listas do filtro de contatos indesejados, injetadas por quem chama (que as
-// lê do banco em lib/filtro-contatos.ts). O padrão de fábrica é só para os
-// testes e para nunca deixar passar nada se alguém esquecer de passar.
-export type FiltroContatos = { termos: string[]; palavras: string[] };
-const FILTRO_PADRAO: FiltroContatos = { termos: TERMOS_BLOQUEIO_PADRAO, palavras: PALAVRAS_BLOQUEIO_PADRAO };
-const descartar = (nome: string, f: FiltroContatos) => motivoBloqueioComListas(nome, f.termos, f.palavras) !== null;
+// Lista do filtro de contatos indesejados (palavras inteiras), injetada por
+// quem chama (que a lê do banco em lib/filtro-contatos.ts). O padrão de
+// fábrica é só para os testes e para nunca deixar passar nada se alguém
+// esquecer de passar.
+export type FiltroContatos = { palavras: string[] };
+const FILTRO_PADRAO: FiltroContatos = { palavras: PALAVRAS_BLOQUEIO_PADRAO };
+const descartar = (nome: string, f: FiltroContatos) => motivoBloqueioComListas(nome, [], f.palavras) !== null;
 
 export type ContatoGoogle = {
   id: string;            // resourceName ("people/c123")

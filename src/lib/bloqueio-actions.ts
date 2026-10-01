@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { limparContatosIndesejados, liberarLapide, clientesComHistorico, type ResultadoLimpeza } from "@/lib/contatos-bloqueados";
 import { podeApagarNaLimpeza } from "@/lib/limpeza-protecao";
-import { listarFiltroContatos, adicionarTermoFiltro, removerTermoFiltro, definirFiltroContatos, type TipoTermoBloqueio } from "@/lib/filtro-contatos";
+import { listarFiltroContatos, adicionarPalavraFiltro, removerPalavraFiltro, definirFiltroContatos, type ListaFiltro } from "@/lib/filtro-contatos";
 import { interpretarComandoFiltro, type MudancaFiltro } from "@/lib/filtro-contatos-ia";
-import { motivoBloqueioComListas } from "@/lib/utils";
+import { motivoBloqueioComListas, palavraCurtaDemais } from "@/lib/utils";
 import { registrarAudit } from "@/lib/audit";
 
-export type ListasFiltro = { termos: string[]; palavras: string[] };
+export type ListasFiltro = ListaFiltro;
 
 const PAGINAS = ["/clientes", "/atendimento", "/orientador", "/dashboard", "/configuracoes", "/financeiro"];
 
@@ -40,16 +40,19 @@ export async function liberarLapideAction(id: string): Promise<{ ok: boolean }> 
   return { ok: r.ok };
 }
 
-export async function adicionarTermoFiltroAction(tipo: TipoTermoBloqueio, valor: string): Promise<ListasFiltro> {
-  const listas = await adicionarTermoFiltro(tipo, valor);
-  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Filtro de contatos: "${valor.trim().toLowerCase()}" adicionado (${tipo}).` }).catch(() => {});
+export async function adicionarPalavraFiltroAction(valor: string): Promise<ListasFiltro> {
+  // O card já recusa com aviso; aqui é a defesa: palavra curta demais o filtro
+  // ignora, e na lista ela ficaria parecendo que filtra.
+  if (palavraCurtaDemais(valor)) return listarFiltroContatos();
+  const listas = await adicionarPalavraFiltro(valor);
+  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Filtro de contatos: "${valor.trim().toLowerCase()}" adicionado.` }).catch(() => {});
   revalidatePath("/configuracoes");
   return listas;
 }
 
-export async function removerTermoFiltroAction(tipo: TipoTermoBloqueio, valor: string): Promise<ListasFiltro> {
-  const listas = await removerTermoFiltro(tipo, valor);
-  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Filtro de contatos: "${valor.trim().toLowerCase()}" removido (${tipo}).` }).catch(() => {});
+export async function removerPalavraFiltroAction(valor: string): Promise<ListasFiltro> {
+  const listas = await removerPalavraFiltro(valor);
+  await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Filtro de contatos: "${valor.trim().toLowerCase()}" removido.` }).catch(() => {});
   revalidatePath("/configuracoes");
   return listas;
 }
@@ -59,16 +62,15 @@ export async function removerTermoFiltroAction(tipo: TipoTermoBloqueio, valor: s
 // apagar de verdade. Nunca apaga nada aqui.
 async function previaImpacto(novas: MudancaFiltro[]): Promise<{ clientes: number; conversas: number }> {
   if (!novas.length) return { clientes: 0, conversas: 0 };
-  const termos = novas.filter((m) => m.tipo === "termo").map((m) => m.valor);
-  const palavras = novas.filter((m) => m.tipo === "palavra").map((m) => m.valor);
-  const bate = (nome: string | null) => !!nome && motivoBloqueioComListas(nome, termos, palavras) !== null;
+  const palavras = novas.map((m) => m.valor);
+  const bate = (nome: string | null) => !!nome && motivoBloqueioComListas(nome, [], palavras) !== null;
   const [clientes, conversas, comHistorico] = await Promise.all([
     db.cliente.findMany({ select: { id: true, nome: true } }),
     db.whatsAppConversation.findMany({ where: { isGroup: false }, select: { contactName: true, clienteId: true } }),
     clientesComHistorico(),
   ]);
   // Mesma regra da limpeza: quem tem negociação/visita/compra não cai por termo.
-  const caem = clientes.filter((c) => bate(c.nome) && podeApagarNaLimpeza({ temHistorico: comHistorico.has(c.id), motivo: motivoBloqueioComListas(c.nome, termos, palavras) }));
+  const caem = clientes.filter((c) => bate(c.nome) && podeApagarNaLimpeza({ temHistorico: comHistorico.has(c.id), motivo: motivoBloqueioComListas(c.nome, [], palavras) }));
   return {
     clientes: caem.length,
     conversas: conversas.filter((c) => bate(c.contactName) && !(c.clienteId && comHistorico.has(c.clienteId))).length,
@@ -93,11 +95,10 @@ export async function assistenteFiltroAction(comando: string): Promise<RespostaA
   const plano = await interpretarComandoFiltro(texto, atual);
   let listas = atual;
   if (plano.adicionar.length || plano.remover.length) {
-    const termos = new Set(atual.termos);
     const palavras = new Set(atual.palavras);
-    for (const m of plano.remover) (m.tipo === "termo" ? termos : palavras).delete(m.valor);
-    for (const m of plano.adicionar) (m.tipo === "termo" ? termos : palavras).add(m.valor);
-    listas = await definirFiltroContatos([...termos], [...palavras]);
+    for (const m of plano.remover) palavras.delete(m.valor);
+    for (const m of plano.adicionar) palavras.add(m.valor);
+    listas = await definirFiltroContatos([...palavras]);
     await registrarAudit({
       acao: "perfil_atualizado", origem: "usuario",
       descricao: `Assistente do filtro de contatos ("${texto}"): +${plano.adicionar.map((m) => m.valor).join(", ") || "—"} / −${plano.remover.map((m) => m.valor).join(", ") || "—"}.`,

@@ -12,10 +12,20 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Atendimento parado: a tela diz quando o
-recebimento para, e a conversa aberta pega mensagem fora de ordem"** (01/10).
-**1.310 testes passando** (111 arquivos), lint e build limpos.
+Último commit com código: **"Arábica sem 0% travado, filtro de contatos só
+com palavras inteiras, dois cards a menos em Configurações"** (01/10).
+**1.327 testes passando** (114 arquivos), lint e build limpos.
 `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
+
+**01/10 — arábica 0,00% e Configurações.** O arábica do ES que a fonte da vez
+não traz era repetido para sempre (o 1.155,00 de 23/09 comparado com ele
+mesmo); agora vale 6 h depois de lido de verdade (`arabicaDaLeitura`,
+`arabicaLidaEm`) e, sem ele, o letreiro mostra o Arábica NY. O filtro de
+contatos virou UMA lista de palavras inteiras: `filtro.contatos.termos` (os
+"pedaços") é somado às palavras na leitura e esvaziado na primeira edição.
+Saíram os cards "Conversas importadas sem contato" e "Conversas do WhatsApp:
+a partir de quando" — a data de corte (16/09) CONTINUA valendo, invisível, e
+muda pela importação do histórico em Conexão.
 
 **01/10, depois do letreiro — "O atendimento não está atualizando".** Não deu
 para ver produção daqui. O caminho inteiro (webhook → banco → lista → conversa

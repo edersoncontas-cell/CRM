@@ -225,7 +225,7 @@ export async function GET() {
     const es = c.cafeES;
     return [
       `bolsa: ${c.fonte ?? "?"}, lida ${c.cafeAtualizadoEm ?? "nunca"}, arábica ${num(c.cafeArabica)}, conilon ${num(c.cafeConilon)}`,
-      `café do ES: ${es ? `${es.fonte}, lido ${es.atualizadoEm}, arábica ${num(es.arabica)}, conilon ${num(es.conilon)}, dólar ${num(es.dolar)}` : "nunca lido"}`,
+      `café do ES: ${es ? `${es.fonte}, lido ${es.atualizadoEm}, arábica ${num(es.arabica)}${es.arabica != null ? ` (lido ${es.arabicaLidaEm ?? "antes da regra de 01/10"}, ${num(es.variacaoArabicaPct)}%)` : " (a fonte não trouxe; o letreiro usa o de NY)"}, conilon ${num(es.conilon)}, dólar ${num(es.dolar)}` : "nunca lido"}`,
       `dólar: ${num(c.dolar)} (${c.dolarFonte ?? "fonte ?"}, lido ${c.dolarLidoEm ?? "?"})`,
     ].join(" · ");
   }));

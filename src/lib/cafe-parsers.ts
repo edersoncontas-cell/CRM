@@ -42,6 +42,44 @@ export function variacaoDiaria(
   return { pct: 0, base: "primeira leitura" };
 }
 
+// ARÁBICA QUE A FONTE DA VEZ NÃO TROUXE.
+//
+// "O indicador do café arábica está travado em zero %" (01/10). Quando a fonte
+// que respondeu não tem arábica (Notícias Agrícolas só tem conilon), o robô
+// repetia o arábica da leitura anterior — para sempre. O de 23/09 (R$ 1.155,00)
+// atravessou a semana fora do ar, foi comparado com o próprio 23/09 do
+// histórico e deu 0,00% todo dia.
+//
+// Agora o arábica repetido vale só 6 h depois de lido DE VERDADE, e com a
+// variação que tinha quando foi lido. Passou disso, fica sem arábica do ES e o
+// letreiro mostra o Arábica NY (bolsa), que tem variação de verdade. Leitura
+// gravada antes desta regra não diz quando o arábica foi lido: não é repetida.
+export const VALIDADE_ARABICA_MS = 6 * 3_600_000;
+
+export type ArabicaAnterior = { arabica: number | null; arabicaLidaEm?: string | null; variacaoArabicaPct?: number | null } | null | undefined;
+
+export function arabicaDaLeitura(a: {
+  achado: { arabica: number | null; variacaoArabicaPct?: number | null };
+  anterior: ArabicaAnterior;
+  hist: PontoHistoricoCafe[];
+  chaveHoje: string;
+  agora: Date;
+}): { arabica: number | null; lidaEm: string | null; pct: number | null; base: string | null; noHistorico: number | null } {
+  const deHoje = a.hist.find((h) => h.data === a.chaveHoje)?.arabica ?? null;
+  if (a.achado.arabica != null) {
+    const v = variacaoDiaria(a.hist, a.chaveHoje, "arabica", a.achado.arabica, a.anterior?.arabica);
+    return { arabica: a.achado.arabica, lidaEm: a.agora.toISOString(), pct: a.achado.variacaoArabicaPct ?? v.pct, base: v.base, noHistorico: a.achado.arabica };
+  }
+  const ant = a.anterior;
+  const lida = ant?.arabicaLidaEm ? Date.parse(ant.arabicaLidaEm) : NaN;
+  const idade = a.agora.getTime() - lida;
+  // Data no futuro (relógio torto) também não vale: não dá para saber a idade.
+  if (ant?.arabica != null && Number.isFinite(lida) && idade >= -60_000 && idade <= VALIDADE_ARABICA_MS) {
+    return { arabica: ant.arabica, lidaEm: ant.arabicaLidaEm!, pct: ant.variacaoArabicaPct ?? null, base: null, noHistorico: deHoje };
+  }
+  return { arabica: null, lidaEm: null, pct: null, base: null, noHistorico: deHoje };
+}
+
 // "1.234,56" → 1234.56 (só aceita valores plausíveis de saca).
 export const numBR = (s: string): number | null => {
   const n = parseFloat(String(s).replace(/\./g, "").replace(",", "."));

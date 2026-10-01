@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { dataIsoBrasilia, inicioDoDiaBrasilia, diaSemanaBrasilia, horaBrasilia, motivoBloqueioComListas, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO, semCodigoPais, iniciais } from "@/lib/utils";
+import { dataIsoBrasilia, inicioDoDiaBrasilia, diaSemanaBrasilia, horaBrasilia, motivoBloqueioComListas, PALAVRAS_BLOQUEIO_PADRAO, semCodigoPais, iniciais } from "@/lib/utils";
 
 // Regra de fábrica (as listas editáveis do banco começam iguais a esta).
-const deveDescartarContato = (nome: string) => motivoBloqueioComListas(nome, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO) !== null;
+const deveDescartarContato = (nome: string) => motivoBloqueioComListas(nome, [], PALAVRAS_BLOQUEIO_PADRAO) !== null;
 import { calcularFinanciamento, calcularConsorcio, anualParaMensal } from "@/lib/finance";
 import { phoneLookupVariants, isGroupChatId, buildConvMatch, isAllowedInstance } from "@/lib/whatsapp-routing";
 

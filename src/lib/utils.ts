@@ -145,8 +145,17 @@ export function agoraBrasiliaExtenso(date: Date = new Date()): string {
 // Valores de fábrica — o filtro de verdade mora no banco (Configuracao) e é
 // editável em Configurações → WhatsApp/Clientes; ver lib/filtro-contatos.ts.
 // Isto aqui é só a semente usada na primeira vez, antes de existir override.
-export const TERMOS_BLOQUEIO_PADRAO = ["contab", "contador", "financeir", "escritorio", "bradesco", "sicoob", "sicredi", "banestes", "hotel", "pousada", "restaurante"];
-export const PALAVRAS_BLOQUEIO_PADRAO = ["banco", "cnh", "bcnh", "pme"];
+// Lista de fábrica do filtro de contatos que não são clientes — só PALAVRAS
+// INTEIRAS. A lista de "pedaços de palavra" saiu em 01/10 a pedido do vendedor
+// (um card só, palavra inteira); os pedaços de fábrica viraram as palavras
+// que eles pegavam.
+export const PALAVRAS_BLOQUEIO_PADRAO = [
+  "banco", "cnh", "bcnh", "pme",
+  "contabilidade", "contabil", "contabeis", "contador", "contadora", "contadores",
+  "financeira", "financeiro", "escritorio",
+  "bradesco", "sicoob", "sicredi", "banestes",
+  "hotel", "pousada", "restaurante",
+];
 
 export const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -154,7 +163,7 @@ export const semAcento = (s: string) => s.toLowerCase().normalize("NFD").replace
 // recebe as listas prontas. Quem decide QUAIS listas usar é lib/filtro-contatos.ts.
 // Termo com menos de 3 letras é ignorado: "a" ou "sa" na lista (um deslize
 // no card ou no assistente) bloquearia — e APAGARIA — todo contato que chega.
-const TAMANHO_MINIMO_TERMO = 3;
+export const TAMANHO_MINIMO_TERMO = 3;
 // Contato marcado pelo vendedor na agenda do celular: nome terminado em "*"
 // (ex.: "Compadre Zé *"). É a marca manual de "isto não é cliente" — vale
 // mais que qualquer lista e tira o contato do CRM inteiro: não vira cliente,
@@ -226,6 +235,15 @@ export function motivoBloqueioComListas(nome: string, termos: string[], palavras
     return contemSequencia(partes, alvo);
   });
   return palavra ?? null;
+}
+
+/**
+ * A palavra é curta demais para entrar no filtro (menos de 3 letras, sem
+ * contar espaço e pontuação)? O filtro ignora essas — "da" ou "sa" apagariam
+ * meio CRM —, então o card avisa em vez de aceitar e deixar parecendo que filtra.
+ */
+export function palavraCurtaDemais(p: string): boolean {
+  return palavrasDe(p).join("").length < TAMANHO_MINIMO_TERMO;
 }
 
 export function iniciais(nome: string) {

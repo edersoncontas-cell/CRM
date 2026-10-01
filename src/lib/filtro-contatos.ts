@@ -1,76 +1,88 @@
 // Filtro de contatos indesejados (contabilidade, bancos, financeiras, hotéis,
-// restaurantes…) — o "espaço de configuração" de Clientes/WhatsApp: as listas
-// vivem em Configuracao (editáveis pelo card de Configurações, manual ou pelo
-// assistente de configuração) em vez de fixas no código.
+// restaurantes…) — o "espaço de configuração" de Clientes/WhatsApp: a lista
+// vive em Configuracao (editável pelo card de Configurações, manual ou pelo
+// assistente de configuração) em vez de fixa no código.
+//
+// UMA lista só, de PALAVRAS INTEIRAS (01/10, pedido do vendedor). Havia uma
+// segunda, de "pedaços de palavra", gravada em filtro.contatos.termos. O que
+// estiver lá passa a valer como palavra inteira — o que só estreita o filtro,
+// nunca alarga — e a primeira edição do card a esvazia.
 
 import { getConfig, setConfig } from "@/lib/config";
-import { TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO, motivoBloqueioComListas } from "@/lib/utils";
+import { PALAVRAS_BLOQUEIO_PADRAO, motivoBloqueioComListas } from "@/lib/utils";
 
-const CHAVE_TERMOS = "filtro.contatos.termos";
+const CHAVE_TERMOS_ANTIGA = "filtro.contatos.termos";
 const CHAVE_PALAVRAS = "filtro.contatos.palavras";
 // Cache em memória (por instância do servidor): motivoBloqueio/deveDescartarContato
 // são chamados em massa (varrendo listas de clientes) — sem isso, cada chamada
 // seria um round-trip ao banco. Recarrega sozinho a cada 30s, e na hora quando
 // o próprio card/assistente edita a lista.
 const TTL_MS = 30_000;
-let cache: { termos: string[]; palavras: string[] } | null = null;
+let cache: ListaFiltro | null = null;
 let cacheEm = 0;
 
-async function carregar(): Promise<{ termos: string[]; palavras: string[] }> {
+export type ListaFiltro = { palavras: string[] };
+
+const limpar = (arr: string[]): string[] =>
+  Array.from(new Set(arr.map((s) => s.trim().toLowerCase()).filter(Boolean)));
+
+function lerLista(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pura: a lista que vale, juntando a de palavras com a antiga de pedaços. */
+export function listaQueVale(palavrasGravadas: string | null, termosGravados: string | null): string[] {
+  const palavras = lerLista(palavrasGravadas) ?? PALAVRAS_BLOQUEIO_PADRAO;
+  return limpar([...palavras, ...(lerLista(termosGravados) ?? [])]);
+}
+
+async function carregar(): Promise<ListaFiltro> {
   if (cache && Date.now() - cacheEm < TTL_MS) return cache;
-  const [rt, rp] = await Promise.all([getConfig(CHAVE_TERMOS), getConfig(CHAVE_PALAVRAS)]);
-  const termos = rt ? (JSON.parse(rt) as string[]) : TERMOS_BLOQUEIO_PADRAO;
-  const palavras = rp ? (JSON.parse(rp) as string[]) : PALAVRAS_BLOQUEIO_PADRAO;
-  cache = { termos, palavras };
+  const [rp, rt] = await Promise.all([getConfig(CHAVE_PALAVRAS), getConfig(CHAVE_TERMOS_ANTIGA)]);
+  cache = { palavras: listaQueVale(rp, rt) };
   cacheEm = Date.now();
   return cache;
 }
 
-export async function listarFiltroContatos(): Promise<{ termos: string[]; palavras: string[] }> {
+export async function listarFiltroContatos(): Promise<ListaFiltro> {
   return carregar();
 }
 
 export async function motivoBloqueio(nome: string): Promise<string | null> {
-  const { termos, palavras } = await carregar();
-  return motivoBloqueioComListas(nome, termos, palavras);
+  const { palavras } = await carregar();
+  return motivoBloqueioComListas(nome, [], palavras);
 }
 
 export async function deveDescartarContato(nome: string): Promise<boolean> {
   return (await motivoBloqueio(nome)) !== null;
 }
 
-const limpar = (arr: string[]): string[] =>
-  Array.from(new Set(arr.map((s) => s.trim().toLowerCase()).filter(Boolean)));
-
-// Substitui as duas listas inteiras (usado pelo formulário e pelo assistente
-// depois de calcular o resultado final).
-export async function definirFiltroContatos(termos: string[], palavras: string[]): Promise<{ termos: string[]; palavras: string[] }> {
-  const t = limpar(termos);
+// Substitui a lista inteira (usado pelo card e pelo assistente depois de
+// calcular o resultado final). Esvazia a antiga de pedaços: o que estava lá já
+// veio junto na lista lida, e não pode voltar depois de ele remover.
+export async function definirFiltroContatos(palavras: string[]): Promise<ListaFiltro> {
   const p = limpar(palavras);
-  await Promise.all([setConfig(CHAVE_TERMOS, JSON.stringify(t)), setConfig(CHAVE_PALAVRAS, JSON.stringify(p))]);
-  cache = { termos: t, palavras: p };
+  await Promise.all([setConfig(CHAVE_PALAVRAS, JSON.stringify(p)), setConfig(CHAVE_TERMOS_ANTIGA, "[]")]);
+  cache = { palavras: p };
   cacheEm = Date.now();
   return cache;
 }
 
-export type { TipoTermoBloqueio } from "@/lib/filtro-contatos-plano";
-import type { TipoTermoBloqueio } from "@/lib/filtro-contatos-plano";
-
-export async function adicionarTermoFiltro(tipo: TipoTermoBloqueio, valor: string): Promise<{ termos: string[]; palavras: string[] }> {
+export async function adicionarPalavraFiltro(valor: string): Promise<ListaFiltro> {
   const atual = await carregar();
   const v = valor.trim().toLowerCase();
   if (!v) return atual;
-  return definirFiltroContatos(
-    tipo === "termo" ? [...atual.termos, v] : atual.termos,
-    tipo === "palavra" ? [...atual.palavras, v] : atual.palavras
-  );
+  return definirFiltroContatos([...atual.palavras, v]);
 }
 
-export async function removerTermoFiltro(tipo: TipoTermoBloqueio, valor: string): Promise<{ termos: string[]; palavras: string[] }> {
+export async function removerPalavraFiltro(valor: string): Promise<ListaFiltro> {
   const atual = await carregar();
   const v = valor.trim().toLowerCase();
-  return definirFiltroContatos(
-    tipo === "termo" ? atual.termos.filter((t) => t !== v) : atual.termos,
-    tipo === "palavra" ? atual.palavras.filter((p) => p !== v) : atual.palavras
-  );
+  return definirFiltroContatos(atual.palavras.filter((p) => p !== v));
 }

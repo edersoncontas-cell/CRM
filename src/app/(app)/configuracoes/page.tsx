@@ -8,10 +8,6 @@ import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google
 import { resumoBloqueio } from "@/lib/contatos-bloqueados";
 import { listarFiltroContatos } from "@/lib/filtro-contatos";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
-import { ConversasAntigasCard } from "@/components/ConversasAntigasCard";
-import { ConversasImportadasCard } from "@/components/ConversasImportadasCard";
-import { lerImportadasAction } from "@/lib/whatsapp-importadas-actions";
-import { lerEstadoCorteAction } from "@/lib/whatsapp-corte-actions";
 import { ClientesDuplicadosCard } from "@/components/ClientesDuplicadosCard";
 import { lerEstadoDuplicadosAction } from "@/lib/clientes-duplicados-actions";
 import { ClientesLixoCard } from "@/components/ClientesLixoCard";
@@ -41,7 +37,7 @@ import { lerEstadoProvisorio } from "@/lib/trazer-provisorio-estado";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, corte, duplicados, importadas, limpeza, provisorio] = await Promise.all([
+  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio] = await Promise.all([
     lerAprendizadoOrientador(),
     obterCotacoes(),
     statusGoogle(),
@@ -50,9 +46,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     envioParaGoogleAtivo(),
     resumoBloqueio().catch(() => ({ total: 0, recentes: [] })),
     listarFiltroContatos(),
-    lerEstadoCorteAction().catch(() => ({ dia: null, conversasAnteriores: 0 })),
     lerEstadoDuplicadosAction().catch(() => ({ previa: { totalGrupos: 0, totalSomem: 0, grupos: [] }, historico: [] })),
-    lerImportadasAction().catch(() => ({ total: 0, comCliente: 0, semCliente: 0 })),
     lerEstadoLimpezaAction().catch(() => ({ previa: { apagar: 0, consertar: 0, porMotivo: {}, exemplos: [] }, historico: [] })),
     lerEstadoProvisorio(),
   ]);
@@ -133,12 +127,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
 
       <ClientesLixoCard inicial={limpeza} />
 
-      <ConversasAntigasCard inicial={corte} />
-
-      <ConversasImportadasCard inicial={importadas} />
-
       <ContatosBloqueadosCard
-        termos={filtro.termos}
         palavras={filtro.palavras}
         total={bloqueio.total}
         recentes={bloqueio.recentes.map((r) => ({ ...r, criadoEm: r.criadoEm.toISOString() }))}

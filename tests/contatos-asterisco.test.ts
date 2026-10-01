@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   nomeMarcadoComAsterisco, motivoBloqueioComListas, MOTIVO_ASTERISCO,
-  TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO,
+  PALAVRAS_BLOQUEIO_PADRAO,
 } from "@/lib/utils";
 import { planejarSincronizacao, type ContatoGoogle } from "@/lib/google-contatos-util";
 
-const motivo = (nome: string) => motivoBloqueioComListas(nome, TERMOS_BLOQUEIO_PADRAO, PALAVRAS_BLOQUEIO_PADRAO);
+const motivo = (nome: string) => motivoBloqueioComListas(nome, [], PALAVRAS_BLOQUEIO_PADRAO);
 
 describe("marca de asterisco na agenda do celular", () => {
   it("reconhece o asterisco no fim do nome", () => {

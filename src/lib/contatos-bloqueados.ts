@@ -225,7 +225,7 @@ export async function limparContatosIndesejados(): Promise<ResultadoLimpeza> {
     };
     // Listas carregadas UMA vez e aplicadas com a função pura — a varredura
     // percorre todos os clientes/conversas, não dá para consultar por item.
-    const motivo = (nome: string) => motivoBloqueioComListas(nome, listas.termos, listas.palavras);
+    const motivo = (nome: string) => motivoBloqueioComListas(nome, [], listas.palavras);
 
     const telefonesAlvo = new Set<string>(bloqueadosAntes);
     // O MESMO buraco do telefone aparecia aqui: sem número, o contato era

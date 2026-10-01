@@ -8,34 +8,31 @@ import { normalizarPlanoFiltro, type PlanoFiltro } from "@/lib/filtro-contatos-p
 
 export type { MudancaFiltro, PlanoFiltro } from "@/lib/filtro-contatos-plano";
 
-export async function interpretarComandoFiltro(comando: string, atual: { termos: string[]; palavras: string[] }): Promise<PlanoFiltro> {
+export async function interpretarComandoFiltro(comando: string, atual: { palavras: string[] }): Promise<PlanoFiltro> {
   if (!iaHabilitada()) {
-    return { resposta: "A IA não está configurada — adicione ou remova os termos manualmente pelas caixinhas acima.", adicionar: [], remover: [] };
+    return { resposta: "A IA não está configurada — adicione ou remova as palavras pelo campo acima.", adicionar: [], remover: [] };
   }
   const system = `Você é o assistente de configuração do filtro de contatos de um CRM de vendedor de máquinas pesadas.
 O filtro barra contatos que NÃO são clientes (contabilidade, banco, financeira, hotel, restaurante…): pelo nome do
 contato, eles nunca entram no CRM e, se já existem, são apagados com todo o histórico.
 
-Há dois tipos de regra:
-- "palavra": bate só como palavra inteira do nome ("banco" pega "Banco do Brasil", não pega "Bancorbrás").
-- "termo": bate como pedaço de qualquer palavra ("contab" pega contabilidade, contábil, contábeis).
-Use "palavra" por padrão. Use "termo" só quando o vendedor pedir um pedaço/prefixo ou disser "qualquer coisa que
-contenha/comece com", ou quando a palavra tiver muitas variações óbvias (contab, financeir).
+A regra é uma lista de PALAVRAS INTEIRAS: cada uma bate só como palavra inteira do nome ("banco" pega
+"Banco do Brasil", não pega "Bancorbrás"). Pode ter mais de uma palavra ("new holland" pega "New Holland Vitória").
+Não existe pedaço de palavra: para pegar as variações, adicione cada uma ("contabilidade", "contabil", "contabeis").
+Palavra com menos de 3 letras não vale (apagaria contato demais).
 
-Listas atuais:
-- termos: ${JSON.stringify(atual.termos)}
-- palavras: ${JSON.stringify(atual.palavras)}
+Lista atual: ${JSON.stringify(atual.palavras)}
 
 Devolva SOMENTE um JSON válido:
 {
   "resposta": string,                 // 1-2 frases, direto, confirmando o que vai mudar (ou explicando, se for só pergunta)
-  "adicionar": [ { "tipo": "termo"|"palavra", "valor": string } ],
-  "remover":   [ { "tipo": "termo"|"palavra", "valor": string } ]
+  "adicionar": [ { "valor": string } ],
+  "remover":   [ { "valor": string } ]
 }
 Regras:
 - "valor" sempre minúsculo e sem acento. Um pedido pode gerar várias entradas ("bloqueia despachante e cartório").
 - "liberar", "desbloquear", "tirar", "parar de bloquear" = remover. "bloquear", "barrar", "não deixar entrar" = adicionar.
-- Para remover, use exatamente o valor que está na lista atual (e o tipo em que ele está).
+- Para remover, use o valor que está na lista atual.
 - Se for só uma pergunta ("o que está bloqueado?"), responda em "resposta" e deixe as listas vazias.
 - Não invente regras que o vendedor não pediu. Nunca adicione nomes de pessoas.`;
   try {
