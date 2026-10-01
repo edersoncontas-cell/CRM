@@ -1,8 +1,9 @@
 "use client";
 
-// Card de Configurações com as regras da realidade do negócio — as mesmas da
-// Academia. Fica nos dois lugares de propósito: quem descobre a regra
-// treinando cadastra ali mesmo, e quem procura configuração acha aqui.
+// Card da Central Inteligente (veio de Configurações em 01/10) com as regras da
+// realidade do negócio — as mesmas da Academia. Fica nos dois lugares de
+// propósito: quem descobre a regra treinando cadastra ali mesmo, e quem está
+// na Central acha aqui.
 
 import { useState } from "react";
 import { Card } from "@/components/ui";

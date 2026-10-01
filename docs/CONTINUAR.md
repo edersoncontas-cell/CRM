@@ -12,9 +12,44 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Desconectar o WhatsApp confere se saiu, destrava
-a sessão presa e mostra a saída"** (01/10).
-**1.335 testes passando** (114 arquivos), lint e build limpos.
+Último commit com código: **"Configurações enxuta: 5 cards a menos, 2 vão para a
+Central Inteligente, sol/lua fixo, WhatsApp com 'refazer do zero' direto"** (01/10).
+**1.346 testes passando** (115 arquivos), lint e build limpos.
+
+**01/10 — Configurações enxuta (pedido dele, card por card).** SAÍRAM: "Envio de
+mensagens PAUSADO", "Mensagens com erro esperando envio", "Tema do CRM", "Travas
+de envio do WhatsApp", "Exportar dados". FORAM PARA A CENTRAL INTELIGENTE
+(`/cerebro`, entre os 3 painéis e "O que o Cérebro fez"): "A realidade do seu
+negócio" e "O que o Orientador aprendeu com você" (`revalidatePath("/cerebro")`
+nas ações dos dois). O tema virou o **sol/lua fixo** no canto de todas as telas
+do `(app)` (`components/AlternarTema.tsx`, montado no layout; 26 px no PC para
+caber na margem de cima, 36 px no celular, ao lado do hambúrguer). `/sem-sinal`
+fica sem ele (está fora do layout, funciona offline).
+- ⚠ **A trava de envio CONTINUA ligada e agora NÃO há botão para liberar.**
+  `lib/whatsapp-pausa.ts` nasce pausada; `lib/whatsapp-pausa-actions.ts`
+  (`lerPausaAction`/`definirPausaAction`) ficou pronta, sem tela, para a futura
+  tela de envio por cidade. Nada sai — nem resposta digitada no Atendimento.
+  Ele NÃO pediu para liberar; não libere.
+- Teto (80/dia), janela (8h–18h, dias úteis) e ritmo (`lib/envio-limites.ts`,
+  lido por `envio-guarda.ts`) seguem valendo sem tela. Ele disse "vai ficar
+  limitado ao número de clientes de cada cidade": isso NÃO foi implementado —
+  perguntar se uma cidade com mais de 80 clientes deve sair em ondas.
+- `/api/exportar/*` continua; só o botão saiu.
+- Apagados: `PausaEnvioCard`, `FalhadasCard`, `SeletorTema`, `TravasEnvioCard`,
+  `ExportarDadosCard`, `limpeza-falhadas-actions.ts`, `envio-limites-actions.ts`.
+  `limpeza-falhadas.ts` (puro) fica — os testes usam.
+- `tests/tela-removida-sem-referencia.test.ts` pega texto que mande ele para uma
+  tela que não existe mais.
+- Defeito achado no caminho: no tema claro o título de Clientes sumia (página
+  com fundo preto próprio + variável de tema) → classe `.pagina-escura`.
+
+**01/10 — "continua não recebendo, resolva ou desconecte".** Em /conexao, com o
+número "conectado", o painel agora tem ao lado de Desconectar o botão **"Não
+chega mensagem? Refazer do zero"** (confirmação na tela): apaga a instância na
+Evolution e cria de novo, já com o webhook no endereço de onde ele está
+abrindo o CRM (`criarInstanciaEvolutionAction` confirma a origem) e mostra o QR.
+Antes só aparecia depois de "Desconectar" falhar. Provado só contra a Evolution
+FALSA (`/tmp/claude-0/shots/refazer-direto.mjs`). **Não confirmado em produção.**
 
 **01/10 — "desconectar não está indo".** O botão mandava UM logout e
 acreditava nele; com a sessão presa a Evolution diz "logged out" e continua
@@ -70,8 +105,9 @@ do banco provisório" — perguntar.
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —
 > campanha, resposta automática, aniversário, mensagem da tela — e nasce
-> pausada. Só ele libera, em Configurações. Não libere por conta própria e não
-> escreva nada que contorne a trava.
+> pausada. Desde 01/10 NÃO existe tela para liberar (o card saiu de
+> Configurações a pedido dele). Não libere por conta própria e não escreva nada
+> que contorne a trava.
 
 > Ao retomar, confira o estado real antes de confiar nestes números:
 > `git log --oneline -5`, `npx vitest run`, `grep -n "CHAVE_MANUTENCAO = " src/lib/manutencao.ts`.
@@ -191,8 +227,9 @@ contatos. O que fecha isso agora:
   teto. Não aplica a peneira de contato frio, **de propósito**: são 3 ou 4 por
   dia, com o nome da pessoa, e cortar custaria relacionamento sem proteger o
   número.
-- Em Configurações, o card **"Travas de envio do WhatsApp"** mostra quanto já
-  saiu hoje contra o teto e deixa mudar teto e horário.
+- O card **"Travas de envio do WhatsApp"** (que mostrava quanto já saiu contra o
+  teto e deixava mudar teto e horário) SAIU de Configurações em 01/10, a pedido
+  dele; os limites padrão continuam valendo, sem tela.
 
 Se for mexer nisso: a tela **não pode prometer número que não vai cumprir**.
 `checarEnvioAgoraAction` confere a relação no servidor e devolve os ids, para o

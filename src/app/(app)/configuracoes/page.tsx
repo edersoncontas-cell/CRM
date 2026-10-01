@@ -12,7 +12,6 @@ import { ClientesDuplicadosCard } from "@/components/ClientesDuplicadosCard";
 import { lerEstadoDuplicadosAction } from "@/lib/clientes-duplicados-actions";
 import { ClientesLixoCard } from "@/components/ClientesLixoCard";
 import { lerEstadoLimpezaAction } from "@/lib/clientes-lixo-actions";
-import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
@@ -21,23 +20,13 @@ import { GoogleIntegracaoCard } from "@/components/GoogleIntegracaoCard";
 import { obterCotacoes } from "@/lib/mercado";
 import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
-import { ExportarDadosCard } from "@/components/ExportarDadosCard";
-import { TravasEnvioCard } from "@/components/TravasEnvioCard";
-import { PausaEnvioCard } from "@/components/PausaEnvioCard";
-import { FalhadasCard } from "@/components/FalhadasCard";
-import { SeletorTema } from "@/components/SeletorTema";
-import { modoAtual } from "@/lib/tema-servidor";
-import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
-import { lerRegrasNegocio } from "@/lib/contexto-negocio";
-import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
 import { VoltaProvisorioCard } from "@/components/VoltaProvisorioCard";
 import { lerEstadoProvisorio } from "@/lib/trazer-provisorio-estado";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [aprendizado, cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio] = await Promise.all([
-    lerAprendizadoOrientador(),
+  const [cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio] = await Promise.all([
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
@@ -81,21 +70,16 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         subtitulo="Ative as integrações conforme você obtiver as credenciais"
       />
 
-      {/* A trava geral abre a tela: quando o número está em risco, é a
-          primeira coisa que ele precisa achar. */}
-      <PausaEnvioCard />
-
-      <FalhadasCard />
+      {/* Saíram daqui em 01/10, a pedido dele: "Envio de mensagens PAUSADO",
+          "Mensagens com erro esperando envio", "Tema do CRM" (virou o sol/lua
+          fixo no canto — components/AlternarTema.tsx), "Travas de envio do
+          WhatsApp" e "Exportar dados". "A realidade do seu negócio" e "O que
+          o Orientador aprendeu com você" foram para a Central Inteligente.
+          A trava geral de envio CONTINUA ligada (lib/whatsapp-pausa.ts nasce
+          pausada) e o teto/janela/ritmo (lib/envio-limites.ts) continuam
+          valendo — só não há mais tela para mexer neles. */}
 
       <ParametrosNegocioForm p={parametros} />
-
-      <RealidadeNegocioCard inicial={await lerRegrasNegocio().catch(() => [])} temIA={iaHabilitada()} />
-
-      <SeletorTema atual={modoAtual()} />
-
-      <TravasEnvioCard />
-
-      <ExportarDadosCard />
 
       {/* Visibilidade dos itens do menu lateral */}
       <Card className="mb-6">
@@ -144,8 +128,6 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
           </Card>
         ))}
       </div>
-
-      <AprendizadoOrientadorCard inicial={aprendizado} />
 
       <Card className="mt-6">
         <div className="mb-2 flex items-center gap-2 font-semibold text-slate-700">

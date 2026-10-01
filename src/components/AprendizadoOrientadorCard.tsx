@@ -30,7 +30,7 @@ export function AprendizadoOrientadorCard({ inicial }: { inicial: AprendizadoOri
     <Card className="mt-6">
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 font-semibold text-slate-700">
-          <Bot size={18} className="text-brand-600" /> O que o Orientador aprendeu com você
+          <Bot size={18} className="shrink-0 text-brand-600" /> O que o Orientador aprendeu com você
         </div>
         <button
           type="button"

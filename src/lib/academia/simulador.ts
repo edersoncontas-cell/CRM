@@ -617,14 +617,14 @@ export const CENARIOS: CenarioSimulador[] = [
         id: "a",
         texto: "“Pegamos sim, faço uma avaliação e abato na entrada.”",
         qualidade: "ruim",
-        feedback: "Cuidado: isso depende da regra da SUA operação. Prometer o que a empresa não faz destrói a confiança na hora de fechar. Confira a regra em Configurações › Realidade do negócio.",
+        feedback: "Cuidado: isso depende da regra da SUA operação. Prometer o que a empresa não faz destrói a confiança na hora de fechar. Confira a regra em Central Inteligente › A realidade do seu negócio.",
         proximo: "insta-4",
       },
       {
         id: "b",
         texto: "“A gente não trabalha pegando máquina como entrada. O que eu faço é te ajudar a vender o trator direto para outro produtor — costuma render mais para você do que uma avaliação de troca — e a entrada entra em dinheiro.”",
         qualidade: "boa",
-        feedback: "Disse a verdade da operação, sem constrangimento, e ofereceu uma saída melhor para o cliente. É exatamente a regra cadastrada na Realidade do negócio.",
+        feedback: "Disse a verdade da operação, sem constrangimento, e ofereceu uma saída melhor para o cliente. É exatamente a regra cadastrada em A realidade do seu negócio.",
         proximo: "insta-4",
       },
       {

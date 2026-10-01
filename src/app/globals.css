@@ -112,6 +112,15 @@
     --funil-card-texto2: #64748b;
 }
 
+/* Página que pinta o PRÓPRIO fundo escuro (wrapper #09090b em Clientes etc.):
+   no tema claro o título e o subtítulo, que seguem as variáveis acima, ficavam
+   grafite sobre preto e sumiam. Dentro dela valem os valores do tema escuro. */
+.pagina-escura {
+    --sobre-fundo-titulo: #ffffff;
+    --sobre-fundo-texto: #cbd5e1;
+    --sobre-fundo-mudo: #94a3b8;
+}
+
 /* ── Performance mobile: remove delay de 300ms em taps ── */
 /* IMPORTANTE: NÃO aplicar touch-action em * — bloqueia scroll no iOS */
 /* O :where() é a MESMA correção do seletor de input mais abaixo, pelo mesmo

@@ -8,7 +8,7 @@ export const maxDuration = 60;
 // O robô do Orientador: recalcula as lições do histórico (taxa de
 // fechamento, motivo de perda mais comum, tempo até fechar) e reaprende o
 // jeito de falar do vendedor. Disparado pelo /api/cron/tudo uma vez por
-// semana; também roda na hora pelo botão em Configurações.
+// semana; também roda na hora pelo botão da Central Inteligente.
 export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const r = await atualizarAprendizadoOrientador();

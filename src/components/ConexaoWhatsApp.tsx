@@ -415,7 +415,11 @@ export function ConexaoWhatsApp() {
 // na tela, a resposta aparece embaixo do botão, e quando a conexão fica presa
 // a tela dá as duas saídas que sempre funcionam.
 function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | undefined; aoTerminar: () => Promise<void> }) {
-  const [etapa, setEtapa] = useState<"parado" | "confirmando" | "desconectando" | "presa" | "confirmandoRefazer" | "refazendo">("parado");
+  const [etapa, setEtapa] = useState<"parado" | "confirmando" | "desconectando" | "presa" | "confirmandoRefazer" | "refazendo" | "refazerDireto">("parado");
+  // O "refazer do zero" também é aberto direto, sem passar por "presa" (01/10:
+  // "continua não recebendo, resolva ou desconecte"). Aí uma falha volta para o
+  // começo — dizer que "a conexão ficou presa" seria dizer o que não foi visto.
+  const [direto, setDireto] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const [motivoPresa, setMotivoPresa] = useState<string | null>(null);
   const semResposta = "O CRM não respondeu a tempo. Recarregue a página: se aparecer o QR Code, a desconexão funcionou.";
@@ -431,6 +435,7 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
         await aoTerminar();
       } else if (r.presa) {
         setMotivoPresa(r.erro ?? null);
+        setDireto(false);
         setEtapa("presa");
       } else {
         setMsg({ tipo: "erro", texto: `Não desconectou: ${r.erro ?? "a Evolution não disse o motivo"}.` });
@@ -453,11 +458,11 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
         await aoTerminar();
       } else {
         setMsg({ tipo: "erro", texto: `Não deu para refazer: ${r.erro ?? "sem motivo"}.` });
-        setEtapa("presa");
+        setEtapa(direto ? "parado" : "presa");
       }
     } catch {
       setMsg({ tipo: "erro", texto: semResposta });
-      setEtapa("presa");
+      setEtapa(direto ? "parado" : "presa");
     }
   }
 
@@ -465,9 +470,25 @@ function SaidaWhatsApp({ provedor, aoTerminar }: { provedor: string | null | und
   return (
     <div className="mt-4">
       {etapa === "parado" && (
-        <button onClick={() => { setMsg(null); setEtapa("confirmando"); }} className={`${botao} bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50`}>
-          <LogOut size={14} /> Desconectar
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => { setMsg(null); setEtapa("confirmando"); }} className={`${botao} bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50`}>
+            <LogOut size={14} /> Desconectar
+          </button>
+          {provedor === "evolution" && (
+            <button onClick={() => { setMsg(null); setDireto(true); setEtapa("refazerDireto"); }} className={`${botao} bg-white text-amber-700 ring-1 ring-amber-300 hover:bg-amber-50`}>
+              <RefreshCw size={14} /> Não chega mensagem? Refazer do zero
+            </button>
+          )}
+        </div>
+      )}
+      {etapa === "refazerDireto" && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p>O CRM apaga a conexão com o WhatsApp na Evolution e cria de novo, já com o QR Code para você ler. Resolve a conexão que fica &quot;verde&quot; mas não entrega mensagem. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={refazer} className={`${botao} bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Sim, refazer do zero</button>
+            <button onClick={() => setEtapa("parado")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
+          </div>
+        </div>
       )}
       {etapa === "confirmando" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">

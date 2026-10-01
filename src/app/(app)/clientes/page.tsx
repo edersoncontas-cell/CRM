@@ -180,7 +180,7 @@ export default async function ClientesPage({
   const filaContatosSemNome = contatosSemNome.map((c) => ({ id: c.id, telefone: semCodigoPais(c.telefone ?? "") }));
 
   return (
-    <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
+    <div style={{ background: "#09090b", minHeight: "100%" }} className="pagina-escura -m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
       <PageHeader
         titulo="Clientes"
         subtitulo={mostrarLista

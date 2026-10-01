@@ -1,5 +1,5 @@
 // O "robô" que faz o Orientador aprender com os casos reais do vendedor —
-// duas coisas, sem exagero, sempre visível e controlável em Configurações:
+// duas coisas, sem exagero, sempre visível e controlável na Central Inteligente:
 //
 //   1) O JEITO DE FALAR: reaproveita aprenderMeuEstilo() (lib/actions.ts) —
 //      lê as últimas mensagens reais do vendedor (nunca as da IA) e grava um
@@ -12,7 +12,7 @@
 //      condução para o padrão que de fato acontece com este vendedor.
 //
 // Roda sozinho uma vez por semana (cron) e sob demanda (botão em
-// Configurações → "Atualizar aprendizado agora"). O resultado fica guardado
+// Central Inteligente → "Atualizar agora"). O resultado fica guardado
 // em Configuracao para a tela mostrar o que foi aprendido — nada de caixa-preta.
 
 import { db } from "@/lib/db";

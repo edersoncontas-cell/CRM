@@ -215,7 +215,7 @@ export async function enviarMensagemClientesAction(clienteIds: string[], texto: 
   // inteira com o envio pausado — e quando fosse liberado, os clientes que
   // "falharam" nunca mais receberiam.
   if (await envioPausado()) {
-    return { ...r, bloqueio: "Envio de WhatsApp está PAUSADO no CRM. Libere em Configurações → Envio de mensagens." };
+    return { ...r, bloqueio: "Envio de WhatsApp está PAUSADO no CRM — nenhuma mensagem sai." };
   }
 
   const lim = await lerLimitesEnvio();
@@ -285,7 +285,7 @@ export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
     pediramSaida: e.pediramSaida.length,
     semTelefone: e.semTelefone.length,
     bloqueio: pausado
-      ? "Envio de WhatsApp está PAUSADO no CRM. Libere em Configurações → Envio de mensagens."
+      ? "Envio de WhatsApp está PAUSADO no CRM — nenhuma mensagem sai."
       : trava ? explicarBloqueio(trava, lim) : undefined,
   };
 }

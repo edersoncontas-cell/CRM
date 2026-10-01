@@ -7,6 +7,12 @@ import { registrarAudit } from "@/lib/audit";
 import { lerConfigAniversario } from "@/lib/aniversario-automatico";
 import { lerParametros } from "@/lib/parametros";
 
+// SEM TELA desde 01/10. O card que chamava estas duas ações (Configurações →
+// "Envio de mensagens PAUSADO") foi removido a pedido do vendedor: o envio em
+// massa para todos deixou de existir, só clientes de cada cidade. Ficam aqui,
+// prontas, para o botão de liberar morar na tela do envio por cidade — não
+// reescrever do zero, e não liberar por outro caminho: a trava geral é esta.
+
 export type ItemFila = { o_que: string; quantos: number; onde: string | null };
 
 export type EstadoPausa = {

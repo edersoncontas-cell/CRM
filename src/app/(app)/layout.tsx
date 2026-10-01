@@ -4,6 +4,8 @@ import { AuthPersist } from "@/components/AuthPersist";
 import { SplashBoot } from "@/components/SplashBoot";
 import { CurvasDeNivel } from "@/components/CurvasDeNivel";
 import { RodapeMercado } from "@/components/RodapeMercado";
+import { AlternarTema } from "@/components/AlternarTema";
+import { modoAtual } from "@/lib/tema-servidor";
 import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
 import { SincronizadorOffline } from "@/components/SincronizadorOffline";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
@@ -55,6 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           fixas em branco elas sumiriam sobre o fundo claro. */}
       <CurvasDeNivel className="fixed inset-0 -z-10 h-full w-full text-[var(--curvas-cor)] opacity-[var(--curvas-opacidade)] print:hidden" />
       <Sidebar nome={parametros?.nomeCrm} sub={parametros?.nomeEmpresa} />
+      {/* Sol e lua fixos no canto de todas as telas (trocam o tema na hora). */}
+      <AlternarTema atual={modoAtual()} />
       <main className="flex-1 overflow-x-hidden p-4 sm:p-6 md:p-8" style={{ paddingBottom: "calc(var(--rodape-mercado) + 1rem)" }}>
         {!saude.ok ? (
           <BancoForaDoAr saude={saude} />

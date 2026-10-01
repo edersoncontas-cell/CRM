@@ -30,12 +30,14 @@ export async function adicionarRealidadeAction(texto: string, area: RegraNegocio
   const regras = await adicionarRegraNegocio(t, area);
   await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Realidade do negócio: ${t.slice(0, 120)}` }).catch(() => {});
   revalidatePath("/academia");
+  revalidatePath("/cerebro"); // o card também mora na Central Inteligente
   return { ok: true, regras };
 }
 
 export async function removerRealidadeAction(id: string): Promise<RegraNegocio[]> {
   const r = await removerRegraNegocio(id);
   revalidatePath("/academia");
+  revalidatePath("/cerebro");
   return r;
 }
 

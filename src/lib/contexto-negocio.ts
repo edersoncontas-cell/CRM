@@ -7,7 +7,7 @@
 // Sem um lugar para dizer isso, a IA repetia o erro para sempre.
 //
 // As regras ficam em Configuracao (chave "negocio.realidade"), editáveis em
-// Configurações e na própria Academia. Toda regra entra nos prompts como
+// Central Inteligente e na própria Academia. Toda regra entra nos prompts como
 // instrução DURA: a IA nunca pode contrariar.
 
 import { getConfig, setConfig } from "@/lib/config";

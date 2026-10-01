@@ -297,8 +297,9 @@ Três consequências práticas:
 2. **Saída sem refém.** Se a relação terminar, a empresa leva o dado dela. Isso
    não é concessão: é o que faz a diretoria assinar sem medo. O CRM **já tem
    exportação** (`/api/exportar/…` cobre clientes, negociações, visitas,
-   mensagens e pós-venda) — vale transformar isso em botão na tela e citar na
-   apresentação.
+   mensagens e pós-venda) — o botão "Exportar dados" saiu de Configurações em
+   01/10 a pedido do vendedor; se a diretoria pedir, volta num lugar à parte.
+   Vale citar na apresentação.
 3. **Argumento a favor.** "O sistema é meu, o dado é de vocês, e vocês saem com
    ele quando quiserem" é uma frase que derruba a principal objeção de comprar
    de um funcionário.

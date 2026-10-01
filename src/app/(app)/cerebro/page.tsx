@@ -7,6 +7,11 @@ import { lerRelatorios } from "@/lib/cerebro/relatorio-diario";
 import { listarIdeias } from "@/lib/cerebro/radar";
 import { buscarMemoriasAction } from "@/lib/cerebro/acoes";
 import { lerParametros } from "@/lib/parametros";
+import { iaHabilitada } from "@/lib/ai";
+import { lerRegrasNegocio } from "@/lib/contexto-negocio";
+import { lerAprendizadoOrientador } from "@/lib/zeus/orientador-aprendizado";
+import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
+import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { TODAS_AULAS } from "@/lib/academia-trilha";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
 import { Brain } from "lucide-react";
@@ -53,7 +58,7 @@ async function contagens(): Promise<Record<string, { total: number; rotulo: stri
 export default async function CerebroPage() {
   await garantirManutencaoSeNecessario();
 
-  const [numeros, relatorios, ideias, memorias, audits, parametros] = await Promise.all([
+  const [numeros, relatorios, ideias, memorias, audits, parametros, regras, aprendizado] = await Promise.all([
     contagens().catch(() => ({}) as Record<string, { total: number; rotulo: string }>),
     lerRelatorios(14).catch(() => []),
     listarIdeias(undefined, 40).catch(() => []),
@@ -64,6 +69,8 @@ export default async function CerebroPage() {
       select: { id: true, descricao: true, criadoEm: true, origem: true },
     }),
     lerParametros().catch(() => null),
+    lerRegrasNegocio().catch(() => []),
+    lerAprendizadoOrientador(),
   ]);
 
   const nos: NoGrafo[] = SESSOES.map((s) => ({
@@ -106,7 +113,15 @@ export default async function CerebroPage() {
         <PainelMemoria inicial={memorias} />
       </div>
 
-      <div className="rounded-2xl p-4" style={{ background: "#111a24", border: "1px solid #1e2a36" }}>
+      {/* O que ensina o Cérebro: vieram de Configurações (01/10, pedido dele).
+          A realidade do negócio é lida pelo Orientador, pela Academia e pelas
+          IAs; o aprendizado é o que o Orientador tirou dos casos fechados e do
+          jeito de falar dele. Cada card já traz a própria margem de cima (24 px). */}
+      <RealidadeNegocioCard inicial={regras} temIA={iaHabilitada()} />
+
+      <AprendizadoOrientadorCard inicial={aprendizado} />
+
+      <div className="mt-6 rounded-2xl p-4" style={{ background: "#111a24", border: "1px solid #1e2a36" }}>
         <div className="mb-3 text-sm font-black text-white">O que o Cérebro fez</div>
         {audits.length === 0 ? (
           <p className="text-xs text-zinc-600">Nenhuma ação registrada ainda.</p>

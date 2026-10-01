@@ -10,6 +10,6 @@ export async function atualizarAprendizadoOrientadorAction(): Promise<Aprendizad
     acao: "perfil_atualizado", origem: "usuario",
     descricao: `Aprendizado do Orientador atualizado: ${r.amostra} negociação(ões) fechada(s) analisada(s), jeito de falar ${r.estiloAprendido ? "atualizado" : "sem mensagens suficientes ainda"}.`,
   }).catch(() => {});
-  revalidatePath("/configuracoes");
+  revalidatePath("/cerebro");
   return r;
 }
