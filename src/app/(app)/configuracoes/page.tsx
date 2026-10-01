@@ -13,13 +13,12 @@ import { lerEstadoDuplicadosAction } from "@/lib/clientes-duplicados-actions";
 import { ClientesLixoCard } from "@/components/ClientesLixoCard";
 import { lerEstadoLimpezaAction } from "@/lib/clientes-lixo-actions";
 import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
-import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Smartphone, ArrowRight, Wrench, Coffee } from "lucide-react";
+import { Bot, MessageCircle, Mic, CheckCircle2, Circle, Wrench, Coffee } from "lucide-react";
 import { VisibilidadeMenu } from "@/components/VisibilidadeMenu";
 import { BotaoManutencao } from "@/components/BotaoManutencao";
 import { AtualizarCotacaoCafeForm } from "@/components/AtualizarCotacaoCafeForm";
 import { GoogleIntegracaoCard } from "@/components/GoogleIntegracaoCard";
 import { obterCotacoes } from "@/lib/mercado";
-import Link from "next/link";
 import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 import { ExportarDadosCard } from "@/components/ExportarDadosCard";
@@ -103,23 +102,8 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         <VisibilidadeMenu />
       </Card>
 
-      <Link
-        href="/conexao"
-        className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 hover:bg-emerald-100"
-      >
-        <div className="rounded-lg bg-emerald-500 p-2 text-white">
-          <Smartphone size={20} />
-        </div>
-        <div className="flex-1">
-          <div className="font-semibold text-emerald-800">Conectar WhatsApp por QR Code</div>
-          <p className="text-sm text-emerald-700">
-            {zapi.isEnabled()
-              ? `${zapi.provedorWhatsAppNome()} configurada. Abra para escanear o QR e parear seu número.`
-              : "Veja como ativar e escanear o QR para receber/responder no CRM."}
-          </p>
-        </div>
-        <ArrowRight size={18} className="text-emerald-600" />
-      </Link>
+      {/* O card "Conectar WhatsApp por QR Code" mudou para a tela Conexão
+          WhatsApp (01/10, pedido dele) — é lá que o QR é lido. */}
 
       <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
 
@@ -133,7 +117,9 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         recentes={bloqueio.recentes.map((r) => ({ ...r, criadoEm: r.criadoEm.toISOString() }))}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* mt-6: o card de cima (contatos que não são clientes) só tem margem em
+          cima, e sem esta os cards de integração ficavam colados nele. */}
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {integracoes.map((i) => (
           <Card key={i.nome}>
             <div className="flex items-start gap-3">

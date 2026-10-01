@@ -32,7 +32,7 @@ export function SeletorTema({ atual }: { atual: ModoTema }) {
   ];
 
   return (
-    <Card className="mb-6">
+    <Card className="my-6">
       <div className="mb-1 flex items-center gap-2 font-semibold text-slate-700">
         {modo === "claro" ? <Sun size={18} className="text-brand-600" /> : <Moon size={18} className="text-brand-600" />}
         Tema do CRM

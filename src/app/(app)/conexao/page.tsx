@@ -3,11 +3,11 @@ import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
-import { provedorWhatsApp, urlPublicaCrm, urlPublicaConfirmada } from "@/lib/zapi";
+import { provedorWhatsApp, urlPublicaCrm, urlPublicaConfirmada, isEnabled, provedorWhatsAppNome } from "@/lib/zapi";
 import { dataCorteWhatsApp } from "@/lib/whatsapp-corte";
 import { diaBrasiliaISO } from "@/lib/whatsapp-corte-regra";
 import { diasDesde } from "@/lib/utils";
-import { MessageCircle, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
+import { MessageCircle, Activity, CheckCircle2, AlertTriangle, Smartphone } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 // As ações da tela (desconectar conferindo o estado, refazer a instância)
@@ -75,6 +75,22 @@ export default async function ConexaoPage() {
         subtitulo="Conecte seu número por QR Code — ele continua no seu celular"
         acao={<BotaoAtualizar />}
       />
+
+      {/* Veio de Configurações (01/10, pedido dele): o card que abria esta tela
+          agora mora nela, logo acima do QR. */}
+      <div className="mb-4 flex max-w-2xl items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="shrink-0 rounded-lg bg-emerald-500 p-2 text-white">
+          <Smartphone size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-emerald-800">Conectar WhatsApp por QR Code</div>
+          <p className="text-sm text-emerald-700">
+            {isEnabled()
+              ? `${provedorWhatsAppNome()} configurada. Escaneie o QR logo abaixo para parear seu número.`
+              : "WhatsApp ainda não configurado — veja abaixo como ativar e escanear o QR para receber e responder no CRM."}
+          </p>
+        </div>
+      </div>
 
       <div className="mb-6 max-w-2xl">
         <ConexaoWhatsApp />
