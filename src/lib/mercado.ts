@@ -2,7 +2,10 @@ import { getConfig, setConfig } from "@/lib/config";
 import { lerCafeES, type CotacaoCafeES } from "@/lib/cafe-es";
 
 // Cotações do letreiro do Dashboard — AUTOMÁTICAS, sem chave de API:
-//   • Dólar (USD/BRL): AwesomeAPI (pública).
+//   • Dólar (USD/BRL): AwesomeAPI (pública); se ela não responder, o par
+//     BRL=X do Yahoo. O último dólar bom fica guardado (cotacao_dolar_ultimo):
+//     sem isso, um dia de AwesomeAPI fora tirava o dólar do letreiro, e o
+//     rodízio das cotações repetia o café no lugar dele.
 //   • Café arábica: contrato "Coffee C" da bolsa de Nova York (KC=F, ¢/lb).
 //   • Café conilon/robusta: contrato de Londres (RC=F, US$/tonelada).
 //   Os dois via Yahoo Finance (endpoint público de gráfico) e convertidos
@@ -17,6 +20,7 @@ const CHAVE_ARABICA = "cotacao_cafe_arabica";
 const CHAVE_CONILON = "cotacao_cafe_conilon";
 const CHAVE_ATUALIZADO_EM = "cotacao_cafe_atualizado_em";
 const CHAVE_ULTIMA_AUTO = "cotacao_auto_ultima";
+const CHAVE_DOLAR = "cotacao_dolar_ultimo";
 
 const LB_POR_SACA = 132.277; // 60 kg em libras
 const CACHE_MS = 60_000;
@@ -37,6 +41,10 @@ export type CotacoesMercado = {
   cafeAtualizadoEm: string | null;
   detalhe: { dolar: Cotacao | null; arabica: Cotacao | null; conilon: Cotacao | null };
   fonte: "mercado" | "reserva-manual" | "indisponivel";
+  // De onde veio o dólar acima e quando foi lido (pode ser o último bom
+  // guardado, se as fontes não responderam agora).
+  dolarFonte?: string | null;
+  dolarLidoEm?: string | null;
   // Preço físico do conilon no ES (robô lib/cafe-es.ts) — o que o produtor
   // recebe de fato, diferente da bolsa de Londres.
   cafeES?: CotacaoCafeES | null;
@@ -50,13 +58,45 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json();
 }
 
-async function buscarDolar(): Promise<Cotacao | null> {
+/** Reais por dólar dentro do possível. Fora disso é leitura errada, não cotação. */
+export function dolarPlausivel(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 2 && v <= 12;
+}
+
+export async function buscarDolarAwesome(): Promise<Cotacao | null> {
   try {
     const data = (await fetchJson("https://economia.awesomeapi.com.br/json/last/USD-BRL")) as { USDBRL?: { bid?: string; pctChange?: string } };
     const valor = parseFloat(data?.USDBRL?.bid ?? "");
-    if (!Number.isFinite(valor)) return null;
+    if (!dolarPlausivel(valor)) return null;
     const pct = parseFloat(data?.USDBRL?.pctChange ?? "");
     return { valor, variacaoPct: Number.isFinite(pct) ? pct : null, bruto: null, unidadeBruta: null };
+  } catch {
+    return null;
+  }
+}
+
+/** Reserva: o par dólar/real no mesmo endpoint do Yahoo que dá o café da bolsa. */
+export async function buscarDolarYahoo(): Promise<Cotacao | null> {
+  const f = await buscarFuturo("BRL=X");
+  if (!f || !dolarPlausivel(f.preco)) return null;
+  return { valor: f.preco, variacaoPct: f.variacaoPct, bruto: null, unidadeBruta: null };
+}
+
+type DolarGuardado = { cotacao: Cotacao; fonte: string; em: string };
+
+async function buscarDolar(): Promise<DolarGuardado | null> {
+  const em = new Date().toISOString();
+  const awesome = await buscarDolarAwesome();
+  if (awesome) return { cotacao: awesome, fonte: "AwesomeAPI", em };
+  const yahoo = await buscarDolarYahoo();
+  if (yahoo) return { cotacao: yahoo, fonte: "Yahoo Finance", em };
+  return null;
+}
+
+async function lerDolarGuardado(): Promise<DolarGuardado | null> {
+  try {
+    const g = JSON.parse((await getConfig(CHAVE_DOLAR)) ?? "null") as DolarGuardado | null;
+    return g && dolarPlausivel(g.cotacao?.valor) ? g : null;
   } catch {
     return null;
   }
@@ -88,7 +128,12 @@ async function lerReservaManual(): Promise<{ arabica: number | null; conilon: nu
 // telas usam obterCotacoes(), que só lê o que já está gravado.
 export async function atualizarCotacoesMercado(): Promise<CotacoesMercado> {
 
-  const [dolar, kc, rc] = await Promise.all([buscarDolar(), buscarFuturo("KC=F"), buscarFuturo("RC=F")]);
+  const [vivo, kc, rc] = await Promise.all([buscarDolar(), buscarFuturo("KC=F"), buscarFuturo("RC=F")]);
+  if (vivo) await setConfig(CHAVE_DOLAR, JSON.stringify(vivo)).catch(() => {});
+  // Nenhuma fonte do dólar respondeu agora: o último bom serve — o dólar anda
+  // pouco num dia, e sem ele nem o café da bolsa sai em reais.
+  const lido = vivo ?? (await lerDolarGuardado());
+  const dolar = lido?.cotacao ?? null;
 
   let arabica: Cotacao | null = null;
   let conilon: Cotacao | null = null;
@@ -129,6 +174,12 @@ export async function atualizarCotacoesMercado(): Promise<CotacoesMercado> {
     }
   }
 
+  if (lido) {
+    dados.dolar = lido.cotacao.valor;
+    dados.detalhe = { ...dados.detalhe, dolar: lido.cotacao };
+  }
+  dados.dolarFonte = lido?.fonte ?? null;
+  dados.dolarLidoEm = lido?.em ?? null;
   dados.cafeES = await lerCafeES().catch(() => null);
   cacheMem = { em: Date.now(), dados };
   return dados;
@@ -145,9 +196,17 @@ export function limparCacheCotacoes(): void {
 export async function obterCotacoes(): Promise<CotacoesMercado> {
   if (cacheMem && Date.now() - cacheMem.em < CACHE_MS) return cacheMem.dados;
   let ultima: CotacoesMercado | null = null;
-  try { ultima = JSON.parse((await getConfig(CHAVE_ULTIMA_AUTO)) ?? "null"); } catch { ultima = null; }
-  if (ultima && (ultima.cafeArabica || ultima.cafeConilon || ultima.dolar)) {
-    const dados: CotacoesMercado = { ...ultima, fonte: "mercado", cafeES: await lerCafeES().catch(() => null) };
+  const [bruto, dolar] = await Promise.all([getConfig(CHAVE_ULTIMA_AUTO).catch(() => null), lerDolarGuardado()]);
+  try { ultima = JSON.parse(bruto ?? "null"); } catch { ultima = null; }
+  if (ultima && (ultima.cafeArabica || ultima.cafeConilon || ultima.dolar || dolar)) {
+    // O dólar guardado à parte é sempre o mais novo: a leitura da bolsa só é
+    // gravada quando o café também veio.
+    const dados: CotacoesMercado = {
+      ...ultima,
+      ...(dolar ? { dolar: dolar.cotacao.valor, detalhe: { ...ultima.detalhe, dolar: dolar.cotacao }, dolarFonte: dolar.fonte, dolarLidoEm: dolar.em } : {}),
+      fonte: "mercado",
+      cafeES: await lerCafeES().catch(() => null),
+    };
     cacheMem = { em: Date.now(), dados };
     return dados;
   }

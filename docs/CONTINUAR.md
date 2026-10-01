@@ -12,9 +12,22 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Volta para o Neon: a 1ª tela não cai se faltar
-coluna lá"** (29/09). **1.278 testes passando** (108 arquivos), lint e build
-limpos. `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
+Último commit com código: **"Letreiro: arábica, conilon e dólar — o dólar com
+reserva e sem repetir café"** (01/10). **1.289 testes passando** (109 arquivos),
+lint e build limpos. `CHAVE_MANUTENCAO = "manutencao.v44"` (nada mudou no schema).
+
+**01/10 — o CRM VOLTOU para o Neon** (ele rodou o prompt da extensão). Logo depois:
+"no letreiro está repetindo o valor do café conilon, antes era o dolar" e
+"agora tá o arabica, é pra ficar arabica, conilon e dolar". Causa: o dólar não
+veio de fonte nenhuma em produção (o Painel do Café não trouxe, a AwesomeAPI não
+respondeu e o dólar não era guardado à parte); com 2 ativos, o rodízio de 3
+repetia o café. Conserto: reserva no Yahoo (BRL=X — provado de verdade aqui: a
+AwesomeAPI está bloqueada neste ambiente e o CRM trouxe R$ 5,16 pelo Yahoo),
+último dólar bom guardado (`cotacao_dolar_ultimo`), os três lugares sempre no
+letreiro e no cartão ("indisponível"/"—" quando nenhuma fonte responde), e o
+grupo do rodízio nunca repete ativo. `/api/diag` testa AwesomeAPI, Yahoo e
+Painel do Café ao vivo. **Não confirmado:** se ele já clicou em "Trazer os dados
+do banco provisório" — perguntar.
 
 > ⚠ **O envio de WhatsApp está PAUSADO.** O número do vendedor foi bloqueado
 > duas vezes. A trava geral (`lib/whatsapp-pausa.ts`) barra TODA saída —

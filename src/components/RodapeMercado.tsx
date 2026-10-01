@@ -5,7 +5,7 @@ import { INTERVALO_MERCADO } from "@/lib/intervalos-atualizacao";
 import type { CotacoesMercado } from "@/lib/mercado";
 import type { Noticia } from "@/lib/noticias";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
-import { montarFita, duracaoDaFita, type CotacaoFita, type ItemFita } from "@/lib/ticker-fita";
+import { montarFita, duracaoDaFita, cotacoesDaFita, type ItemFita } from "@/lib/ticker-fita";
 
 // LETREIRO FIXO NO RODAPÉ, EM TODAS AS TELAS.
 //
@@ -20,9 +20,6 @@ import { montarFita, duracaoDaFita, type CotacaoFita, type ItemFita } from "@/li
 //
 // A faixa é duplicada de propósito: a animação anda até -50% e recomeça, o
 // que faz a emenda ser invisível e o letreiro não ter fim.
-
-const fmtBRL = (v: number | null, casas = 2) =>
-  v == null ? "—" : `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}`;
 
 // AMARELO NEW HOLLAND (agro-400) na faixa inteira, texto preto — letreiro de
 // bolsa de verdade, e a cor da marca. Sobre amarelo, verde e vermelho claros
@@ -48,38 +45,6 @@ const VERDE_ALTA = "#0f7a33";
 const VERMELHO_BAIXA = "#c0261c";
 const NH_SUAVE = "rgba(20,20,22,0.66)";
 
-/**
- * As cotações do letreiro — AS MESMAS dos cartões do topo do Dashboard.
- *
- *   "os valores do letreiro de cima que mantemos sempre atualizado não está
- *    refletindo no letreiro de baixo, corrija"
- *
- * Estava, mas não parecia: eu punha o preço FÍSICO do ES e o da BOLSA como
- * ativos separados, para ter seis itens e o rodízio mostrar "outros ativos" a
- * cada grupo. Só que aí o rodapé exibia dois preços de arábica diferentes,
- * enquanto o cartão de cima mostrava um — e duas verdades na mesma tela lêem
- * como erro, não como informação.
- *
- * Agora a régua é uma só, e é a mesma do cartão: preço do ES quando existe,
- * bolsa só como reserva quando o ES não veio. O que o vendedor lê em cima é
- * exatamente o que passa embaixo.
- */
-function cotacoesDaFita(c: CotacoesMercado): CotacaoFita[] {
-  const es = c.cafeES ?? null;
-  const lista: CotacaoFita[] = [];
-
-  if (es?.arabica != null) lista.push({ chave: "arabica-es", rotulo: "Arábica ES", valor: fmtBRL(es.arabica), pct: es.variacaoArabicaPct ?? null });
-  else if (c.cafeArabica != null) lista.push({ chave: "arabica-ny", rotulo: "Arábica NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct ?? null });
-
-  if (es?.conilon != null) lista.push({ chave: "conilon-es", rotulo: "Conilon ES", valor: fmtBRL(es.conilon), pct: es.variacaoConilonPct ?? null });
-  else if (c.cafeConilon != null) lista.push({ chave: "conilon-ldn", rotulo: "Conilon Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct ?? null });
-
-  const dolar = es?.dolar ?? c.dolar;
-  if (dolar != null) lista.push({ chave: "dolar", rotulo: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct ?? null });
-
-  return lista;
-}
-
 function Peca({ item }: { item: ItemFita }) {
   if (item.tipo === "cotacao") {
     const seta = item.pct == null ? "" : item.pct > 0 ? "▲" : item.pct < 0 ? "▼" : "•";
@@ -90,7 +55,9 @@ function Peca({ item }: { item: ItemFita }) {
     return (
       <span className="inline-flex shrink-0 items-baseline gap-1.5 pr-8 text-[12px]">
         <span className="font-black uppercase tracking-wider" style={{ color: NH_SUAVE }}>{item.rotulo}</span>
-        <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>
+        {item.falta
+          ? <span className="italic" style={{ color: NH_SUAVE }}>{item.valor}</span>
+          : <span className="font-bold" style={{ color: NH_TEXTO }}>{item.valor}</span>}
         {item.pct != null && (
           <span className="text-[11px] font-black" style={{ color: corDaVariacao }}>{seta} {Math.abs(item.pct).toFixed(2).replace(".", ",")}%</span>
         )}

@@ -91,8 +91,9 @@ Regras: use só o que está no texto; não invente; se houver vários valores de
   }
 }
 
-// 1) Painel do Café: JSON da API do app.
-async function fontePainelDoCafe(): Promise<Leitura | null> {
+// 1) Painel do Café: JSON da API do app. Exportada para o /api/diag testar
+//    a fonte ao vivo (sem gravar nada).
+export async function fontePainelDoCafe(): Promise<Leitura | null> {
   const corpo = await baixar(API_PAINEL, "application/json");
   if (!corpo) return null;
   try {

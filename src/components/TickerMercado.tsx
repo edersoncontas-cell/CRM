@@ -90,16 +90,30 @@ export function TickerMercado({ inicial }: { inicial: DadosTicker }) {
   const doPainel = (es?.fonte ?? "").startsWith("Painel do Café");
   const lido = es ? `lido ${quando(es.atualizadoEm, agora)}` : "";
   const ref = es?.dataReferencia ? ` · ${es.dataReferencia}` : "";
-  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; base?: string | null; sub?: string; destaque?: boolean }[] = [];
+  const cartoes: { icone: typeof Coffee; label: string; valor: string; pct?: number | null; base?: string | null; sub?: string; destaque?: boolean; falta?: boolean }[] = [];
+  // Cotação que nenhuma fonte trouxe aparece como "—", dizendo que falta — o
+  // cartão sumir calado escondia o defeito (o dólar sumiu assim em 01/10).
+  const SEM_LEITURA = "sem leitura agora — a fonte não respondeu";
   // Arábica primeiro: é o café da região do vendedor.
   if (es?.arabica) cartoes.push({ icone: Coffee, label: doPainel ? "Arábica Rio · ES" : "Arábica", valor: fmtBRL(es.arabica, 2), pct: es.variacaoArabicaPct, base: es.variacaoBase, sub: `sc 60 kg · ${fonte}${ref} · ${lido}`, destaque: true });
   else if (c.cafeArabica != null) cartoes.push({ icone: Coffee, label: "Arábica · NY", valor: fmtBRL(c.cafeArabica, 0), pct: c.detalhe?.arabica?.variacaoPct, sub: "sc 60 kg · bolsa", destaque: true });
+  else cartoes.push({ icone: Coffee, label: "Arábica", valor: "—", sub: SEM_LEITURA, destaque: true, falta: true });
   if (es?.conilon) cartoes.push({ icone: Coffee, label: doPainel ? "Conilon 7/8 · ES" : `Conilon · ${es.praca ?? "ES"}`, valor: fmtBRL(es.conilon, 2), pct: es.variacaoConilonPct, base: es.variacaoBase, sub: `sc 60 kg · ${fonte}${ref} · ${lido}` });
   else if (c.cafeConilon != null) cartoes.push({ icone: Coffee, label: "Conilon · Londres", valor: fmtBRL(c.cafeConilon, 0), pct: c.detalhe?.conilon?.variacaoPct, sub: atualizando ? "sc 60 kg · bolsa · buscando o preço do ES…" : "sc 60 kg · bolsa · preço do ES indisponível agora" });
+  else cartoes.push({ icone: Coffee, label: "Conilon", valor: "—", sub: SEM_LEITURA, falta: true });
   const dolar = es?.dolar ?? c.dolar;
-  if (dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct, sub: es?.dolar != null ? `${fonte}${ref}` : quando(c.cafeAtualizadoEm, agora) ? `atualizado ${quando(c.cafeAtualizadoEm, agora)}` : undefined });
+  const dolarLido = c.dolarLidoEm ? `${c.dolarFonte ?? "bolsa"} · lido ${quando(c.dolarLidoEm, agora)}` : quando(c.cafeAtualizadoEm, agora) ? `atualizado ${quando(c.cafeAtualizadoEm, agora)}` : undefined;
+  if (dolar != null) cartoes.push({ icone: DollarSign, label: "Dólar", valor: fmtBRL(dolar), pct: es?.dolar != null ? null : c.detalhe?.dolar?.variacaoPct, sub: es?.dolar != null ? `${fonte}${ref}` : dolarLido });
+  else cartoes.push({ icone: DollarSign, label: "Dólar", valor: "—", sub: SEM_LEITURA, falta: true });
 
-  if (!cartoes.length) return null;
+  // Nenhuma das três veio: uma linha só, dizendo — não três cartões vazios.
+  if (cartoes.every((k) => k.falta)) {
+    return (
+      <div className="mb-4 rounded-xl px-3 py-2 text-xs" style={{ background: T.card, border: `1px solid ${T.borda}`, color: T.mudo }}>
+        Cotações do café e do dólar indisponíveis agora — as fontes não responderam. Tenta de novo sozinho a cada 15 min, ou no botão Atualizar.
+      </div>
+    );
+  }
 
 
   return (

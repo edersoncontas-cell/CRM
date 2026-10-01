@@ -168,10 +168,37 @@ export async function GET() {
   // 4. O que o Dashboard chama ALÉM do banco. Se o banco está de pé e a tela
   //    cai mesmo assim, é aqui. Estes dois saem para fora da Vercel.
   linhas.push("— Serviços de fora que o Dashboard usa");
+  // O que o letreiro mostra e de onde veio cada número — e cada fonte testada
+  // ao vivo, para saber QUAL caiu quando uma cotação some (01/10: o dólar
+  // sumiu e o rodízio repetia o café no lugar dele).
+  const num = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("pt-BR", { maximumFractionDigits: 2 }));
   linhas.push(await testar("cotações (café/dólar)", async () => {
     const { obterCotacoes } = await import("@/lib/mercado");
     const c = await obterCotacoes();
-    return `fonte ${c.fonte ?? "?"}`;
+    const es = c.cafeES;
+    return [
+      `bolsa: ${c.fonte ?? "?"}, lida ${c.cafeAtualizadoEm ?? "nunca"}, arábica ${num(c.cafeArabica)}, conilon ${num(c.cafeConilon)}`,
+      `café do ES: ${es ? `${es.fonte}, lido ${es.atualizadoEm}, arábica ${num(es.arabica)}, conilon ${num(es.conilon)}, dólar ${num(es.dolar)}` : "nunca lido"}`,
+      `dólar: ${num(c.dolar)} (${c.dolarFonte ?? "fonte ?"}, lido ${c.dolarLidoEm ?? "?"})`,
+    ].join(" · ");
+  }));
+  linhas.push(await testar("dólar ao vivo — AwesomeAPI", async () => {
+    const { buscarDolarAwesome } = await import("@/lib/mercado");
+    const d = await buscarDolarAwesome();
+    if (!d) throw new Error("não respondeu, ou respondeu sem valor de dólar");
+    return `R$ ${num(d.valor)}`;
+  }));
+  linhas.push(await testar("dólar ao vivo — Yahoo (reserva)", async () => {
+    const { buscarDolarYahoo } = await import("@/lib/mercado");
+    const d = await buscarDolarYahoo();
+    if (!d) throw new Error("não respondeu, ou respondeu sem valor de dólar");
+    return `R$ ${num(d.valor)}`;
+  }));
+  linhas.push(await testar("Painel do Café ao vivo", async () => {
+    const { fontePainelDoCafe } = await import("@/lib/cafe-es");
+    const l = await fontePainelDoCafe();
+    if (!l) throw new Error("não respondeu, ou o formato mudou e o leitor não achou o café");
+    return `conilon ${num(l.conilon)}, arábica ${num(l.arabica)}, dólar ${l.dolar == null ? "NÃO VEIO" : num(l.dolar)}`;
   }));
   linhas.push(await testar("notícias do setor", async () => {
     const { obterNoticias } = await import("@/lib/noticias");

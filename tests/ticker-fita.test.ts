@@ -9,7 +9,8 @@
 // pareceria travado. É isso que estes testes guardam.
 
 import { describe, it, expect } from "vitest";
-import { montarFita, duracaoDaFita, COTACOES_POR_NOTICIA, type CotacaoFita, type NoticiaFita } from "@/lib/ticker-fita";
+import { montarFita, duracaoDaFita, cotacoesDaFita, COTACOES_POR_NOTICIA, TEXTO_FALTA, type CotacaoFita, type NoticiaFita } from "@/lib/ticker-fita";
+import type { CotacoesMercado } from "@/lib/mercado";
 
 const cot = (chave: string): CotacaoFita => ({ chave, rotulo: chave.toUpperCase(), valor: "R$ 1,00", pct: 0 });
 const noticia = (t: string): NoticiaFita => ({ titulo: t, tema: "Café", fonte: "Fonte", link: "https://x" });
@@ -70,9 +71,13 @@ describe("quando falta uma das fontes, o letreiro não fica vazio", () => {
 });
 
 describe("os limites do dado", () => {
-  it("com menos ativos que o grupo, eles repetem — é limite da fonte, não da regra", () => {
+  // "no letreiro está repetindo o valor do café conilon, antes era o dolar":
+  // com dois ativos, o grupo de três repetia um deles no lugar do que faltou.
+  it("com menos ativos que o grupo, o grupo encolhe — o mesmo ativo nunca duas vezes seguidas", () => {
     const f = montarFita([cot("dolar")], [noticia("n1")]);
-    expect(f.map((i) => (i.tipo === "cotacao" ? i.chave : "NOT"))).toEqual(["dolar", "dolar", "dolar", "NOT"]);
+    expect(f.map((i) => (i.tipo === "cotacao" ? i.chave : "NOT"))).toEqual(["dolar", "NOT"]);
+    const dois = montarFita([cot("arabica"), cot("conilon")], [noticia("n1"), noticia("n2")]);
+    expect(dois.map((i) => (i.tipo === "cotacao" ? i.chave : "NOT"))).toEqual(["arabica", "conilon", "NOT", "arabica", "conilon", "NOT"]);
   });
 
   it("grupo inválido não quebra a fita", () => {
@@ -90,5 +95,50 @@ describe("a duração da passagem", () => {
     const curta = duracaoDaFita(montarFita(SEIS, [noticia("n")]));
     const longa = duracaoDaFita(montarFita(SEIS, Array.from({ length: 8 }, (_, i) => noticia(`manchete bem comprida número ${i}`))));
     expect(longa).toBeGreaterThan(curta);
+  });
+});
+
+// O que vai no letreiro, a partir do que a rota devolveu.
+function mercado(parcial: Partial<CotacoesMercado>): CotacoesMercado {
+  return {
+    dolar: null, cafeArabica: null, cafeConilon: null, cafeAtualizadoEm: null,
+    detalhe: { dolar: null, arabica: null, conilon: null }, fonte: "mercado", cafeES: null, ...parcial,
+  };
+}
+const cafeES = (extra: Record<string, unknown> = {}) => ({
+  conilon: 1180.5, arabica: 1890, dataReferencia: "30/09/2026", fonte: "Painel do Café", atualizadoEm: "2026-10-01T12:00:00Z",
+  variacaoConilonPct: 0.5, variacaoArabicaPct: -0.2, ...extra,
+});
+
+describe("as cotações do letreiro", () => {
+  it("o dia normal: arábica e conilon do ES, dólar do Painel do Café", () => {
+    const l = cotacoesDaFita(mercado({ cafeES: cafeES({ dolar: 5.31 }) }));
+    expect(l.map((x) => [x.rotulo, x.valor])).toEqual([["Arábica ES", "R$ 1.890,00"], ["Conilon ES", "R$ 1.180,50"], ["Dólar", "R$ 5,31"]]);
+    expect(l.some((x) => x.falta)).toBe(false);
+  });
+
+  it("o Painel sem dólar: vale o dólar da bolsa", () => {
+    const l = cotacoesDaFita(mercado({ cafeES: cafeES({ dolar: null }), dolar: 5.29 }));
+    expect(l[2]).toMatchObject({ rotulo: "Dólar", valor: "R$ 5,29" });
+  });
+
+  // O caso de 01/10: nenhuma fonte trouxe o dólar. Ele não pode sumir (o
+  // rodízio repetia o café no lugar dele): fica, dizendo que falta.
+  it("sem dólar nenhum: o lugar dele fica, dizendo que está indisponível", () => {
+    const l = cotacoesDaFita(mercado({ cafeES: cafeES({ dolar: null }) }));
+    expect(l).toHaveLength(3);
+    expect(l[2]).toMatchObject({ chave: "dolar", rotulo: "Dólar", valor: TEXTO_FALTA, falta: true, pct: null });
+    const f = montarFita(l, [noticia("n1"), noticia("n2")]);
+    const conilons = f.slice(0, 3).filter((i) => i.tipo === "cotacao" && i.chave.startsWith("conilon"));
+    expect(conilons).toHaveLength(1);
+  });
+
+  it("sem o café do ES: a bolsa, com o nome da praça", () => {
+    const l = cotacoesDaFita(mercado({ cafeArabica: 2100, cafeConilon: 1300, dolar: 5.3 }));
+    expect(l.map((x) => x.rotulo)).toEqual(["Arábica NY", "Conilon Londres", "Dólar"]);
+  });
+
+  it("nada veio: lista vazia — o letreiro passa só as notícias", () => {
+    expect(cotacoesDaFita(mercado({}))).toEqual([]);
   });
 });
