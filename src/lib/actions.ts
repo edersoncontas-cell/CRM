@@ -15,6 +15,7 @@ import { criarVisitaNoBanco } from "./visita-criar";
 import { ID_VALIDO } from "./sem-sinal-regra";
 import { enviarClienteParaGoogle } from "./google-contatos";
 import * as zapi from "./zapi";
+import { semChaveNaUrl } from "@/lib/evolution";
 import { acharOuCriarConversa, inserirMensagem } from "./whatsapp-store";
 import { vigiarConexao, lerMemoriaVigia, type ResultadoVigia } from "@/lib/whatsapp-vigia";
 import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
@@ -1329,9 +1330,10 @@ export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean;
   const url = await zapi.urlWebhookCrm();
   if (!url) return { ok: false, erro: "Defina NEXTAUTH_URL na Vercel (URL pública do CRM) para apontar o webhook." };
   const r = await zapi.configurarWebhookEvolution(url);
-  if (r.ok) await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Webhook da Evolution API apontado para ${url}.` }).catch(() => {});
+  // A URL leva a chave da Evolution: nem na auditoria nem na tela por extenso.
+  if (r.ok) await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: `Webhook da Evolution API apontado para ${semChaveNaUrl(url)}.` }).catch(() => {});
   revalidatePath("/conexao");
-  return { ...r, url };
+  return { ...r, url: semChaveNaUrl(url) };
 }
 
 // Cria a instância na Evolution (com o nome da instância que vale: EVOLUTION_INSTANCE, ou crm-2… se o CRM trocou) já com o webhook

@@ -179,7 +179,7 @@ export function tratarEnvio(e: Linha): Linha {
 // de cada banco.
 const CONFIG_NUNCA = [
   "whatsapp.pausa.", "ia.somente_gratuitos", "manutencao.", "provisorio.", "zeus.ia_usada.",
-  "autofix.cota", "whatsapp.vigia", "whatsapp.qr.", "diag.", "orientador.analises.", "limpeza.bloqueio.",
+  "autofix.cota", "whatsapp.vigia", "whatsapp.resgate", "whatsapp.qr.", "diag.", "orientador.analises.", "limpeza.bloqueio.",
 ];
 export function configPodeVir(chave: string): boolean {
   return !CONFIG_NUNCA.some((p) => chave === p || chave.startsWith(p));

@@ -210,3 +210,10 @@ export function mensagemEvolutionParaZapi(record: Obj): Obj {
   else if (c.text) out.text = { message: c.text };
   return out;
 }
+
+// A URL do webhook leva a chave da Evolution (?apikey=…) — é credencial: nunca
+// aparece por extenso na tela. Antes o diagnóstico e o aviso "Webhook apontado
+// para …" mostravam a chave inteira.
+export function semChaveNaUrl(texto: string): string {
+  return texto.replace(/(apikey=)([^&\s"'()<>]+)/gi, (_, p: string, v: string) => `${p}${v.length > 4 ? "••••" + v.slice(-2) : "••••"}`);
+}

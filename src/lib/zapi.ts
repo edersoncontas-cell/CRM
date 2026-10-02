@@ -11,7 +11,7 @@ import { exigirEnvioLiberado } from "@/lib/whatsapp-pausa";
 import { db } from "@/lib/db";
 import { apagarEvolution } from "@/lib/whatsapp-apagar-instancia";
 import { CHAVE_INSTANCIA_ATIVA, lerInstanciaGuardada, instanciaQueVale, proximoNomeInstancia } from "@/lib/whatsapp-instancia-nome";
-import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta, textoDoErroEvolution } from "@/lib/evolution";
+import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta, textoDoErroEvolution, semChaveNaUrl } from "@/lib/evolution";
 import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
 import { desconectarEvolution, type ResultadoDesconexao } from "@/lib/whatsapp-desconectar";
 import { getConfig, setConfig } from "@/lib/config";
@@ -515,6 +515,75 @@ export async function mensagensDoChat(phone: string, amount = 200): Promise<Reco
   return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
 }
 
+// As mensagens mais recentes que a Evolution GUARDOU (de todas as conversas),
+// da mais nova para a mais antiga — é o que ela recebeu do WhatsApp,
+// tenha ou não avisado o CRM pelo webhook. Na 2.x: findMessages ordena por
+// messageTimestamp desc e filtra a janela quando vêm gte E lte; versão antiga
+// ignora o filtro, por isso quem chama confere a hora de novo.
+// `total` = quantas ela guarda ao todo (0 com DATABASE_SAVE_DATA_NEW_MESSAGE
+// desligado — aí não há o que puxar nem como conferir por ela).
+export async function mensagensRecentesEvolution(desde: Date, quantas = 50): Promise<{ ok: boolean; erro?: string; total: number | null; registros: Record<string, unknown>[] }> {
+  if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada.", total: null, registros: [] };
+  try {
+    const pagina = { page: 1, offset: quantas, limit: quantas };
+    const comJanela = { ...pagina, where: { messageTimestamp: { gte: desde.toISOString(), lte: new Date(Date.now() + 5 * 60_000).toISOString() } } };
+    // Versão que recuse o filtro de hora: sem ele, a página mais nova serve igual.
+    const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, comJanela, TEMPO_TELA_MS)
+      .catch(() => evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, { ...pagina, where: {} }, TEMPO_TELA_MS));
+    const mensagens = data?.messages as Record<string, unknown> | unknown[] | undefined;
+    const registros: unknown[] = Array.isArray(data)
+      ? data
+      : Array.isArray(mensagens)
+      ? mensagens
+      : Array.isArray((mensagens as Record<string, unknown> | undefined)?.records)
+      ? ((mensagens as Record<string, unknown>).records as unknown[])
+      : [];
+    const totalBruto = (mensagens as Record<string, unknown> | undefined)?.total;
+    return {
+      ok: true,
+      total: typeof totalBruto === "number" ? totalBruto : registros.length,
+      registros: registros.filter((r): r is Record<string, unknown> => !!r && typeof r === "object"),
+    };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e), total: null, registros: [] };
+  }
+}
+
+/** Quantas mensagens a Evolution guarda ao todo (0 = ela não guarda; null = não respondeu). */
+export async function totalGuardadoEvolution(): Promise<number | null> {
+  if (provedorWhatsApp() !== "evolution") return null;
+  try {
+    const data = await evoFetch("POST", `/chat/findMessages/${evoInstancia()}`, { where: {}, page: 1, offset: 1, limit: 1 }, TEMPO_TELA_MS);
+    const m = data?.messages as Record<string, unknown> | unknown[] | undefined;
+    if (Array.isArray(data)) return data.length;
+    if (Array.isArray(m)) return m.length;
+    const t = (m as Record<string, unknown> | undefined)?.total;
+    return typeof t === "number" ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+// A conexão está viva POR DENTRO? connectionState diz "open" até com o socket
+// morto (o zumbi de 01 e 02/10). Perguntar ao WhatsApp se um número existe
+// passa pelo socket: morto, a Evolution responde "Connection Closed".
+// Número aleatório de propósito: a Evolution guarda a resposta de números já
+// consultados e responderia do cache, sem passar pelo socket. É UMA consulta,
+// só no teste que o vendedor pede — nunca em laço (consulta em série de
+// números é o que o WhatsApp lê como robô).
+export async function sondarConexaoEvolution(): Promise<{ estado: "viva" | "morta" | "desconhecida"; detalhe: string }> {
+  if (provedorWhatsApp() !== "evolution") return { estado: "desconhecida", detalhe: "Evolution API não configurada." };
+  const numero = `55119${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+  try {
+    await evoFetch("POST", `/chat/whatsappNumbers/${evoInstancia()}`, { numbers: [numero] }, TEMPO_TELA_MS);
+    return { estado: "viva", detalhe: "o WhatsApp respondeu a uma consulta feita pela conexão" };
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (/connection closed|not connected|connection lost|socket/i.test(m)) return { estado: "morta", detalhe: m.slice(0, 200) };
+    return { estado: "desconhecida", detalhe: m.slice(0, 200) };
+  }
+}
+
 export async function fotoPerfil(phone: string): Promise<string | null> {
   try {
     if (provedorWhatsApp() === "evolution") {
@@ -796,8 +865,10 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
   const cfg = evolutionConfig();
   const ativa = cfg ? await nomeDaInstancia({ forcar: true }) : null;
   const etapas: EtapaDiagnostico[] = [];
+  // A chave do webhook (?apikey=…) nunca vai para a tela.
   const fim = (conclusao: string): Diagnostico => ({
-    provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: ativa, etapas, conclusao,
+    provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: ativa,
+    etapas: etapas.map((e) => ({ ...e, detalhe: semChaveNaUrl(e.detalhe) })), conclusao: semChaveNaUrl(conclusao),
   });
 
   if (!cfg) {

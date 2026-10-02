@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { evolutionConfig, tokenDaInstancia, nomeDaInstancia, CHAVE_TESTE_WEBHOOK } from "@/lib/zapi";
 import { setConfig } from "@/lib/config";
-import { extrairConteudoEvolution, normalizarChaveEvolution, STATUS_EVOLUTION } from "@/lib/evolution";
+import { STATUS_EVOLUTION } from "@/lib/evolution";
 import { atualizarStatusEntrega } from "@/lib/whatsapp-store";
 import { registrarDiag } from "@/lib/zapi-diag";
-import { processarEventoMensagem } from "@/lib/whatsapp-inbound";
+import { processarDadoEvolution } from "@/lib/whatsapp-evolution-entrada";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -98,51 +98,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignorado: evento || "sem evento" });
   }
 
+  // Cada mensagem passa pelo mesmo caminho do resgate (o CRM puxando da
+  // Evolution o que o webhook não trouxe): lib/whatsapp-evolution-entrada.ts.
   let algumErro = false;
   for (const data of dados) {
-    const chaveMsg = normalizarChaveEvolution(data);
-    if (!chaveMsg) {
-      await registrarDiag({ dir: "-", phone: null, nome: null, texto: "", status: "sem-telefone" });
-      continue;
-    }
-    // Stories/status do WhatsApp não são conversa.
-    if (chaveMsg.remoteJid === "status@broadcast" || chaveMsg.remoteJid.endsWith("@broadcast")) continue;
-
-    const conteudo = extrairConteudoEvolution(data.message);
-    const pushName = str(data.pushName);
-    const audioBase64 = conteudo.mediaType === "audio" && conteudo.base64
-      ? { data: conteudo.base64, mimeType: conteudo.mimeType ?? "audio/ogg" }
-      : null;
-    const tsRaw = Number(data.messageTimestamp ?? 0) || 0;
-    const sentAt = tsRaw ? new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) : null;
-
-    console.log("[webhook evolution]", JSON.stringify({ fromMe: chaveMsg.fromMe, phone: chaveMsg.phone, isGroup: chaveMsg.isGroup, tipo: conteudo.mediaType ?? "texto" }));
-
-    const r = await processarEventoMensagem({
-      fromMe: chaveMsg.fromMe,
-      phone: chaveMsg.phone,
-      lid: chaveMsg.lid,
-      isGroup: chaveMsg.isGroup,
-      // pushName é o nome de quem ENVIOU: do contato quando é recebida, do
-      // operador quando é fromMe (nunca usar como nome do contato nesse caso).
-      nomeContato: !chaveMsg.fromMe ? pushName : null,
-      nomeGrupo: null, // a Evolution não manda o nome do grupo no evento
-      foto: null,
-      conteudo: {
-        text: conteudo.text,
-        mediaType: conteudo.mediaType,
-        // Foto/documento/vídeo: o CRM busca o conteúdo na Evolution sob demanda
-        // (rota /api/whatsapp/midia) — sem hospedar nada.
-        mediaUrl: chaveMsg.id && conteudo.mediaType && ["image", "document", "video"].includes(conteudo.mediaType)
-          ? `/api/whatsapp/midia/${encodeURIComponent(chaveMsg.id)}`
-          : null,
-        mediaName: conteudo.mediaName,
-        transcript: null,
-      },
-      messageId: chaveMsg.id,
-      audioBase64,
-      sentAt,
-    });
+    const r = await processarDadoEvolution(data, "webhook");
     if (!r.ok) algumErro = true;
   }
 

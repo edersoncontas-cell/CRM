@@ -13,6 +13,8 @@ export type EventoDiag = {
   nome: string | null;
   texto: string;
   status: string; // recebida | enviada | grupo | status | sem-telefone | sem-texto | erro:...
+  /** "resgate": não veio pelo webhook — o CRM puxou da Evolution. Sem o campo = veio pelo webhook. */
+  via?: "resgate";
 };
 
 export type Diag = {

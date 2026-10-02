@@ -183,6 +183,10 @@ export default async function ConexaoPage() {
                     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${CORES_STATUS[e.status] ?? "bg-red-100 text-red-700"}`}>
                       {e.status}
                     </span>
+                    {/* Não veio pelo aviso da Evolution: o CRM puxou (lib/whatsapp-resgate.ts). */}
+                    {e.via === "resgate" && (
+                      <span title="O aviso da Evolution (webhook) não trouxe esta mensagem; o CRM puxou da Evolution." className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">puxada</span>
+                    )}
                     <span className="w-16 shrink-0 text-xs text-slate-400">{quando(e.em)}</span>
                     <span className="min-w-0 flex-1 truncate text-slate-600">
                       {e.nome ? <b>{e.nome}</b> : e.phone ? e.phone : "—"}

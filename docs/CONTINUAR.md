@@ -12,9 +12,35 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"WhatsApp travado: o CRM cria uma instância nova (crm-2)
-quando a Evolution não deixa apagar a velha"** (02/10).
-**1.377 testes passando** (117 arquivos), lint e build limpos.
+Último commit com código: **"Testar recebimento na Conexão e resgate: o CRM puxa da
+Evolution o que o webhook não trouxe"** (02/10).
+**1.403 testes passando** (118 arquivos), lint e build limpos.
+
+**02/10 — 6ª vez: "desconectei, conectei, mandei mensagem de outro telefone e não
+chegou".** Sem print do que a tela mostrou, então não se sabe onde parou. A
+mensagem pode parar em 3 lugares, e agora o CRM descobre sozinho, na Vercel (que
+alcança a Evolution dele):
+- **"Testar recebimento"** (painel conectado da Conexão, `TesteRecebimento.tsx`
+  → `testarRecebimentoAction` em `lib/whatsapp-recebimento-actions.ts`): ele manda
+  uma mensagem de outro celular; a tela mostra 3 passos — conexão viva por dentro
+  (UMA consulta `whatsappNumbers` com número aleatório; morta = "Connection
+  Closed") → a Evolution recebeu (`findMessages`, que na 2.x ordena por hora desc
+  e filtra a janela com gte+lte) → o CRM recebeu (pelo aviso, puxada ou
+  descartada). Conclusões puras em `concluirTeste` (`lib/whatsapp-resgate-regra.ts`);
+  toda situação fecha quando os 150 s acabam. Na 1ª consulta ainda puxa o que
+  ficou para trás nas últimas 24 h (só ANTES da janela do teste).
+- **Resgate** (`lib/whatsapp-resgate.ts`): o que a Evolution guardou e o CRM não
+  tem passa pelo MESMO caminho do webhook (`processarDadoEvolution` em
+  `lib/whatsapp-evolution-entrada.ts`, agora usado pelo webhook também). O vigia
+  (cron) puxa a cada passada, com a conexão de pé: janela desde a última passada
+  (folga de 10 min), no máximo 2 h, até 20 por vez; memória em
+  `whatsapp.resgate` (ids vistos + hora do vigia; o teste não move a hora).
+  Não vem na volta do provisório. Diag marca `via: "resgate"` → selo "puxada".
+- **A chave da Evolution aparecia na tela** (`?apikey=` na URL do webhook, no
+  diagnóstico e no "Webhook apontado para…"): agora `semChaveNaUrl`.
+- Evolution falsa: `WEBHOOK=mudo` (guarda e não avisa), `GUARDA=0` (não guarda),
+  `/__receber/<inst>` simula mensagem; e2e `recebimento-e2e.mjs` com
+  `CENARIO=chegou|puxada|morta|grupo|nada`.
 
 **02/10 — 5ª vez: "não vai, resolva me entregue funcionando".** O print novo mostrou
 que reiniciar NÃO cura o zumbi dele: "depois de reiniciar: open → logout falhou:

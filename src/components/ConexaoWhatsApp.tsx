@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { TesteRecebimento } from "@/components/TesteRecebimento";
 import { reiniciarZapi, desconectarZapi, apagarConexaoWhatsAppAction, trocarInstanciaWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
@@ -294,11 +295,15 @@ export function ConexaoWhatsApp() {
           </div>
         )}
         {status.provedor === "evolution" && blocoDiagnostico("Conectado mas nada chega? Isto testa o caminho inteiro, inclusive uma chamada de fora no webhook.")}
+        {status.provedor === "evolution" && (
+          <TesteRecebimento aoRefazer={() => { saida.setMsg(null); saida.setDireto(true); saida.setEtapa("refazerDireto"); }} />
+        )}
         <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-sm text-slate-600">
           <div className="flex items-center gap-1.5 font-semibold text-slate-700"><ShieldCheck size={15} className="text-green-600" /> Vigia da conexão</div>
           <p className="mt-1 text-xs text-slate-500">
             O CRM confere a conexão de 5 em 5 minutos. Se o WhatsApp cair, ele religa sozinho (e reaponta o webhook) — só pede o QR Code
-            quando o pareamento cai de verdade. Nada no sistema desconecta o número: só o botão abaixo.
+            quando o pareamento cai de verdade. Se o aviso da Evolution (webhook) falhar, ele puxa dela as mensagens que não chegaram.
+            Nada no sistema desconecta o número: só o botão abaixo.
           </p>
           {vigia && <p className="mt-1.5 text-xs font-semibold text-slate-600">{vigia.descricao}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -582,6 +587,9 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
   // ela, a tela voltava verde lá em cima e parecia que nada tinha acontecido.
   const msgRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (msg?.tipo === "erro") msgRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [msg]);
+  // "Refazer do zero" pode ser aberto pelo Testar recebimento, lá em cima: leva até a confirmação.
+  const confirmarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (etapa === "refazerDireto") confirmarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [etapa]);
   return (
     <div className="mt-4">
       {etapa === "parado" && (
@@ -597,7 +605,7 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
         </div>
       )}
       {etapa === "refazerDireto" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div ref={confirmarRef} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <p>O CRM apaga a conexão com o WhatsApp na Evolution e cria de novo, já com o QR Code para você ler. Se a Evolution não deixar apagar (conexão travada), o CRM cria uma conexão nova com outro nome e passa a usá-la. Resolve a conexão que fica &quot;verde&quot; mas não entrega mensagem. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button onClick={refazer} className={`${botao} bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Sim, refazer do zero</button>

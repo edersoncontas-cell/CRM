@@ -31,6 +31,8 @@ export type EventoMensagem = {
   messageId: string | null;      // id da mensagem no provedor (anti-eco / status)
   audioBase64?: { data: string; mimeType: string } | null; // Evolution: áudio embutido no webhook
   sentAt?: Date | null;          // timestamp do provedor (null = agora)
+  /** "resgate": o webhook não trouxe e o CRM puxou da Evolution (lib/whatsapp-resgate.ts). */
+  via?: "webhook" | "resgate";
 };
 
 // Transcreve áudio (Groq Whisper grátis / OpenAI) a partir de URL pública
@@ -64,7 +66,7 @@ async function transcreverAudio(ev: EventoMensagem): Promise<string | null> {
 
 export async function processarEventoMensagem(ev: EventoMensagem): Promise<{ ok: boolean; status: string }> {
   const c = ev.conteudo;
-  const diag = { dir: ev.fromMe ? "out" as const : "in" as const, phone: ev.phone, nome: ev.nomeContato, texto: "", status: "?" };
+  const diag = { dir: ev.fromMe ? "out" as const : "in" as const, phone: ev.phone, nome: ev.nomeContato, texto: "", status: "?", ...(ev.via === "resgate" ? { via: "resgate" as const } : {}) };
 
   // Mensagens de grupo não entram no CRM — só conversas 1:1 com cliente.
   if (ev.isGroup) {
