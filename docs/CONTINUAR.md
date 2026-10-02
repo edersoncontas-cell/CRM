@@ -14,7 +14,26 @@ Repositório: `edersoncontas-cell/CRM`
 
 Último commit com código: **"Testar recebimento na Conexão e resgate: o CRM puxa da
 Evolution o que o webhook não trouxe"** (02/10).
-**1.403 testes passando** (118 arquivos), lint e build limpos.
+**1.420 testes passando** (119 arquivos), lint e build limpos.
+
+**02/10 — 7ª vez: print às 10:18, a VPS dele (`147.15.65.44:8080`) "não respondeu
+em 10s", fora do ar havia ~2h** (desde ANTES do deploy do Testar recebimento).
+Nada no CRM religa a VPS; o que mudou é a tela dizer qual causa é e o que tocar
+pelo celular (antes: três causas e "entre por SSH"):
+- `lib/evolution-servidor-regra.ts` (puro): a porta da Evolution RECUSOU (VPS
+  ligada, Evolution parada → Reiniciar no painel; comando à parte) ou ficou
+  CALADA; calada → `lib/sondar-porta.ts` bate UMA vez na porta 22 da mesma
+  máquina (só no diagnóstico): responde/recusa = VPS ligada (firewall ou
+  Evolution travada); calada = VPS inteira fora (parada, suspensa, outro IP).
+  O começo da frase de erro do `evoFetch` é fixo (`PREFIXO_SERVIDOR_FORA`):
+  `servidorEvolutionFora()` reconhece.
+- Vigia: servidor fora NÃO tenta connect/restart e NÃO pede QR (nem o tick do
+  Zeus); memória ganhou `servidorForaDesde`/`avisouServidorFora`; um aviso + push
+  depois de 10 min, resolvido sozinho quando volta. Linha da tela: "Servidor da
+  Evolution (sua VPS) sem responder desde HH:MM".
+- Tela do QR: aviso vermelho no topo, QR some ("Sem o servidor…"), passos do QR
+  escondidos. e2e: `servidor-fora-e2e.mjs` (porta fechada / `calado.mjs` /
+  `EVO_URL=http://10.255.255.1:8080` no `subir.sh`).
 
 **02/10 — 6ª vez: "desconectei, conectei, mandei mensagem de outro telefone e não
 chegou".** Sem print do que a tela mostrou, então não se sabe onde parou. A

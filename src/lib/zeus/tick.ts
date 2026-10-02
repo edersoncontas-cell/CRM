@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { statusConexao } from "@/lib/zapi";
 import { lerDiag } from "@/lib/zapi-diag";
 import { lerMemoriaVigia } from "@/lib/whatsapp-vigia";
+import { servidorEvolutionFora } from "@/lib/evolution-servidor-regra";
 import { precisaMesmoDeQr } from "@/lib/whatsapp-vigia-regra";
 import { processarPendentes } from "@/lib/zeus/pipeline";
 import { registrarZeusEvent, type TipoZeusEvent, type SeveridadeZeusEvent } from "@/lib/zeus/eventos";
@@ -64,7 +65,8 @@ async function healthChecks(): Promise<number> {
   // Queda de conexão não vira alerta na hora: o vigia (cron whatsapp-vigia)
   // religa sozinho. Só alarma quando ele já esgotou as tentativas — ou quando
   // o próprio vigia não roda há muito tempo.
-  if (status?.configurado && !status.conectado && precisaMesmoDeQr(await lerMemoriaVigia(), new Date())) {
+  // Servidor da Evolution fora (VPS): QR não resolve — o vigia avisa isso.
+  if (status?.configurado && !status.conectado && !servidorEvolutionFora(status.erro) && precisaMesmoDeQr(await lerMemoriaVigia(), new Date())) {
     const criado = await eventoSeNovo("health", "WhatsApp desconectado — escaneie o QR em /conexao", 60, "alta", { erro: status.erro ?? null });
     if (criado) {
       novos++;

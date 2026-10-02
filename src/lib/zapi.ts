@@ -15,6 +15,8 @@ import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta, textoDoEr
 import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
 import { desconectarEvolution, type ResultadoDesconexao } from "@/lib/whatsapp-desconectar";
 import { getConfig, setConfig } from "@/lib/config";
+import { PREFIXO_SERVIDOR_FORA, classificarFalhaRede, causaDaFalha, concluirServidorFora, hostDaUrl } from "@/lib/evolution-servidor-regra";
+import { sondarPorta } from "@/lib/sondar-porta";
 
 export type ZApiConfig = { instanceId: string; token: string; clientToken: string; apiUrl: string };
 export type EvolutionConfig = { url: string; apiKey: string; instance: string };
@@ -134,10 +136,10 @@ async function evoFetch(
   } catch (e) {
     // Erro de rede/tempo esgotado: sem isto a tela mostrava o texto cru
     // "The operation was aborted due to timeout", que não diz o que fazer.
-    const causa = e instanceof Error && e.name === "TimeoutError"
-      ? `não respondeu em ${Math.round(timeoutMs / 1000)}s`
-      : "está inalcançável (servidor desligado, porta fechada ou endereço errado)";
-    throw new Error(`Não consegui falar com o servidor da Evolution API: ${cfg.url} ${causa}. Confira se ele está ligado e acessível pela internet.`);
+    // O começo da frase é fixo: vigia e tela reconhecem "servidor fora" por
+    // ele (servidorEvolutionFora) e param de pedir QR, que não resolve.
+    const causa = causaDaFalha(classificarFalhaRede(e), Math.round(timeoutMs / 1000));
+    throw new Error(`${PREFIXO_SERVIDOR_FORA}: ${cfg.url} ${causa}. Confira se ele está ligado e acessível pela internet.`);
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
@@ -859,14 +861,15 @@ export async function contarConversasGuardadas(): Promise<number> {
 // existe → pareada → webhook apontado. Sem isto, qualquer falha virava um
 // "timeout" genérico que não indica o que consertar.
 export type EtapaDiagnostico = { etapa: string; ok: boolean; detalhe: string };
-export type Diagnostico = { provedor: ProvedorWhatsApp | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string };
+/** comando: o que colar no terminal, quando é esse o conserto (a tela mostra em bloco à parte). */
+export type Diagnostico = { provedor: ProvedorWhatsApp | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string; comando?: string };
 
 export async function diagnosticarConexao(origemNavegador: string | null = null): Promise<Diagnostico> {
   const cfg = evolutionConfig();
   const ativa = cfg ? await nomeDaInstancia({ forcar: true }) : null;
   const etapas: EtapaDiagnostico[] = [];
   // A chave do webhook (?apikey=…) nunca vai para a tela.
-  const fim = (conclusao: string): Diagnostico => ({
+  const fim = (conclusao: string, comando?: string): Diagnostico => ({ ...(comando ? { comando } : {}),
     provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: ativa,
     etapas: etapas.map((e) => ({ ...e, detalhe: semChaveNaUrl(e.detalhe) })), conclusao: semChaveNaUrl(conclusao),
   });
@@ -884,17 +887,18 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
     const res = await fetch(`${cfg.url}/`, { cache: "no-store", signal: AbortSignal.timeout(TEMPO_TELA_MS) });
     etapas.push({ etapa: "Servidor no ar", ok: true, detalhe: `respondeu HTTP ${res.status} em ${Date.now() - inicio}ms` });
   } catch (e) {
-    const tempo = e instanceof Error && e.name === "TimeoutError";
-    etapas.push({
-      etapa: "Servidor no ar", ok: false,
-      detalhe: tempo ? `não respondeu em ${TEMPO_TELA_MS / 1000}s` : "endereço inalcançável (DNS, porta fechada ou servidor desligado)",
-    });
-    return fim(
-      `Nada responde em ${cfg.url}, então nenhum QR pode ser gerado — o código quem cria é esse servidor. ` +
-      "São três causas possíveis, nesta ordem: (1) a VPS está desligada ou o container caiu — entre por SSH e rode \"docker compose up -d\"; " +
-      "(2) a porta está fechada no firewall — libere com \"ufw allow 8080\" e confira também o firewall do painel da hospedagem; " +
-      "(3) o IP da VPS mudou — pegue o endereço atual e atualize EVOLUTION_API_URL na Vercel, com Redeploy depois."
-    );
+    // Qual das causas é (02/10: a tela listava três e mandava "entrar por
+    // SSH"). Porta calada → uma batida na porta do SSH da mesma máquina diz
+    // se a VPS está ligada. Regras: lib/evolution-servidor-regra.ts.
+    const falha = classificarFalhaRede(e);
+    const host = hostDaUrl(cfg.url);
+    const SSH_MS = 5_000;
+    const ssh = (falha === "tempo" || falha === "inalcancavel") && host
+      ? await sondarPorta(host, 22, SSH_MS).catch(() => "nao-testada" as const)
+      : "nao-testada";
+    const r = concluirServidorFora({ url: cfg.url, falha, ssh, segundos: TEMPO_TELA_MS / 1000, segundosSsh: SSH_MS / 1000 });
+    etapas.push(...r.etapas);
+    return fim(r.conclusao, r.comando);
   }
 
   // 2. A chave é aceita e a instância existe?

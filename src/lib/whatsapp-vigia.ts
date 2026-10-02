@@ -12,13 +12,15 @@ import * as zapi from "@/lib/zapi";
 import { registrarZeusEvent } from "@/lib/zeus/eventos";
 import { enviarPushNotificacao } from "@/lib/push";
 import {
-  decidirAcao, memoriaAposLeitura, memoriaAposTentativa, precisaMesmoDeQr, descreverConexao,
+  decidirAcao, memoriaAposLeitura, memoriaAposTentativa, precisaMesmoDeQr, precisaAvisarServidorFora, descreverConexao,
   MEMORIA_VAZIA, type MemoriaVigia, type EstadoConexao, type AcaoVigia,
 } from "@/lib/whatsapp-vigia-regra";
 import { vigiaPausado } from "@/lib/whatsapp-vigia-pausa";
+import { servidorEvolutionFora } from "@/lib/evolution-servidor-regra";
 
 export const CHAVE_VIGIA = "whatsapp.vigia";
 const TITULO_ALERTA_QR = "WhatsApp desconectado — escaneie o QR em /conexao";
+const TITULO_ALERTA_SERVIDOR = "Servidor do WhatsApp (Evolution) fora do ar — reinicie a VPS no painel da hospedagem";
 
 export async function lerMemoriaVigia(): Promise<MemoriaVigia> {
   const raw = await getConfig(CHAVE_VIGIA).catch(() => null);
@@ -38,6 +40,8 @@ export type ResultadoVigia = {
   religou: boolean;
   webhookCorrigido: boolean;
   precisaQr: boolean;
+  /** A Evolution nem atendeu: é a VPS, não o WhatsApp. */
+  servidorFora: boolean;
   descricao: string;
   erro?: string | null;
 };
@@ -49,11 +53,15 @@ export async function vigiarConexao({ agora = new Date(), forcar = false }: { ag
   const status = await zapi.statusConexao(urlWebhook).catch(() => null);
 
   if (!status?.configurado) {
-    return { estado: "nao_configurado", acao: "nenhuma", conectado: false, religou: false, webhookCorrigido: false, precisaQr: false, descricao: "WhatsApp não configurado." };
+    return { estado: "nao_configurado", acao: "nenhuma", conectado: false, religou: false, webhookCorrigido: false, precisaQr: false, servidorFora: false, descricao: "WhatsApp não configurado." };
   }
 
   const estado: EstadoConexao = status.conectado ? "aberta" : status.instanciaNaoExiste ? "sem_instancia" : "fechada";
-  const leitura = memoriaAposLeitura(await lerMemoriaVigia(), estado, agora);
+  // Servidor que nem atende (02/10, VPS fora 2h+): connect/restart vão para
+  // o mesmo vazio, e o aviso "escaneie o QR" mandava fazer o que não resolve.
+  const servidorFora = !status.conectado && servidorEvolutionFora(status.erro);
+  const memoriaAntes = await lerMemoriaVigia();
+  const leitura = memoriaAposLeitura(memoriaAntes, estado, agora, servidorFora);
   let memoria = leitura.memoria;
 
   // Webhook fora do lugar: reaponta na hora, mesmo com a conexão de pé.
@@ -90,7 +98,7 @@ export async function vigiarConexao({ agora = new Date(), forcar = false }: { ag
   // Tela do QR aberta: não mexe na instância (cada restart invalida o código
   // que o vendedor está escaneando naquele instante).
   const pausado = !forcar && (await vigiaPausado(agora).catch(() => false));
-  const acao = pausado ? "esperar" : decidirAcao(estado, memoria, agora);
+  const acao = pausado || servidorFora ? "esperar" : decidirAcao(estado, memoria, agora);
   let religou = false;
   let erro: string | null = null;
 
@@ -119,8 +127,22 @@ export async function vigiarConexao({ agora = new Date(), forcar = false }: { ag
     }
   }
 
+  // Servidor fora: um aviso por queda, dizendo o que é de verdade.
+  if (servidorFora && precisaAvisarServidorFora(memoria, agora)) {
+    memoria = { ...memoria, avisouServidorFora: true };
+    await registrarZeusEvent({ tipo: "health", titulo: TITULO_ALERTA_SERVIDOR, severidade: "alta", detalhe: { desde: memoria.servidorForaDesde, erro: status.erro ?? null } }).catch(() => {});
+    await enviarPushNotificacao({
+      title: "⚠️ Servidor do WhatsApp fora do ar",
+      body: "A VPS da Evolution não responde — não é o QR. Abra /conexao: ele diz o que tocar no painel da hospedagem.",
+      url: "/conexao", tag: "zeus-wa-servidor",
+    }).catch(() => {});
+  }
+  if (memoriaAntes.servidorForaDesde && !servidorFora) {
+    await db.zeusEvent.updateMany({ where: { titulo: TITULO_ALERTA_SERVIDOR, resolvido: false }, data: { resolvido: true } }).catch(() => {});
+  }
+
   // Só avisa o vendedor quando o religamento automático se esgotou.
-  const precisaQr = !religou && estado !== "aberta" && precisaMesmoDeQr(memoria, agora);
+  const precisaQr = !religou && estado !== "aberta" && !servidorFora && precisaMesmoDeQr(memoria, agora);
   if (precisaQr && !memoria.avisouQr) {
     memoria = { ...memoria, avisouQr: true };
     await registrarZeusEvent({ tipo: "health", titulo: TITULO_ALERTA_QR, severidade: "alta", detalhe: { tentativas: memoria.tentativas, erro: status.erro ?? erro ?? null } }).catch(() => {});
@@ -138,7 +160,7 @@ export async function vigiarConexao({ agora = new Date(), forcar = false }: { ag
   await gravarMemoria(memoria);
 
   return {
-    estado, acao, conectado: status.conectado || religou, religou, webhookCorrigido, precisaQr,
+    estado, acao, conectado: status.conectado || religou, religou, webhookCorrigido, precisaQr, servidorFora,
     descricao: descreverConexao(memoria, agora), erro: erro ?? status.erro ?? null,
   };
 }

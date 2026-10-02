@@ -24,12 +24,20 @@ export type MemoriaVigia = {
   ultimaTentativaEm: string | null;
   reconexoesAutomaticas: number;
   avisouQr: boolean;
+  /** Desde quando o SERVIDOR da Evolution não atende (VPS fora) — não é o
+   *  WhatsApp que caiu, e QR ou religar não resolvem (02/10). */
+  servidorForaDesde: string | null;
+  avisouServidorFora: boolean;
 };
 
 export const MEMORIA_VAZIA: MemoriaVigia = {
   ultimoEstado: null, conectadaDesde: null, ultimaQueda: null, ultimaVerificacao: null,
   tentativas: 0, ultimaTentativaEm: null, reconexoesAutomaticas: 0, avisouQr: false,
+  servidorForaDesde: null, avisouServidorFora: false,
 };
+
+/** Servidor fora por menos que isso é soluço (reinício, rede): não avisa. */
+export const MINUTOS_ANTES_DO_AVISO_SERVIDOR = 10;
 
 export const TENTATIVAS_ANTES_DO_QR = 4;
 const ESPERA_ENTRE_TENTATIVAS_MS = 45_000;
@@ -55,8 +63,12 @@ export function decidirAcao(estado: EstadoConexao, memoria: MemoriaVigia, agora:
 export type LeituraVigia = { memoria: MemoriaVigia; reconectou: boolean; caiu: boolean };
 
 // Atualiza a memória com o estado lido agora, antes de decidir a ação.
-export function memoriaAposLeitura(memoria: MemoriaVigia, estado: EstadoConexao, agora: Date): LeituraVigia {
+// `servidorFora`: a Evolution nem atendeu (lib/evolution-servidor-regra.ts).
+export function memoriaAposLeitura(memoria: MemoriaVigia, estado: EstadoConexao, agora: Date, servidorFora = false): LeituraVigia {
   const iso = agora.toISOString();
+  const servidor = servidorFora && estado !== "aberta"
+    ? { servidorForaDesde: memoria.servidorForaDesde ?? iso }
+    : { servidorForaDesde: null, avisouServidorFora: false };
   const estavaFora = memoria.ultimoEstado !== null && memoria.ultimoEstado !== "aberta";
   const caiu = memoria.ultimoEstado === "aberta" && estado !== "aberta";
   const reconectou = estavaFora && estado === "aberta";
@@ -72,6 +84,7 @@ export function memoriaAposLeitura(memoria: MemoriaVigia, estado: EstadoConexao,
         ultimaTentativaEm: null,
         reconexoesAutomaticas: memoria.reconexoesAutomaticas + (reconectou && memoria.tentativas > 0 ? 1 : 0),
         avisouQr: false,
+        ...servidor,
       },
       reconectou, caiu: false,
     };
@@ -84,6 +97,7 @@ export function memoriaAposLeitura(memoria: MemoriaVigia, estado: EstadoConexao,
       conectadaDesde: null,
       ultimaQueda: caiu ? iso : (memoria.ultimaQueda ?? iso),
       ultimaVerificacao: iso,
+      ...servidor,
     },
     reconectou: false, caiu,
   };
@@ -102,12 +116,31 @@ export function precisaMesmoDeQr(memoria: MemoriaVigia, agora: Date, toleranciaM
   return agora.getTime() - new Date(memoria.ultimaVerificacao).getTime() > toleranciaMin * 60_000;
 }
 
+// Uma vez por queda do servidor, e só depois de MINUTOS_ANTES_DO_AVISO_SERVIDOR.
+export function precisaAvisarServidorFora(memoria: MemoriaVigia, agora: Date, minutos = MINUTOS_ANTES_DO_AVISO_SERVIDOR): boolean {
+  if (!memoria.servidorForaDesde || memoria.avisouServidorFora) return false;
+  return agora.getTime() - new Date(memoria.servidorForaDesde).getTime() >= minutos * 60_000;
+}
+
+function horaBrasilia(iso: string, agora: Date): string {
+  const d = new Date(iso);
+  const mesmoDia = agora.getTime() - d.getTime() < 20 * 3_600_000;
+  return d.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
+    ...(mesmoDia ? {} : { day: "2-digit", month: "2-digit" }),
+  });
+}
+
 export function descreverConexao(memoria: MemoriaVigia, agora: Date): string {
   const horas = (iso: string) => Math.max(0, Math.round((agora.getTime() - new Date(iso).getTime()) / 3_600_000));
   if (memoria.ultimoEstado === "aberta" && memoria.conectadaDesde) {
     const h = horas(memoria.conectadaDesde);
     const base = h < 1 ? "Conectado (há menos de 1 hora)" : `Conectado há ${h}h`;
     return memoria.reconexoesAutomaticas > 0 ? `${base} · religado sozinho ${memoria.reconexoesAutomaticas}x desde que foi pareado` : base;
+  }
+  if (memoria.servidorForaDesde && memoria.ultimoEstado !== "aberta") {
+    const h = horas(memoria.servidorForaDesde);
+    return `Servidor da Evolution (sua VPS) sem responder desde ${horaBrasilia(memoria.servidorForaDesde, agora)} (${h < 1 ? "há menos de 1 hora" : `há ${h}h`}) · não é o WhatsApp: QR e religar dependem do servidor. Quando ele voltar, o CRM religa sozinho`;
   }
   if (memoria.ultimaQueda) {
     const h = horas(memoria.ultimaQueda);

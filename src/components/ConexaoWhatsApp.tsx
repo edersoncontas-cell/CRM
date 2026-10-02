@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { TesteRecebimento } from "@/components/TesteRecebimento";
+import { servidorEvolutionFora } from "@/lib/evolution-servidor-regra";
 import { reiniciarZapi, desconectarZapi, apagarConexaoWhatsAppAction, trocarInstanciaWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
 } from "lucide-react";
 
 type EtapaDiagnostico = { etapa: string; ok: boolean; detalhe: string };
-type Diagnostico = { provedor: string | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string };
+type Diagnostico = { provedor: string | null; url: string | null; instancia: string | null; etapas: EtapaDiagnostico[]; conclusao: string; comando?: string };
 
 type Status = {
   configurado: boolean;
@@ -251,6 +252,9 @@ export function ConexaoWhatsApp() {
             ))}
           </ul>
           <p className="mt-2 rounded-md bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">{diagnostico.conclusao}</p>
+          {diagnostico.comando && (
+            <code className="mt-1.5 block select-all break-all rounded-md bg-slate-900 px-2.5 py-2 font-mono text-[11px] text-slate-100">{diagnostico.comando}</code>
+          )}
         </div>
       )}
     </div>
@@ -310,7 +314,7 @@ export function ConexaoWhatsApp() {
             <button
               onClick={() => startTransition(async () => {
                 const r = await vigiarConexaoAction();
-                setVigiaMsg(r.religou ? "Religado agora." : r.webhookCorrigido ? "Webhook reapontado." : r.conectado ? "Tudo certo — conexão de pé." : "Ainda fora do ar; continuo tentando.");
+                setVigiaMsg(r.religou ? "Religado agora." : r.webhookCorrigido ? "Webhook reapontado." : r.conectado ? "Tudo certo — conexão de pé." : r.servidorFora ? "O servidor da Evolution não atendeu." : "Ainda fora do ar; continuo tentando.");
                 await buscarStatus();
                 await lerConexaoVigiadaAction().then(setVigia).catch(() => {});
               })}
@@ -358,11 +362,22 @@ export function ConexaoWhatsApp() {
     );
   }
 
-  // Precisa escanear o QR.
+  // Precisa escanear o QR — ou o servidor da Evolution nem atende (02/10: a
+  // VPS fora 2h e a tela pedindo QR, que não resolve).
+  const servidorFora = servidorEvolutionFora(qrErro ?? status.erro);
   return (
     <div>
     {!status.clientTokenConfigurado && <AvisoClientToken />}
     <div className="rounded-xl border border-slate-200 bg-white p-5">
+      {servidorFora && (
+        <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+          <Server size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <b>O servidor da Evolution (sua VPS) não está respondendo.</b> Não é o WhatsApp nem o celular — por isso QR,
+            religar e reiniciar não funcionam agora. O <b>diagnóstico</b> logo abaixo diz o que tocar no painel da hospedagem.
+          </span>
+        </div>
+      )}
       {avisoSaida && (
         <div ref={avisoRef} role="status" className="mb-3 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
           <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> <span>{avisoSaida}</span>
@@ -380,17 +395,17 @@ export function ConexaoWhatsApp() {
             <img src={qr} alt="QR Code do WhatsApp" className="h-52 w-52 rounded-lg" />
           ) : (
             <div className="px-4 text-center text-sm text-slate-400">
-              {qrErro ?? "Clique em \"Gerar novo QR\"."}
+              {servidorFora ? "Sem o servidor da Evolution não há QR. O que fazer está logo abaixo." : qrErro ?? "Clique em \"Gerar novo QR\"."}
             </div>
           )}
         </div>
-        <ol className="flex-1 space-y-2 text-sm text-slate-600">
+        {!servidorFora && <ol className="flex-1 space-y-2 text-sm text-slate-600">
           <li>1. Abra o <b>WhatsApp</b> no seu celular.</li>
           <li>2. Toque em <b>Configurações → Aparelhos conectados</b>.</li>
           <li>3. Toque em <b>Conectar um aparelho</b>.</li>
           <li>4. Aponte a câmera para este QR Code.</li>
           <li className="text-xs text-slate-400">A página detecta a conexão sozinha em alguns segundos.</li>
-        </ol>
+        </ol>}
       </div>
 
       {/* Status e QR costumam falhar pelo mesmo motivo — mostrar as duas
@@ -411,7 +426,7 @@ export function ConexaoWhatsApp() {
         <button
           onClick={() => startTransition(async () => {
             const r = await vigiarConexaoAction();
-            setVigiaMsg(r.religou ? "Religou sem precisar do QR." : "Não deu para religar sozinho — escaneie o QR.");
+            setVigiaMsg(r.religou ? "Religou sem precisar do QR." : r.servidorFora ? "O servidor da Evolution não atendeu — o diagnóstico acima diz o que fazer." : "Não deu para religar sozinho — escaneie o QR.");
             await buscarStatus();
           })}
           disabled={pending}
