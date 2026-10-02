@@ -29,7 +29,13 @@ export type OpsApagar = {
   agora: () => number;
 };
 
-export type ResultadoApagar = { ok: boolean; erro?: string; passos: string[] };
+/**
+ * zumbi: reiniciar não curou — voltou "open" com o socket morto (o logout
+ * estoura "Connection Closed" de novo) e o apagar segue recusado. O print de
+ * 02/10 mostrou a 2ª rodada idêntica à 1ª: daqui só sai criando OUTRA
+ * instância (criarInstanciaNovaEvolution), e quanto antes, melhor.
+ */
+export type ResultadoApagar = { ok: boolean; erro?: string; passos: string[]; zumbi?: boolean };
 
 /** Tempo total que apagar pode levar (a ação do servidor tem 60 s; criar vem em outra ação). */
 export const PRAZO_APAGAR_MS = 45_000;
@@ -72,6 +78,7 @@ export async function apagarEvolution(ops: OpsApagar): Promise<ResultadoApagar> 
 
   if (await tentarApagar("apagou a instância")) return confirmar();
 
+  let zumbi = false;
   for (let rodada = 1; rodada <= RODADAS && ops.agora() < fim; rodada++) {
     try { await ops.reiniciar(); passos.push("reiniciou"); }
     catch (e) { passos.push(`reiniciar falhou: ${msg(e).slice(0, 180)}`); }
@@ -81,19 +88,26 @@ export async function apagarEvolution(ops: OpsApagar): Promise<ResultadoApagar> 
     passos.push(`depois de reiniciar: ${assentou ?? "sem resposta"}`);
     if (assentou === "inexistente") return { ok: true, passos };
 
+    let logoutMorto = false;
     if (assentou === "open") {
       // Socket novo: agora o logout funciona e o apagar, que passa por ele, também.
       try { await ops.logout(); passos.push("logout"); }
-      catch (e) { passos.push(`logout falhou: ${msg(e).slice(0, 180)}`); }
+      catch (e) {
+        passos.push(`logout falhou: ${msg(e).slice(0, 180)}`);
+        logoutMorto = /connection closed/i.test(msg(e));
+      }
       await aguardar((s) => s !== null && s !== "open", ESPERA_SAIR_MS);
     }
     if (ops.agora() >= fim) break;
     if (await tentarApagar(rodada === 1 ? "apagou de novo" : "apagou na rodada 2")) return confirmar();
+    // Reiniciar não curou: outra rodada só repete a mesma recusa.
+    if (logoutMorto) { zumbi = true; passos.push("reiniciar não curou — a instância continua morta por dentro"); break; }
   }
 
   return {
     ok: false,
     erro: `A Evolution recusou apagar a instância${recusa ? `: ${recusa.slice(0, 200)}` : ""}`,
     passos,
+    zumbi,
   };
 }

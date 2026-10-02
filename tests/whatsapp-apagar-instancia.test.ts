@@ -85,14 +85,24 @@ describe("apagar a instância da Evolution com a sessão morta", () => {
     expect(ev.chamadas).not.toContain("reiniciar");
   });
 
-  it("socket morto de novo depois de reiniciar: tenta duas rodadas e diz o motivo, sem prometer", async () => {
+  it("socket morto de novo depois de reiniciar (o print de 02/10): para na 1ª rodada, diz 'zumbi' e o motivo", async () => {
     const ev = evolutionZumbi({ reinicio: "morta-de-novo" });
     const r = await apagarEvolution(ev);
     expect(r.ok).toBe(false);
+    expect(r.zumbi).toBe(true);
     expect(r.erro).toMatch(/recusou apagar/);
     expect(r.erro).toMatch(/Connection Closed/);
+    // A 2ª rodada do print foi idêntica à 1ª: só gastava 20 s antes da saída que funciona.
+    expect(ev.chamadas.filter((c) => c === "reiniciar")).toHaveLength(1);
+    expect(r.passos.filter((p) => /recusado/.test(p)).length).toBe(2);
+  });
+
+  it("recusa sem 'Connection Closed' no logout: não é o zumbi, tenta a 2ª rodada", async () => {
+    const ev = evolutionZumbi({ reinicio: "close", apagarRecusaSempre: true });
+    const r = await apagarEvolution(ev);
+    expect(r.ok).toBe(false);
+    expect(r.zumbi).toBe(false);
     expect(ev.chamadas.filter((c) => c === "reiniciar")).toHaveLength(2);
-    expect(r.passos.filter((p) => /recusado/.test(p)).length).toBeGreaterThanOrEqual(2);
   });
 
   it("nunca assenta ('connecting' para sempre): para no prazo, não fica num laço", async () => {

@@ -10,6 +10,7 @@ import { exigirEnvioLiberado } from "@/lib/whatsapp-pausa";
 
 import { db } from "@/lib/db";
 import { apagarEvolution } from "@/lib/whatsapp-apagar-instancia";
+import { CHAVE_INSTANCIA_ATIVA, lerInstanciaGuardada, instanciaQueVale, proximoNomeInstancia } from "@/lib/whatsapp-instancia-nome";
 import { mensagemEvolutionParaZapi, extrairBase64Qr, estadoDaResposta, textoDoErroEvolution } from "@/lib/evolution";
 import { pausarVigia, podeForcarNovoQr, marcarForcaNovoQr } from "@/lib/whatsapp-vigia-pausa";
 import { desconectarEvolution, type ResultadoDesconexao } from "@/lib/whatsapp-desconectar";
@@ -116,9 +117,14 @@ async function evoFetch(
 ): Promise<Record<string, unknown>> {
   const cfg = evolutionConfig();
   if (!cfg) throw new Error("Evolution API não configurada.");
+  // O nome da instância entra aqui, e não em quem monta o caminho: ele pode
+  // ter mudado (crm → crm-2) e mora no banco — ver nomeDaInstancia.
+  const caminho = path.includes(MARCA_INSTANCIA)
+    ? path.split(MARCA_INSTANCIA).join(encodeURIComponent(await nomeDaInstancia()))
+    : path;
   let res: Response;
   try {
-    res = await fetch(`${cfg.url}${path}`, {
+    res = await fetch(`${cfg.url}${caminho}`, {
       method,
       headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
       body: body ? JSON.stringify(body) : undefined,
@@ -136,13 +142,56 @@ async function evoFetch(
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const detalhe = textoDoErroEvolution((data?.response as Record<string, unknown> | undefined)?.message ?? data?.message ?? data?.error) || JSON.stringify(data);
-    throw new Error(`Evolution API ${path} falhou (${res.status}): ${detalhe.slice(0, 200)}`);
+    throw new Error(`Evolution API ${caminho} falhou (${res.status}): ${detalhe.slice(0, 200)}`);
   }
   return data;
 }
 
+// ---------- Qual instância é a do CRM ----------
+//
+// Normalmente a da variável EVOLUTION_INSTANCE. Quando ela trava de um jeito
+// que a Evolution não deixa nem sair nem apagar, o CRM cria outra (crm-2…) e
+// guarda no banco qual vale (lib/whatsapp-instancia-nome.ts). Os caminhos
+// levam uma MARCA no lugar do nome, e evoFetch troca pela instância que vale
+// na hora — assim nenhum dos ~30 lugares que falam com a Evolution precisa
+// saber disso.
+const MARCA_INSTANCIA = "__INSTANCIA_DO_CRM__";
+const VALIDADE_NOME_MS = 20_000;
+let cacheInstancia: { nome: string; em: number } | null = null;
+
+export async function nomeDaInstancia(opts?: { forcar?: boolean }): Promise<string> {
+  const base = evolutionConfig()?.instance ?? "";
+  if (!opts?.forcar && cacheInstancia && Date.now() - cacheInstancia.em < VALIDADE_NOME_MS) return cacheInstancia.nome;
+  try {
+    const nome = instanciaQueVale(base, lerInstanciaGuardada(await getConfig(CHAVE_INSTANCIA_ATIVA)));
+    cacheInstancia = { nome, em: Date.now() };
+    return nome;
+  } catch {
+    // Banco fora do ar: o último nome lido (mesmo velho) ou a variável.
+    return cacheInstancia?.nome ?? base;
+  }
+}
+
+/** A instância de antes da última troca (guarda a mídia das mensagens antigas). */
+async function instanciaAnterior(): Promise<string | null> {
+  const base = evolutionConfig()?.instance ?? "";
+  try {
+    const g = lerInstanciaGuardada(await getConfig(CHAVE_INSTANCIA_ATIVA));
+    return g && g.base === base && g.anterior && g.anterior !== g.nome ? g.anterior : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ativarInstancia(nome: string, anterior: string): Promise<void> {
+  const base = evolutionConfig()?.instance ?? "";
+  await setConfig(CHAVE_INSTANCIA_ATIVA, JSON.stringify({ base, nome, anterior, desde: new Date().toISOString() }));
+  cacheInstancia = { nome, em: Date.now() };
+  cacheToken = null;
+}
+
 function evoInstancia(): string {
-  return encodeURIComponent(evolutionConfig()?.instance ?? "");
+  return MARCA_INSTANCIA;
 }
 
 // Converte o "phone" do CRM (dígitos, id de grupo da Z-API ou JID) no
@@ -300,8 +349,8 @@ export async function sendAudioBase64(phone: string, base64: string, mimeType: s
 // dela (DATABASE_SAVE_DATA_NEW_MESSAGE) e devolve o conteúdo em base64.
 export async function baixarMidiaEvolution(messageId: string): Promise<{ base64: string; mimeType: string; fileName: string | null } | null> {
   if (provedorWhatsApp() !== "evolution") return null;
-  try {
-    const data = await evoFetch("POST", `/chat/getBase64FromMediaMessage/${evoInstancia()}`, {
+  const deUma = async (inst: string) => {
+    const data = await evoFetch("POST", `/chat/getBase64FromMediaMessage/${inst}`, {
       message: { key: { id: messageId } }, convertToMp4: false,
     });
     const base64 = typeof data.base64 === "string" ? data.base64 : null;
@@ -311,8 +360,21 @@ export async function baixarMidiaEvolution(messageId: string): Promise<{ base64:
       mimeType: (typeof data.mimetype === "string" && data.mimetype) || "application/octet-stream",
       fileName: typeof data.fileName === "string" ? data.fileName : null,
     };
+  };
+  try {
+    const r = await deUma(evoInstancia());
+    if (r) return r;
   } catch (e) {
     console.error("[evolution] mídia:", e);
+  }
+  // A mensagem pode ter chegado pela instância de antes da troca (crm → crm-2):
+  // é ela que guarda a mídia.
+  const anterior = await instanciaAnterior();
+  if (!anterior) return null;
+  try {
+    return await deUma(encodeURIComponent(anterior));
+  } catch (e) {
+    console.error("[evolution] mídia (instância anterior):", e);
     return null;
   }
 }
@@ -542,6 +604,7 @@ export async function tokenDaInstancia(): Promise<string | null> {
   if (!cfg) return null;
   if (cacheToken && Date.now() - cacheToken.em < 10 * 60_000) return cacheToken.valor;
   let valor: string | null = null;
+  const ativa = await nomeDaInstancia();
   try {
     const data = await evoFetch("GET", `/instance/fetchInstances?instanceName=${evoInstancia()}`, undefined, TEMPO_TELA_MS);
     const lista: unknown[] = Array.isArray(data) ? data : [data];
@@ -549,7 +612,7 @@ export async function tokenDaInstancia(): Promise<string | null> {
       const o = item as Record<string, unknown>;
       const inst = (o.instance as Record<string, unknown> | undefined) ?? o;
       const nome = String(inst.instanceName ?? inst.name ?? o.name ?? "");
-      if (nome && nome !== cfg.instance) continue;
+      if (nome && nome !== ativa) continue;
       const t = [o.token, o.hash, inst.token, inst.apikey, (o.hash as Record<string, unknown> | undefined)?.apikey]
         .find((v) => typeof v === "string" && v);
       if (typeof t === "string") { valor = t; break; }
@@ -587,7 +650,7 @@ export async function testarWebhookDeFora(urlConfigurada: string | null): Promis
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": "crm-teste-webhook" },
-      body: JSON.stringify({ event: "connection.update", instance: cfg.instance, data: { state: "open", teste: marca }, apikey: apikeyNoCorpo }),
+      body: JSON.stringify({ event: "connection.update", instance: await nomeDaInstancia(), data: { state: "open", teste: marca }, apikey: apikeyNoCorpo }),
       cache: "no-store",
       signal: AbortSignal.timeout(TEMPO_TELA_MS),
     });
@@ -634,13 +697,13 @@ export async function testarWebhookDeFora(urlConfigurada: string | null): Promis
   }
 }
 
-// Cria a instância com o nome de EVOLUTION_INSTANCE (canal Baileys, QR Code)
+// Cria a instância com o nome da instância que vale (EVOLUTION_INSTANCE, ou crm-2… depois de uma troca) (canal Baileys, QR Code)
 // já apontando o webhook para o CRM. Tenta o formato das versões 2.x e, se a
 // Evolution recusar, o formato "plano" das 1.x. Devolve o QR quando ele já vem
 // na resposta.
-export async function criarInstanciaEvolution(urlWebhook: string | null): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
+export async function criarInstanciaEvolution(urlWebhook: string | null, nomeExplicito?: string): Promise<{ ok: boolean; erro?: string; qr?: string | null; jaExistia?: boolean }> {
   if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada." };
-  const nome = evolutionConfig()?.instance ?? "";
+  const nome = nomeExplicito ?? (await nomeDaInstancia());
   const eventos = ["MESSAGES_UPSERT", "MESSAGES_UPDATE"];
   // syncFullHistory: ao parear, o celular manda o histórico inteiro das
   // conversas para a Evolution — é isso que "Importar conversas" puxa.
@@ -664,7 +727,7 @@ export async function criarInstanciaEvolution(urlWebhook: string | null): Promis
   } catch (e1) {
     const msg1 = e1 instanceof Error ? e1.message : String(e1);
     // Já existe: não é erro para quem só quer conectar.
-    if (/already|já existe|in use|em uso/i.test(msg1)) return { ok: true, qr: null };
+    if (/already|já existe|in use|em uso/i.test(msg1)) return { ok: true, qr: null, jaExistia: true };
     try {
       const data = await evoFetch("POST", "/instance/create", corpoV1);
       return { ok: true, qr: extrairQr(data) };
@@ -731,9 +794,10 @@ export type Diagnostico = { provedor: ProvedorWhatsApp | null; url: string | nul
 
 export async function diagnosticarConexao(origemNavegador: string | null = null): Promise<Diagnostico> {
   const cfg = evolutionConfig();
+  const ativa = cfg ? await nomeDaInstancia({ forcar: true }) : null;
   const etapas: EtapaDiagnostico[] = [];
   const fim = (conclusao: string): Diagnostico => ({
-    provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: cfg?.instance ?? null, etapas, conclusao,
+    provedor: provedorWhatsApp(), url: cfg?.url ?? null, instancia: ativa, etapas, conclusao,
   });
 
   if (!cfg) {
@@ -741,7 +805,7 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
     etapas.push({ etapa: "Variáveis na Vercel", ok: false, detalhe: `Faltando: ${faltando.join(", ")}` });
     return fim("O CRM não sabe onde fica sua Evolution API. Preencha as variáveis na Vercel (Settings → Environment Variables) e faça Redeploy.");
   }
-  etapas.push({ etapa: "Variáveis na Vercel", ok: true, detalhe: `${cfg.url} · instância "${cfg.instance}"` });
+  etapas.push({ etapa: "Variáveis na Vercel", ok: true, detalhe: `${cfg.url} · instância "${ativa}"${ativa !== cfg.instance ? ` (o CRM trocou de "${cfg.instance}" para esta, que a anterior travou)` : ""}` });
 
   // 1. O servidor responde?
   const inicio = Date.now();
@@ -767,7 +831,7 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
     const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
     etapas.push({ etapa: "Chave (apikey) aceita", ok: true, detalhe: "a Evolution respondeu à consulta autenticada" });
     const state = estadoDaResposta(data) || "desconhecido";
-    etapas.push({ etapa: `Instância "${cfg.instance}"`, ok: true, detalhe: `existe · estado "${state}"` });
+    etapas.push({ etapa: `Instância "${ativa}"`, ok: true, detalhe: `existe · estado "${state}"` });
     if (state === "open") {
       const w = await lerWebhookEvolution();
       const esperado = await urlWebhookCrm();
@@ -833,8 +897,8 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
     }
     if (/\(404\)/.test(msg) || /does not exist|não existe/i.test(msg)) {
       etapas.push({ etapa: "Chave (apikey) aceita", ok: true, detalhe: "a Evolution respondeu à consulta autenticada" });
-      etapas.push({ etapa: `Instância "${cfg.instance}"`, ok: false, detalhe: "não existe neste servidor" });
-      return fim(`O servidor está no ar, mas não tem nenhuma instância chamada "${cfg.instance}". Clique em "Gerar novo QR" — o CRM cria a instância e já mostra o código.`);
+      etapas.push({ etapa: `Instância "${ativa}"`, ok: false, detalhe: "não existe neste servidor" });
+      return fim(`O servidor está no ar, mas não tem nenhuma instância chamada "${ativa}". Clique em "Gerar novo QR" — o CRM cria a instância e já mostra o código.`);
     }
     etapas.push({ etapa: "Consulta à instância", ok: false, detalhe: msg.slice(0, 200) });
     return fim("O servidor respondeu, mas a consulta falhou. O detalhe acima vem da própria Evolution.");
@@ -850,7 +914,7 @@ export type StatusConexao = {
   clientTokenConfigurado: boolean;
   provedor?: ProvedorWhatsApp | null;
   erro?: string | null;
-  // Evolution: a instância com o nome de EVOLUTION_INSTANCE ainda não foi criada
+  // Evolution: a instância que vale (EVOLUTION_INSTANCE ou a que o CRM criou no lugar) ainda não foi criada
   // (a tela /conexao oferece o botão "Criar instância").
   instanciaNaoExiste?: boolean;
   // Evolution: o webhook da instância aponta para urlWebhookEsperada? null = não
@@ -866,7 +930,10 @@ export async function statusConexao(urlWebhookEsperada?: string | null): Promise
   }
 
   if (provedor === "evolution") {
-    const instancia = evolutionConfig()?.instance ?? null;
+    // Relida no banco a cada consulta (e o cache das chamadas seguintes junto):
+    // depois da troca crm → crm-2, outra cópia do servidor mostraria a velha,
+    // "open" e morta, como conectada.
+    const instancia = await nomeDaInstancia({ forcar: true });
     try {
       const data = await evoFetch("GET", `/instance/connectionState/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
       const state = String((data?.instance as Record<string, unknown> | undefined)?.state ?? data?.state ?? "");
@@ -906,6 +973,9 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
     // Enquanto o vendedor está na tela do QR, o vigia não pode reiniciar a
     // instância — cada restart invalida o código que ele está escaneando.
     await pausarVigia(3).catch(() => {});
+    // Relê no banco qual instância vale (o QR tem que ser o da nova, mesmo que
+    // a troca tenha sido feita por outra cópia do servidor segundos antes).
+    await nomeDaInstancia({ forcar: true });
     try {
       const data = await evoFetch("GET", `/instance/connect/${evoInstancia()}`, undefined, TEMPO_TELA_MS);
       const imagem = extrairBase64Qr(data);
@@ -938,7 +1008,7 @@ export async function obterQrCode(): Promise<{ imagem: string | null; erro?: str
           const imagem3 = extrairBase64Qr(data3);
           if (imagem3) return { imagem: imagem3 };
         }
-        return { imagem: null, erro: `A instância "${evolutionConfig()?.instance}" não existe na Evolution. Criei agora — clique em "Gerar novo QR".` };
+        return { imagem: null, erro: `A instância "${await nomeDaInstancia()}" não existe na Evolution. Criei agora — clique em "Gerar novo QR".` };
       }
       return { imagem: null, erro: msg };
     }
@@ -986,7 +1056,8 @@ export async function desconectar(): Promise<ResultadoDesconexao> {
   if (provedorWhatsApp() === "evolution") {
     // O vigia não pode religar a instância no meio da desconexão.
     await pausarVigia(5).catch(() => {});
-    const inst = evoInstancia();
+    // Nome fixo do começo ao fim: a mesma instância é consultada, desligada e reiniciada.
+    const inst = encodeURIComponent(await nomeDaInstancia({ forcar: true }));
     return desconectarEvolution({
       estado: async () => {
         try {
@@ -1017,10 +1088,10 @@ export async function desconectar(): Promise<ResultadoDesconexao> {
 // A Evolution recusa apagar quando a sessão está morta ("Connection Closed"):
 // a lógica de reiniciar, esperar assentar e tentar de novo mora em
 // lib/whatsapp-apagar-instancia.ts (pura, testada com uma Evolution falsa).
-export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: string; passos: string[] }> {
+export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: string; passos: string[]; zumbi?: boolean }> {
   if (provedorWhatsApp() !== "evolution") return { ok: false, erro: "Evolution API não configurada.", passos: [] };
   await pausarVigia(5).catch(() => {});
-  const inst = evoInstancia();
+  const inst = encodeURIComponent(await nomeDaInstancia({ forcar: true }));
   const texto = (e: unknown) => (e instanceof Error ? e.message : String(e));
   const sumiu = (m: string) => /\(404\)/.test(m) || /does not exist|não existe/i.test(m);
   return apagarEvolution({
@@ -1040,6 +1111,42 @@ export async function apagarInstanciaEvolution(): Promise<{ ok: boolean; erro?: 
     esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
     agora: () => Date.now(),
   });
+}
+
+// O ÚLTIMO recurso, quando a instância travou de um jeito que a Evolution não
+// deixa nem sair nem apagar (o zumbi do print de 01/10): cria OUTRA, com o
+// próximo nome (crm-2, crm-3…), já com o webhook, e o CRM passa a usá-la. A
+// velha fica esquecida na Evolution (não dá para apagá-la por aqui) — se um
+// dia ela acordar, o webhook a recusa como "outra instância".
+export async function criarInstanciaNovaEvolution(urlWebhook: string | null): Promise<{ ok: boolean; erro?: string; qr?: string | null; nome?: string; anterior?: string; passos: string[] }> {
+  const passos: string[] = [];
+  const cfg = evolutionConfig();
+  if (!cfg) return { ok: false, erro: "Evolution API não configurada.", passos };
+  await pausarVigia(5).catch(() => {});
+  const anterior = await nomeDaInstancia({ forcar: true });
+  let nome = proximoNomeInstancia(cfg.instance, anterior);
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    const r = await criarInstanciaEvolution(urlWebhook, nome);
+    if (!r.ok) { passos.push(`criar "${nome}" falhou: ${(r.erro ?? "sem motivo").slice(0, 160)}`); return { ok: false, erro: r.erro, passos }; }
+    if (r.jaExistia) {
+      // Sobra de uma tentativa anterior: serve se ainda não está "open" (pode
+      // ser outro zumbi); senão, o próximo nome.
+      let estado = "";
+      try { estado = estadoDaResposta(await evoFetch("GET", `/instance/connectionState/${encodeURIComponent(nome)}`, undefined, 6_000)); } catch { estado = ""; }
+      if (estado === "open") { passos.push(`"${nome}" já existe e está open — pulei`); nome = proximoNomeInstancia(cfg.instance, nome); continue; }
+      passos.push(`"${nome}" já existia (${estado || "sem estado"}) — reaproveitada`);
+    } else {
+      passos.push(`criou a instância "${nome}"`);
+    }
+    await ativarInstancia(nome, anterior);
+    passos.push(`o CRM passou a usar "${nome}" (antes: "${anterior}")`);
+    if (urlWebhook) {
+      const w = await configurarWebhookEvolution(urlWebhook).catch((e) => ({ ok: false, erro: e instanceof Error ? e.message : String(e) }));
+      passos.push(w.ok ? "webhook apontado" : `webhook: ${("erro" in w && w.erro) || "falhou"}`);
+    }
+    return { ok: true, qr: r.qr ?? null, nome, anterior, passos };
+  }
+  return { ok: false, erro: "Todos os nomes tentados já existem e estão conectados.", passos };
 }
 
 export async function baixarAudio(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string } | null> {

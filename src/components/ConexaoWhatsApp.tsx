@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { reiniciarZapi, desconectarZapi, apagarConexaoWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
+import { reiniciarZapi, desconectarZapi, apagarConexaoWhatsAppAction, trocarInstanciaWhatsAppAction, configurarWebhookEvolutionAction, criarInstanciaEvolutionAction, vigiarConexaoAction, lerConexaoVigiadaAction } from "@/lib/actions";
 import {
   Smartphone, RefreshCw, QrCode, CheckCircle2, AlertTriangle, LogOut, Loader2, Server, Terminal, ShieldCheck, Stethoscope,
 } from "lucide-react";
@@ -450,21 +450,41 @@ function useSaidaWhatsApp(provedor: string | null | undefined, aoTerminar: (avis
   const [progresso, setProgresso] = useState("");
   const semResposta = "O CRM não respondeu a tempo. Recarregue a página: se aparecer o QR Code, a desconexão funcionou.";
 
-  // Apaga a conexão na Evolution e cria outra, que nasce pedindo QR. São DUAS
-  // ações do servidor, cada uma com os próprios 60 s da Vercel: apagar pode
-  // levar até ~50 s (reinicia e espera a Evolution assentar) e criar vem depois.
-  async function apagarECriar(): Promise<{ ok: true } | { ok: false; erro: string; passos: string[] }> {
-    setProgresso("Apagando a conexão antiga na Evolution… (ela reinicia e espera assentar; pode levar até 50 s)");
-    const a = await apagarConexaoWhatsAppAction("REFAZER");
+  // Apaga a conexão na Evolution e cria outra, que nasce pedindo QR. Cada
+  // passo é uma ação do servidor com os próprios 60 s da Vercel.
+  //
+  // Quando a Evolution NÃO deixa apagar (o zumbi dos prints de 01 e 02/10:
+  // "open" por fora, socket morto, logout "Connection Closed", apagar
+  // "[object Object]", reiniciar não cura), cria OUTRA instância com outro nome
+  // (crm-2…) e o CRM passa a usá-la. Era o que faltava: as duas tentativas
+  // anteriores insistiam na mesma instância, que nunca ia sair.
+  async function apagarECriar(): Promise<{ ok: true; nova?: { nome: string; anterior: string } } | { ok: false; erro: string; passos: string[] }> {
+    setProgresso("Apagando a conexão antiga na Evolution… (se ela estiver travada, o CRM tenta reiniciar antes; pode levar até 45 s)");
+    let a: Awaited<ReturnType<typeof apagarConexaoWhatsAppAction>>;
+    try { a = await apagarConexaoWhatsAppAction("REFAZER"); }
+    catch { a = { ok: false, erro: "o CRM não respondeu a tempo ao apagar", passos: [] }; }
     const passosA = a.passos ?? [];
-    if (!a.ok) return { ok: false, erro: a.erro ?? "A Evolution não apagou a instância.", passos: passosA };
-    setProgresso("Criando a conexão nova e o QR Code…");
-    await new Promise((r) => setTimeout(r, 1500));
-    let c = await criarInstanciaEvolutionAction();
-    if (!c.ok) { await new Promise((r) => setTimeout(r, 3000)); c = await criarInstanciaEvolutionAction(); }
-    if (!c.ok) return { ok: false, erro: `a conexão antiga foi apagada, mas a nova não nasceu: ${c.erro ?? "sem motivo"}`, passos: passosA };
-    return { ok: true };
+    if (a.ok) {
+      setProgresso("Criando a conexão nova e o QR Code…");
+      await new Promise((r) => setTimeout(r, 1500));
+      let c = await criarInstanciaEvolutionAction();
+      if (!c.ok) { await new Promise((r) => setTimeout(r, 3000)); c = await criarInstanciaEvolutionAction(); }
+      if (!c.ok) return { ok: false, erro: `a conexão antiga foi apagada, mas a nova não nasceu: ${c.erro ?? "sem motivo"}`, passos: passosA };
+      return { ok: true };
+    }
+    setProgresso("A Evolution não deixa apagar a conexão travada. Criando uma conexão NOVA, com outro nome, e o QR Code…");
+    let t: Awaited<ReturnType<typeof trocarInstanciaWhatsAppAction>>;
+    try { t = await trocarInstanciaWhatsAppAction("REFAZER"); }
+    catch { t = { ok: false, erro: "o CRM não respondeu a tempo ao criar a conexão nova", passos: [] }; }
+    const passosT = [...passosA, ...(t.passos ?? [])];
+    if (!t.ok || !t.nome) {
+      return { ok: false, erro: `a Evolution não deixou apagar a conexão travada (${a.erro ?? "sem motivo"}) e criar uma conexão nova também falhou: ${t.erro ?? "sem motivo"}. Aí o problema é o próprio servidor da Evolution: reinicie o serviço dela no servidor (no Docker, docker restart do contêiner da Evolution) e clique de novo`, passos: passosT };
+    }
+    return { ok: true, nova: { nome: t.nome, anterior: t.anterior ?? "" } };
   }
+
+  const textoNova = (n: { nome: string; anterior: string }) =>
+    `A conexão antiga${n.anterior ? ` ("${n.anterior}")` : ""} travou de um jeito que a Evolution não deixa nem desconectar nem apagar, então o CRM criou uma conexão nova ("${n.nome}") e já passou a usá-la. Leia o QR Code abaixo com o celular. Se em Aparelhos conectados aparecer um aparelho antigo do CRM, pode desconectá-lo.`;
 
   async function desconectar() {
     setEtapa("desconectando");
@@ -485,7 +505,7 @@ function useSaidaWhatsApp(provedor: string | null | undefined, aoTerminar: (avis
         setEtapa("refazendo");
         const f = await apagarECriar();
         if (f.ok) {
-          const texto = "O WhatsApp não obedeceu ao pedido de sair, então o CRM apagou a conexão na Evolution e criou outra. Leia o QR Code abaixo com o celular.";
+          const texto = f.nova ? textoNova(f.nova) : "O WhatsApp não obedeceu ao pedido de sair, então o CRM apagou a conexão na Evolution e criou outra. Leia o QR Code abaixo com o celular.";
           setMsg({ tipo: "ok", texto });
           setEtapa("parado");
           await aoTerminar(texto);
@@ -516,7 +536,7 @@ function useSaidaWhatsApp(provedor: string | null | undefined, aoTerminar: (avis
     try {
       const f = await apagarECriar();
       if (f.ok) {
-        const texto = "Conexão refeita do zero. Leia o QR Code abaixo com o celular.";
+        const texto = f.nova ? textoNova(f.nova) : "Conexão refeita do zero. Leia o QR Code abaixo com o celular.";
         setMsg({ tipo: "ok", texto });
         setEtapa("parado");
         await aoTerminar(texto);
@@ -558,6 +578,10 @@ function PainelSaidaEmCurso({ progresso }: { progresso: string }) {
 function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefined; saida: SaidaWhatsAppEstado }) {
   const { etapa, setEtapa, setDireto, passos, msg, setMsg, motivoPresa, progresso, desconectar, refazer } = saida;
   const botao = "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-60";
+  // A falha aparece embaixo do painel "conectado", que é alto: sem levar até
+  // ela, a tela voltava verde lá em cima e parecia que nada tinha acontecido.
+  const msgRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (msg?.tipo === "erro") msgRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [msg]);
   return (
     <div className="mt-4">
       {etapa === "parado" && (
@@ -574,7 +598,7 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
       )}
       {etapa === "refazerDireto" && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          <p>O CRM apaga a conexão com o WhatsApp na Evolution e cria de novo, já com o QR Code para você ler. Resolve a conexão que fica &quot;verde&quot; mas não entrega mensagem. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>
+          <p>O CRM apaga a conexão com o WhatsApp na Evolution e cria de novo, já com o QR Code para você ler. Se a Evolution não deixar apagar (conexão travada), o CRM cria uma conexão nova com outro nome e passa a usá-la. Resolve a conexão que fica &quot;verde&quot; mas não entrega mensagem. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button onClick={refazer} className={`${botao} bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Sim, refazer do zero</button>
             <button onClick={() => setEtapa("parado")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
@@ -584,7 +608,7 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
       {etapa === "confirmando" && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <p>Isso tira o WhatsApp do CRM e você vai ler o QR Code de novo. As conversas que já estão no CRM ficam.</p>
-          {provedor === "evolution" && <p className="mt-1 text-xs text-red-700">Se o WhatsApp não obedecer ao pedido de sair, o CRM apaga a conexão na Evolution e cria outra, já com o QR Code — tudo neste mesmo clique.</p>}
+          {provedor === "evolution" && <p className="mt-1 text-xs text-red-700">Se o WhatsApp não obedecer ao pedido de sair, o CRM apaga a conexão na Evolution e cria outra (com outro nome, se a Evolution não deixar apagar), já com o QR Code — tudo neste mesmo clique.</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             <button onClick={desconectar} className={`${botao} bg-red-600 text-white hover:bg-red-700`}><LogOut size={14} /> Sim, desconectar</button>
             <button onClick={() => setEtapa("parado")} className={`${botao} bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>Cancelar</button>
@@ -607,8 +631,8 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
             </p>
           )}
           <p className="mt-2"><b>Saída 1 — pelo celular</b>: WhatsApp → Configurações → <b>Aparelhos conectados</b> → toque no aparelho do CRM → <b>Desconectar</b>. Só adianta se a Evolution ainda estiver ouvindo o WhatsApp; se o motivo acima for &quot;Connection Closed&quot;, ela não está.</p>
-          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 2 — refazer do zero</b>: o CRM apaga a instância na Evolution e cria de novo, já com o QR Code. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>}
-          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 3 — outro nome de instância</b> (funciona mesmo com a Evolution travada): na Vercel, troque a variável <code>EVOLUTION_INSTANCE</code> para outro nome (ex.: <code>crm2</code>) e faça um redeploy. O CRM mostra &quot;Falta criar a instância&quot;, cria a nova e mostra o QR Code. A velha fica esquecida na Evolution.</p>}
+          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 2 — refazer do zero</b>: o CRM apaga a instância na Evolution e cria de novo, já com o QR Code. Se a Evolution não deixar apagar, o CRM cria uma instância nova com outro nome e passa a usá-la — sem mexer na Vercel. As conversas do CRM ficam; o celular manda o histórico de novo ao ler o QR.</p>}
+          {provedor === "evolution" && <p className="mt-1.5"><b>Saída 3 — reiniciar a própria Evolution</b>: se nem a instância nova nascer, o problema é o servidor da Evolution (desligado, sem espaço, travado). Reinicie o serviço dela no servidor onde ela roda (no Docker: <code>docker restart</code> do contêiner da Evolution) e clique em Refazer do zero de novo.</p>}
           {provedor === "evolution" && etapa === "presa" && (
             <button onClick={() => setEtapa("confirmandoRefazer")} className={`${botao} mt-2 bg-amber-600 text-white hover:bg-amber-700`}><RefreshCw size={14} /> Refazer do zero</button>
           )}
@@ -621,7 +645,7 @@ function SaidaWhatsApp({ provedor, saida }: { provedor: string | null | undefine
           <button onClick={desconectar} className="mt-2 block text-xs font-semibold text-amber-800 underline">Tentar desconectar de novo</button>
         </div>
       )}
-      {msg && <p role="status" className={`mt-2 text-sm ${msg.tipo === "ok" ? "text-green-700" : "text-red-700"}`}>{msg.texto}</p>}
+      {msg && <p ref={msgRef} role="status" className={`mt-2 break-words text-sm ${msg.tipo === "ok" ? "text-green-700" : "text-red-700"}`}>{msg.texto}</p>}
     </div>
   );
 }

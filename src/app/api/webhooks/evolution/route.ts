@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evolutionConfig, tokenDaInstancia, CHAVE_TESTE_WEBHOOK } from "@/lib/zapi";
+import { evolutionConfig, tokenDaInstancia, nomeDaInstancia, CHAVE_TESTE_WEBHOOK } from "@/lib/zapi";
 import { setConfig } from "@/lib/config";
 import { extrairConteudoEvolution, normalizarChaveEvolution, STATUS_EVOLUTION } from "@/lib/evolution";
 import { atualizarStatusEntrega } from "@/lib/whatsapp-store";
@@ -22,7 +22,7 @@ const str = (v: unknown): string | null => (typeof v === "string" && v ? v : nul
 // GET de teste no navegador.
 export async function GET() {
   const cfg = evolutionConfig();
-  return NextResponse.json({ status: "webhook ativo", provedor: "evolution", instancia: cfg ? cfg.instance : "—" });
+  return NextResponse.json({ status: "webhook ativo", provedor: "evolution", instancia: cfg ? await nomeDaInstancia() : "—" });
 }
 
 export async function POST(req: NextRequest) {
@@ -55,10 +55,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Isolamento de instância (uma Evolution pode hospedar vários números).
+  // A do CRM pode ter mudado (crm → crm-2, quando a anterior travou) e mora no
+  // banco: antes de recusar, relê sem o cache — a troca pode ter acabado de
+  // acontecer em outra cópia do servidor.
   const instancia = str(body.instance);
-  if (instancia && instancia !== cfg.instance) {
-    await registrarDiag({ dir: "-", phone: null, nome: instancia, texto: `esperava a instância "${cfg.instance}"`, status: "outra-instancia" });
-    return NextResponse.json({ ignorado: "outra instância" });
+  if (instancia && instancia !== (await nomeDaInstancia())) {
+    const ativa = await nomeDaInstancia({ forcar: true });
+    if (instancia !== ativa) {
+      await registrarDiag({ dir: "-", phone: null, nome: instancia, texto: `esperava a instância "${ativa}"`, status: "outra-instancia" });
+      return NextResponse.json({ ignorado: "outra instância" });
+    }
   }
 
   const evento = String(body.event ?? "").toLowerCase().replace(/_/g, ".");

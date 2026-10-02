@@ -54,6 +54,11 @@ async function montarPrincipal() {
   await principal.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "vendedorId" text`);
   await principal.$executeRawUnsafe(`INSERT INTO "Configuracao" VALUES ('manutencao.v45','ok') ON CONFLICT DO NOTHING`);
   await principal.$executeRawUnsafe(`INSERT INTO "Configuracao" VALUES ('whatsapp.pausa.v1','pausado') ON CONFLICT (chave) DO UPDATE SET valor='pausado'`);
+  // O principal trocou para crm-2 no dia 1º; o provisório, para crm-3 depois (crm-2 travou também).
+  await principal.$executeRawUnsafe(
+    `INSERT INTO "Configuracao" VALUES ('whatsapp.instancia.ativa', $1) ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor`,
+    JSON.stringify({ base: "crm", nome: "crm-2", anterior: "crm", desde: "2026-10-01T12:00:00.000Z" }),
+  );
   await principal.$executeRawUnsafe(
     `INSERT INTO "Configuracao" VALUES ('frase_dia.historico', $1) ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor`,
     JSON.stringify([{ d: "2026-09-20", f: "Frase antiga um", a: "Autor A" }, { d: "2026-09-21", f: "Frase antiga dois", a: "Autor B" }]),
@@ -136,6 +141,7 @@ async function montarProvisorio(csP: L[]) {
     { chave: "ia.somente_gratuitos", valor: "false" },
     { chave: "manutencao.v44", valor: "ok" },
     { chave: "filtro.contatos.termos", valor: "[\"teste\"]" },
+    { chave: "whatsapp.instancia.ativa", valor: JSON.stringify({ base: "crm", nome: "crm-3", anterior: "crm-2", desde: "2026-10-02T12:00:00.000Z" }) },
     { chave: "frase_dia.historico", valor: JSON.stringify([{ d: "2026-09-21", f: "Frase antiga dois", a: "Autor B" }, { d: "2026-09-25", f: "Frase da semana", a: "Autor C" }]) },
   ]);
 }
@@ -214,6 +220,7 @@ async function main() {
   confere((await um<L>(principal, `SELECT valor FROM "Configuracao" WHERE chave='whatsapp.pausa.v1'`)).valor === "pausado", "trava do WhatsApp continua PAUSADA (o 'liberado' do provisório não veio)");
   confere((await n(principal, `SELECT count(*)::int n FROM "Configuracao" WHERE chave='ia.somente_gratuitos'`)) === 0, "trava de IA paga não foi afrouxada");
   confere((await n(principal, `SELECT count(*)::int n FROM "Configuracao" WHERE chave='filtro.contatos.termos'`)) === 1, "configuração que o principal não tinha veio");
+  confere(JSON.parse(String((await um<L>(principal, `SELECT valor FROM "Configuracao" WHERE chave='whatsapp.instancia.ativa'`)).valor)).nome === "crm-3", "instância do WhatsApp: vale a troca mais nova (crm-3 do provisório, não a crm-2 travada)");
   const hist = JSON.parse(String((await um<L>(principal, `SELECT valor FROM "Configuracao" WHERE chave='frase_dia.historico'`)).valor));
   confere(hist.length === 3 && hist[2].f === "Frase da semana", "histórico da motivação do dia juntou os dois bancos, sem repetir");
   confere((await um<L>(principal, `SELECT "estagioVenda" FROM "OrientadorAnalise" WHERE "clienteId"=$1`, a)).estagioVenda === "novo", "leitura do Orientador mais recente ficou");

@@ -21,6 +21,7 @@
 import { PrismaClient } from "@prisma/client";
 import { ehFalhaDeConexao } from "@/lib/falha-conexao";
 import { completarColunas } from "@/lib/coluna-que-falta";
+import { CHAVE_INSTANCIA_ATIVA, instanciaQueVemNaVolta } from "@/lib/whatsapp-instancia-nome";
 import {
   type Linha, chavesDoClienteNoProvisorio, indiceDeClientes, completarCliente,
   chavesDaConversa, completarConversa, tratarConversaNova, chaveDaMensagem, tratarMensagem,
@@ -460,12 +461,22 @@ async function etapaConfiguracoes(ctx: Ctx, aplicar: boolean): Promise<Resultado
   );
   let travas = 0;
   const novas: { chave: string; valor: string }[] = [];
-  let historico: string | null = null;
+  // Chaves em que o principal já tem valor, mas o do provisório tem de valer.
+  const sobrepor: { chave: string; valor: string }[] = [];
+  let historico = false;
   for (const c of doProvisorio) {
     if (!configPodeVir(c.chave)) { travas++; continue; }
     if (c.chave === CHAVE_HISTORICO_FRASE) {
       const junto = juntarHistoricoFrase(doPrincipal.get(c.chave) ?? null, c.valor);
-      if (junto !== doPrincipal.get(c.chave)) historico = junto;
+      if (junto !== doPrincipal.get(c.chave)) { sobrepor.push({ chave: c.chave, valor: junto }); historico = true; }
+      else r.jaExistiam++;
+      continue;
+    }
+    // Instância do WhatsApp: se o provisório trocou depois (crm-2 → crm-3),
+    // a do principal já travou — voltar para ela seria voltar para o zumbi.
+    if (c.chave === CHAVE_INSTANCIA_ATIVA && doPrincipal.has(c.chave)) {
+      const vem = instanciaQueVemNaVolta(doPrincipal.get(c.chave), c.valor);
+      if (vem) sobrepor.push({ chave: c.chave, valor: vem });
       else r.jaExistiam++;
       continue;
     }
@@ -476,12 +487,12 @@ async function etapaConfiguracoes(ctx: Ctx, aplicar: boolean): Promise<Resultado
   r.observacao = `${travas} ficaram de fora de propósito (travas de envio e de IA paga, marcas de manutenção e contadores do dia)${historico ? "; o histórico da motivação do dia junta os dois" : ""}`;
   if (!aplicar) return r;
   r.gravadas = await inserir(ctx.destino, "Configuracao", novas, ["chave", "valor"]);
-  if (historico) {
+  for (const s of sobrepor) {
     await ctx.destino.$executeRawUnsafe(
       `INSERT INTO "Configuracao" (chave, valor) VALUES ($1, $2) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor`,
-      CHAVE_HISTORICO_FRASE, historico,
+      s.chave, s.valor,
     );
-    r.atualizadas = 1;
+    r.atualizadas++;
   }
   return r;
 }

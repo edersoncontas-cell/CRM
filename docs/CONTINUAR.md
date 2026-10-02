@@ -12,9 +12,37 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Evolution zumbi: esperar assentar depois de reiniciar,
-apagar e recriar conduzidos pela tela, erro legível"** (01/10).
-**1.360 testes passando** (116 arquivos), lint e build limpos.
+Último commit com código: **"WhatsApp travado: o CRM cria uma instância nova (crm-2)
+quando a Evolution não deixa apagar a velha"** (02/10).
+**1.377 testes passando** (117 arquivos), lint e build limpos.
+
+**02/10 — 5ª vez: "não vai, resolva me entregue funcionando".** O print novo mostrou
+que reiniciar NÃO cura o zumbi dele: "depois de reiniciar: open → logout falhou:
+Connection Closed → apagou de novo recusado: [object Object]", e a 2ª rodada
+idêntica. O `[object Object]` vem da própria Evolution (texto literal). Não há
+saída pela API para aquela instância. O que mudou:
+- **Instância nova com outro nome, sozinha.** Quando apagar é recusado,
+  `trocarInstanciaWhatsAppAction` → `criarInstanciaNovaEvolution` cria
+  `crm-2` (depois `crm-3`…) já com webhook, e grava no banco
+  (`whatsapp.instancia.ativa` = `{base, nome, anterior, desde}`) — sem mexer na
+  Vercel. Vale só enquanto `base` = `EVOLUTION_INSTANCE` (se ele trocar a
+  variável, a variável manda). Regras puras: `lib/whatsapp-instancia-nome.ts`.
+- **Todo caminho usa a que vale**: `evoInstancia()` devolve a marca
+  `__INSTANCIA_DO_CRM__` e `evoFetch` troca pelo nome do banco (cache de 20 s;
+  status, QR, diagnóstico, desconectar e apagar releem com `forcar`). O webhook
+  aceita a instância ativa (relê o banco antes de recusar); a velha, se acordar,
+  cai como "outra-instancia". Mídia de mensagem antiga tenta a instância
+  `anterior` quando a ativa não tem.
+- **Zumbi confirmado para na 1ª rodada** (`zumbi: true` em `apagarEvolution`):
+  a 2ª rodada era idêntica e só gastava 20 s.
+- **Volta do provisório**: a troca mais nova vence (`instanciaQueVemNaVolta`),
+  provado em `scripts/provar-trazer-provisorio.ts`.
+- Evolution falsa com várias instâncias (`/tmp/claude-0/shots/evolution-presa.mjs`,
+  modos `zumbi-eterno` e `zumbi-sem-criar`): Refazer do zero → QR da `crm-2` em
+  12 s; Desconectar → 37 s; mensagem pela `crm-2` grava, pela `crm` é ignorada.
+- **Fica na Evolution dele**: a instância `crm` zumbi (não dá para apagar pela
+  API). Reiniciar o serviço da Evolution no servidor dela limpa; e no celular
+  pode sobrar um aparelho antigo em Aparelhos conectados.
 
 **01/10 — 3ª e 4ª vez: "continua não permitindo desconectar, me entregue com QR novo".**
 Daqui NÃO se alcança a Evolution dele (sem URL, sem chave, sem rede). O PRINT dele

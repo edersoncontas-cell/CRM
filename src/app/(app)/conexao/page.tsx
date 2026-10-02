@@ -41,7 +41,7 @@ const EXPLICACAO_STATUS: Record<string, string> = {
   eco: "cópia de uma mensagem que o próprio CRM enviou — ignorada.",
   duplicado: "a Evolution reenviou a mesma mensagem — ignorada.",
   "chave-recusada": "a Evolution chamou com uma chave que o CRM não reconhece — clique em Configurar webhook agora.",
-  "outra-instancia": "chamada de OUTRA instância da Evolution — confira EVOLUTION_INSTANCE na Vercel.",
+  "outra-instancia": "chamada de OUTRA instância da Evolution, ignorada (a antiga, se o CRM trocou de instância depois de ela travar; senão, confira EVOLUTION_INSTANCE na Vercel).",
 };
 
 const CORES_STATUS: Record<string, string> = {

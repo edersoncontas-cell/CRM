@@ -1334,7 +1334,7 @@ export async function configurarWebhookEvolutionAction(): Promise<{ ok: boolean;
   return { ...r, url };
 }
 
-// Cria a instância na Evolution (nome de EVOLUTION_INSTANCE) já com o webhook
+// Cria a instância na Evolution (com o nome da instância que vale: EVOLUTION_INSTANCE, ou crm-2… se o CRM trocou) já com o webhook
 // apontando para este CRM. Usado pelo botão "Criar instância" em /conexao.
 export async function criarInstanciaEvolutionAction(): Promise<{ ok: boolean; erro?: string; qr?: string | null }> {
   const origem = zapi.origemPublicaDaRequisicao(headers());
@@ -1376,7 +1376,7 @@ export async function desconectarZapi(confirmacao?: string): Promise<{ ok: boole
 // Apaga a instância na Evolution (a sessão presa não obedece ao logout). Quem
 // chama cria outra em seguida (criarInstanciaEvolutionAction, com o webhook) e
 // o QR novo nasce daí. Pede confirmação própria ("REFAZER") — é mais que desconectar.
-export async function apagarConexaoWhatsAppAction(confirmacao?: string): Promise<{ ok: boolean; erro?: string; passos?: string[] }> {
+export async function apagarConexaoWhatsAppAction(confirmacao?: string): Promise<{ ok: boolean; erro?: string; passos?: string[]; zumbi?: boolean }> {
   if (confirmacao !== "REFAZER") return { ok: false, erro: "Não confirmado — nada foi alterado." };
   const r = await zapi.apagarInstanciaEvolution();
   await registrarAudit({
@@ -1386,7 +1386,28 @@ export async function apagarConexaoWhatsAppAction(confirmacao?: string): Promise
       : `Refazer a conexão do WhatsApp falhou ao apagar a instância: ${r.erro ?? "sem motivo"} · ${r.passos.join(", ")}.`,
   }).catch(() => {});
   revalidatePath("/conexao");
-  return { ok: r.ok, erro: r.erro, passos: r.passos };
+  return { ok: r.ok, erro: r.erro, passos: r.passos, zumbi: r.zumbi };
+}
+
+// Quando a Evolution não deixa apagar a instância travada (o zumbi: diz
+// "open", o socket está morto, logout e apagar recusados, reiniciar não cura),
+// o CRM cria OUTRA instância com o próximo nome (crm-2…), já com o webhook, e
+// passa a usá-la — guardado no banco, sem mexer na Vercel. A tela chama isto
+// sozinha depois que o apagar falha; mesma confirmação ("REFAZER").
+export async function trocarInstanciaWhatsAppAction(confirmacao?: string): Promise<{ ok: boolean; erro?: string; qr?: string | null; nome?: string; anterior?: string; passos?: string[] }> {
+  if (confirmacao !== "REFAZER") return { ok: false, erro: "Não confirmado — nada foi alterado." };
+  const origem = zapi.origemPublicaDaRequisicao(headers());
+  if (origem) await zapi.confirmarUrlPublica(origem).catch(() => {});
+  const url = await zapi.urlWebhookCrm();
+  const r = await zapi.criarInstanciaNovaEvolution(url);
+  await registrarAudit({
+    acao: "perfil_atualizado", origem: "usuario",
+    descricao: r.ok
+      ? `WhatsApp: a instância "${r.anterior}" travou e a Evolution não deixou apagar — o CRM passou a usar a instância nova "${r.nome}" · ${r.passos.join(", ")}.`
+      : `WhatsApp: criar uma instância nova no lugar da travada falhou: ${r.erro ?? "sem motivo"} · ${r.passos.join(", ")}.`,
+  }).catch(() => {});
+  revalidatePath("/conexao");
+  return { ok: r.ok, erro: r.erro, qr: r.qr, nome: r.nome, anterior: r.anterior, passos: r.passos };
 }
 
 // "Verificar e religar agora": o mesmo vigia que roda de 5 em 5 minutos.
