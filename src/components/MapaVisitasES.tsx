@@ -6,7 +6,7 @@ import L from "leaflet";
 import type { GeoJsonObject } from "geojson";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
-import { CENTRO_ES, LIMITES_ES } from "@/lib/municipios-es";
+import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
 
 export type VisitaMapa = {
   id: string;
@@ -23,8 +23,6 @@ export type VisitaMapa = {
 };
 
 export type DiaMapa = { iso: string; nome: string; label: string; ehHoje: boolean };
-
-const URL_CONTORNO_ES = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/32?formato=application/vnd.geo+json&qualidade=minima";
 
 function iconeNumero(n: number, hoje: boolean): L.DivIcon {
   const tamanho = 30;
@@ -46,15 +44,19 @@ export type AgendaProxima = {
   itens: { id: string; titulo: string; hora: string; cidade: string | null; tipo: "visita" | "evento" | "reuniao"; clienteId: string | null; status: string | null }[];
 };
 
-export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [] }: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[] }) {
+export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [], mapa }: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[]; mapa: MapaDaArea }) {
   const [dia, setDia] = useState(diaInicial);
-  const [contorno, setContorno] = useState<GeoJsonObject | null>(null);
+  const [contornos, setContornos] = useState<GeoJsonObject[]>([]);
 
+  // Contorno dos estados da área de atuação (Configurações).
+  const codigos = mapa.estados.map((e) => e.codigo).join(",");
   useEffect(() => {
     let ativo = true;
-    fetch(URL_CONTORNO_ES).then((r) => (r.ok ? r.json() : null)).then((g) => { if (ativo && g) setContorno(g as GeoJsonObject); }).catch(() => {});
+    Promise.all(codigos.split(",").filter(Boolean).map((c) =>
+      fetch(urlContornoEstado(Number(c))).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    )).then((gs) => { if (ativo) setContornos(gs.filter(Boolean) as GeoJsonObject[]); });
     return () => { ativo = false; };
-  }, []);
+  }, [codigos]);
 
   // Compromisso fixo (reunião de segunda) sempre primeiro; depois por hora.
   const doDia = useMemo(() => visitas.filter((v) => v.dataIso === dia).sort((a, b) => Number(!!b.fixo) - Number(!!a.fixo) || a.hora.localeCompare(b.hora)), [visitas, dia]);
@@ -77,10 +79,10 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
         })}
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_300px]">
-        <MapContainer center={CENTRO_ES} zoom={8} minZoom={6} maxBounds={LIMITES_ES} maxBoundsViscosity={0.8} scrollWheelZoom={false}
+        <MapContainer bounds={mapa.inicial} minZoom={4} maxBounds={mapa.limites} maxBoundsViscosity={0.8} scrollWheelZoom={false}
           style={{ height: 460, width: "100%", borderRadius: "1rem", border: "1px solid #e2e8f0" }}>
           <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {contorno && <GeoJSON data={contorno} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />}
+          {contornos.map((c, i) => <GeoJSON key={i} data={c} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />)}
           {rota.length > 1 && <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />}
           {comCoord.map((v, i) => (
             <Marker key={v.id} position={[v.lat!, v.lng!]} icon={iconeNumero(i + 1, !!diaSel?.ehHoje)}>

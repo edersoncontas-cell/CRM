@@ -7,6 +7,7 @@
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { nomesDosEstadosDaArea } from "@/lib/area-atuacao";
 import { agruparDuplicados, mesclarCampos, telefoneDoNome, type ClienteParaDedup, type GrupoDuplicados } from "@/lib/clientes-duplicados-regra";
 import { nomeGenerico } from "@/lib/google-contatos-util";
 
@@ -34,8 +35,11 @@ export type PreviaGrupo = { fica: { id: string; nome: string; telefone: string |
 export type PreviaDuplicados = { totalGrupos: number; totalSomem: number; grupos: PreviaGrupo[] };
 
 async function carregarGrupos(): Promise<GrupoDuplicados<ClienteParaDedup>[]> {
-  const clientes = await db.cliente.findMany({ select: SELECAO_DEDUP });
-  return agruparDuplicados(clientes);
+  const [clientes, cidades] = await Promise.all([
+    db.cliente.findMany({ select: SELECAO_DEDUP }),
+    nomesDosEstadosDaArea().catch(() => undefined),
+  ]);
+  return agruparDuplicados(clientes, cidades);
 }
 
 export async function previaDuplicados(limite = 40): Promise<PreviaDuplicados> {

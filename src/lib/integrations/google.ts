@@ -14,6 +14,8 @@
 
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
+import { lerAreaAtuacao, ufDoMunicipioNaArea } from "@/lib/area-atuacao";
+import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 import type { ContatoGoogle } from "@/lib/google-contatos-util";
 export type { ContatoGoogle };
 
@@ -301,9 +303,17 @@ export async function sincronizarVisitaComAgenda(visitaId: string): Promise<void
     inicio: v.data,
     minutos: 60,
     descricao,
-    local: v.cliente.municipio ? `${v.cliente.municipio.nome} - ES` : undefined,
+    local: v.cliente.municipio ? await localDaVisita(v.cliente.municipio.nome) : undefined,
   });
   if (id) await db.visita.update({ where: { id: visitaId }, data: { googleEventId: id } });
+}
+
+/** "Castelo - ES": a UF vem da área de atuação; "Viana (MA)" vira "Viana - MA". */
+async function localDaVisita(municipio: string): Promise<string> {
+  const area = await lerAreaAtuacao().catch(() => AREA_PADRAO);
+  const uf = ufDoMunicipioNaArea(municipio, area);
+  const nome = municipio.replace(/\s\([A-Z]{2}\)$/, "");
+  return uf ? `${nome} - ${uf}` : nome;
 }
 
 export async function removerEventoDaVisita(visitaId: string): Promise<void> {

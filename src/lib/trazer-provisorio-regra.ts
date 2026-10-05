@@ -176,10 +176,14 @@ export function tratarEnvio(e: Linha): Linha {
 // Só entra chave que o principal NÃO tem — o que ele configurou lá vale. E
 // algumas nunca vêm: as travas (envio do WhatsApp e IA paga) nascem no lado
 // seguro e só ele muda, na tela; marcas de manutenção e contadores do dia são
-// de cada banco.
+// de cada banco. A área de atuação também não: ela só vale junto com a marca
+// "atendo / fora da área" de cada cidade, que salvar acerta no MESMO banco —
+// a chave sozinha chegaria dizendo uma lista e as cidades seguindo outra.
+// Depois da volta, ele salva a área de novo em Configurações (um clique).
 const CONFIG_NUNCA = [
   "whatsapp.pausa.", "ia.somente_gratuitos", "manutencao.", "provisorio.", "zeus.ia_usada.",
   "autofix.cota", "whatsapp.vigia", "whatsapp.resgate", "whatsapp.qr.", "diag.", "orientador.analises.", "limpeza.bloqueio.",
+  "area.atuacao",
 ];
 export function configPodeVir(chave: string): boolean {
   return !CONFIG_NUNCA.some((p) => chave === p || chave.startsWith(p));

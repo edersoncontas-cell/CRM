@@ -11,6 +11,7 @@ import { RecarregarNoDiaNovo } from "@/components/RecarregarNoDiaNovo";
 import { Painel, Anel, Delta, Chip, CalendarioVisitas } from "@/components/dashboard-ui";
 import { GraficoEvolucao, GraficoTicketPorAno, GraficoDonut, GraficoBarrasHorizontais } from "@/components/DashboardVendas";
 import { MapaVendasWrapper } from "@/components/MapaVendasWrapper";
+import { mapaDaAreaOuPadrao } from "@/lib/area-atuacao";
 import { carregarVendasFaturadas, resumoVendas } from "@/lib/vendas-dashboard";
 import { lerParametros } from "@/lib/parametros";
 import { calcularRitmoMetas } from "@/lib/metas";
@@ -64,7 +65,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     negociacoes, perdidasAno, futuros, demandasHoje,
     visitasSemanaAgendadas, negociosCriadosSemana,
     total30DiasSemContato, colunasFunil,
-    vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias,
+    vendasFaturadas, visitasMes, clientesProximaVisitaMes, eventosMes, conversados, cotacoes, noticias, mapa,
   ] = await Promise.all([
     db.negociacao.findMany({ where: { status: "aberta" }, include: { cliente: true } }),
     // As perdidas do ano escolhido. O funil só desenha o que está aberto, mas
@@ -116,6 +117,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     contarClientesConversados(),
     obterCotacoes(),
     obterNoticias(),
+    // Enquadramento e contorno do mapa: a área de atuação (Configurações).
+    mapaDaAreaOuPadrao(),
   ]);
 
   const { metaAnualVendas: META_ANUAL_VENDAS, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
@@ -458,10 +461,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </Painel>
       </div>
 
-      {/* ── Linha 3: mapa do ES + linhas/cidades ── */}
+      {/* ── Linha 3: mapa da área de atuação + linhas/cidades ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Painel className="lg:col-span-2" titulo="Vendas por cidade — Espírito Santo" subtitulo="cifrão = cidade com máquina faturada (município do cadastro do cliente); atualiza sozinho">
-          <MapaVendasWrapper pontosIniciais={resumo.pontosMapa} pontosTudoIniciais={resumo.pontosMapaTudo} ano={anoSel} />
+        <Painel className="lg:col-span-2" titulo={`Vendas por cidade — ${mapa.titulo}`} subtitulo="cifrão = cidade com máquina faturada (município do cadastro do cliente); atualiza sozinho">
+          <MapaVendasWrapper pontosIniciais={resumo.pontosMapa} pontosTudoIniciais={resumo.pontosMapaTudo} ano={anoSel} mapa={mapa} />
         </Painel>
         <div className="grid grid-cols-1 gap-3">
           <Painel titulo="Vendas por linha" subtitulo={`New Holland × Dynapac em ${anoSel}`}>

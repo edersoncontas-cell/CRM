@@ -21,17 +21,22 @@ export type CerebroTool = {
   executar: (input: Record<string, unknown>) => Promise<ToolResult>;
 };
 
+import { municipioDaArea } from "@/lib/area-atuacao";
+
 const s = (v: unknown): string => (v == null ? "" : String(v));
 const n = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 async function acharOuCriarMunicipio(nome: string) {
   const alvo = nome.trim();
   if (!alvo) return null;
-  const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-  const todos = await db.municipio.findMany();
-  let m = todos.find((x) => norm(x.nome) === norm(alvo)) ?? null;
-  if (!m) m = await db.municipio.create({ data: { nome: alvo } });
-  return m;
+  // Município da área de atuação: com o nome oficial e coordenada (mapa).
+  const daArea = await municipioDaArea(alvo).catch(() => null);
+  if (daArea) return daArea;
+  // Fora dos estados dele: o vendedor pediu com todas as letras, então
+  // cadastra como escreveu — mas como "fora da área".
+  const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const todos = await db.municipio.findMany({ select: { id: true, nome: true } });
+  return todos.find((x) => norm(x.nome) === norm(alvo)) ?? (await db.municipio.create({ data: { nome: alvo, foraDeArea: true, regiao: "Fora da área" }, select: { id: true, nome: true } }));
 }
 
 // ── Tools de leitura ──────────────────────────────────────────────────────

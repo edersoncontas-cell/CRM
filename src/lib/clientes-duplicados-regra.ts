@@ -31,12 +31,16 @@ export function telefoneEfetivo(c: { nome: string; telefone: string | null }): s
 // Nome sem a cidade colada no fim: "(ITA) Adailton Christophori Dores do
 // Rio Preto" e "(ITA) Adailton Christophori" são a mesma pessoa — o Google
 // guarda o município no nome, o CRM guarda no cadastro. Só tira quando sobra
-// nome de verdade (3+ letras) e a cidade é um município do ES.
-const CIDADES_NORMALIZADAS = [...NOMES_MUNICIPIOS_ES].map(normalizarTexto).sort((a, b) => b.length - a.length);
-export function chaveNomeSemCidade(nome: string): string | null {
+// nome de verdade (3+ letras) e a cidade é um município da área de atuação
+// (sem área salva, os do ES — lib/area-atuacao.ts passa a lista).
+export function normalizarCidadesParaNome(cidades: string[]): string[] {
+  return Array.from(new Set(cidades.map(normalizarTexto).filter(Boolean))).sort((a, b) => b.length - a.length);
+}
+const CIDADES_NORMALIZADAS = normalizarCidadesParaNome(NOMES_MUNICIPIOS_ES);
+export function chaveNomeSemCidade(nome: string, cidadesNormalizadas: string[] = CIDADES_NORMALIZADAS): string | null {
   const n = chaveNome(nome);
   if (!n) return null;
-  for (const cidade of CIDADES_NORMALIZADAS) {
+  for (const cidade of cidadesNormalizadas) {
     if (n.endsWith(" " + cidade)) {
       const resto = n.slice(0, -cidade.length).trim();
       if (resto.length >= 3 && !/^[\d ]+$/.test(resto)) return resto;
@@ -84,7 +88,8 @@ export function escolherQuemFica<T extends ClienteParaDedup>(grupo: T[]): T {
   })[0];
 }
 
-export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): GrupoDuplicados<T>[] {
+export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[], cidades?: string[]): GrupoDuplicados<T>[] {
+  const cidadesNormalizadas = cidades ? normalizarCidadesParaNome(cidades) : CIDADES_NORMALIZADAS;
   const pai = new Map<string, string>();
   const achar = (x: string): string => {
     let r = x;
@@ -110,7 +115,7 @@ export function agruparDuplicados<T extends ClienteParaDedup>(clientes: T[]): Gr
   for (const c of clientes) {
     const t = chaveTelefone(telefoneEfetivo(c));
     if (t) { const outro = porTelefone.get(t); if (outro) marcar(outro, c.id, "telefone"); else porTelefone.set(t, c.id); }
-    const n = chaveNomeSemCidade(c.nome);
+    const n = chaveNomeSemCidade(c.nome, cidadesNormalizadas);
     if (n) { if (!porNome.has(n)) porNome.set(n, []); porNome.get(n)!.push(c); }
   }
 

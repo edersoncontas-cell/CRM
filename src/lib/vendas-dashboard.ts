@@ -6,6 +6,8 @@
 
 import { db } from "@/lib/db";
 import { coordenadasMunicipioES } from "@/lib/municipios-es";
+import { lerAreaAtuacao, coordenadasNaArea } from "@/lib/area-atuacao";
+import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 import { anosParaSeletor } from "@/lib/data-faturamento";
 
 export const META_ANUAL_VENDAS = 40;
@@ -42,6 +44,14 @@ export async function carregarVendasFaturadas(): Promise<VendaDash[]> {
       cliente: { select: { id: true, nome: true, municipio: { select: { id: true, nome: true, lat: true, lng: true } } } },
     },
   });
+  // Cidade sem coordenada no banco: a da base do IBGE, nos estados da área
+  // de atuação (Configurações) — senão a venda não vira cifrão no mapa.
+  const area = await lerAreaAtuacao().catch(() => AREA_PADRAO);
+  const comCoordenada = (m: VendaDash["municipio"]): VendaDash["municipio"] => {
+    if (!m || (m.lat != null && m.lng != null)) return m;
+    const c = coordenadasNaArea(m.nome, area);
+    return c ? { ...m, lat: c.lat, lng: c.lng } : m;
+  };
   return rows.map((r) => ({
     id: r.id,
     valor: r.valor ?? 0,
@@ -50,14 +60,15 @@ export async function carregarVendasFaturadas(): Promise<VendaDash[]> {
     faturadoEm: r.faturadoEm!,
     clienteId: r.cliente.id,
     clienteNome: r.cliente.nome,
-    municipio: r.cliente.municipio,
+    municipio: comCoordenada(r.cliente.municipio),
   }));
 }
 
 const doAno = (vendas: VendaDash[], ano: number | null) =>
   ano == null ? vendas : vendas.filter((v) => v.faturadoEm.getFullYear() === ano);
 
-// Cidades com venda -> ponto no mapa (coordenada do banco ou da tabela do ES).
+// Cidades com venda -> ponto no mapa (coordenada do banco, da área de
+// atuação — preenchida ao carregar — ou, por último, da tabela do ES).
 export function pontosVendas(vendas: VendaDash[], ano: number | null): PontoVenda[] {
   const porMunicipio = new Map<string, PontoVenda>();
   for (const v of doAno(vendas, ano)) {

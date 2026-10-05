@@ -12,6 +12,8 @@
 
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
+import { lerAreaAtuacao } from "@/lib/area-atuacao";
+import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 
 const CHAVE_ULTIMA = "licitacoes.ultima";
 const CACHE_MS = 5 * 60 * 1000;
@@ -43,7 +45,7 @@ const TEMPO_MS = 12000;
  * pagina de qualquer jeito.
  */
 export const POR_PAGINA = 50;
-/** Teto de páginas por modalidade — o ES inteiro cabe com folga. */
+/** Teto de páginas por modalidade e estado — o ES inteiro cabe com folga. */
 export const MAX_PAGINAS = 20;
 /** Orçamento de tempo da rodada inteira: o cron da Vercel corta em 60 s. */
 export const PRAZO_TOTAL_MS = 40_000;
@@ -54,7 +56,7 @@ export const PRAZO_TOTAL_MS = 40_000;
  * resposta a isso: o robô se identifica, respira entre as páginas e recua
  * quando é mandado recuar.
  */
-export const USER_AGENT = "CRM-NewHolland-Dynapac-ES/1.0 (robô de licitações de máquinas; contato pelo CRM)";
+export const USER_AGENT = "CRM-Vendas-Maquinas/1.0 (robô de licitações de máquinas; contato pelo CRM)";
 export const PAUSA_ENTRE_PAGINAS_MS = 250;
 export const TENTATIVAS_429 = 3;
 
@@ -214,8 +216,8 @@ export function esperaDoRetryAfter(cabecalho: string | null, tentativa: number):
  *     tenta de novo, em vez de desistir na hora e perder a modalidade inteira.
  *  3. PACIÊNCIA ENTRE PÁGINAS — ver buscarModalidade.
  */
-async function buscarPagina(modalidade: number, dataFinal: string, pagina: number): Promise<{ itens: Obj[]; totalPaginas: number }> {
-  const url = `${PNCP}?dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}&uf=ES&pagina=${pagina}&tamanhoPagina=${POR_PAGINA}`;
+async function buscarPagina(uf: string, modalidade: number, dataFinal: string, pagina: number): Promise<{ itens: Obj[]; totalPaginas: number }> {
+  const url = `${PNCP}?dataFinal=${dataFinal}&codigoModalidadeContratacao=${modalidade}&uf=${uf}&pagina=${pagina}&tamanhoPagina=${POR_PAGINA}`;
 
   for (let tentativa = 1; tentativa <= TENTATIVAS_429; tentativa++) {
     const res = await fetch(url, {
@@ -249,16 +251,16 @@ async function buscarPagina(modalidade: number, dataFinal: string, pagina: numbe
  * Lê a modalidade INTEIRA, página a página.
  *
  * Este era o defeito central: a busca pedia uma página só e parava. O PNCP
- * devolve todas as contratações abertas do Espírito Santo — milhares — e a
+ * devolve todas as contratações abertas do estado — milhares — e a
  * compra de máquina é um punhado no meio. Filtrar 50 registros sorteados de
  * milhares e concluir "nenhum edital de máquina" não era uma resposta: era um
  * palpite. Agora o robô varre tudo e o painel passa a dizer quantos editais
  * de fato olhou.
  */
-async function buscarModalidade(modalidade: number, dataFinal: string, limite: number): Promise<{ itens: Obj[]; paginas: number }> {
+async function buscarModalidade(uf: string, modalidade: number, dataFinal: string, limite: number): Promise<{ itens: Obj[]; paginas: number }> {
   const todos: Obj[] = [];
   let paginas = 0;
-  const primeira = await buscarPagina(modalidade, dataFinal, 1);
+  const primeira = await buscarPagina(uf, modalidade, dataFinal, 1);
   todos.push(...primeira.itens);
   paginas = 1;
   const ate = Math.min(primeira.totalPaginas, MAX_PAGINAS);
@@ -269,7 +271,7 @@ async function buscarModalidade(modalidade: number, dataFinal: string, limite: n
     // Um respiro entre páginas. Disparar 100 requisições em rajada é o jeito
     // mais rápido de um portal público te barrar — e barrou.
     await dormir(PAUSA_ENTRE_PAGINAS_MS);
-    const r = await buscarPagina(modalidade, dataFinal, p);
+    const r = await buscarPagina(uf, modalidade, dataFinal, p);
     todos.push(...r.itens);
     paginas++;
     if (!r.itens.length) break;
@@ -277,10 +279,35 @@ async function buscarModalidade(modalidade: number, dataFinal: string, limite: n
   return { itens: todos, paginas };
 }
 
-/** Cidades da área de atuação (as que estão no CRM e não foram marcadas fora). */
-async function cidadesDaArea(): Promise<string[]> {
+type CidadesDoEstado = { uf: string; nomes: string[]; noCrm: (nomeDoEdital: string) => string };
+
+/**
+ * Cidades da área de atuação, por estado (Configurações → Área de atuação):
+ * o nome como o PNCP escreve e como o CRM grava ("Viana (MA)" quando há
+ * outro Viana). Sem área salva, as cidades marcadas "atendo" no banco, no
+ * estado de sempre.
+ */
+async function cidadesDaArea(): Promise<CidadesDoEstado[]> {
+  const area = await lerAreaAtuacao().catch(() => AREA_PADRAO);
+  if (area.configurada) {
+    return area.ufs.map((uf) => {
+      const daUf = area.municipios.filter((m) => m.uf === uf);
+      const crm = new Map(daUf.map((m) => [m.nome, m.crm ?? m.nome]));
+      return { uf, nomes: daUf.map((m) => m.nome), noCrm: (n: string) => crm.get(n) ?? n };
+    });
+  }
   const ms = await db.municipio.findMany({ where: { foraDeArea: false }, select: { nome: true } });
-  return ms.map((m) => m.nome);
+  return [{ uf: area.ufs[0], nomes: ms.map((m) => m.nome), noCrm: (n: string) => n }];
+}
+
+/**
+ * A ordem dos estados gira a cada hora: com vários estados, o prazo da rodada
+ * pode acabar antes do último — e ele não pode ficar sempre para trás.
+ */
+export function girarEstados<T>(lista: T[], agora: number = Date.now()): T[] {
+  if (lista.length < 2) return lista;
+  const k = Math.floor(agora / 3_600_000) % lista.length;
+  return [...lista.slice(k), ...lista.slice(0, k)];
 }
 
 /**
@@ -288,7 +315,8 @@ async function cidadesDaArea(): Promise<string[]> {
  * obterLicitacoes(), que só lê o que já está gravado.
  */
 export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
-  const cidades = await cidadesDaArea();
+  const porEstado = girarEstados(await cidadesDaArea());
+  const cidadesOlhadas = porEstado.reduce((n, e) => n + e.nomes.length, 0);
   const hoje = new Date();
   // Janela: editais com proposta aberta até 90 dias à frente.
   const ate = new Date(hoje.getTime() + 90 * 86400000);
@@ -300,26 +328,38 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
   let erro: string | null = null;
   let editaisLidos = 0;
 
-  for (const m of MODALIDADES) {
-    try {
-      const { itens, paginas } = await buscarModalidade(m.codigo, dataFinal, limite);
-      editaisLidos += itens.length;
-      leituras.push({ nome: m.nome, editaisLidos: itens.length, paginas, erro: null });
-      for (const bruto of itens) {
-        const it = normalizarItemPncp(bruto);
-        if (!it) continue;
-        const termos = termosDeMaquina(it.objeto);
-        if (!termos.length) continue;
-        const cidade = cidadeAtendida(it.cidade, cidades);
-        if (!cidade) continue;
-        achados.set(it.id, { ...it, cidade, termos });
+  // Um pedido ao PNCP por estado da área de atuação (o portal filtra por UF).
+  const variosEstados = porEstado.length > 1;
+  for (const estado of porEstado) {
+    if (!estado.nomes.length) continue;
+    for (const m of MODALIDADES) {
+      const nome = variosEstados ? `${m.nome} · ${estado.uf}` : m.nome;
+      // Com vários estados o prazo pode acabar: o que ficou de fora diz que
+      // ficou (a ordem gira a cada hora, e a próxima rodada soma).
+      if (variosEstados && Date.now() > limite) {
+        leituras.push({ nome, editaisLidos: 0, paginas: 0, erro: "sem tempo nesta rodada — fica para a próxima" });
+        continue;
       }
-    } catch (e) {
-      // Uma modalidade falhar não pode derrubar as outras.
-      const msg = e instanceof Error ? e.message : String(e);
-      erro = msg;
-      leituras.push({ nome: m.nome, editaisLidos: 0, paginas: 0, erro: msg });
-      console.error(`[licitacoes] modalidade ${m.nome} (${m.codigo}):`, e);
+      try {
+        const { itens, paginas } = await buscarModalidade(estado.uf, m.codigo, dataFinal, limite);
+        editaisLidos += itens.length;
+        leituras.push({ nome, editaisLidos: itens.length, paginas, erro: null });
+        for (const bruto of itens) {
+          const it = normalizarItemPncp(bruto);
+          if (!it) continue;
+          const termos = termosDeMaquina(it.objeto);
+          if (!termos.length) continue;
+          const cidade = cidadeAtendida(it.cidade, estado.nomes);
+          if (!cidade) continue;
+          achados.set(it.id, { ...it, cidade: estado.noCrm(cidade), termos });
+        }
+      } catch (e) {
+        // Uma modalidade falhar não pode derrubar as outras.
+        const msg = e instanceof Error ? e.message : String(e);
+        erro = msg;
+        leituras.push({ nome, editaisLidos: 0, paginas: 0, erro: msg });
+        console.error(`[licitacoes] modalidade ${m.nome} (${m.codigo}) ${estado.uf}:`, e);
+      }
     }
   }
 
@@ -346,7 +386,7 @@ export async function atualizarLicitacoes(): Promise<LicitacoesGuardadas> {
   const guardado: LicitacoesGuardadas = {
     em: new Date().toISOString(),
     itens: itens.slice(0, 40),
-    cidadesOlhadas: cidades.length,
+    cidadesOlhadas,
     editaisLidos,
     leituras,
     // Só reporta erro quando o robô não conseguiu LER nada. Erro numa

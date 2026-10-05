@@ -10,7 +10,9 @@ import { MapPin, Calendar, Clock, CheckCircle2, XCircle, CalendarClock, Users } 
 import { MapaVisitasWrapper } from "@/components/MapaVisitasWrapper";
 import { listarEventos, diasDoEvento, type EventoAgenda } from "@/lib/eventos-agenda";
 import type { VisitaMapa, AgendaProxima } from "@/components/MapaVisitasES";
-import { coordenadasMunicipioES, NOMES_MUNICIPIOS_ES } from "@/lib/municipios-es";
+import { coordenadasMunicipioES } from "@/lib/municipios-es";
+import { lerAreaAtuacao, cidadesParaSugerir, coordenadasNaArea, mapaDaAreaOuPadrao } from "@/lib/area-atuacao";
+import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 import { sugerirVisitasNaViagem } from "@/lib/visitas-na-viagem";
 import Link from "next/link";
 
@@ -58,7 +60,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
   const mesAnterior = mesCal === 1 ? `${anoCal - 1}-12` : `${anoCal}-${String(mesCal - 1).padStart(2, "0")}`;
   const mesProximo = mesCal === 12 ? `${anoCal + 1}-01` : `${anoCal}-${String(mesCal + 1).padStart(2, "0")}`;
 
-  const [visitas, clientesRaw, municipiosRaw] = await Promise.all([
+  const [visitas, clientesRaw, municipiosRaw, area, cidades, mapa] = await Promise.all([
     db.visita.findMany({
       include: { cliente: { include: { municipio: true } } },
       orderBy: { data: "asc" },
@@ -70,6 +72,10 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       select: { id: true, nome: true, _count: { select: { clientes: { where: { origem: { not: "prospect_ia" } } } } } },
       orderBy: { nome: "asc" },
     }),
+    // Área de atuação (Configurações): cidades sugeridas, coordenadas e mapa.
+    lerAreaAtuacao().catch(() => AREA_PADRAO),
+    cidadesParaSugerir().catch(() => [] as string[]),
+    mapaDaAreaOuPadrao(),
   ]);
   const cidadesComClientes = municipiosRaw.filter((m) => m._count.clientes > 0).map((m) => ({ id: m.id, nome: m.nome, total: m._count.clientes }));
   const clientes = clientesRaw.map((c) => ({ id: c.id, nome: c.nome, cidade: c.municipio?.nome ?? null }));
@@ -93,7 +99,6 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
       .filter((c) => c.status !== "nao_cliente")
       .map((c) => ({ id: c.id, nome: c.nome, cidade: c.municipio?.nome ?? null }))
   );
-  const cidades = NOMES_MUNICIPIOS_ES;
 
   const estaSemanaCompleta = visitas.filter((v) => v.data >= inicioSemana && v.data < fimSemanaCompleta);
   const estaSemanaUtil = estaSemanaCompleta.filter((v) => v.data < fimDiasUteis);
@@ -119,11 +124,12 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
     };
   });
 
-  // Pontos do mapa: cidade da visita (ou município do cadastro) → coordenada.
+  // Pontos do mapa: cidade da visita (ou município do cadastro) → coordenada,
+  // nos estados da área de atuação. A reunião da PME é em Vitória (ES) sempre.
   const coordVitoria = coordenadasMunicipioES("Vitória");
   const visitasMapa: VisitaMapa[] = estaSemanaCompleta.map((v) => {
     const cidade = v.cidade ?? v.cliente.municipio?.nome ?? null;
-    const coord = cidade ? coordenadasMunicipioES(cidade) ?? (v.cliente.municipio?.lat != null && v.cliente.municipio.lng != null ? { lat: v.cliente.municipio.lat, lng: v.cliente.municipio.lng } : null) : null;
+    const coord = cidade ? coordenadasNaArea(cidade, area) ?? (v.cliente.municipio?.lat != null && v.cliente.municipio.lng != null ? { lat: v.cliente.municipio.lat, lng: v.cliente.municipio.lng } : null) : null;
     return {
       id: v.id, clienteId: v.clienteId, clienteNome: v.cliente.nome, cidade, observacao: v.observacao,
       hora: horaLocal(v.data), dataIso: dataIsoBrasilia(v.data), lat: coord?.lat ?? null, lng: coord?.lng ?? null, status: v.status,
@@ -290,7 +296,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
-        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} proximos7={proximos7} />
+        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} proximos7={proximos7} mapa={mapa} />
       </section>
 
       <section className="mb-6">

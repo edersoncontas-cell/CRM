@@ -8,7 +8,7 @@ https://github.com/kelvins/municipios-brasileiros — csv/municipios.csv e
 csv/estados.csv, copiados em scripts/dados/. Para atualizar: baixe os dois CSV de
 novo para scripts/dados/ e rode `python3 scripts/gerar-municipios-brasil.py`.
 
-Formato: {"estados": [[uf, nome, lat, lng], ...],
+Formato: {"estados": [[uf, nome, lat, lng, codigo_ibge_da_uf], ...],
           "municipios": {uf: [[nome, lat, lng, ibge], ...]}}  (por nome, pt-BR)
 """
 import csv, json, os, locale
@@ -27,15 +27,20 @@ def chave(s):
     import unicodedata
     return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode().lower()
 
+# Nome oficial do IBGE onde a fonte veio sem acento (achado ao comparar com a
+# lista que o CRM já usava para o ES).
+CORRECOES = {3200706: "Atílio Vivácqua"}
+
 municipios = {}
 for m in ler("municipios.csv"):
+    m["nome"] = CORRECOES.get(int(m["codigo_ibge"]), m["nome"])
     uf = uf_por_codigo[m["codigo_uf"]]
     municipios.setdefault(uf, []).append([m["nome"], round(float(m["latitude"]), 4), round(float(m["longitude"]), 4), int(m["codigo_ibge"])])
 for uf in municipios:
     municipios[uf].sort(key=lambda x: chave(x[0]))
 
 saida = {
-    "estados": sorted([[e["uf"], e["nome"], float(e["latitude"]), float(e["longitude"])] for e in estados], key=lambda x: chave(x[1])),
+    "estados": sorted([[e["uf"], e["nome"], float(e["latitude"]), float(e["longitude"]), int(e["codigo_uf"])] for e in estados], key=lambda x: chave(x[1])),
     "municipios": dict(sorted(municipios.items())),
 }
 destino = os.path.join(RAIZ, "src", "lib", "municipios-brasil.json")

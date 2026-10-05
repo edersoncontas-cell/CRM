@@ -23,7 +23,9 @@ export type AcaoAudit =
   // Volta do banco provisório para o principal (Configurações).
   | "dados_provisorio_trazidos"
   // O que o vendedor fez no modo sem sinal e subiu quando a internet voltou.
-  | "offline_sincronizado";
+  | "offline_sincronizado"
+  // Estado(s) e municípios que ele atende (Configurações → Área de atuação).
+  | "area_atuacao_alterada";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

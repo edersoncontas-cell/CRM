@@ -8,11 +8,11 @@
 import dados from "@/lib/municipios-brasil.json";
 
 export type MunicipioBR = { nome: string; lat: number; lng: number; ibge: number; uf: string };
-export type EstadoBR = { uf: string; nome: string; lat: number; lng: number };
+export type EstadoBR = { uf: string; nome: string; lat: number; lng: number; codigo: number };
 
-const BASE = dados as unknown as { estados: [string, string, number, number][]; municipios: Record<string, [string, number, number, number][]> };
+const BASE = dados as unknown as { estados: [string, string, number, number, number][]; municipios: Record<string, [string, number, number, number][]> };
 
-export const ESTADOS_BR: EstadoBR[] = BASE.estados.map(([uf, nome, lat, lng]) => ({ uf, nome, lat, lng }));
+export const ESTADOS_BR: EstadoBR[] = BASE.estados.map(([uf, nome, lat, lng, codigo]) => ({ uf, nome, lat, lng, codigo }));
 const UFS = new Set(ESTADOS_BR.map((e) => e.uf));
 
 export function ufValida(uf: string): boolean {

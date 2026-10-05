@@ -22,11 +22,15 @@ import { lerParametros } from "@/lib/parametros";
 import { ParametrosNegocioForm } from "@/components/ParametrosNegocioForm";
 import { VoltaProvisorioCard } from "@/components/VoltaProvisorioCard";
 import { lerEstadoProvisorio } from "@/lib/trazer-provisorio-estado";
+import { AreaAtuacaoCard } from "@/components/AreaAtuacaoCard";
+import { estadoInicialDaArea } from "@/lib/area-atuacao";
+import { ESTADOS_BR } from "@/lib/municipios-brasil";
+import { UFS_LIBERADAS } from "@/lib/area-atuacao-regra";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio] = await Promise.all([
+  const [cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio, area] = await Promise.all([
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
@@ -37,6 +41,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     lerEstadoDuplicadosAction().catch(() => ({ previa: { totalGrupos: 0, totalSomem: 0, grupos: [] }, historico: [] })),
     lerEstadoLimpezaAction().catch(() => ({ previa: { apagar: 0, consertar: 0, porMotivo: {}, exemplos: [] }, historico: [] })),
     lerEstadoProvisorio(),
+    estadoInicialDaArea().catch(() => null),
   ]);
 
   const integracoes = [
@@ -80,6 +85,16 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
           valendo — só não há mais tela para mexer neles. */}
 
       <ParametrosNegocioForm p={parametros} />
+
+      {/* Municípios que ele atende — vale para o CRM inteiro (05/10). Por
+          enquanto só o ES (UFS_LIBERADAS em lib/area-atuacao-regra.ts). */}
+      {area ? (
+        <AreaAtuacaoCard estados={ESTADOS_BR.filter((e) => UFS_LIBERADAS.includes(e.uf)).map((e) => ({ uf: e.uf, nome: e.nome }))} inicial={area} />
+      ) : (
+        <Card className="mb-6">
+          <p className="text-sm text-red-700">Não consegui ler a área de atuação agora (banco sem resposta). O CRM segue usando a área de sempre; recarregue a tela em instantes.</p>
+        </Card>
+      )}
 
       {/* Visibilidade dos itens do menu lateral */}
       <Card className="mb-6">

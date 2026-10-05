@@ -484,7 +484,7 @@ async function etapaConfiguracoes(ctx: Ctx, aplicar: boolean): Promise<Resultado
     novas.push(c);
   }
   r.novas = novas.length;
-  r.observacao = `${travas} ficaram de fora de propósito (travas de envio e de IA paga, marcas de manutenção e contadores do dia)${historico ? "; o histórico da motivação do dia junta os dois" : ""}`;
+  r.observacao = `${travas} ficaram de fora de propósito (travas de envio e de IA paga, marcas de manutenção, contadores do dia e a área de atuação — salve-a de novo em Configurações)${historico ? "; o histórico da motivação do dia junta os dois" : ""}`;
   if (!aplicar) return r;
   r.gravadas = await inserir(ctx.destino, "Configuracao", novas, ["chave", "valor"]);
   for (const s of sobrepor) {

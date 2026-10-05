@@ -24,6 +24,7 @@ import { horaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { getWaSettings } from "@/lib/whatsapp-settings";
 import { normalizarCoaching, coachingVazio, coachingEstaVazio, dicasParaResposta, type Coaching } from "@/lib/zeus/orientador-coaching";
 import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, montarPromptCompacto, montarPromptCoaching } from "@/lib/zeus/orientador-prompt";
+import { validadorDaArea, municipioDaArea } from "@/lib/area-atuacao";
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
@@ -197,16 +198,12 @@ export async function aplicarFatosDaNota(clienteId: string, fatos: FatosNegociac
 
 async function aplicarFatos(clienteId: string, fatos: FatosNegociacao, temNota: boolean): Promise<void> {
   try {
-    // Cidade: só município do ES (municipioDoES já barrou o resto). Corrige
-    // até uma cidade errada já gravada, porque foi assim que um cliente de
-    // Guaçuí ficou marcado como sendo de Recife — e ninguém tinha como saber.
-    if (fatos.municipio) {
-      const muni = await db.municipio.upsert({
-        where: { nome: fatos.municipio },
-        create: { nome: fatos.municipio },
-        update: {},
-        select: { id: true },
-      });
+    // Cidade: só município dos estados da área de atuação (o validador já
+    // barrou o resto). Corrige até uma cidade errada já gravada, porque foi
+    // assim que um cliente de Guaçuí ficou marcado como sendo de Recife — e
+    // ninguém tinha como saber. Cidade nova nasce com coordenada (mapa).
+    const muni = fatos.municipio ? await municipioDaArea(fatos.municipio) : null;
+    if (muni) {
       await db.cliente.updateMany({
         where: { id: clienteId, NOT: { municipioId: muni.id } },
         data: { municipioId: muni.id },
@@ -361,6 +358,9 @@ export async function gerarAnaliseOrientador(args: {
       ? Math.max(0, Math.min(100, Math.round(parsed.probabilidadeFechamento)))
       : 50;
 
+    // Cidade: só município dos estados da área de atuação (Configurações).
+    const validarMunicipio = await validadorDaArea().catch(() => undefined);
+    const fatosNovos = normalizarFatos(parsed.fatos, validarMunicipio);
     const analiseNova: AnaliseOrientador = {
       resumoNegociacao: typeof parsed.resumoNegociacao === "string" ? parsed.resumoNegociacao : "",
       estagioVenda: ESTAGIOS.includes(parsed.estagioVenda) ? parsed.estagioVenda : "Lead",
@@ -373,10 +373,10 @@ export async function gerarAnaliseOrientador(args: {
       oportunidadesPerdidas,
       combinados: soTextos(parsed.combinados),
       pendencias: soTextos(parsed.pendencias),
-      coaching: comVisitaMarcada(normalizarCoaching(parsed), normalizarFatos(parsed.fatos)),
+      coaching: comVisitaMarcada(normalizarCoaching(parsed), fatosNovos),
       alertas,
       conversaEncerrada: parsed.conversaEncerrada === true,
-      fatos: normalizarFatos(parsed.fatos),
+      fatos: fatosNovos,
       pedidos: normalizarPedidos(parsed.pedidos),
     };
 

@@ -8,14 +8,13 @@ import type { GeoJsonObject } from "geojson";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
-import { CENTRO_ES, LIMITES_ES } from "@/lib/municipios-es";
+import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
 import { useTemaDash } from "@/components/TemaDashProvider";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import type { PontoVenda } from "@/lib/vendas-dashboard";
 
-// Contorno do estado (IBGE, gratuito, sem chave). Se a busca falhar, o mapa
-// segue só com os azulejos escuros — nada quebra.
-const URL_CONTORNO_ES = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/32?formato=application/vnd.geo+json&qualidade=minima";
+// Contorno dos estados da área de atuação (IBGE, gratuito, sem chave). Se a
+// busca falhar, o mapa segue só com os azulejos escuros — nada quebra.
 
 function iconeCifrao(vendas: number, max: number): L.DivIcon {
   const tamanho = Math.round(26 + (vendas / max) * 22);
@@ -31,23 +30,26 @@ function iconeCifrao(vendas: number, max: number): L.DivIcon {
 }
 
 export default function MapaVendasES({
-  pontosIniciais, pontosTudoIniciais, ano,
-}: { pontosIniciais: PontoVenda[]; pontosTudoIniciais: PontoVenda[]; ano: number }) {
+  pontosIniciais, pontosTudoIniciais, ano, mapa,
+}: { pontosIniciais: PontoVenda[]; pontosTudoIniciais: PontoVenda[]; ano: number; mapa: MapaDaArea }) {
   const T = useTemaDash();
   const [modo, setModo] = useState<"ano" | "tudo">("ano");
   const [pontosAno, setPontosAno] = useState(pontosIniciais);
   const [pontosTudo, setPontosTudo] = useState(pontosTudoIniciais);
-  const [contorno, setContorno] = useState<GeoJsonObject | null>(null);
+  const [contornos, setContornos] = useState<GeoJsonObject[]>([]);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
 
   useEffect(() => { setPontosAno(pontosIniciais); }, [pontosIniciais]);
   useEffect(() => { setPontosTudo(pontosTudoIniciais); }, [pontosTudoIniciais]);
 
+  const codigos = mapa.estados.map((e) => e.codigo).join(",");
   useEffect(() => {
     let ativo = true;
-    fetch(URL_CONTORNO_ES).then((r) => (r.ok ? r.json() : null)).then((g) => { if (ativo && g) setContorno(g as GeoJsonObject); }).catch(() => {});
+    Promise.all(codigos.split(",").filter(Boolean).map((c) =>
+      fetch(urlContornoEstado(Number(c))).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    )).then((gs) => { if (ativo) setContornos(gs.filter(Boolean) as GeoJsonObject[]); });
     return () => { ativo = false; };
-  }, []);
+  }, [codigos]);
 
   // Atualização "ao vivo": a cada 10 min (só com a tela visível) e sempre que a aba volta ao foco.
   useEffect(() => {
@@ -104,10 +106,9 @@ export default function MapaVendasES({
         </span>
       </div>
       <MapContainer
-        center={CENTRO_ES}
-        zoom={7}
-        minZoom={6}
-        maxBounds={LIMITES_ES}
+        bounds={mapa.inicial}
+        minZoom={4}
+        maxBounds={mapa.limites}
         maxBoundsViscosity={0.8}
         scrollWheelZoom={false}
         style={{ height: 420, width: "100%", borderRadius: "1rem", background: T.fundoSolido, border: `1px solid ${T.borda}` }}
@@ -118,9 +119,9 @@ export default function MapaVendasES({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           className="mapa-escuro"
         />
-        {contorno && (
-          <GeoJSON data={contorno} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />
-        )}
+        {contornos.map((c, i) => (
+          <GeoJSON key={i} data={c} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />
+        ))}
         {pontos.map((p) => (
           <Marker key={p.municipioId} position={[p.lat, p.lng]} icon={iconeCifrao(p.vendas, max)}>
             <Popup maxWidth={320}>

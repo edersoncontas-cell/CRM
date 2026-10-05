@@ -12,9 +12,36 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Testar recebimento na Conexão e resgate: o CRM puxa da
-Evolution o que o webhook não trouxe"** (02/10).
-**1.420 testes passando** (119 arquivos), lint e build limpos.
+Último commit com código: **"Área de atuação em Configurações: os municípios que ele
+atende valem no CRM inteiro (só ES por enquanto)"** (05/10).
+**1.446 testes passando** (120 arquivos), lint e build limpos.
+
+**05/10 — Área de atuação** (Configurações, card logo abaixo de Parâmetros). Ele
+pediu estado + municípios "valendo no sistema inteiro"; no meio do trabalho
+decidiu **"pode ser então só ES"** — o estado está fixo (`UFS_LIBERADAS = ["ES"]`
+em `lib/area-atuacao-regra.ts`) e ele marca os municípios.
+- Gravado em `Configuracao` `area.atuacao` (`{ufs, municipios, atualizadoEm}`),
+  **sem coluna nova**. Sem nada salvo (ou lixo), é a área de sempre e quem
+  atende continua sendo a marca `foraDeArea` do banco. Salvar sincroniza essa
+  marca (que o "para todos", as listas "Cidades que atendo / Fora da minha
+  área", o vínculo automático e as licitações já liam), cria o município que
+  falta **com coordenada** e preenche a que faltava. Só passa para "fora" o
+  município do IBGE que ele viu desmarcado: distrito / nome escrito diferente
+  fica como está e a tela lista (`ficamComoEstao`).
+- Base do IBGE do Brasil inteiro em `lib/municipios-brasil.json` (servidor só;
+  a tela pede por UF). Os 78 do ES batem com `municipios-es.ts` (teste).
+- Quem lê a área: mapas do Dashboard e de Visitas (abrem nas cidades atendidas,
+  `mapaDaAreaOuPadrao`), cidades sugeridas em Visitas (as dele primeiro),
+  coordenada das vendas, cidade que a IA grava (`validadorDaArea` /
+  `municipioDaArea` no pipeline, Orientador e Cérebro — nasce "fora" se não
+  está na lista dele), deduplicação de clientes, licitações (PNCP por UF da
+  área), local do evento no Google, `/api/municipios/[uf]` (base local, sem IBGE).
+- **Não vem na volta do provisório** (`CONFIG_NUNCA`): a chave sem a marca das
+  cidades diria uma lista e as cidades outra. Depois da volta, salvar de novo.
+- **Textos da IA continuam dizendo ES** (ele recusou a troca no meio). Para
+  abrir outro estado: `docs/PRODUTO-CONFIGURACOES.md` §2.
+- Avaliação "o que pode / não pode mudar" para vender o CRM:
+  `docs/PRODUTO-CONFIGURACOES.md`.
 
 **02/10 — 7ª vez: print às 10:18, a VPS dele (`147.15.65.44:8080`) "não respondeu
 em 10s", fora do ar havia ~2h** (desde ANTES do deploy do Testar recebimento).

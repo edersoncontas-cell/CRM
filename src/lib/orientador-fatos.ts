@@ -169,8 +169,12 @@ export function normalizarValor(valor: unknown): number | null {
   return arredondado;
 }
 
-/** Valida o bloco "fatos" que o Orientador devolve. O que não passa vira null. */
-export function normalizarFatos(bruto: unknown): FatosNegociacao {
+/**
+ * Valida o bloco "fatos" que o Orientador devolve. O que não passa vira null.
+ * `validarMunicipio`: só município da área de atuação (lib/area-atuacao.ts
+ * validadorDaArea); sem ele, só do ES — a área de sempre.
+ */
+export function normalizarFatos(bruto: unknown, validarMunicipio: (nome: unknown) => string | null = municipioDoES): FatosNegociacao {
   if (!bruto || typeof bruto !== "object") return { ...FATOS_VAZIOS };
   const f = bruto as Record<string, unknown>;
   return {
@@ -178,7 +182,7 @@ export function normalizarFatos(bruto: unknown): FatosNegociacao {
     maquinaModelo: normalizarModelo(f.maquinaModelo ?? f.maquina ?? f.modelo),
     valor: normalizarValor(f.valor ?? f.valorNegociado),
     condicaoPagamento: normalizarPagamento(f.condicaoPagamento ?? f.pagamento),
-    municipio: municipioDoES(f.municipio ?? f.cidade),
+    municipio: validarMunicipio(f.municipio ?? f.cidade),
     // Só true/false explícito conta; qualquer outra coisa é "não disse".
     visitaRealizada: typeof f.visitaRealizada === "boolean" ? f.visitaRealizada : null,
     entradaValor: normalizarValor(f.entradaValor ?? f.entrada),
