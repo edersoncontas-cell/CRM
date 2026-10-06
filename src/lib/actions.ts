@@ -2484,6 +2484,7 @@ export async function definirComissaoPaga(id: string, paga: boolean, mesPagament
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/faturadas");
   revalidatePath("/financeiro/comissoes");
+  revalidatePath("/financeiro/comissoes-futuras");
   return { ok: true };
 }
 
@@ -2499,6 +2500,7 @@ export async function marcarComissoesPagas(ids: string[], mesPagamento: string) 
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/faturadas");
   revalidatePath("/financeiro/comissoes");
+  revalidatePath("/financeiro/comissoes-futuras");
   return { ok: true };
 }
 

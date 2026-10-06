@@ -12,34 +12,10 @@ import { ComissoesPagasSection } from "@/components/ComissoesPagasSection";
 import { PopupComissoesPendentes } from "@/components/PopupComissoesPendentes";
 import { SeletorAno } from "@/components/SeletorAno";
 import { lerParametros } from "@/lib/parametros";
+import { comissoesFuturas as listarComissoesFuturas, previsaoComissaoCrdPme } from "@/lib/comissoes-futuras";
 
 export const dynamic = "force-dynamic";
 
-
-// Calcula previsão de pagamento da comissão CRD PME:
-// Comissão paga quando 75% do valor da máquina for pago (entrada + parcelas).
-function previsaoComissaoCrdPme(neg: {
-  faturadoEm: Date | null;
-  valor: number | null;
-  entradaValor?: number | null;
-  crdSaldoParcelasQtd?: number | null;
-  crdParcelaValor?: number | null;
-}): Date | null {
-  if (!neg.faturadoEm || !neg.valor) return null;
-  const alvo75 = neg.valor * 0.75;
-  const entrada = (neg as any).entradaValor ?? 0;
-  const qtd = (neg as any).crdSaldoParcelasQtd ?? 0;
-  const parcela = (neg as any).crdParcelaValor ?? 0;
-  let pago = entrada;
-  let meses = 0;
-  while (pago < alvo75 && meses < qtd) {
-    pago += parcela;
-    meses++;
-  }
-  const dt = new Date(neg.faturadoEm);
-  dt.setMonth(dt.getMonth() + meses);
-  return dt;
-}
 
 export default async function FinanceiroPage({
   searchParams,
@@ -101,7 +77,7 @@ export default async function FinanceiroPage({
   const pendentesComissao = todasGanhasAno.filter((n: any) => {
     if (n.comissaoPaga) return false;
     if (n.tipoPagamento !== "crd_pme") return true;
-    const previsao = previsaoComissaoCrdPme(n);
+    const previsao = previsaoComissaoCrdPme(n).data;
     return !previsao || previsao <= hoje;
   });
   const comissaoTotal = pendentesComissao.reduce((s: number, n: any) => s + calcComissao(n.valor), 0);
@@ -113,7 +89,7 @@ export default async function FinanceiroPage({
   const pendentesComissaoTodos = todasGanhas.filter((n: any) => {
     if (n.comissaoPaga) return false;
     if (n.tipoPagamento !== "crd_pme") return true;
-    const previsao = previsaoComissaoCrdPme(n);
+    const previsao = previsaoComissaoCrdPme(n).data;
     return !previsao || previsao <= hoje;
   });
   const mesReferenciaPagamento = mesAnoAtualBrasilia();
@@ -146,17 +122,18 @@ export default async function FinanceiroPage({
     faturadasProxMes.reduce((s: number, n: any) => s + (n.valor ?? 0), 0)
   );
 
-  // Comissões futuras CRD PME (pagas quando 75% do valor for pago)
-  // Comissão já marcada como paga sai daqui (mesmo critério da relação).
-  const negCrdPme = todasGanhas.filter((n: any) => n.tipoPagamento === "crd_pme" && !n.comissaoPaga);
-  const comissoesFuturas = negCrdPme.map((n: any) => ({
+  // Comissões futuras: TODA faturada com a comissão pendente, de qualquer
+  // forma de pagamento (lib/comissoes-futuras.ts). Antes só CRD PME — e o
+  // relatório dava R$ 0 com faturadas pendentes (print dele, 06/10).
+  const comissoesFuturas = listarComissoesFuturas(todasGanhas as any[], TAXA_COMISSAO, hoje).map((n: any) => ({
     id: n.id,
     cliente: n.cliente.nome,
     maquina: n.maquinaModelo ?? "?",
+    tipoPagamento: n.tipoPagamento as string | null,
     valor: n.valor ?? 0,
-    comissao: calcComissao(n.valor),
-    previsaoPagamento: previsaoComissaoCrdPme(n),
-    faturadoEm: n.faturadoEm,
+    comissao: n.comissao as number,
+    previsaoPagamento: n.situacao.tipo === "crd_aguarda_75" ? (n.situacao.previsao as Date) : null,
+    faturadoEm: (n.faturadoEm ?? n.atualizadoEm) as Date,
   }));
   const totalComissoesFuturas = comissoesFuturas.reduce((s, c) => s + c.comissao, 0);
 
@@ -237,7 +214,7 @@ export default async function FinanceiroPage({
         acao={<SeletorAno basePath="/financeiro" anoSelecionado={anoSelecionado} anosDisponiveis={anosDisponiveis} />}
       />
       <p className="-mt-4 mb-6 text-xs text-slate-400">
-        Negociações Faturadas, Valor Máquinas Vendidas e Comissões a Receber consideram a data de faturamento de {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Comissões Futuras (CRD PME) nunca filtra por ano — é sempre o que ainda falta receber.
+        Negociações Faturadas, Valor Máquinas Vendidas e Comissões a Receber consideram a data de faturamento de {anoSelecionado === "todos" ? "todos os anos" : anoSelecionado}. Comissões Futuras nunca filtra por ano — é toda venda faturada com a comissão ainda pendente.
       </p>
 
       {/* KPIs hero — todos clicáveis */}
@@ -272,9 +249,9 @@ export default async function FinanceiroPage({
         <Link href="/financeiro/comissoes-futuras">
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 hover:shadow-md hover:border-amber-400 transition-all cursor-pointer group">
             <div className="mb-2 text-amber-600"><Clock size={20} /></div>
-            <div className="text-xs text-slate-500 mb-1">Comissões Futuras (CRD PME)</div>
+            <div className="text-xs text-slate-500 mb-1">Comissões Futuras</div>
             <div className="text-xl font-bold text-amber-700">{formatCurrency(totalComissoesFuturas)}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{negCrdPme.length} negoc. CRD PME</div>
+            <div className="text-xs text-slate-400 mt-0.5">{comissoesFuturas.length} venda(s) com comissão pendente</div>
             <div className="text-xs text-amber-600 group-hover:underline mt-1 flex items-center gap-1">Ver relação <ChevronRight size={12} /></div>
           </div>
         </Link>
@@ -338,18 +315,18 @@ export default async function FinanceiroPage({
           )}
         </Card>
 
-        {/* Comissões Futuras CRD PME */}
+        {/* Comissões Futuras (toda faturada com a comissão pendente) */}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-slate-700">
-              <Clock size={17} className="text-amber-500" /> Comissões Futuras (CRD PME)
+              <Clock size={17} className="text-amber-500" /> Comissões Futuras
             </div>
             <Link href="/financeiro/comissoes-futuras" className="text-xs text-brand-600 hover:underline flex items-center gap-1">
               Ver todas <ChevronRight size={12} />
             </Link>
           </div>
           {comissoesFuturas.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhuma negociação CRD PME registrada.</p>
+            <p className="text-sm text-slate-400">Nenhuma comissão pendente — todas as faturadas estão marcadas como pagas.</p>
           ) : (
             <ul className="max-h-72 space-y-2 overflow-y-auto">
               {comissoesFuturas.slice(0, 8).map((c) => (
@@ -357,7 +334,8 @@ export default async function FinanceiroPage({
                   <div className="min-w-0">
                     <p className="block truncate text-sm font-semibold text-slate-800">{c.cliente}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {c.maquina} · Faturado: {c.faturadoEm ? formatDate(c.faturadoEm) : "?"}
+                      {c.maquina} · Faturado: {formatDate(c.faturadoEm)}
+                      {c.tipoPagamento === "crd_pme" && <span className="ml-1 rounded bg-amber-100 px-1 text-amber-700 font-bold">CRD PME</span>}
                     </p>
                     {c.previsaoPagamento && (
                       <p className="text-xs text-amber-700 font-semibold">

@@ -12,9 +12,20 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-Último commit com código: **"Área de atuação em Configurações: os municípios que ele
-atende valem no CRM inteiro (só ES por enquanto)"** (05/10).
-**1.446 testes passando** (120 arquivos), lint e build limpos.
+Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
+pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
+**1.457 testes passando** (121 arquivos), lint e build limpos.
+
+**06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
+pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro
+filtravam só `tipoPagamento: "crd_pme"`. Agora é **toda venda ganha com
+`comissaoPaga = false`**, de qualquer forma de pagamento, a mais antiga
+primeiro (`lib/comissoes-futuras.ts`, puro, testado). CRD PME mantém a
+previsão dos 75% na linha; as outras dizem há quantos dias estão pendentes
+(sem inventar data). **Saiu o card "Regra CRD PME"** a pedido dele. Sai da
+lista quando ele marca "Paga / Mês pago" em Negociações Faturadas (as duas
+ações revalidam a tela). "Comissões a Receber" e o aviso do 5º dia útil não
+mudaram.
 
 **05/10 — Área de atuação** (Configurações, card logo abaixo de Parâmetros). Ele
 pediu estado + municípios "valendo no sistema inteiro"; no meio do trabalho
