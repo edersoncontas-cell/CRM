@@ -9,7 +9,8 @@ import { BarrasHorizontais } from "@/components/charts";
 import { PopupContatoSemNome } from "@/components/PopupContatoSemNome";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { GoogleContatosSync } from "@/components/GoogleContatosSync";
-import { googleContatosDisponivel, lerResumoSincronizacaoGoogle } from "@/lib/google-contatos";
+import { lerSituacaoGoogle, type ResumoSincronizacao } from "@/lib/google-contatos";
+import type { SituacaoGoogle } from "@/lib/google-conexao-regra";
 import { ExcluirNaoClientes } from "@/components/ExcluirNaoClientes";
 import { ListaClientesSelecionavel } from "@/components/ListaClientesSelecionavel";
 import { STATUS_NAO_CLIENTE, STATUS_CLIENTE, STATUS_POTENCIAL } from "@/lib/cliente-status";
@@ -85,7 +86,7 @@ export default async function ClientesPage({
   // clientes de cara, uma lista enorme sem filtro nenhum.
   const mostrarLista = !!busca || !!filtro || !!regiaoFiltro || apenasNaoVisitados || apenasVisitados || apenasSemCidade || apenasNaoCliente || apenasSemTelefone || apenasCliente || apenasPotencial || verTodos;
 
-  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, googleConectado, resumoGoogle, totalGoogle, totalSemCidade, totalNaoCliente, totalSemTelefone, totalEhCliente, totalPotencial] = await Promise.all([
+  const [clientes, municipios, maquinas, totalNaoVisitados, totalVisitados, totalClientes, municipiosComVisitas, contatosSemNome, situacaoGoogle, totalGoogle, totalSemCidade, totalNaoCliente, totalSemTelefone, totalEhCliente, totalPotencial] = await Promise.all([
     mostrarLista ? db.cliente.findMany({
       where: {
         // Prospects sugeridos pela IA (podem ser nomes inventados quando incertos)
@@ -146,8 +147,7 @@ export default async function ClientesPage({
       take: 15,
     }),
     // Google Contatos: a lista de clientes espelha a agenda do vendedor.
-    googleContatosDisponivel().catch(() => false),
-    lerResumoSincronizacaoGoogle(),
+    lerSituacaoGoogle().catch((): SituacaoGoogle<ResumoSincronizacao> => ({ tipo: "desconectado" })),
     db.cliente.count({ where: { googleContatoId: { not: null } } }),
     db.cliente.count({ where: { municipioId: null, ...SEM_PROSPECT_IA } }),
     db.cliente.count({ where: { status: STATUS_NAO_CLIENTE } }),
@@ -309,7 +309,7 @@ export default async function ClientesPage({
           ele, que sabe se já excluiu nesta visita. */}
       {apenasNaoCliente && <ExcluirNaoClientes total={totalNaoCliente} />}
 
-      <GoogleContatosSync conectado={googleConectado} resumo={resumoGoogle} totalGoogle={totalGoogle} />
+      <GoogleContatosSync situacao={situacaoGoogle} totalGoogle={totalGoogle} />
 
       {/* Busca — filtra automaticamente enquanto digita */}
       <BuscaClientesInstantanea valorInicial={busca} />

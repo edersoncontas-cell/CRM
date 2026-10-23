@@ -17,6 +17,7 @@ import { getConfig, setConfig } from "@/lib/config";
 import { lerAreaAtuacao, ufDoMunicipioNaArea } from "@/lib/area-atuacao";
 import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 import type { ContatoGoogle } from "@/lib/google-contatos-util";
+import { ehErroDeReconexao, MENSAGEM_RECONECTAR, type ProblemaGoogle } from "@/lib/google-conexao-regra";
 export type { ContatoGoogle };
 
 const CHAVE_TOKENS = "google.oauth";
@@ -48,7 +49,19 @@ export type TokensGoogle = {
   expiraEm: number; // epoch ms
   email: string | null;
   conectadoEm: string;
+  // O Google recusou renovar o acesso (invalid_grant). O token FICA gravado
+  // com esta marca — antes era apagado, e a conexão sumia sem ninguém saber.
+  // Só reconectar limpa (a reconexão grava um token novo, sem a marca).
+  problema?: ProblemaGoogle;
 };
+
+/** O acesso ao Google caiu e só reconectando volta. Não é falha de rede: não adianta tentar de novo. */
+export class ErroReconectarGoogle extends Error {
+  constructor() {
+    super(MENSAGEM_RECONECTAR);
+    this.name = "ErroReconectarGoogle";
+  }
+}
 
 export async function lerTokensGoogle(): Promise<TokensGoogle | null> {
   try {
@@ -56,12 +69,14 @@ export async function lerTokensGoogle(): Promise<TokensGoogle | null> {
     if (!raw) return null;
     const t = JSON.parse(raw) as Partial<TokensGoogle>;
     if (!t.refreshToken) return null;
+    const p = t.problema as Partial<ProblemaGoogle> | undefined;
     return {
       refreshToken: t.refreshToken,
       accessToken: t.accessToken ?? "",
       expiraEm: Number(t.expiraEm) || 0,
       email: t.email ?? null,
       conectadoEm: t.conectadoEm ?? new Date().toISOString(),
+      ...(p && typeof p.em === "string" ? { problema: { em: p.em, codigo: String(p.codigo ?? ""), descricao: String(p.descricao ?? "") } } : {}),
     };
   } catch {
     return null;
@@ -77,6 +92,14 @@ export async function statusGoogle() {
     conectadoEm: t?.conectadoEm ?? null,
     redirectUri: redirectUriGoogle(),
   };
+}
+
+/** Marca a conexão como caída — só se o token que falhou ainda é o gravado (uma reconexão no meio não pode ser marcada por quem usava o token velho). */
+export async function marcarProblemaGoogle(refreshTokenQueFalhou: string, codigo: string, descricao: string): Promise<void> {
+  const t = await lerTokensGoogle();
+  if (!t || t.refreshToken !== refreshTokenQueFalhou || t.problema) return;
+  const marcado: TokensGoogle = { ...t, accessToken: "", expiraEm: 0, problema: { em: new Date().toISOString(), codigo, descricao: descricao.slice(0, 200) } };
+  await setConfig(CHAVE_TOKENS, JSON.stringify(marcado));
 }
 
 export function urlAutorizacaoGoogle(state: string): string {
@@ -116,7 +139,9 @@ export async function trocarCodigoGoogle(code: string): Promise<{ email: string 
   });
   if (!r.access_token) throw new Error(r.error_description || r.error || "O Google não devolveu o token de acesso.");
   const anterior = await lerTokensGoogle();
-  const refreshToken = r.refresh_token ?? anterior?.refreshToken;
+  // O token da conexão que caiu não serve de reserva: reaproveitá-lo daria
+  // "conectado" na tela e o mesmo erro na primeira sincronização.
+  const refreshToken = r.refresh_token ?? (anterior?.problema ? undefined : anterior?.refreshToken);
   if (!refreshToken) {
     throw new Error("O Google não devolveu o refresh token. Remova o acesso do CRM em myaccount.google.com/permissions e conecte de novo.");
   }
@@ -149,6 +174,8 @@ export async function desconectarGoogle(): Promise<void> {
 async function accessTokenGoogle(): Promise<string | null> {
   const t = await lerTokensGoogle();
   if (!t) return null;
+  // Já caiu: não bate no Google toda vez (invalid_grant não se cura sozinho).
+  if (t.problema) throw new ErroReconectarGoogle();
   if (t.accessToken && t.expiraEm - Date.now() > 60_000) return t.accessToken;
   const r = await postForm(URL_TOKEN, {
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
@@ -157,8 +184,12 @@ async function accessTokenGoogle(): Promise<string | null> {
     grant_type: "refresh_token",
   });
   if (!r.access_token) {
-    // Acesso revogado pelo usuário no Google: limpa para a tela mostrar "desconectado".
-    if (r.error === "invalid_grant") await db.configuracao.deleteMany({ where: { chave: CHAVE_TOKENS } });
+    // Acesso expirado/revogado no Google: guarda a queda COM o token (as telas
+    // mostram "reconecte" e o botão). Antes apagava, e a conexão sumia calada.
+    if (ehErroDeReconexao(r.error) || ehErroDeReconexao(r.error_description)) {
+      await marcarProblemaGoogle(t.refreshToken, r.error ?? "invalid_grant", r.error_description ?? "").catch((e) => console.error("[google] marcar queda:", e));
+      throw new ErroReconectarGoogle();
+    }
     throw new Error(r.error_description || r.error || "Não foi possível renovar o acesso ao Google.");
   }
   await setConfig(CHAVE_TOKENS, JSON.stringify({ ...t, accessToken: r.access_token, expiraEm: Date.now() + (r.expires_in ?? 3600) * 1000 } satisfies TokensGoogle));
@@ -287,7 +318,10 @@ export async function atualizarContatoGoogle(resourceName: string, d: DadosConta
 // IA, WhatsApp). Silencioso quando o Google não está conectado.
 export async function sincronizarVisitaComAgenda(visitaId: string): Promise<void> {
   if (!googleConfigurado()) return;
-  if (!(await lerTokensGoogle())) return;
+  const tokens = await lerTokensGoogle();
+  // Sem conexão, ou com a conexão caída: não há o que enviar (o aviso de
+  // "reconecte" já está nas telas) — sem barulho no log a cada visita.
+  if (!tokens || tokens.problema) return;
   const v = await db.visita.findUnique({
     where: { id: visitaId },
     include: { cliente: { include: { municipio: true } } },
@@ -317,6 +351,8 @@ async function localDaVisita(municipio: string): Promise<string> {
 }
 
 export async function removerEventoDaVisita(visitaId: string): Promise<void> {
+  // Conexão caída: não há como apagar o evento agora (o aviso de "reconecte" já está nas telas).
+  if ((await lerTokensGoogle())?.problema) return;
   const v = await db.visita.findUnique({ where: { id: visitaId }, select: { googleEventId: true } });
   if (v?.googleEventId) await excluirEventoAgenda(v.googleEventId).catch((e) => console.error("[google] excluir evento:", e));
 }

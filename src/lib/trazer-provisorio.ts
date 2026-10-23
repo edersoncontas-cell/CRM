@@ -22,6 +22,7 @@ import { PrismaClient } from "@prisma/client";
 import { ehFalhaDeConexao } from "@/lib/falha-conexao";
 import { completarColunas } from "@/lib/coluna-que-falta";
 import { CHAVE_INSTANCIA_ATIVA, instanciaQueVemNaVolta } from "@/lib/whatsapp-instancia-nome";
+import { googleQueVemNaVolta } from "@/lib/google-conexao-regra";
 import {
   type Linha, chavesDoClienteNoProvisorio, indiceDeClientes, completarCliente,
   chavesDaConversa, completarConversa, tratarConversaNova, chaveDaMensagem, tratarMensagem,
@@ -476,6 +477,13 @@ async function etapaConfiguracoes(ctx: Ctx, aplicar: boolean): Promise<Resultado
     // a do principal já travou — voltar para ela seria voltar para o zumbi.
     if (c.chave === CHAVE_INSTANCIA_ATIVA && doPrincipal.has(c.chave)) {
       const vem = instanciaQueVemNaVolta(doPrincipal.get(c.chave), c.valor);
+      if (vem) sobrepor.push({ chave: c.chave, valor: vem });
+      else r.jaExistiam++;
+      continue;
+    }
+    // Google: o token caído do principal cede ao que funciona no provisório.
+    if (c.chave === "google.oauth" && doPrincipal.has(c.chave)) {
+      const vem = googleQueVemNaVolta(doPrincipal.get(c.chave), c.valor);
       if (vem) sobrepor.push({ chave: c.chave, valor: vem });
       else r.jaExistiam++;
       continue;

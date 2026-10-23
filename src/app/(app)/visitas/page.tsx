@@ -14,6 +14,8 @@ import { coordenadasMunicipioES } from "@/lib/municipios-es";
 import { lerAreaAtuacao, cidadesParaSugerir, coordenadasNaArea, mapaDaAreaOuPadrao } from "@/lib/area-atuacao";
 import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
 import { sugerirVisitasNaViagem } from "@/lib/visitas-na-viagem";
+import { lerSituacaoGoogle } from "@/lib/google-contatos";
+import { AvisoGoogleReconectar } from "@/components/AvisoGoogleReconectar";
 import Link from "next/link";
 
 // As três colunas do rodapé (realizadas, não realizadas, reagendadas) juntam
@@ -218,6 +220,9 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
   });
   const tituloMes = new Date(`${mesParam}-01T12:00:00-03:00`).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", month: "long", year: "numeric" });
 
+  // Com o Google caído a visita nova não vai para a Agenda: avisa aqui, onde ela nasce.
+  const situacaoGoogle = await lerSituacaoGoogle().catch(() => null);
+
   return (
     <div>
       <PageHeader
@@ -225,6 +230,8 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
         subtitulo={`${realizadasSemana}/20 realizadas esta semana · ${estaSemanaCompleta.length} agendada(s) na semana${pendentesPassadas ? ` · ${pendentesPassadas} passada(s) sem confirmar (✓ ou ✗)` : ""}`}
         acao={<NovaVisitaForm clientes={clientes} cidades={cidades} clienteInicial={searchParams.cliente} abrirInicial={searchParams.novo === "1"} />}
       />
+
+      <AvisoGoogleReconectar situacao={situacaoGoogle} />
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Agenda da semana · arraste para outro dia · ✓ realizada · ✗ não realizada</h2>

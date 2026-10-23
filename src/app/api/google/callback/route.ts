@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 // Volta do consentimento do Google: confere o `state`, troca o código por
 // tokens e devolve o vendedor para Configurações com o resultado.
 export async function GET(req: NextRequest) {
-  const voltar = new URL("/configuracoes", req.nextUrl.origin);
+  // #google: o card fica abaixo de vários outros; sem a âncora o resultado
+  // (conectou / não conseguiu e por quê) cairia fora da tela, sobretudo no celular.
+  const voltar = new URL("/configuracoes#google", req.nextUrl.origin);
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const erroGoogle = req.nextUrl.searchParams.get("error");

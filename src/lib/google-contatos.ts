@@ -13,7 +13,8 @@
 
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
-import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle } from "@/lib/integrations/google";
+import { googleConfigurado, lerTokensGoogle, listarContatosGoogle, criarContatoGoogle, atualizarContatoGoogle, ErroReconectarGoogle } from "@/lib/integrations/google";
+import { situacaoGoogle, MENSAGEM_RECONECTAR, type SituacaoGoogle } from "@/lib/google-conexao-regra";
 import { planejarSincronizacao, clientesParaEnviar, nomeGenerico, type ClienteResumo } from "@/lib/google-contatos-util";
 import { deveDescartarContato, listarFiltroContatos } from "@/lib/filtro-contatos";
 import { listarLapides, limparContatosIndesejados, bloquearContato, apagarContatoPorTelefone, desbloquearContato } from "@/lib/contatos-bloqueados";
@@ -58,8 +59,24 @@ export async function definirEnvioParaGoogle(ativo: boolean): Promise<void> {
   await setConfig(CHAVE_ENVIAR, ativo ? "on" : "off");
 }
 
+// Conectado E funcionando. Conexão caída (o Google recusou renovar) não conta:
+// não há o que sincronizar até reconectar.
 export async function googleContatosDisponivel(): Promise<boolean> {
-  return googleConfigurado() && !!(await lerTokensGoogle());
+  if (!googleConfigurado()) return false;
+  const t = await lerTokensGoogle();
+  return !!t && !t.problema;
+}
+
+/** Conectou um dia, mas o acesso caiu: o cron pula e a tela pede a reconexão. */
+export async function googlePrecisaReconectar(): Promise<boolean> {
+  if (!googleConfigurado()) return false;
+  return !!(await lerTokensGoogle())?.problema;
+}
+
+/** Em que pé está a conexão — a mesma resposta para a faixa de Clientes, o card de Configurações e o aviso de Visitas. */
+export async function lerSituacaoGoogle(): Promise<SituacaoGoogle<ResumoSincronizacao>> {
+  const [tokens, resumo] = await Promise.all([lerTokensGoogle(), lerResumoSincronizacaoGoogle()]);
+  return situacaoGoogle({ configurado: googleConfigurado(), tokens, resumo });
 }
 
 const SELECAO_CLIENTE = { id: true, nome: true, telefone: true, email: true, endereco: true, municipioId: true, origem: true, googleContatoId: true } as const;
@@ -68,7 +85,9 @@ const SELECAO_CLIENTE = { id: true, nome: true, telefone: true, email: true, end
 export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> {
   const agora = new Date();
   const base: ResumoSincronizacao = { em: agora.toISOString(), ok: false, lidos: 0, criados: 0, atualizados: 0, enviados: 0, ignorados: 0, semTelefone: 0, pendentesEnvio: 0, asteriscoBloqueados: 0, asteriscoLiberados: 0 };
-  if (!(await googleContatosDisponivel())) return gravar({ ...base, erro: "Conta Google não conectada." });
+  if (!(await googleContatosDisponivel())) {
+    return gravar({ ...base, erro: (await googlePrecisaReconectar()) ? MENSAGEM_RECONECTAR : "Conta Google não conectada." });
+  }
 
   try {
     // Antes de ler o Google, tira do CRM o que não é cliente (contabilidade, banco…).
@@ -111,7 +130,7 @@ export async function sincronizarContatosGoogle(): Promise<ResumoSincronizacao> 
 
     return gravar({ ...base, ok: true, asteriscoBloqueados, asteriscoLiberados, lidos: contatos.length, criados: plano.criar.length, atualizados: plano.atualizar.length, enviados, ignorados: plano.ignorados, semTelefone: plano.semTelefone, pendentesEnvio });
   } catch (e) {
-    return gravar({ ...base, erro: e instanceof Error ? e.message : String(e) });
+    return gravar({ ...base, erro: e instanceof ErroReconectarGoogle ? MENSAGEM_RECONECTAR : e instanceof Error ? e.message : String(e) });
   }
 
   async function gravar(r: ResumoSincronizacao): Promise<ResumoSincronizacao> {

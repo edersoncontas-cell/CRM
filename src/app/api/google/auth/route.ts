@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // vendedor para a tela de consentimento do Google. Protegida pelo login
 // (middleware) — só quem está no CRM pode conectar a conta.
 export async function GET(req: NextRequest) {
-  const voltar = new URL("/configuracoes", req.nextUrl.origin);
+  const voltar = new URL("/configuracoes#google", req.nextUrl.origin);
   if (!googleConfigurado()) {
     voltar.searchParams.set("google", "naoconfigurado");
     return NextResponse.redirect(voltar);

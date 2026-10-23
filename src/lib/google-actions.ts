@@ -12,7 +12,8 @@ import { registrarAudit } from "@/lib/audit";
 export async function desconectarGoogleAction(): Promise<{ ok: boolean }> {
   await desconectarGoogle();
   await registrarAudit({ acao: "perfil_atualizado", origem: "usuario", descricao: "Google Agenda e Contatos desconectados." }).catch(() => {});
-  revalidatePath("/configuracoes");
+  // Clientes e Visitas mostram o estado da conexão (faixa / aviso de reconexão).
+  for (const p of ["/configuracoes", "/clientes", "/visitas"]) revalidatePath(p);
   return { ok: true };
 }
 
@@ -24,7 +25,7 @@ export async function sincronizarContatosGoogleAction(): Promise<ResumoSincroniz
       descricao: `Sincronização com o Google Contatos: ${r.lidos} contato(s) lido(s), ${r.criados} cliente(s) novo(s), ${r.atualizados} atualizado(s), ${r.enviados} enviado(s) ao Google.`,
     }).catch(() => {});
   }
-  for (const p of ["/clientes", "/atendimento", "/orientador", "/configuracoes", "/dashboard"]) revalidatePath(p);
+  for (const p of ["/clientes", "/atendimento", "/orientador", "/configuracoes", "/dashboard", "/visitas"]) revalidatePath(p);
   return r;
 }
 

@@ -19,12 +19,22 @@ custo. Leva uns 10 minutos, uma vez só.
 
 ## 3. Tela de consentimento
 
-1. **APIs e serviços** → **Tela de permissão OAuth** (ou "Branding" na tela nova).
+1. Menu ☰ → **Google Auth Platform** (antes chamado **Tela de permissão OAuth**;
+   em inglês, "OAuth consent screen").
 2. Tipo de usuário: **Externo** → **Criar**.
 3. Nome do app: `CRM do Edy`; e-mail de suporte e de contato: o seu. **Salvar**.
 4. Em **Público-alvo / Usuários de teste**, clique em **Adicionar usuários** e
-   coloque o seu próprio e-mail Google. (O app fica em modo "teste", que é
-   suficiente: só a sua conta precisa conectar. Não é preciso publicar.)
+   coloque o seu próprio e-mail Google.
+5. **Publique o app** (ainda em **Público-alvo**, em inglês *Audience*): em
+   **Status da publicação** (*Publishing status: Testing*), clique em
+   **Publicar app** (*Publish app*) e confirme. É grátis e não precisa
+   enviar para verificação do Google. **Não pule este passo**: com o app em
+   modo "teste" o Google só vale o acesso por **7 dias** — a conexão cai toda
+   semana com "Token has been expired or revoked" e as visitas param de ir
+   para a Agenda. (Este passo estava errado nas versões antigas deste guia, que
+   mandavam deixar em teste.) Publicado e sem verificação, o app mostra o aviso
+   "O Google não verificou este app" na hora de conectar (passo 6) e vale para até 100
+   contas — para um vendedor sozinho, é o que precisa.
 
 ## 4. Criar a credencial
 
@@ -61,8 +71,8 @@ custo. Leva uns 10 minutos, uma vez só.
    com o Google**.
 2. Escolha a sua conta, aceite as permissões (agenda e contatos — leitura e
    gravação, para os clientes do CRM poderem ir para a sua agenda).
-   Se aparecer "app não verificado", clique em **Avançado** → **Acessar CRM do
-   Edy** (é o seu próprio app, em modo teste).
+   Se aparecer "O Google não verificou este app", clique em **Avançado** →
+   **Acessar CRM do Edy** (é o seu próprio app).
 3. De volta ao CRM, o card mostra o e-mail conectado. Pronto:
    - toda visita nova (formulário, voz, IA ou WhatsApp) entra na agenda;
    - remover a visita no CRM apaga o evento;
@@ -81,8 +91,20 @@ desconecte e conecte de novo para liberar o envio.
 
 - **"redirect_uri_mismatch"**: o URI cadastrado no Google não é idêntico ao
   `GOOGLE_REDIRECT_URI`. Confira `https`, o domínio e o final `/api/google/callback`.
-- **"access_denied" / usuário não autorizado**: seu e-mail não está em
-  "Usuários de teste" (passo 3.4).
+- **"access_denied" / usuário não autorizado**: com o app em teste, seu e-mail
+  não está em "Usuários de teste" (passo 3.4). Com o app já publicado, quase
+  sempre foi só o cancelamento da tela do Google; se persistir, o
+  administrador do Google Workspace bloqueou o app ou o limite de 100 contas do
+  app não verificado foi atingido.
+- **"Token has been expired or revoked"** (a faixa de Clientes e o card de
+  Configurações passam a mostrar "reconexão necessária" com o botão
+  **Reconectar com o Google**): o Google recusou renovar o acesso. Causa mais
+  comum: o app está **em teste** (passo 3.5) e o acesso venceu aos 7 dias.
+  Publique o app e reconecte — só uma vez. Outras causas: a permissão foi
+  removida em myaccount.google.com/permissions ou o administrador do Google
+  Workspace bloqueou o app. Nada
+  se perde: as visitas e os clientes continuam no CRM; enquanto estiver caída,
+  só o lembrete na Agenda e a sincronização de contatos ficam parados.
 - **Conectou mas não cria evento**: veja **ZEUS** → eventos de erro; o mais
   comum é a Calendar API não ativada (passo 2).
 - **Quer trocar de conta**: **Desconectar** no card e conecte de novo.

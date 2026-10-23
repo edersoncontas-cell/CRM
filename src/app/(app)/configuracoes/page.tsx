@@ -4,7 +4,7 @@ import { iaHabilitada, provedorIANome } from "@/lib/ai";
 import * as zapi from "@/lib/zapi";
 import * as transcription from "@/lib/integrations/transcription";
 import { statusGoogle } from "@/lib/integrations/google";
-import { lerResumoSincronizacaoGoogle, envioParaGoogleAtivo } from "@/lib/google-contatos";
+import { lerSituacaoGoogle, envioParaGoogleAtivo } from "@/lib/google-contatos";
 import { resumoBloqueio } from "@/lib/contatos-bloqueados";
 import { listarFiltroContatos } from "@/lib/filtro-contatos";
 import { ContatosBloqueadosCard } from "@/components/ContatosBloqueadosCard";
@@ -30,11 +30,11 @@ import { UFS_LIBERADAS } from "@/lib/area-atuacao-regra";
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [cotacoes, google, parametros, resumoContatos, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio, area] = await Promise.all([
+  const [cotacoes, google, parametros, situacaoGoogle, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio, area] = await Promise.all([
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
-    lerResumoSincronizacaoGoogle(),
+    lerSituacaoGoogle(),
     envioParaGoogleAtivo(),
     resumoBloqueio().catch(() => ({ total: 0, recentes: [] })),
     listarFiltroContatos(),
@@ -104,7 +104,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       {/* O card "Conectar WhatsApp por QR Code" mudou para a tela Conexão
           WhatsApp (01/10, pedido dele) — é lá que o QR é lido. */}
 
-      <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} resumo={resumoContatos} enviarAtivo={enviarContatos} />
+      <GoogleIntegracaoCard status={google} feedback={searchParams.google} msg={searchParams.msg} situacao={situacaoGoogle} enviarAtivo={enviarContatos} />
 
       <ClientesDuplicadosCard inicial={duplicados} />
 

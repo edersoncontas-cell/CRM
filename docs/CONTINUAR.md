@@ -12,9 +12,25 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
+**22/10 — Google caiu ("Token has been expired or revoked.")**. Print dele: a faixa
+de Clientes só repetia o erro cru, sem botão. Era o Google recusando renovar o
+acesso (`invalid_grant`) — causa mais provável: app do Google Cloud em modo de
+TESTE (acesso vale 7 dias; o `docs/GOOGLE.md` antigo mandava deixar em teste).
+O código antigo ainda APAGAVA os tokens ao receber esse erro. Agora a queda é um
+estado com nome (`lib/google-conexao-regra.ts`, puro): o token fica gravado com
+`problema`, e Clientes (faixa), Configurações (card + 3 passos para publicar o
+app) e Visitas (aviso: a visita nova não entra na Agenda) mostram "reconecte" +
+botão `/api/google/auth`. O cron devolve 200 "pulado" (não 500), a sincronização
+não bate no Google com a conexão caída, e a volta do banco provisório não deixa
+o token caído bloquear o que funciona. **Falta ele:** clicar em Reconectar uma
+vez e publicar o app no Google Cloud (Público-alvo → Publicar app) — código não
+faz isso. Não feito: reenviar para a Agenda as visitas marcadas durante a queda.
+Prova: `tests/google-conexao.test.ts` (51) + e2e com Google falso local (48/48,
+PC e celular, dois temas). O Google de verdade não foi testado (sem rede aqui).
+
 Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
 pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
-**1.457 testes passando** (121 arquivos), lint e build limpos.
+**1.508 testes passando** (122 arquivos), lint e build limpos.
 
 **06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
 pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro
