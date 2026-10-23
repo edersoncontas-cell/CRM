@@ -12,6 +12,22 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
+**23/10 — Mapa por região** (Dashboard "Vendas por cidade" e Visitas "Mapa da
+semana"). Pedido dele, com a foto do Mapa do Turismo Capixaba 2025: divisas entre
+as cidades, **coloridas** onde ele atende (cor da região, 10 regiões da foto) e
+**cinza** onde não atende. Cidade que ele atende e que a foto deixa fora de
+qualquer região (8, ex.: Marechal Floriano, Presidente Kennedy) sai em **lilás**,
+não cinza. Legenda embaixo: "Você atende N de 78 cidades" + as regiões + "Não
+atendo". Divisas vão junto com o código (`src/lib/malha-es.json`, nada de
+internet para o desenho); o ES deixou de buscar o contorno no IBGE. Quem ele
+atende vem de `mapaDaArea().atendidos` (área salva ou `foraDeArea`); banco sem
+resposta = `null` = mapa sem cores + aviso na legenda. Tudo em
+`docs/mapa-por-regiao.md`. **Decisão dele:** usei as regiões da foto do Turismo;
+trocar por as 5 regiões de rota dele (Caparaó, Litorânea, Granito, Serrana, Das
+Santas) é só mexer numa tabela. Prova: `tests/mapa-regioes-es.test.ts` (23) +
+e2e (62 conferências, PC 1440 e celular 390, tema claro e escuro) com os azulejos
+do OpenStreetMap trocados por um liso (sem rede aqui).
+
 **22/10 — Google caiu ("Token has been expired or revoked.")**. Print dele: a faixa
 de Clientes só repetia o erro cru, sem botão. Era o Google recusando renovar o
 acesso (`invalid_grant`) — causa mais provável: app do Google Cloud em modo de
@@ -30,7 +46,7 @@ PC e celular, dois temas). O Google de verdade não foi testado (sem rede aqui).
 
 Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
 pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
-**1.508 testes passando** (122 arquivos), lint e build limpos.
+**1.531 testes passando** (123 arquivos), lint e build limpos.
 
 **06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
 pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro

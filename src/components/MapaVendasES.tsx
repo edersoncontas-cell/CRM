@@ -9,6 +9,9 @@ import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
+import { UFS_COM_MALHA } from "@/lib/mapa-regioes-es";
+import { CamadaMunicipiosES } from "@/components/CamadaMunicipiosES";
+import { LegendaMapaRegioes } from "@/components/LegendaMapaRegioes";
 import { useTemaDash } from "@/components/TemaDashProvider";
 import { EVENTO_ATUALIZAR } from "@/components/BotaoAtualizar";
 import type { PontoVenda } from "@/lib/vendas-dashboard";
@@ -42,7 +45,9 @@ export default function MapaVendasES({
   useEffect(() => { setPontosAno(pontosIniciais); }, [pontosIniciais]);
   useEffect(() => { setPontosTudo(pontosTudoIniciais); }, [pontosTudoIniciais]);
 
-  const codigos = mapa.estados.map((e) => e.codigo).join(",");
+  // Divisas entre as cidades vão junto com o código (ES); só o estado sem elas busca o contorno do IBGE.
+  const comDivisas = mapa.estados.some((e) => UFS_COM_MALHA.includes(e.uf));
+  const codigos = mapa.estados.filter((e) => !UFS_COM_MALHA.includes(e.uf)).map((e) => e.codigo).join(",");
   useEffect(() => {
     let ativo = true;
     Promise.all(codigos.split(",").filter(Boolean).map((c) =>
@@ -119,6 +124,7 @@ export default function MapaVendasES({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           className="mapa-escuro"
         />
+        {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} />}
         {contornos.map((c, i) => (
           <GeoJSON key={i} data={c} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />
         ))}
@@ -146,6 +152,7 @@ export default function MapaVendasES({
           </Marker>
         ))}
       </MapContainer>
+      {comDivisas && <LegendaMapaRegioes atendidos={mapa.atendidos} texto={T.texto2} />}
       {pontos.length === 0 && (
         <p className="mt-2 text-xs" style={{ color: T.mudo }}>
           Nenhuma venda faturada com município no cadastro do cliente {modo === "ano" ? `em ${ano}` : ""}. Preencha a cidade no cadastro e o cifrão aparece aqui.

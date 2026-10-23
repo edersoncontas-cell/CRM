@@ -10,6 +10,7 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
+import { chaveMunicipio } from "@/lib/mapa-regioes-es";
 import { ESTADOS_BR, ufValida, municipiosDaUf, acharMunicipio, type MunicipioBR } from "@/lib/municipios-brasil";
 import {
   CHAVE_AREA, AREA_PADRAO, lerAreaDoTexto, validarEntradaArea, planejarSincronia, criarValidadorMunicipio, enquadrar, nomeDaArea,
@@ -106,6 +107,8 @@ export function mapaPadrao(): MapaDaArea {
     ...enquadrar(municipiosDaUf(uf), []),
     estados: [{ uf, nome: nomeDoEstado(uf), codigo: ESTADOS_BR.find((e) => e.uf === uf)?.codigo ?? 0 }],
     titulo: nomeDoEstado(uf),
+    // O banco não respondeu: não dá para dizer quem ele atende — sem cores.
+    atendidos: null,
   };
 }
 
@@ -119,19 +122,25 @@ export async function mapaDaArea(): Promise<MapaDaArea> {
   const area = await lerAreaAtuacao();
   const doEstado = area.ufs.flatMap((uf) => municipiosDaUf(uf));
   let atendidas: { lat: number; lng: number }[] = [];
+  let atendidos: string[] | null;
   if (area.configurada) {
-    atendidas = area.municipios.map((m) => acharMunicipio(m.uf, m.nome)).filter((m): m is MunicipioBR => !!m);
+    const achados = area.municipios.map((m) => acharMunicipio(m.uf, m.nome)).filter((m): m is MunicipioBR => !!m);
+    atendidas = achados;
+    atendidos = area.municipios.map((m) => chaveMunicipio(m.uf, m.nome));
   } else {
     // Sem área salva: as cidades que hoje estão como "atendo" no banco.
-    const linhas = await db.municipio.findMany({ where: { foraDeArea: false }, select: { nome: true, lat: true, lng: true } }).catch(() => []);
-    atendidas = linhas
+    const linhas = await db.municipio.findMany({ where: { foraDeArea: false }, select: { nome: true, lat: true, lng: true } }).catch(() => null);
+    atendidas = (linhas ?? [])
       .map((l) => (l.lat != null && l.lng != null ? { lat: l.lat, lng: l.lng } : coordenadasNaArea(l.nome, area)))
       .filter((p): p is { lat: number; lng: number } => !!p);
+    // Banco que não respondeu = lista desconhecida (null), nunca "não atendo nenhuma".
+    atendidos = linhas ? linhas.map((l) => chaveMunicipio(area.ufs[0], acharMunicipio(area.ufs[0], l.nome)?.nome ?? l.nome)) : null;
   }
   return {
     ...enquadrar(doEstado, atendidas),
     estados: area.ufs.map((uf) => ({ uf, nome: nomeDoEstado(uf), codigo: ESTADOS_BR.find((e) => e.uf === uf)?.codigo ?? 0 })).filter((e) => e.codigo),
     titulo: nomeDaAreaLida(area),
+    atendidos,
   };
 }
 

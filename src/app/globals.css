@@ -506,6 +506,15 @@ img, video, iframe {
   filter: invert(1) hue-rotate(200deg) brightness(0.8) contrast(0.95) saturate(0.55);
 }
 
+/* Dica ao passar/tocar numa cidade do mapa por região ("Cachoeiro de Itapemirim
+   · Sul Capixaba dos Vales e Café · você atende"): o Leaflet não quebra linha e
+   no celular a frase saía da tela. Duas classes para vencer o .leaflet-tooltip. */
+.leaflet-tooltip.tip-municipio {
+  white-space: normal;
+  width: max-content;
+  max-width: 220px;
+}
+
 /* Letreiro de notícias do Dashboard (estilo bolsa): corre para a esquerda,
    conteúdo duplicado para o laço ser contínuo; pausa no hover/toque. */
 @keyframes letreiro {

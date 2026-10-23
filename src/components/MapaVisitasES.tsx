@@ -7,6 +7,9 @@ import type { GeoJsonObject } from "geojson";
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
+import { UFS_COM_MALHA } from "@/lib/mapa-regioes-es";
+import { CamadaMunicipiosES } from "@/components/CamadaMunicipiosES";
+import { LegendaMapaRegioes } from "@/components/LegendaMapaRegioes";
 
 export type VisitaMapa = {
   id: string;
@@ -48,8 +51,10 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
   const [dia, setDia] = useState(diaInicial);
   const [contornos, setContornos] = useState<GeoJsonObject[]>([]);
 
-  // Contorno dos estados da área de atuação (Configurações).
-  const codigos = mapa.estados.map((e) => e.codigo).join(",");
+  // Divisas entre as cidades: vão junto com o código (ES). Só o estado SEM
+  // divisas no código busca o contorno do IBGE.
+  const comDivisas = mapa.estados.some((e) => UFS_COM_MALHA.includes(e.uf));
+  const codigos = mapa.estados.filter((e) => !UFS_COM_MALHA.includes(e.uf)).map((e) => e.codigo).join(",");
   useEffect(() => {
     let ativo = true;
     Promise.all(codigos.split(",").filter(Boolean).map((c) =>
@@ -79,24 +84,28 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
         })}
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_300px]">
-        <MapContainer bounds={mapa.inicial} minZoom={4} maxBounds={mapa.limites} maxBoundsViscosity={0.8} scrollWheelZoom={false}
-          style={{ height: 460, width: "100%", borderRadius: "1rem", border: "1px solid #e2e8f0" }}>
-          <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {contornos.map((c, i) => <GeoJSON key={i} data={c} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />)}
-          {rota.length > 1 && <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />}
-          {comCoord.map((v, i) => (
-            <Marker key={v.id} position={[v.lat!, v.lng!]} icon={iconeNumero(i + 1, !!diaSel?.ehHoje)}>
-              <Popup>
-                <div className="text-sm">
-                  <b>{i + 1}. {v.clienteNome}</b><br />
-                  {v.hora}{v.cidade ? ` · ${v.cidade}` : ""}<br />
-                  {v.observacao && <span className="text-xs text-slate-600">{v.observacao}<br /></span>}
-                  {!v.fixo && <Link href={`/clientes/${v.clienteId}`} className="text-brand-600 underline">Abrir cadastro</Link>}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+        <div className="min-w-0">
+          <MapContainer bounds={mapa.inicial} minZoom={4} maxBounds={mapa.limites} maxBoundsViscosity={0.8} scrollWheelZoom={false}
+            style={{ height: 460, width: "100%", borderRadius: "1rem", border: "1px solid #e2e8f0" }}>
+            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} />}
+            {contornos.map((c, i) => <GeoJSON key={i} data={c} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />)}
+            {rota.length > 1 && <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />}
+            {comCoord.map((v, i) => (
+              <Marker key={v.id} position={[v.lat!, v.lng!]} icon={iconeNumero(i + 1, !!diaSel?.ehHoje)}>
+                <Popup>
+                  <div className="text-sm">
+                    <b>{i + 1}. {v.clienteNome}</b><br />
+                    {v.hora}{v.cidade ? ` · ${v.cidade}` : ""}<br />
+                    {v.observacao && <span className="text-xs text-slate-600">{v.observacao}<br /></span>}
+                    {!v.fixo && <Link href={`/clientes/${v.clienteId}`} className="text-brand-600 underline">Abrir cadastro</Link>}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+          {comDivisas && <LegendaMapaRegioes atendidos={mapa.atendidos} texto="var(--sobre-fundo-texto)" />}
+        </div>
         {/* OS PRÓXIMOS 7 DIAS, e não só o dia aberto.
             "eu quero que mostre os compromissos ou visitas dos próximos 7
             dias". As abas do mapa cobrem segunda a sexta DESTA semana; a

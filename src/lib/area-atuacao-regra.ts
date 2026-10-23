@@ -209,8 +209,13 @@ export function criarValidadorMunicipio(entradas: EntradaValidador[], estados: {
 export type Limites = [[number, number], [number, number]];
 export type Enquadramento = { inicial: Limites; limites: Limites; centro: [number, number] };
 
-/** O que os mapas (Dashboard e Visitas) recebem: enquadramento + estados para o contorno. */
-export type MapaDaArea = Enquadramento & { estados: { uf: string; nome: string; codigo: number }[]; titulo: string };
+/**
+ * O que os mapas (Dashboard e Visitas) recebem: enquadramento + estados para o
+ * contorno + as cidades que ele atende (chaves "UF:nome sem acento", para
+ * pintar as divisas). `atendidos` null = não deu para ler a lista (banco fora
+ * do ar): o mapa então não pinta ninguém de cinza.
+ */
+export type MapaDaArea = Enquadramento & { estados: { uf: string; nome: string; codigo: number }[]; titulo: string; atendidos: string[] | null };
 
 /** Contorno de um estado (IBGE, gratuito, sem chave). */
 export const urlContornoEstado = (codigo: number): string =>
