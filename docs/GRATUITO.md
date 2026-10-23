@@ -81,6 +81,22 @@ endpoint: `/api/cron/tudo`. Quem chama ele é o cron-job.org (grátis).
    - Save.
 3. Clique em **Test run**: a resposta deve ser um JSON começando com `{"ok":true`.
 
+### Se o cron-job.org parar (23/10/2026)
+
+O cron-job.org **desliga o job sozinho** depois de muitas falhas seguidas (foi o
+que pode ter acontecido na semana em que o banco ficou fora). Parado ele, ninguém
+vigia nem religa o WhatsApp, e os lembretes não saem.
+
+O CRM agora avisa: na tela **Conexão WhatsApp** aparece "O agendador do CRM parou
+— a última chamada foi há X" quando passam 40 min sem chamada. Para voltar:
+cron-job.org → o job → **History** (mostra o erro) → ative o job de novo.
+
+Rede de segurança: com o CRM **aberto** (celular ou computador), se nada rodou há
+mais de 20 min, ele mesmo roda a passada (`/api/agendador/batida` → a mesma do
+`/api/cron/tudo`): o vigia religa o WhatsApp, os lembretes saem. Só vale com o CRM
+aberto — não substitui o agendador, só cobre a falha dele. O cron diário da
+Vercel (12h UTC) também é só rede de segurança e não conta como "o agendador chamou".
+
 > Por que 15 min e não 1 min: chamadas de minuto em minuto manteriam o banco
 > Neon acordado 24h e estourariam a cota grátis. O que é tempo real (mensagem
 > chegando → resposta da IA) NÃO passa por aqui, continua instantâneo.
@@ -314,4 +330,5 @@ por ociosidade.
 | Mensagens não chegam no CRM | webhook não configurado | refaça "Criar a instância e o webhook"; confira em /conexao → Diagnóstico |
 | Áudio chega como "🎵 Áudio" sem texto | Base64 desligado no webhook, ou sem `GROQ_API_KEY` | ligue *Webhook Base64* e confira a chave |
 | ZEUS: "cron parece parado" | cron-job.org sem rodar | veja *History* no cron-job.org; confira o header Authorization |
+| /conexao: "O agendador do CRM parou" | cron-job.org desligou o job (falhas seguidas) ou o header Authorization mudou | *History* no cron-job.org → ative o job de novo; `Authorization: Bearer <CRON_SECRET>` tem de ser igual ao da Vercel |
 | IA "limite excedido" no ZEUS | cota diária do Gemini | normal — o Groq assume sozinho; se os dois estourarem, espera até o dia seguinte |

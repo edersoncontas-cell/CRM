@@ -1,6 +1,9 @@
 import { PageHeader, Card } from "@/components/ui";
 import { ConexaoWhatsApp } from "@/components/ConexaoWhatsApp";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
+import { AvisoAgendadorParado } from "@/components/AvisoAgendadorParado";
+import { lerPassadas } from "@/lib/agendador";
+import { saudeAgendador } from "@/lib/agendador-regra";
 import { ImportarAtendimento } from "@/components/ImportarAtendimento";
 import { lerDiag } from "@/lib/zapi-diag";
 import { provedorWhatsApp, urlPublicaCrm, urlPublicaConfirmada, isEnabled, provedorWhatsAppNome } from "@/lib/zapi";
@@ -61,6 +64,8 @@ const CORES_STATUS: Record<string, string> = {
 
 export default async function ConexaoPage() {
   const diag = await lerDiag();
+  // O agendador externo parou? (O WhatsApp só é vigiado quando ele chama.)
+  const agendador = saudeAgendador((await lerPassadas()).externa, new Date());
   const corte = await dataCorteWhatsApp().catch(() => null);
   const recebeuAlgo = diag.ultimos.some((e) => e.status === "recebida" || e.status === "enviada");
   const provedor = provedorWhatsApp();
@@ -75,6 +80,8 @@ export default async function ConexaoPage() {
         subtitulo="Conecte seu número por QR Code — ele continua no seu celular"
         acao={<BotaoAtualizar />}
       />
+
+      <AvisoAgendadorParado saude={agendador} />
 
       {/* Veio de Configurações (01/10, pedido dele): o card que abria esta tela
           agora mora nela, logo acima do QR. */}

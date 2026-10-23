@@ -71,6 +71,10 @@ hora**, 7.200 por dia, cada uma acordando o banco.
   Cabe nos 100 da cota grátis, mas é mais da metade dela. **É a próxima
   alavanca**, se a cota voltar a apertar: espaçar as rotinas que não precisam de
   15 minutos.
+- **A batida do CRM aberto** (`BatidaDoAgendador`, 23/10/2026): com a tela visível,
+  a cada 10 min (e ao abrir), uma chamada a `/api/agendador/batida` que lê duas
+  linhas de configuração. Só roda a passada completa se nada rodou há mais de 20
+  min — ou seja, só quando o agendador externo parou. Aba escondida: zero.
 - **Mensagem de WhatsApp que chega**: cada uma aciona o webhook e grava no banco.
   É o CRM trabalhando.
 - **Você usando o CRM**: cada tela aberta consulta o banco.

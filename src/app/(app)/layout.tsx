@@ -8,6 +8,7 @@ import { AlternarTema } from "@/components/AlternarTema";
 import { modoAtual } from "@/lib/tema-servidor";
 import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
 import { SincronizadorOffline } from "@/components/SincronizadorOffline";
+import { BatidaDoAgendador } from "@/components/BatidaDoAgendador";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
@@ -99,6 +100,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           "banco fora do ar" não pode tomar o lugar de uma cópia boa
           (lib/sem-sinal-telas.ts, MARCA_TELA_OK). */}
       {saude.ok && !recemCriado && <span hidden data-crm-tela="ok" />}
+      {/* Rede de segurança do agendador externo: com o CRM aberto, se nada rodou
+          há mais de 20 min, o servidor roda a passada (vigia do WhatsApp, lembretes).
+          Só com o banco de pé — não adianta bater num banco que não responde. */}
+      {saude.ok && !recemCriado && <BatidaDoAgendador />}
     </div>
   );
 }

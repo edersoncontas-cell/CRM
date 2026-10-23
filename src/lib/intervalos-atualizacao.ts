@@ -21,3 +21,10 @@ export const INTERVALO_ALERTAS = 10 * 60_000;
 
 /** Pontos do mapa de vendas do Dashboard (MapaVendasES). */
 export const INTERVALO_MAPA_VENDAS = 10 * 60_000;
+
+/**
+ * A batida do CRM aberto no agendador (BatidaDoAgendador): só pergunta ao
+ * servidor se alguma rotina está atrasada — duas leituras de configuração, e só
+ * roda a passada se nada rodou há mais de 20 min (lib/agendador-regra.ts).
+ */
+export const INTERVALO_BATIDA_AGENDADOR = 10 * 60_000;

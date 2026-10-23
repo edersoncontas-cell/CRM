@@ -59,7 +59,7 @@ export function ConexaoWhatsApp() {
   const [pending, startTransition] = useTransition();
   const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
   const [criandoMsg, setCriandoMsg] = useState<string | null>(null);
-  const [vigia, setVigia] = useState<{ descricao: string; reconexoes: number } | null>(null);
+  const [vigia, setVigia] = useState<{ descricao: string; reconexoes: number; ultimoEstado: string | null } | null>(null);
   const [vigiaMsg, setVigiaMsg] = useState<string | null>(null);
   // O que a saída do WhatsApp fez, para continuar na tela depois que o painel
   // "conectado" some e o QR aparece (o botão que explicou desmonta junto).
@@ -442,7 +442,14 @@ export function ConexaoWhatsApp() {
           {pending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Reiniciar instância
         </button>
       </div>
-      {(vigiaMsg || vigia) && <p className="mt-2 text-xs text-slate-500">{vigiaMsg ?? vigia?.descricao}</p>}
+      {/* Desconectado AGORA, mas a última coisa que o vigia viu foi "conectado":
+          mostrar "Conectado há…" debaixo de um QR confunde (era o caso com o
+          agendador parado). Aí a frase é a verdade de agora. */}
+      {(vigiaMsg || vigia) && (
+        <p className="mt-2 text-xs text-slate-500">
+          {vigiaMsg ?? (vigia?.ultimoEstado === "aberta" ? "Desconectado agora — o vigia ainda não tinha visto a queda. Escaneie o QR ou use “Tentar religar sem QR”." : vigia?.descricao)}
+        </p>
+      )}
     </div>
     </div>
   );

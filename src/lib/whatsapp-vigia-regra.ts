@@ -131,7 +131,22 @@ function horaBrasilia(iso: string, agora: Date): string {
   });
 }
 
+/** O vigia confere de 5 em 5 min; mais que isto sem conferir e o que a tela diz pode estar velho. */
+export const VERIFICACAO_VELHA_MIN = 30;
+
+// 23/10: com o agendador externo parado, a tela dizia "Conectado (há menos de 1
+// hora)" debaixo de um QR de WhatsApp desconectado — era a última coisa que o
+// vigia viu, dias antes. Toda descrição agora diz DE QUANDO é a informação.
 export function descreverConexao(memoria: MemoriaVigia, agora: Date): string {
+  const base = descreverSemIdade(memoria, agora);
+  const v = memoria.ultimaVerificacao;
+  if (!v) return base;
+  const min = Math.floor((agora.getTime() - new Date(v).getTime()) / 60_000);
+  if (!Number.isFinite(min) || min <= VERIFICACAO_VELHA_MIN) return base;
+  return `${base} · última verificação do vigia: ${horaBrasilia(v, agora)} (ele não confere desde então — o estado pode ter mudado)`;
+}
+
+function descreverSemIdade(memoria: MemoriaVigia, agora: Date): string {
   const horas = (iso: string) => Math.max(0, Math.round((agora.getTime() - new Date(iso).getTime()) / 3_600_000));
   if (memoria.ultimoEstado === "aberta" && memoria.conectadaDesde) {
     const h = horas(memoria.conectadaDesde);

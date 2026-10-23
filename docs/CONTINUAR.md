@@ -12,6 +12,26 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
+**23/10 — WhatsApp parado + foto das Máquinas Usadas.**
+- **Máquinas Usadas:** o campo de foto tinha `capture="environment"`, que faz o
+  celular abrir DIRETO a câmera e some com a galeria ("a única opção é tirar
+  foto"). Tirei o `capture`; o botão agora é "Anexar foto". Continua **uma foto
+  por máquina** (coluna `fotoUrl`); várias fotos pedem coluna nova — decisão dele.
+  O menu que o celular abre (Câmera / Galeria / Arquivos) é do aparelho; o site não
+  controla se ele lista "Tirar foto" junto (iPhone costuma listar).
+- **WhatsApp:** SEM print da tela não sei qual das causas é. O que o código
+  cobre e o que ficou de fora (Evolution FALSA local, `fake-evolution.mjs` fora do
+  repo): conectado, desconectado (QR aparece), instância inexistente (cria sozinho),
+  presa, chave recusada, servidor sem resposta e desligado — tudo diz a causa. O
+  que faltava: se o **agendador externo (cron-job.org) para**, nada vigia o
+  WhatsApp (o vigia só roda pelo `/api/cron/tudo`) e a tela não avisava. Agora:
+  aviso na Conexão ("o agendador parou há X"), rede de segurança (o CRM aberto roda
+  a passada se nada rodou há 20 min — `lib/agendador.ts`, `/api/agendador/batida`,
+  `BatidaDoAgendador` no layout) e a frase "Conectado há…" não fica mais debaixo de
+  um QR com informação velha (`descreverConexao` diz de quando é). **Não dá para o
+  código:** ligar a VPS (é dele; `docs/PROMPT-RELIGAR-VPS.md`), nem ler o QR com o
+  celular. WhatsApp continua PAUSADO para envio (nada disso mexe na trava).
+
 **23/10 — Mapa por região** (Dashboard "Vendas por cidade" e Visitas "Mapa da
 semana"). Pedido dele, com a foto do Mapa do Turismo Capixaba 2025: divisas entre
 as cidades, **coloridas** onde ele atende (cor da região, 10 regiões da foto) e
@@ -46,7 +66,7 @@ PC e celular, dois temas). O Google de verdade não foi testado (sem rede aqui).
 
 Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
 pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
-**1.531 testes passando** (123 arquivos), lint e build limpos.
+**1.561 testes passando** (125 arquivos), lint e build limpos.
 
 **06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
 pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro

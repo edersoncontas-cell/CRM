@@ -1419,9 +1419,10 @@ export async function vigiarConexaoAction(): Promise<ResultadoVigia> {
   return r;
 }
 
-export async function lerConexaoVigiadaAction(): Promise<{ descricao: string; reconexoes: number; ultimaQueda: string | null; conectadaDesde: string | null }> {
+export async function lerConexaoVigiadaAction(): Promise<{ descricao: string; reconexoes: number; ultimaQueda: string | null; conectadaDesde: string | null; ultimoEstado: string | null }> {
   const m = await lerMemoriaVigia();
   return {
+    ultimoEstado: m.ultimoEstado,
     descricao: descreverConexao(m, new Date()),
     reconexoes: m.reconexoesAutomaticas,
     ultimaQueda: m.ultimaQueda,
