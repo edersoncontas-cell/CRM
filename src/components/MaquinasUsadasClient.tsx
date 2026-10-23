@@ -6,7 +6,7 @@ import {
 } from "@/lib/actions";
 import { formatCurrency } from "@/lib/utils";
 import {
-  Plus, X, Pencil, Trash2, MapPin, Clock, Calendar, Share2, Check, Search, Truck, Camera,
+  Plus, X, Pencil, Trash2, MapPin, Clock, Calendar, Share2, Check, Search, Truck, ImagePlus,
 } from "lucide-react";
 
 // Comprime a foto no navegador (redimensiona p/ no máx. 1000px e exporta JPEG)
@@ -334,11 +334,13 @@ function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () =
           </Campo>
           <Campo label="Localização" full><input name="localizacao" defaultValue={ed?.localizacao ?? ""} placeholder="Cachoeiro de Itapemirim" className={inp} /></Campo>
 
-          {/* Foto da máquina (tirada/escolhida no celular) */}
+          {/* Foto da máquina, ANEXADA da galeria/arquivos. Sem `capture`: esse atributo
+              força o celular a abrir direto a câmera e some com a opção de escolher
+              uma foto que já está no aparelho (print dele: "a única opção é tirar foto"). */}
           <div className="col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-600">Foto da máquina</span>
             <input type="hidden" name="fotoUrl" value={foto} />
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={aoEscolherFoto} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={aoEscolherFoto} className="hidden" />
             {foto ? (
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -356,7 +358,7 @@ function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () =
                   onClick={() => fileRef.current?.click()}
                   className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-black/80"
                 >
-                  <Camera size={13} /> Trocar
+                  <ImagePlus size={13} /> Trocar
                 </button>
               </div>
             ) : (
@@ -365,7 +367,7 @@ function ModalUsada({ maquina, onClose }: { maquina: Usada | null; onClose: () =
                 onClick={() => fileRef.current?.click()}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-6 text-sm font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600"
               >
-                <Camera size={18} /> Tirar / escolher foto
+                <ImagePlus size={18} /> Anexar foto
               </button>
             )}
             {erroFoto && <p className="mt-1 text-xs text-red-500">{erroFoto}</p>}
