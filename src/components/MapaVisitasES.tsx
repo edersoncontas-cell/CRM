@@ -8,6 +8,7 @@ import "leaflet/dist/leaflet.css";
 import Link from "next/link";
 import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
 import { UFS_COM_MALHA } from "@/lib/mapa-regioes-es";
+import type { ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
 import { CamadaMunicipiosES } from "@/components/CamadaMunicipiosES";
 import { LegendaMapaRegioes } from "@/components/LegendaMapaRegioes";
 
@@ -27,8 +28,10 @@ export type VisitaMapa = {
 
 export type DiaMapa = { iso: string; nome: string; label: string; ehHoje: boolean };
 
+const TAMANHO_PIN = 30;
+
 function iconeNumero(n: number, hoje: boolean): L.DivIcon {
-  const tamanho = 30;
+  const tamanho = TAMANHO_PIN;
   return L.divIcon({
     className: "",
     iconSize: [tamanho, tamanho],
@@ -65,10 +68,15 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
 
   // Compromisso fixo (reunião de segunda) sempre primeiro; depois por hora.
   const doDia = useMemo(() => visitas.filter((v) => v.dataIso === dia).sort((a, b) => Number(!!b.fixo) - Number(!!a.fixo) || a.hora.localeCompare(b.hora)), [visitas, dia]);
-  const comCoord = doDia.filter((v) => v.lat != null && v.lng != null);
+  const comCoord = useMemo(() => doDia.filter((v) => v.lat != null && v.lng != null), [doDia]);
   const semCoord = doDia.filter((v) => v.lat == null || v.lng == null);
   const diaSel = dias.find((d) => d.iso === dia);
-  const rota = comCoord.map((v) => [v.lat!, v.lng!] as [number, number]);
+  const rota = useMemo(() => comCoord.map((v) => [v.lat!, v.lng!] as [number, number]), [comCoord]);
+  // Os pins do dia ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles.
+  const obstaculos = useMemo<ObstaculoRotulo[]>(
+    () => comCoord.map((v) => ({ lng: v.lng!, lat: v.lat!, esq: -(TAMANHO_PIN / 2 + 2), dir: TAMANHO_PIN / 2 + 2, cima: -(TAMANHO_PIN + 4), baixo: 2 })),
+    [comCoord],
+  );
 
   return (
     <div>
@@ -85,10 +93,10 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_300px]">
         <div className="min-w-0">
-          <MapContainer bounds={mapa.inicial} minZoom={4} maxBounds={mapa.limites} maxBoundsViscosity={0.8} scrollWheelZoom={false}
+          <MapContainer bounds={mapa.inicial} minZoom={4} zoomSnap={0.25} maxBounds={mapa.limites} maxBoundsViscosity={0.8} scrollWheelZoom={false}
             style={{ height: 460, width: "100%", borderRadius: "1rem", border: "1px solid #e2e8f0" }}>
             <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} />}
+            {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} obstaculos={obstaculos} rota={rota} />}
             {contornos.map((c, i) => <GeoJSON key={i} data={c} style={{ color: "#141416", weight: 1.2, fillColor: "#ffcb2d", fillOpacity: 0.06 }} interactive={false} />)}
             {rota.length > 1 && <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />}
             {comCoord.map((v, i) => (

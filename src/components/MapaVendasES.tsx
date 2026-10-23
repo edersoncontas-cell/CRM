@@ -10,6 +10,7 @@ import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { urlContornoEstado, type MapaDaArea } from "@/lib/area-atuacao-regra";
 import { UFS_COM_MALHA } from "@/lib/mapa-regioes-es";
+import type { ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
 import { CamadaMunicipiosES } from "@/components/CamadaMunicipiosES";
 import { LegendaMapaRegioes } from "@/components/LegendaMapaRegioes";
 import { useTemaDash } from "@/components/TemaDashProvider";
@@ -19,8 +20,10 @@ import type { PontoVenda } from "@/lib/vendas-dashboard";
 // Contorno dos estados da área de atuação (IBGE, gratuito, sem chave). Se a
 // busca falhar, o mapa segue só com os azulejos escuros — nada quebra.
 
+const tamanhoDoCifrao = (vendas: number, max: number) => Math.round(26 + (vendas / max) * 22);
+
 function iconeCifrao(vendas: number, max: number): L.DivIcon {
-  const tamanho = Math.round(26 + (vendas / max) * 22);
+  const tamanho = tamanhoDoCifrao(vendas, max);
   return L.divIcon({
     className: "",
     iconSize: [tamanho, tamanho],
@@ -90,6 +93,11 @@ export default function MapaVendasES({
 
   const pontos = modo === "ano" ? pontosAno : pontosTudo;
   const max = useMemo(() => Math.max(1, ...pontos.map((p) => p.vendas)), [pontos]);
+  // Os cifrões ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles (anel de 3 px + sombra).
+  const obstaculos = useMemo<ObstaculoRotulo[]>(
+    () => pontos.map((p) => { const r = tamanhoDoCifrao(p.vendas, max) / 2 + 5; return { lng: p.lng, lat: p.lat, esq: -r, dir: r, cima: -r, baixo: r }; }),
+    [pontos, max],
+  );
   const totalVendas = pontos.reduce((s, p) => s + p.vendas, 0);
   const totalValor = pontos.reduce((s, p) => s + p.valor, 0);
 
@@ -113,6 +121,7 @@ export default function MapaVendasES({
       <MapContainer
         bounds={mapa.inicial}
         minZoom={4}
+        zoomSnap={0.25}
         maxBounds={mapa.limites}
         maxBoundsViscosity={0.8}
         scrollWheelZoom={false}
@@ -124,7 +133,7 @@ export default function MapaVendasES({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           className="mapa-escuro"
         />
-        {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} />}
+        {comDivisas && <CamadaMunicipiosES atendidos={mapa.atendidos} obstaculos={obstaculos} />}
         {contornos.map((c, i) => (
           <GeoJSON key={i} data={c} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />
         ))}

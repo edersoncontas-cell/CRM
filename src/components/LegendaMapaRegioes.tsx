@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import malha from "@/lib/malha-es.json";
-import { COR_NAO_ATENDO, resumirMapa } from "@/lib/mapa-regioes-es";
+import { COR_DIVISA, COR_NAO_ATENDO, resumirMapa } from "@/lib/mapa-regioes-es";
 
 // Legenda do mapa por região: quantas cidades ele atende, as regiões com cor e o
-// cinza do "não atendo". Fica embaixo do mapa, no tom da tela (quem usa passa as
+// cinza escuro do "não atendo". Fica embaixo do mapa, no tom da tela (quem usa passa as
 // cor). Tem os quatro estados: lista lida, vazia (ninguém marcado), e
 // desconhecida (o banco não respondeu — sem cores no mapa e a legenda diz isso).
 
@@ -37,15 +37,17 @@ export function LegendaMapaRegioes({ atendidos, texto }: { atendidos: string[] |
       <ul className="flex max-h-28 flex-wrap gap-x-3 gap-y-1 overflow-y-auto pr-1" style={{ color: texto }}>
         {resumo.regioes.map(({ regiao, qtd }) => (
           <li key={regiao.id} className="flex items-center gap-1.5">
-            <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: regiao.cor, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)" }} />
+            <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: regiao.cor, boxShadow: `inset 0 0 0 1px ${COR_DIVISA}` }} />
             <span>{regiao.nome} <b>{qtd}</b></span>
           </li>
         ))}
         <li className="flex items-center gap-1.5">
-          <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: COR_NAO_ATENDO, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)" }} />
+          <span aria-hidden className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: COR_NAO_ATENDO, boxShadow: `inset 0 0 0 1px ${COR_DIVISA}` }} />
           <span>Não atendo <b>{resumo.naoAtendidas}</b></span>
         </li>
       </ul>
+      {/* O nome só é escrito na cidade onde ele cabe; o resto aparece ao tocar ou ao aproximar. */}
+      <p className="mt-1.5 opacity-80">Toque numa cidade para ver o nome e a região. Aproxime o mapa (+) para o nome aparecer escrito dentro dela.</p>
     </div>
   );
 }

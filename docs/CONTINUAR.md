@@ -12,6 +12,34 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
+**23/10 (2) — Mapa refeito: sem textura, divisa preta, cinza escuro, nomes DENTRO
+das cidades.** Print dele: "não gostei da textura, sobrepondo o nome das cidades,
+não enquadrados… contorno do limite entre os municípios de preto e as que não
+atendo, cinza escuro". Causa: o preenchimento era 0,8/0,5 transparente, então a
+base do OpenStreetMap (ruas, rios e os NOMES do próprio mapa) aparecia por baixo
+da cor. Agora: preenchimento **opaco**, divisa **preta**, "não atendo" em cinza
+escuro `#555c68`, contorno grosso preto do estado (traço de 4 px por baixo das
+cidades), realce ao tocar (divisa mais grossa + cor mais clara) e o **nome de cada
+cidade escrito dentro dela**, só onde cabe (`lib/mapa-rotulos-es.ts`, puro:
+retângulo do texto inteiro dentro da cidade, dentro da tela, longe de pin, cifrão,
+botões do mapa e do trajeto do dia; 12 → 11 → 10 px, uma ou duas linhas). Cidade
+sem espaço fica sem nome — o nome continua na dica ao tocar, e aproximar com o (+)
+acrescenta nomes. **Limite físico:** na abertura (zoom ~8) só as cidades grandes
+têm nome (PC: ~5; celular: ~2); com 2 níveis a mais, 16-26. O mapa agora abre em
+passos de 1/4 de zoom (`zoomSnap`) para aproveitar a caixa. A malha ganhou o ponto
+do nome (`c`) e os anéis foram arrumados (Vitória, Vila Velha, Guarapari e Ibiraçu
+vinham com as ilhas como anéis soltos e o contorno principal por último;
+`scripts/gerar-malha-es.py` normaliza). Bug que o teste de tela pegou: a família
+da letra tinha aspas duplas dentro do `style="…"` e o atributo fechava no meio
+(texto saía na cor da página). Prova: `tests/mapa-rotulos-es.test.ts` (41) +
+`tests/mapa-regioes-es.test.ts` (33) + e2e 171/171 (PC 1440 e celular 390, tema
+claro e escuro, azulejo falso COM ruas, rios e nomes para provar que a base não
+aparece por baixo). OpenStreetMap real e Safari não foram vistos (sem rede aqui).
+**WhatsApp (mesma data):** o print dele mostrou "Evolution parada dentro da VPS
+ligada"; não dá para o código religar. `docs/PROMPT-RELIGAR-VPS.md` ganhou o passo
+de leitura (disco/memória/contêineres) e o Passo 7 (`systemctl enable docker` +
+`docker update --restart=always …`) para a Evolution subir sozinha depois.
+
 **23/10 — WhatsApp parado + foto das Máquinas Usadas.**
 - **Máquinas Usadas:** o campo de foto tinha `capture="environment"`, que faz o
   celular abrir DIRETO a câmera e some com a galeria ("a única opção é tirar
@@ -66,7 +94,7 @@ PC e celular, dois temas). O Google de verdade não foi testado (sem rede aqui).
 
 Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
 pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
-**1.561 testes passando** (125 arquivos), lint e build limpos.
+**1.612 testes passando** (126 arquivos), lint e build limpos.
 
 **06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
 pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro

@@ -506,6 +506,21 @@ img, video, iframe {
   filter: invert(1) hue-rotate(200deg) brightness(0.8) contrast(0.95) saturate(0.55);
 }
 
+/* Nome da cidade escrito dentro dela no mapa por região (RotulosMunicipiosES).
+   Cor, letra e tamanho vão inline no próprio nome (a conta de "cabe" mediu com eles).
+   Não recebe toque: o toque é da cidade (dica com região e "você atende"). */
+.rotulo-municipio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  background: none;
+  border: 0;
+}
+
 /* Dica ao passar/tocar numa cidade do mapa por região ("Cachoeiro de Itapemirim
    · Sul Capixaba dos Vales e Café · você atende"): o Leaflet não quebra linha e
    no celular a frase saía da tela. Duas classes para vencer o .leaflet-tooltip. */

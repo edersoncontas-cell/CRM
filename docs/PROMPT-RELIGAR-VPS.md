@@ -24,7 +24,8 @@ valem o tempo todo:
   Upgrade. Se aparecer fatura em aberto, só me diga o valor e a data.
 - NÃO apague nem altere regra de firewall que já existe. Só pode CRIAR a regra
   descrita no Passo 4, e só naquele caso.
-- No terminal do servidor, digite SOMENTE o comando do Passo 6, e só naquele caso.
+- No terminal do servidor, digite SOMENTE os comandos dos Passos 6 e 7, cada um só no
+  caso descrito lá. Nenhum deles apaga dados nem desliga nada.
 - Se alguma tela for diferente do que está descrito, pare e me diga o que está vendo.
 
 **Passo 1 — O que o CRM diz agora.**
@@ -72,11 +73,31 @@ pedir usuário ou senha, PARE e me peça. Cole exatamente esta linha e tecle Ent
     cd /opt/evolution && docker compose up -d
 
 Espere terminar. Copie as últimas linhas que ele mostrar (sem nenhuma senha) e volte
-ao Passo 5 uma vez. Não digite mais nada no terminal.
+ao Passo 5 uma vez.
 
-**Passo 7 — Me diga, nesta ordem:**
+Se a Evolution ainda não subiu, rode estes três comandos, um por vez, que só LEEM
+(mostram por que ela parou), e me cole o que cada um mostrar (sem senha):
+
+    docker ps -a
+    df -h /
+    free -m
+
+**Passo 7 — Para não repetir (só depois que o CRM mostrar "WhatsApp conectado" ou um
+QR Code).** Hoje a Evolution fica parada dentro da VPS ligada e só volta quando eu
+reinicio à mão. Dois comandos resolvem: o primeiro faz o Docker ligar junto com a VPS;
+o segundo faz os três contêineres da Evolution subirem sozinhos se caírem. Nenhum
+reinicia nem apaga nada agora. Cole um por vez:
+
+    systemctl enable docker
+    docker update --restart=always evolution_api evolution_postgres evolution_redis
+
+Se algum disser "permission denied", "command not found" ou "No such container", PARE
+e me copie a linha — não tente outro comando.
+
+**Passo 8 — Me diga, nesta ordem:**
 1. O status que a VPS tinha no Passo 2 e os avisos do painel (copiados).
-2. O que você clicou (Iniciar, Reiniciar, regra de firewall, comando).
+2. O que você clicou (Iniciar, Reiniciar, regra de firewall, comandos).
 3. O IP que o painel mostra para a VPS.
 4. O que a tela Conexão do CRM mostra no fim (conectado, QR, ou as linhas do
    diagnóstico).
+5. Se rodou os comandos do Passo 6 (leitura) e do Passo 7, o que eles mostraram.
