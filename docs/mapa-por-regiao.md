@@ -47,9 +47,11 @@ cabe. O nome só é escrito se o retângulo dele ficar **inteiro** dentro da cid
 de pin de visita, cifrão de venda, botões do mapa (+ / −, créditos) e do trajeto do
 dia. Tenta 12 → 11 → 10 px (menos que 10 não se lê no celular), em uma linha e depois
 em duas. Quem não cabe fica sem nome: continua na dica ao passar/tocar, e aproximar
-com o (+) acrescenta nomes (zoom 9: ~46 de 78; zoom 10: ~70).
+com o (+) acrescenta nomes. Quantos: com uma janela que cobre o estado inteiro (~850×1350 px no zoom 9)
+saem ~54 de 78 no zoom 9 e ~76 no 10; na tela real do PC (808×460), dois níveis acima da abertura saem
+15–17 (e 8–9 no celular) — medido no e2e.
 
-- **Na abertura quase não há nomes** (zoom ~8: PC ~5, celular ~2): a cidade tem ~50 px
+- **Na abertura quase não há nomes** (zoom ~8: PC 4–8, celular ~2): a cidade tem ~50 px
   e "Cachoeiro de Itapemirim" tem ~110. É o limite físico — a legenda avisa. O mapa abre
   em passos de 1/4 de zoom (`zoomSnap`) para aproveitar a caixa.
 - O ponto de partida de cada nome é o `c` da malha (ponto do maior pedaço mais longe de
@@ -76,12 +78,18 @@ com o (+) acrescenta nomes (zoom 9: ~46 de 78; zoom 10: ~70).
   do que aparece (antes ia para o canto mais perto do ponto). A busca é do grosso para o
   fino (`acharLugar`): uma grade grossa, testada com o retângulo do texto ENCOLHIDO (se o texto
   cabe num ponto, o encolhido cabe em tudo que está a até meio passo dele — nenhum lugar
-  escapa), e, em volta de cada ponto que passou, 1 px com o retângulo inteiro. O custo não
-  cresce com o tamanho da janela (teto: a tela), e a resolução é ~1 px — uma folga mais estreita
-  que isso pode escapar. O passo fixo de 4 px do começo saltava por cima de faixas estreitas, e
+  escapa), e, em volta de cada ponto que passou, 1 px com o retângulo inteiro. O custo CRESCE com a
+  janela, devagar: ~100 pontos grossos numa janela pequena (a cidade no zoom de abertura), e em
+  tela de PC a ordem é de milhares de perguntas "cabe aqui?" por variante do nome (nada cabe em
+  1440×460: ~3 mil; em 300×200: ~290). A resolução é ~1 px: acha todo lugar com folga de pelo
+  menos 1 px; um lugar mais apertado (caixa livre menor que ~1 px) pode escapar — na comparação com
+  uma varredura exaustiva de 1 px, cerca de 0,5% das telas. O passo fixo de 4 px do começo saltava por cima de faixas estreitas, e
   a busca na caixa INTEIRA da cidade custava > 1 s por arrasto num polígono sintético de 6000
-  vértices (a malha real tem no máximo 263 por anel; no real o antigo gastava ~100 ms no
-  celular, zoom 13).
+  vértices (teste de estresse: a malha real tem no máximo 263 por anel; no real o antigo gastava
+  ~100 ms no celular, zoom 13). Custo no Chromium, zoom de abertura, em relação ao código
+  anterior: de ~1,3× (mediana) a ~1,75× (pior caso) com a CPU normal, e até ~5,9× com a CPU
+  estrangulada em 4×; do zoom 8,5 em diante, igual ou menor. A contagem de perguntas está nos testes;
+  o relógio não (varia com a máquina).
 - **CSS do nome**: `.leaflet-marker-icon.rotulo-municipio` (DUAS classes) em `globals.css`.
   O `leaflet.css` carrega depois, junto do mapa, e com uma classe só o `display:block` dele
   vencia o `flex`: cada linha ocupava 18 px em vez de 14 e o nome de duas linhas saía mais alto
@@ -97,9 +105,23 @@ lê o nome das cidades onde o texto não cabe (na abertura são poucas).
   está colado no topo) → de lado, para o lado com mais espaço (nos cantos é empurrada para dentro,
   porque aberta de lado ela fica centrada na vertical) → em cima/embaixo mas DESLOCADA para o lado
   até caber (o único jeito em mapa estreito: o Dashboard no celular tem 324 px e a dica, 220 mais a
-  seta). Os botões +/− e os créditos ficam POR CIMA da dica (z-index maior), então ela desvia do
-  retângulo deles. Antes era fixa em cima e saía do mapa em todas as bordas (medido, inclusive
-  no PC) — e as cidades do norte, justo as cinzas, ficam coladas no topo e na direita.
+  seta) → deslocada TAMBÉM para cima/baixo, até a borda do botão (nos 20 px do pé do mapa a dica sobe
+  acima dos créditos; no topo de um mapa de celular de 320 px ela desce abaixo do +/−) → se nada
+  escapa, a que MENOS cobre. Os botões +/− e os créditos ficam POR CIMA da dica (z-index maior),
+  então ela desvia do retângulo deles (medido na tela, com a folga de 4 px). Em varredura de mapas
+  de 254 a 1100 px com os dois controles reais, nenhuma dica cobre um controle nem sai do mapa;
+  sem a regra, cerca de 1 em cada 12 toques no mapa do celular (Visitas) caía embaixo do +/− e 1
+  em 6 contando os créditos. Antes era fixa em cima e saía do mapa nas bordas de cima, laterais e
+  cantos de cima (medido, inclusive no PC) — e as cidades do norte, justo as cinzas, ficam
+  coladas no topo e na direita.
+- **A seta** do Leaflet fica fixa no meio da dica: com a dica deslocada ela apontava para outra
+  cidade. `seta` (devolvido por `direcaoDaDica`) vira `--seta` na própria dica e o CSS
+  (`.tip-municipio.leaflet-tooltip-*:before`) a traz de volta para o dedo, presa a 14 px das pontas.
+  **Limite:** a conta supõe a dica com a largura máxima (220 px); num texto mais curto, deslocado
+  no canto, a seta pode ficar presa na ponta da dica a até ~60 px do dedo (o e2e mede e aceita a
+  seta presa). O ponto do dedo é puxado para dentro do mapa antes da conta (a borda fracionária do
+  contêiner entrega -0,75 na primeira linha de pixels) e encostar num botão não conta como cobrir
+  (erro de 1 ulp em dedo fracionário jogava a dica a 400 px).
 - **Celular (sem mouse, `(hover: none)`)**: abre ao tocar e FICA aberta até ele tocar em outra
   cidade (troca, nunca duas), tocar no mapa vazio, mover/aproximar o mapa ou girar o aparelho. O
   Leaflet fecha a dica no `mouseout`, e o Chromium em modo celular manda um logo depois do

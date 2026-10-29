@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { GeoJSON, Pane, useMap } from "react-leaflet";
-import type { Layer, LeafletEvent, LeafletMouseEvent, PathOptions } from "leaflet";
+import type { Layer, LeafletEvent, LeafletMouseEvent, PathOptions, Tooltip } from "leaflet";
 import type { Feature, GeoJsonObject } from "geojson";
 import malha from "@/lib/malha-es.json";
 import { COR_DIVISA, direcaoDaDica, estiloDoMunicipio, estiloRealce, rotuloDoMunicipio, Z_CONTORNO_ESTADO, Z_MUNICIPIOS, type CaixaDoMapa } from "@/lib/mapa-regioes-es";
-import { semIlhotas, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
+import { botoesDoContainer, semIlhotas, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
 import { RotulosMunicipiosES } from "@/components/RotulosMunicipiosES";
 
 // As divisas entre as cidades do ES: colorida (a cor da região, como no Mapa do
@@ -41,13 +41,11 @@ export function CamadaMunicipiosES({ atendidos, obstaculos, rota }: { atendidos:
   const estiloBase = useCallback((f?: Feature) => estiloDoMunicipio(nomeDe(f), conjunto) as PathOptions, [conjunto]);
 
   // Os botões do mapa (+ / − e os créditos) ficam POR CIMA da dica (z-index deles é maior que o do
-  // painel das dicas): a dica evita o retângulo deles, em px do contêiner.
+  // painel das dicas): a dica evita o retângulo deles, em px do contêiner (o mesmo sistema do
+  // `containerPoint` do Leaflet: sem a borda e com a escala descontadas).
   const botoesDoMapa = useCallback((): CaixaDoMapa[] => {
-    const base = mapa.getContainer().getBoundingClientRect();
-    return [...mapa.getContainer().querySelectorAll(".leaflet-control")].map((el) => {
-      const r = el.getBoundingClientRect();
-      return { x0: r.left - base.left - 4, y0: r.top - base.top - 4, x1: r.right - base.left + 4, y1: r.bottom - base.top + 4 };
-    });
+    const container = mapa.getContainer();
+    return botoesDoContainer(container, container.querySelectorAll(".leaflet-control"), { x: 0, y: 0 }, 4);
   }, [mapa]);
 
   // Celular (sem mouse): a dica abre no toque e FICA aberta até ele tocar em outra cidade, tocar no
@@ -90,18 +88,29 @@ export function CamadaMunicipiosES({ atendidos, obstaculos, rota }: { atendidos:
             const base = estiloDoMunicipio(nome, conjunto) as PathOptions;
             const realce = estiloRealce(estiloDoMunicipio(nome, conjunto)) as PathOptions;
             const c = camada as Layer & { setStyle: (o: PathOptions) => void; bringToFront: () => void };
+            // A seta é um pseudo-elemento fixo no meio da dica: com a dica deslocada ela apontava para
+            // outra cidade. `--seta` (lido em globals.css) a empurra de volta para o dedo. No primeiro
+            // "mouseover" a dica ainda não existe no DOM — quem aplica é o "tooltipopen".
+            let seta = 0;
+            const aplicarSeta = (dica: Tooltip | null | undefined) => dica?.getElement()?.style.setProperty("--seta", `${seta}px`);
             // A direção da dica sai de onde está o dedo/mouse (cidade colada na borda tinha a dica
             // cortada). Estes ouvintes entram ANTES do bindTooltip: o Leaflet dispara na ordem em que
             // foram ligados, então a direção já está certa quando ele posiciona a dica.
             const abrirOndeCabe = (e: LeafletMouseEvent) => {
               const dica = c.getTooltip();
               if (!dica || !e.containerPoint) return;
-              const tam = mapa.getSize();
-              const onde = direcaoDaDica(e.containerPoint.x, e.containerPoint.y, tam.x, tam.y, botoesDoMapa());
-              dica.options.direction = onde.direcao;
-              dica.options.offset = onde.deslocamento;
+              // Se a conta falhar, a dica abre onde o Leaflet a puser (em cima): uma exceção aqui interromperia os
+              // ouvintes seguintes — inclusive o que ABRE a dica — e a cidade ficaria muda.
+              try {
+                const tam = mapa.getSize();
+                const onde = direcaoDaDica(e.containerPoint.x, e.containerPoint.y, tam.x, tam.y, botoesDoMapa());
+                dica.options.direction = onde.direcao;
+                dica.options.offset = onde.deslocamento;
+                seta = onde.seta;
+                aplicarSeta(dica);
+              } catch { /* dica no lugar padrão */ }
             };
-            c.on({ mouseover: abrirOndeCabe, mousemove: abrirOndeCabe, click: abrirOndeCabe });
+            c.on({ mouseover: abrirOndeCabe, mousemove: abrirOndeCabe, click: abrirOndeCabe, tooltipopen: () => aplicarSeta(c.getTooltip()) });
             c.bindTooltip(rotuloDoMunicipio(nome, conjunto), { sticky: true, direction: "top", className: "tip-municipio" });
             if (semMouse()) {
               c.off("mouseout", c.closeTooltip); // quem fecha é o próximo toque (efeito acima), não o "mouseout"

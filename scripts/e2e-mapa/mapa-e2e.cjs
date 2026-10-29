@@ -11,7 +11,7 @@ const fs = require("fs");
 const path = require("path");
 
 const BASE = process.env.E2E_BASE || "http://localhost:3210";
-const OUT = process.env.E2E_OUT || "/tmp/mapa-e2e/"; // onde ficam o azulejo falso e as fotos
+const OUT = path.resolve(process.env.E2E_OUT || "/tmp/mapa-e2e") + path.sep; // onde ficam o azulejo falso e as fotos (com ou sem "/" no fim)
 const CHROMIUM = process.env.CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const PSQL = process.env.E2E_PSQL || `su postgres -c "psql -p 5433 -d crmgoogle -At -v ON_ERROR_STOP=1"`;
 const SENHA = process.env.E2E_SENHA; // a senha do CRM de TESTE (banco local descartável) — nunca a de produção
@@ -19,7 +19,8 @@ if (!SENHA) { console.error("Defina E2E_SENHA (a senha do CRM de teste). Veja sc
 const BANCO = process.env.E2E_BANCO; // o NOME do banco de teste: o roteiro grava e apaga dados, então só roda se o banco do PSQL tiver este nome
 if (!BANCO) { console.error("Defina E2E_BANCO com o nome do banco de TESTE (o roteiro grava e apaga dados nele). Veja scripts/e2e-mapa/README.md."); process.exit(2); }
 fs.mkdirSync(OUT, { recursive: true });
-const TILE = fs.readFileSync(OUT + "tile-osm.png");
+if (!fs.existsSync(path.join(OUT, "tile-osm.png"))) { console.error(`Falta o azulejo falso em ${OUT}tile-osm.png. Gere com: E2E_OUT=${OUT} node scripts/e2e-mapa/gerar-tile.cjs`); process.exit(2); }
+const TILE = fs.readFileSync(path.join(OUT, "tile-osm.png"));
 const sql = (q) => execSync(PSQL, { input: q }).toString().trim();
 const setConfig = (chave, obj) => sql(`INSERT INTO "Configuracao"(chave, valor) VALUES ('${chave}', $j$${typeof obj === "string" ? obj : JSON.stringify(obj)}$j$) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;`);
 const delConfig = (chave) => sql(`DELETE FROM "Configuracao" WHERE chave='${chave}';`);
@@ -31,20 +32,39 @@ const info = (t) => console.log(`      · ${t}`);
 // Guarda o que havia ANTES e devolve no fim — também quando o roteiro quebra no meio (bloco finally / SIGINT).
 const b64 = (txt) => Buffer.from(txt, "utf8").toString("base64");
 let guardado = null;
+// O que havia antes também fica GRAVADO no banco de teste (chave reserva): se o roteiro morrer sem passar pelo
+// `finally` (kill -9, queda de energia), a próxima execução devolve o estado verdadeiro em vez de tratar o estado
+// sujo da execução anterior como se fosse o original.
+const CHAVE_RESERVA = "e2e.mapa.original";
+const lerConfig = (chave) => {
+  const b = sql(`SELECT encode(convert_to(valor, 'UTF8'), 'base64') FROM "Configuracao" WHERE chave = '${chave}';`).replace(/\s+/g, "");
+  return b ? Buffer.from(b, "base64").toString("utf8") : null;
+};
+function devolver(g) {
+  if (g.area !== null) setConfig("area.atuacao", g.area); else delConfig("area.atuacao");
+  sql(`UPDATE "Municipio" SET "foraDeArea" = true; ${g.dentro.length ? `UPDATE "Municipio" SET "foraDeArea" = false WHERE id IN (${g.dentro.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")});` : ""}`);
+}
 function guardarBanco() {
   const banco = sql("SELECT current_database();");
   if (banco !== BANCO) { console.error(`O banco do PSQL é "${banco}", não "${BANCO}" (E2E_BANCO). Nada foi gravado.`); process.exit(2); }
-  const area = sql(`SELECT encode(convert_to(valor, 'UTF8'), 'base64') FROM "Configuracao" WHERE chave = 'area.atuacao';`).replace(/\s+/g, "");
+  const sobra = lerConfig(CHAVE_RESERVA);
+  if (sobra) {
+    console.log("Achei o estado guardado por uma execução anterior que não terminou: devolvo ele ao banco antes de começar.");
+    devolver(JSON.parse(sobra));
+    delConfig(CHAVE_RESERVA);
+  }
   const dentro = sql(`SELECT id FROM "Municipio" WHERE "foraDeArea" = false;`).split("\n").filter(Boolean);
-  guardado = { area: area ? Buffer.from(area, "base64").toString("utf8") : null, dentro };
+  guardado = { area: lerConfig("area.atuacao"), dentro };
+  setConfig(CHAVE_RESERVA, guardado);
 }
 function restaurarBanco() {
   if (!guardado) return;
   const g = guardado; guardado = null;
-  if (g.area !== null) setConfig("area.atuacao", g.area); else delConfig("area.atuacao");
-  sql(`UPDATE "Municipio" SET "foraDeArea" = true; ${g.dentro.length ? `UPDATE "Municipio" SET "foraDeArea" = false WHERE id IN (${g.dentro.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")});` : ""}`);
+  devolver(g);
+  delConfig(CHAVE_RESERVA);
 }
 process.on("SIGINT", () => { try { restaurarBanco(); } finally { process.exit(130); } });
+process.on("SIGTERM", () => { try { restaurarBanco(); } finally { process.exit(143); } });
 
 const PC = { width: 1440, height: 900 };
 const CEL = { width: 390, height: 844 };
@@ -65,9 +85,18 @@ async function abrir(browser, vp, tema) {
   await page.fill('input[name="senha"]', SENHA);
   await Promise.all([page.waitForURL(/dashboard/, { timeout: 30000 }).catch(() => {}), page.locator('form button[type="submit"], form button').first().click()]);
   await page.waitForTimeout(500);
+  if (!/dashboard/.test(page.url())) throw new Error(`Não consegui entrar no CRM (parei em ${page.url()}): confira E2E_SENHA = o APP_PASSWORD do servidor de teste.`);
   return { ctx, page, erros, zooms };
 }
-async function fecharLembrete(page) { const b = page.locator('[title^="Agora não"]'); if (await b.count()) await b.first().click().catch(() => {}); }
+// O lembrete "Visita feita?" (z-index 150) cobre o mapa inteiro em dia útil, depois do horário da primeira visita AGENDADA. O seed
+// grava as visitas como REALIZADAS e ele não deveria aparecer; se aparecer (o seed mudou, ou o banco tem visitas agendadas de verdade),
+// fecha — e se NÃO fechar o roteiro para aqui, em vez de medir um mapa coberto.
+async function fecharLembrete(page) {
+  const b = page.locator('[title^="Agora não"]');
+  await b.first().waitFor({ state: "visible", timeout: 800 }).catch(() => {});
+  if (await b.count()) { await b.first().click({ force: true }).catch(() => {}); await page.waitForTimeout(300); }
+  if (await b.count()) throw new Error('O lembrete "Visita feita?" está cobrindo a tela e não fechou: o mapa não pode ser conferido.');
+}
 
 // Lê os pixels de um PNG dentro do navegador (o Pillow deste ambiente está quebrado).
 async function amostrar(aux, png, pts) {
@@ -79,6 +108,43 @@ async function amostrar(aux, png, pts) {
   }, { b64: png.toString("base64"), pts });
 }
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+// Que fração dos pixels de cada caixa difere da cor de fundo esperada (> 60 em algum canal)? É a prova de que o nome está PINTADO na
+// tela: o texto existe no DOM mesmo com z-index errado, opacity 0 ou cor igual à da cidade — só os pixels contam a verdade.
+async function fracoesDeTinta(aux, png, itens) {
+  return aux.evaluate(async ({ b64, itens }) => {
+    const img = new Image(); img.src = "data:image/png;base64," + b64; await img.decode();
+    const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0);
+    return itens.map(({ x, y, w, h, fill }) => {
+      const d = g.getImageData(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))).data;
+      let dif = 0, tot = 0;
+      for (let i = 0; i < d.length; i += 4) { tot++; if (Math.max(Math.abs(d[i] - fill[0]), Math.abs(d[i + 1] - fill[1]), Math.abs(d[i + 2] - fill[2])) > 60) dif++; }
+      return dif / tot;
+    });
+  }, { b64: png.toString("base64"), itens });
+}
+// Cada nome à vista (inteiro dentro da janela): a caixa do texto e a cor de preenchimento da PRÓPRIA cidade.
+const caixasDosNomes = (page) => page.evaluate((NOMES) => {
+  const saida = [];
+  for (const el of document.querySelectorAll(".rotulo-municipio")) {
+    const span = el.querySelector("span"); if (!span) continue;
+    const nome = span.innerText.replace(/\n/g, " "), r = span.getBoundingClientRect();
+    if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) continue;
+    const path = document.querySelector(`.leaflet-municipios-pane path[data-i="${NOMES.indexOf(nome)}"]`);
+    if (path) saida.push({ nome, x: r.left, y: r.top, w: r.width, h: r.height, fill: path.getAttribute("fill") });
+  }
+  return saida;
+}, NOMES);
+async function medirNomesPintados(page, aux) {
+  const dsf = page.viewportSize().width < 500 ? 2 : 1;
+  const caixas = await caixasDosNomes(page);
+  const png = await page.screenshot();
+  const f = await fracoesDeTinta(aux, png, caixas.map((c) => ({ x: c.x * dsf, y: c.y * dsf, w: c.w * dsf, h: c.h * dsf, fill: rgb(c.fill) })));
+  const semTinta = caixas.filter((_, i) => f[i] < 0.04).map((c) => c.nome);
+  return { n: caixas.length, minimo: f.length ? Math.min(...f) : 0, semTinta };
+}
+
 
 // Pontos DENTRO de cada cidade (longe da divisa, e de pin/cifrão: elementFromPoint tem de ser a própria cidade).
 const pontosDentro = (page, maxCidades, porCidade) => page.evaluate(({ maxCidades, porCidade }) => {
@@ -195,6 +261,19 @@ async function conferirDicasNasBordas(page, T, toque, nome) {
     const dentro = !!tb && tb.x >= R.l - 1 && tb.x + tb.width <= R.r + 1 && tb.y >= R.t - 1 && tb.y + tb.height <= R.b + 1;
     const cls = tb ? await tip.getAttribute("class") : "";
     check(`${T}: dica ${toque ? "tocada" : "sob o mouse"} em ${lado} (${Math.round(p.x - R.l)},${Math.round(p.y - R.t)}) cabe INTEIRA no mapa`, dentro, tb ? `dica ${Math.round(tb.x - R.l)}..${Math.round(tb.x + tb.width - R.l)} x ${Math.round(tb.y - R.t)}..${Math.round(tb.y + tb.height - R.t)} no mapa ${Math.round(R.r - R.l)}x${Math.round(R.b - R.t)} (${cls})` : "sem dica");
+    // Os controles do Leaflet (+/−, créditos) ficam POR CIMA da dica: se ela cair embaixo de um, o começo do nome some.
+    const sobControle = await page.evaluate((tbx) => [...document.querySelectorAll(".leaflet-control")].some((e) => { const c = e.getBoundingClientRect(); return tbx && tbx.x < c.right - 0.5 && tbx.x + tbx.width > c.left + 0.5 && tbx.y < c.bottom - 0.5 && tbx.y + tbx.height > c.top + 0.5; }), tb);
+    check(`${T}: dica em ${lado} NÃO cai embaixo do +/− nem dos créditos`, !!tb && !sobControle, tb ? JSON.stringify(tb) : "sem dica");
+    // A seta fica no meio da dica por padrão; com a dica deslocada, --seta a traz de volta para o dedo (presa a 14 px das pontas).
+    // `left`/`top` do ::before contam a partir da borda de DENTRO da dica (a caixa de padding): soma a borda (clientLeft/Top) à posição.
+    const seta = tb ? await tip.evaluate((el) => { const cs = getComputedStyle(el, "::before"), r = el.getBoundingClientRect(); return { cls: el.className, esq: parseFloat(cs.left), topo: parseFloat(cs.top), bx: el.clientLeft, by: el.clientTop, cw: el.clientWidth, ch: el.clientHeight, x: r.x, y: r.y }; }) : null;
+    if (seta) {
+      const vertical = /leaflet-tooltip-(top|bottom)/.test(seta.cls);
+      const centro = vertical ? seta.x + seta.bx + seta.esq : seta.y + seta.by + seta.topo;
+      const dedo = vertical ? p.x : p.y;
+      const preso = vertical ? seta.esq <= 14.5 || seta.esq >= seta.cw - 14.5 : seta.topo <= 14.5 || seta.topo >= seta.ch - 14.5;
+      check(`${T}: a seta da dica em ${lado} aponta para o dedo (${Math.abs(centro - dedo).toFixed(1)} px${preso ? ", presa na ponta da dica" : ""})`, Math.abs(centro - dedo) <= 3 || preso, `seta em ${centro.toFixed(1)}, dedo em ${dedo.toFixed(1)} (${seta.cls})`);
+    }
     if (lado === "cantoSupDir" || lado === "topo") await page.screenshot({ path: `${OUT}n-${nome}-dica-${lado}.png`, clip: { x: R.l, y: Math.max(0, R.t), width: R.r - R.l, height: Math.min(R.b - R.t, 300) } });
     if (toque) await page.touchscreen.tap(2, 2); else await page.mouse.move(2, 2);
     await page.waitForTimeout(150);
@@ -353,6 +432,28 @@ async function conferirMapa(page, aux, rotulo, secao, nome, zooms) {
   const arq = `${OUT}n-${nome}-${rotulo.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.png`;
   await mapa.locator("xpath=..").screenshot({ path: arq });
 
+  // ── o que a tela PINTA (não o que o DOM diz): ordem das camadas, divisa e nomes de verdade visíveis
+  const camadas = await page.evaluate(() => {
+    const z = (c) => { const e = document.querySelector(c); return e ? parseInt(getComputedStyle(e).zIndex, 10) : NaN; };
+    const op = (c) => { const e = document.querySelector(c); return e ? getComputedStyle(e).opacity : "?"; };
+    return { estado: z(".leaflet-estado-base-pane"), cidades: z(".leaflet-municipios-pane"), nomes: z(".leaflet-rotulos-municipios-pane"), opacidades: [op(".leaflet-municipios-pane"), op(".leaflet-rotulos-municipios-pane")] };
+  });
+  check(`${T}: camadas na ordem estado < cidades < nomes (z-index lido da tela: ${camadas.estado} < ${camadas.cidades} < ${camadas.nomes})`, camadas.estado < camadas.cidades && camadas.cidades < camadas.nomes, JSON.stringify(camadas));
+  check(`${T}: as camadas de cidades e de nomes estão opacas (opacity ${camadas.opacidades.join("/")})`, camadas.opacidades.every((o) => o === "1"), camadas.opacidades.join("/"));
+  const pintado = await page.$$eval(".leaflet-municipios-pane path", (ps) => ps.map((p) => { const cs = getComputedStyle(p); return { stroke: cs.stroke, sw: parseFloat(cs.strokeWidth), so: cs.strokeOpacity, fo: cs.fillOpacity, op: cs.opacity, vis: cs.visibility }; }));
+  const ruim = pintado.find((c) => c.stroke !== "rgb(0, 0, 0)" || c.so !== "1" || c.fo !== "1" || c.op !== "1" || c.vis !== "visible" || !(c.sw > 0.5));
+  check(`${T}: o ESTILO CALCULADO da divisa é preto, opaco e visível em todas (um CSS por cima do atributo SVG também conta)`, !ruim, JSON.stringify(ruim));
+  await page.mouse.move(2, 2);
+  const pint = await medirNomesPintados(page, aux);
+  info(`${T}: ${pint.n} nomes à vista; o que menos tem tinta: ${(pint.minimo * 100).toFixed(0)}% dos pixels`);
+  check(`${T}: todo nome à vista está PINTADO na tela (≥ 4% dos pixels da caixa diferem da cor da cidade; ${pint.n} nomes)`, pint.n >= 1 && pint.semTinta.length === 0, `sem tinta: ${pint.semTinta.slice(0, 4).join(", ")}`);
+  // Controle: com os nomes por BAIXO das cidades (z-index 345) a mesma medida TEM de achar nomes sem tinta.
+  await page.evaluate(() => { document.querySelector(".leaflet-rotulos-municipios-pane").style.zIndex = "345"; });
+  await page.waitForTimeout(150);
+  const escondidos = await medirNomesPintados(page, aux);
+  await page.evaluate((z) => { document.querySelector(".leaflet-rotulos-municipios-pane").style.zIndex = String(z); }, camadas.nomes);
+  check(`${T}: [controle] com os nomes por baixo das cidades a medida enxerga ${escondidos.semTinta.length}/${escondidos.n} sem tinta`, escondidos.n >= 1 && escondidos.semTinta.length >= escondidos.n * 0.9, `sem tinta ${escondidos.semTinta.length}/${escondidos.n}`);
+
   // ── a base NÃO aparece por baixo da cor (azulejo sujo de ruas/rios/nomes)
   await page.addStyleTag({ content: ".rotulo-municipio{visibility:hidden !important} .leaflet-control{visibility:hidden !important} .leaflet-overlay-pane{visibility:hidden !important} .leaflet-tooltip{visibility:hidden !important}" });
   await page.mouse.move(2, 2);
@@ -404,6 +505,11 @@ async function aproximar(page, T, nome, rotuloArq) {
   const browser = await chromium.launch({ executablePath: CHROMIUM });
   let falhou = false;
   try {
+    // O CRM cria a estrutura num banco VAZIO na primeira requisição que passa pelo layout do app (entrar + abrir uma tela). Faz isso antes
+    // de guardar o estado, senão o primeiro SELECT em Configuracao falha em banco recém-criado.
+    const preparo = await abrir(browser, PC, "escuro");
+    await preparo.page.goto(BASE + "/dashboard", { waitUntil: "domcontentloaded" });
+    await preparo.ctx.close();
     guardarBanco();
     // Os dados do mapa (pins das visitas DE HOJE, cifrões das vendas): o seed usa o dia de hoje — roda a cada vez.
     sql(fs.readFileSync(path.join(__dirname, "mapa-seed.sql"), "utf8"));
@@ -422,6 +528,19 @@ async function aproximar(page, T, nome, rotuloArq) {
         check(`${rotulo} nenhum erro de script na página`, erros.length === 0, erros.join(" | "));
         await ctx.close();
       }
+    }
+    if (!process.env.SO) {
+      // Celular PEQUENO (320 px): o mapa do Dashboard tem ~254 px e a dica (220 px) quase não cabe ao lado do +/−. Aqui o mapa não
+      // escreve nenhum nome (a dica é a única forma de ler a cidade), então só a dica é conferida: inteira no mapa, fora dos controles.
+      const { ctx, page } = await abrir(browser, { width: 320, height: 640 }, "escuro");
+      await page.mouse.move(2, 2);
+      await page.goto(BASE + "/dashboard", { waitUntil: "domcontentloaded" });
+      await fecharLembrete(page);
+      await page.waitForSelector(".leaflet-municipios-pane path", { timeout: 20000 });
+      await page.locator(".leaflet-container").first().scrollIntoViewIfNeeded();
+      await page.waitForTimeout(800);
+      await conferirDicasNasBordas(page, "[cel320/escuro] dashboard", true, "dashboard-cel320");
+      await ctx.close();
     }
     if (!process.env.SO) {
       // Estado ruim: nenhuma cidade atendida → tudo cinza escuro com nome branco

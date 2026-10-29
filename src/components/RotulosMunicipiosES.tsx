@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 import malha from "@/lib/malha-es.json";
-import { alturaDaLinha, botaoEmPx, calcularRotulos, desprojetar, FAMILIA_ROTULO, PESO_ROTULO, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
+import { alturaDaLinha, botoesDoContainer, calcularRotulos, desprojetar, FAMILIA_ROTULO, PESO_ROTULO, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
 import { corDoTexto, COR_NAO_ATENDO, regiaoDoMunicipio, chaveMunicipio, TEXTO_ESCURO, Z_NOMES } from "@/lib/mapa-regioes-es";
 
 // O nome de cada cidade escrito DENTRO dela, só onde cabe (regras em
@@ -59,8 +59,7 @@ export function RotulosMunicipiosES({ atendidos, obstaculos, rota }: { atendidos
         const folga = 4;
         const visao = { x0: x0 + folga, y0: y0 + folga, x1: tela.max!.x - folga, y1: tela.max!.y - folga };
         // Os botões do mapa (+ / − e os créditos) também ficam por cima: o nome não vai embaixo deles.
-        const caixaMapa = container.getBoundingClientRect();
-        const obstaculosPx = [...container.querySelectorAll(".leaflet-control")].map((el) => botaoEmPx(el.getBoundingClientRect(), caixaMapa, { x: x0, y: y0 }));
+        const obstaculosPx = botoesDoContainer(container, container.querySelectorAll(".leaflet-control"), { x: x0, y: y0 }, 3);
         const rotulos = calcularRotulos({ feicoes: FEICOES, zoom, visao, obstaculos, obstaculosPx, rota, medir });
         for (const r of rotulos) {
           const fundo = conjunto.has(chaveMunicipio("ES", r.nome)) ? regiaoDoMunicipio(r.nome).cor : COR_NAO_ATENDO;

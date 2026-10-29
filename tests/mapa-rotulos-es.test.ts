@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   projetar, desprojetar, pontoDentro, caixaDentro, segmentoToca, variantesDeLinhas, calcularRotulos, posicionarRotulo, poligonosDaFeicao,
-  semIlhotas, caixaVisivel, botaoEmPx, alturaDaLinha, AREA_MINIMA_DO_CONTORNO, FAMILIA_ROTULO, FONTES_ROTULO, FOLGA_X, FOLGA_Y, type FeicaoMalha, type Poligono, type Caixa, type ObstaculoRotulo, type RotuloPosto,
+  semIlhotas, caixaVisivel, botaoEmPx, botoesDoContainer, alturaDaLinha, AREA_MINIMA_DO_CONTORNO, FAMILIA_ROTULO, FONTES_ROTULO, FOLGA_X, FOLGA_Y, type FeicaoMalha, type Poligono, type Caixa, type ObstaculoRotulo, type RotuloPosto,
 } from "@/lib/mapa-rotulos-es";
 
 const malha = JSON.parse(readFileSync("src/lib/malha-es.json", "utf8")) as { features: FeicaoMalha[] };
@@ -548,6 +548,35 @@ describe("os botões do mapa viram obstáculo em pixels da projeção (botaoEmPx
     expect(botaoEmPx({ left: 60, top: 70, right: 100, bottom: 140 }, { left: 50, top: 60 }, { x: 1000, y: 2000 }, 0)).toEqual({ x0: 1010, y0: 2010, x1: 1050, y1: 2080 });
   });
 
+  it("desconta a borda do contêiner e a escala (rect.width / offsetWidth), como o Leaflet faz com o mouse", () => {
+    // Contêiner a 50,60 da tela, com borda de 1 px e 0,05% maior na tela do que o offsetWidth diz (719,33 contra 719).
+    const escala = 719.328125 / 719;
+    const r = { left: 50 + 100 * escala, top: 60 + 40, right: 50 + 140 * escala, bottom: 60 + 100 };
+    const caixa = botaoEmPx(r, { left: 50, top: 60 }, { x: 0, y: 0 }, 0, { escala: { x: escala, y: 1 }, borda: { x: 1, y: 1 } });
+    expect(caixa.x0).toBeCloseTo(99, 9); // 100 − 1 de borda
+    expect(caixa.x1).toBeCloseTo(139, 9);
+    expect(caixa.y0).toBeCloseTo(39, 9);
+    expect(caixa.y1).toBeCloseTo(99, 9);
+  });
+
+  it("botoesDoContainer: a medida sai do próprio contêiner (borda = clientLeft/Top, escala = largura na tela / offsetWidth)", () => {
+    const retangulo = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, width, height });
+    const container = { getBoundingClientRect: () => retangulo(297, 239.5, 719.328125, 418), offsetWidth: 719, offsetHeight: 418, clientLeft: 1, clientTop: 1 };
+    const zoom = { getBoundingClientRect: () => retangulo(297 + 11 * (719.328125 / 719), 239.5 + 11, 34, 64) };
+    const [c] = botoesDoContainer(container, [zoom], { x: 0, y: 0 }, 4);
+    // 11 px dentro do mapa na tela = 11 px nas contas do Leaflet; menos 1 de borda; menos a folga de 4.
+    expect(c.x0).toBeCloseTo(11 - 1 - 4, 9);
+    expect(c.y0).toBeCloseTo(11 - 1 - 4, 9);
+    expect(c.x1).toBeCloseTo(11 + 34 / (719.328125 / 719) - 1 + 4, 9);
+    expect(c.y1).toBeCloseTo(11 + 64 - 1 + 4, 9);
+    // A origem (canto da parte visível, em px da projeção) é somada por último.
+    expect(botoesDoContainer(container, [zoom], { x: 1000, y: 2000 }, 4)[0].x0).toBeCloseTo(1000 + 6, 9);
+    // Contêiner sem medida (offsetWidth 0): escala 1, nunca NaN/Infinity.
+    const sem = { ...container, offsetWidth: 0, offsetHeight: 0 };
+    const [d] = botoesDoContainer(sem, [zoom], { x: 0, y: 0 }, 0);
+    expect(Number.isFinite(d.x0) && Number.isFinite(d.y1)).toBe(true);
+  });
+
   it("o nome não é escrito embaixo do botão: com o botão em cima do ponto de partida o nome sai de lá", () => {
     const cidade: Poligono[] = [[[[0, 0], [400, 0], [400, 200], [0, 200], [0, 0]]]];
     const botao = botaoEmPx({ left: 150, top: 80, right: 250, bottom: 120 }, { left: 0, top: 0 }, { x: 0, y: 0 });
@@ -557,17 +586,17 @@ describe("os botões do mapa viram obstáculo em pixels da projeção (botaoEmPx
     expect(c.x0 < botao.x1 && c.x1 > botao.x0 && c.y0 < botao.y1 && c.y1 > botao.y0).toBe(false);
   });
 
-  it("o componente monta os botões com botaoEmPx e entrega ao cálculo (sem isso o nome ia para baixo do +/−)", () => {
+  it("o componente monta os botões com botoesDoContainer e entrega ao cálculo (sem isso o nome ia para baixo do +/−)", () => {
     const src = ler("src/components/RotulosMunicipiosES.tsx");
     expect(src).toMatch(/querySelectorAll\("\.leaflet-control"\)/);
-    expect(src).toMatch(/botaoEmPx\([^)]*getBoundingClientRect\(\)[^)]*caixaMapa, \{ x: x0, y: y0 \}\)/);
+    expect(src).toMatch(/botoesDoContainer\(container, container\.querySelectorAll\("\.leaflet-control"\), \{ x: x0, y: y0 \}, 3\)/);
     expect(src).toMatch(/calcularRotulos\(\{[^}]*obstaculosPx[^}]*\}\)/);
   });
 });
 
 describe("o custo da conta (a cada arrasto/zoom do mapa)", () => {
-  // Um município com 6000 vértices (a malha real tem até alguns milhares) e uma tela que só pega uma
-  // tira dele, mais estreita que o texto. Antes: milhares de candidatos x 6000 vértices x 6 tentativas
+  // Um município SINTÉTICO com 6000 vértices (a malha real tem no máximo 263 por anel: é um teste de
+  // estresse) e uma tela que só pega uma tira dele, mais estreita que o texto. Antes: milhares de candidatos x 6000 vértices x 6 tentativas
   // (> 100 ms por movimento, no celular bem mais). Agora: a parte visível é recortada e a cidade sai na hora.
   const N = 6000;
   const R = 5000;
@@ -639,5 +668,191 @@ describe("o custo da conta (a cada arrasto/zoom do mapa)", () => {
       expect(r).not.toBeNull();
       expect(contagem.testes).toBeLessThan(400);
     });
+  });
+});
+
+// ── 3ª revisão: o que as mutações mostraram que nenhum teste pegava ─────────
+
+describe("a letra e a divisão em linhas que o nome ganha (cada degrau da escada)", () => {
+  const GRANDE: Caixa = { x0: -1000, y0: -1000, x1: 1000, y1: 1000 };
+  const ret = (w: number, h: number): Poligono[] => [[[[0, 0], [w, 0], [w, h], [0, h], [0, 0]]]];
+  const nomeEm = (nome: string, w: number, h: number) => {
+    const r = posicionarRotulo({ nome, poligonos: ret(w, h), ancora: [w / 2, h / 2], area: GRANDE, obstaculos: [], medir });
+    return r && { fonte: r.fonte, linhas: r.linhas.length };
+  };
+
+  it("só a divisão em DUAS linhas cabe: a letra 12 em duas linhas (não a 11, nem sem nome)", () => {
+    expect(nomeEm("Cachoeiro de Itapemirim", 100, 40)).toEqual({ fonte: 12, linhas: 2 });
+  });
+  it("cabe a 11 mas não a 12: sai com 11 (não pula para a 10)", () => {
+    expect(nomeEm("Ibatiba", 57, 40)).toEqual({ fonte: 11, linhas: 1 });
+  });
+  it("só a letra 10 cabe: o nome sai com 10 px (sem a 10 na escada ele sumia)", () => {
+    expect(nomeEm("Ibatiba", 52.5, 40)).toEqual({ fonte: 10, linhas: 1 });
+  });
+  it("nem a 10 cabe: sem nome", () => {
+    expect(nomeEm("Ibatiba", 50, 40)).toBeNull();
+  });
+
+  it("no mapa real, a tela toda à vista: um piso de nomes por zoom (8 → 8, 9 → 51, 10 → 75, 11 → todos os 78) — tirar um degrau da escada perde nomes", () => {
+    const n = (z: number) => rotulosEm(z).length;
+    expect(n(8)).toBeGreaterThanOrEqual(8);
+    expect(n(9)).toBeGreaterThanOrEqual(51);
+    expect(n(10)).toBeGreaterThanOrEqual(75);
+    expect(n(11)).toBe(78);
+  });
+});
+
+describe("o nome nunca passa da borda da tela, nos QUATRO lados, a partir do ponto de partida", () => {
+  // A cidade continua além da tela nos quatro lados: só a borda da TELA segura o nome. O atalho "o ponto de
+  // partida está livre" devolve o próprio ponto, e é nele que a borda de baixo (e as outras) é a única proteção.
+  const cidade: Poligono[] = [[[[-300, -300], [700, -300], [700, 300], [-300, 300], [-300, -300]]]];
+  const area: Caixa = { x0: 0, y0: 0, x1: 400, y1: 100 };
+  for (const [lado, ancora] of [["embaixo", [200, 98]], ["em cima", [200, 2]], ["à esquerda", [3, 50]], ["à direita", [397, 50]]] as const) {
+    it(`ponto de partida colado ${lado}`, () => {
+      const r = posicionarRotulo({ nome: "Ibatiba", poligonos: cidade, ancora: [...ancora], area, obstaculos: [], medir: () => 40, fontes: [12] });
+      expect(r).not.toBeNull();
+      const c = caixaDoRotulo(r!);
+      expect(c.x0).toBeGreaterThanOrEqual(area.x0);
+      expect(c.x1).toBeLessThanOrEqual(area.x1);
+      expect(c.y0).toBeGreaterThanOrEqual(area.y0);
+      expect(c.y1).toBeLessThanOrEqual(area.y1);
+    });
+  }
+});
+
+describe("ramos de proteção que só um caso especial exercita", () => {
+  const ret = (w: number, h: number): Poligono[] => [[[[0, 0], [w, 0], [w, h], [0, h], [0, 0]]]];
+  it("duas peças finas (300×15 e 15×300), texto maior que cada uma e ponto de partida fora da tela: null, sem exceção (uma exceção apagava TODOS os nomes do quadro)", () => {
+    const A: Poligono = [[[0, 100], [300, 100], [300, 115], [0, 115], [0, 100]]];
+    const B: Poligono = [[[500, 0], [515, 0], [515, 300], [500, 300], [500, 0]]];
+    const r = posicionarRotulo({ nome: "Ibatiba", poligonos: [A, B], ancora: [5000, 5000], area: { x0: 0, y0: 0, x1: 1000, y1: 400 }, obstaculos: [], medir: () => 92, fontes: [12] });
+    expect(r).toBeNull();
+  });
+
+  it("caixaVisivel: divisa em diagonal cortada pela borda ESQUERDA da tela (o espelho do corte pela direita)", () => {
+    const triangulo: [number, number][] = [[0, 0], [100, 0], [0, 100], [0, 0]]; // x + y ≤ 100
+    expect(caixaVisivel(triangulo, { x0: 40, y0: 0, x1: 200, y1: 200 })).toEqual({ x0: 40, y0: 0, x1: 100, y1: 60 });
+  });
+
+  it("caixaDentro: uma caixa que cruza SÓ a divisa do buraco (com o centro fora dele) não vale", () => {
+    const quadrado: Poligono = [[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]], [[40, 40], [60, 40], [60, 60], [40, 60], [40, 40]]];
+    // 30..50 × 45..55: o centro (40,50) está na borda do buraco; a caixa entra nele pela divisa esquerda (x=40).
+    expect(caixaDentro({ x0: 20, y0: 45, x1: 45, y1: 55 }, quadrado)).toBe(false);
+    expect(caixaDentro({ x0: 10, y0: 45, x1: 35, y1: 55 }, quadrado)).toBe(true);
+  });
+
+  it("buscas de tamanhos diferentes não se contaminam: a cidade fina de verdade não acha nome por causa de uma peça maior", () => {
+    const fina: Poligono = [[[0, 0], [300, 0], [300, 10], [0, 10], [0, 0]]];
+    expect(posicionarRotulo({ nome: "Ibatiba", poligonos: [fina], ancora: [150, 5], area: { x0: -10, y0: -10, x1: 400, y1: 400 }, obstaculos: [], medir: () => 40, fontes: [12] })).toBeNull();
+    void ret;
+  });
+});
+
+describe("a busca não perde nenhum bolsão livre (propriedade, semente fixa)", () => {
+  // Constrói um bolsão LIVRE de a×b px de centros possíveis, cercado por quatro obstáculos que só encostam no
+  // retângulo do texto, numa cidade grande e com o ponto de partida longe. Exige que o nome seja achado DENTRO do
+  // bolsão. É o que trava o argumento da busca grossa→fina (o retângulo encolhido até sx×sy, a varredura fina
+  // de −sx/2 a +sx/2, a janela de centros): encolher só metade, varrer só até sx/4, pular a ordenação ou usar W no
+  // lugar de H em qualquer um deles faz alguns bolsões escaparem — nenhum dos casos escritos à mão pegava.
+  const ret = (w: number, h: number): Poligono[] => [[[[0, 0], [w, 0], [w, h], [0, h], [0, 0]]]];
+  const sorteio = (semente: number) => {
+    let s = semente;
+    return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+  };
+
+  const tentar = (rnd: () => number, larguras: number[], lados: number[], n: number): string[] => {
+    const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
+    const falhas: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const w0 = pick(larguras);
+      const W = Math.ceil(w0) + 8; // largura do retângulo do texto (o nome mede w0 + 2 × FOLGA_X)
+      const H = 18; // 14 de linha + 2 × FOLGA_Y
+      const Cw = pick([300, 700, 1100]);
+      const Ch = pick([120, 300, 600]);
+      const a = pick(lados);
+      const b = pick(lados);
+      const px = W / 2 + 3 + rnd() * (Cw - W - a - 6);
+      const py = H / 2 + 3 + rnd() * (Ch - H - b - 6);
+      const T = py - H / 2, B = py + b + H / 2, Lx = px - W / 2, Rx = px + a + W / 2;
+      const obstaculos: Caixa[] = [
+        { x0: -10, y0: -10, x1: Cw + 10, y1: T }, { x0: -10, y0: B, x1: Cw + 10, y1: Ch + 10 },
+        { x0: -10, y0: T, x1: Lx, y1: B }, { x0: Rx, y0: T, x1: Cw + 10, y1: B },
+      ];
+      // A tela começa em −10…0 (nunca depois da cidade: o bolsão tem de estar à vista) e tem origem em quartos de pixel,
+      // para a grade grossa cair em alinhamentos diferentes a cada caso.
+      const ox = Math.round(rnd() * 40) / 4 - 10;
+      const oy = Math.round(rnd() * 40) / 4 - 10;
+      const area: Caixa = { x0: ox, y0: oy, x1: Cw + 20 + ox, y1: Ch + 20 + oy };
+      const r = posicionarRotulo({ nome: "Ibatiba", poligonos: ret(Cw, Ch), ancora: [rnd() < 0.5 ? 2 : Cw - 2, rnd() < 0.5 ? 2 : Ch - 2], area, obstaculos, medir: () => w0, fontes: [12] });
+      const quando = `W=${W} cidade ${Cw}x${Ch} bolsão ${a}x${b} em (${px.toFixed(2)},${py.toFixed(2)})`;
+      if (!r) falhas.push(`não achou: ${quando}`);
+      else if (r.x < px - 1e-6 || r.x > px + a + 1e-6 || r.y < py - 1e-6 || r.y > py + b + 1e-6) falhas.push(`achou fora do bolsão (${r.x},${r.y}): ${quando}`);
+    }
+    return falhas;
+  };
+
+  it("600 bolsões de 1,01 a 8 px, em lugares sorteados: todos achados, e dentro do bolsão", () => {
+    expect(tentar(sorteio(7), [20, 40, 60, 90, 130], [1.01, 1.3, 2, 3.7, 8], 600)).toEqual([]);
+  });
+
+  it("2000 bolsões de EXATOS 1×1 px (a resolução da busca): todos achados", () => {
+    expect(tentar(sorteio(11), [20, 33, 40, 57, 90, 130], [1], 2000)).toEqual([]);
+  });
+});
+
+describe("o custo da conta, em perguntas \"cabe aqui?\" (a contagem não depende da máquina; o relógio sim)", () => {
+  const ret = (x: number, y: number, w: number, h: number): Poligono[] => [[[[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]]];
+  const cidade: Poligono[] = [[[[-500, -500], [1700, -500], [1700, 1100], [-500, 1100], [-500, -500]]]];
+  const contar = (poligonos: Poligono[], area: Caixa, obstaculos: Caixa[], ancora: [number, number]) => {
+    const contagem = { testes: 0 };
+    const r = posicionarRotulo({ nome: "Ibatiba", poligonos, ancora, area, obstaculos, medir: () => 40, fontes: [12], contagem });
+    return { r, testes: contagem.testes };
+  };
+  const tampar = (l: number, a: number): Caixa[] => [{ x0: -10, y0: -10, x1: l + 10, y1: a + 10 }];
+
+  it("nada cabe numa tela de celular pequena (200 × 150): centenas de perguntas — e a grade grossa entra na conta (193 medidas)", () => {
+    const { r, testes } = contar(cidade, { x0: 0, y0: 0, x1: 200, y1: 150 }, tampar(200, 150), [30, 30]);
+    expect(r).toBeNull();
+    expect(testes).toBeGreaterThan(100); // um contador que só conta o retângulo de tamanho cheio daria 1
+    expect(testes).toBeLessThan(260); // 500 pontos grossos custam 461 aqui, o dobro do que se mediu para 100
+  });
+
+  it("cidade do tamanho de uma cidade pequena no zoom de abertura (60 × 60), tampada: dezenas de perguntas (61 medidas)", () => {
+    const { r, testes } = contar(ret(100, 100, 60, 60), { x0: 0, y0: 0, x1: 400, y1: 300 }, [{ x0: 90, y0: 90, x1: 170, y1: 170 }], [130, 130]);
+    expect(r).toBeNull();
+    expect(testes).toBeGreaterThan(30);
+    expect(testes).toBeLessThan(80); // passo mínimo de 1 px custaria ~100 aqui
+  });
+
+  it("janela estreita que cabe (51 × 100): dezenas de perguntas (19 medidas), não centenas", () => {
+    const { r, testes } = contar(ret(100, 100, 51, 100), { x0: 0, y0: 0, x1: 1000, y1: 1000 }, [], [500, 500]);
+    expect(r).not.toBeNull();
+    expect(testes).toBeLessThan(60);
+  });
+
+  it("o custo CRESCE com a tela (é a área da janela que manda): 1440 × 460 pergunta bem mais que 300 × 200 — e mesmo assim fica em poucos milhares", () => {
+    const pequena = contar(cidade, { x0: 0, y0: 0, x1: 300, y1: 200 }, tampar(300, 200), [30, 30]).testes;
+    const grande = contar(cidade, { x0: 0, y0: 0, x1: 1440, y1: 460 }, tampar(1440, 460), [30, 30]).testes;
+    expect(grande).toBeGreaterThan(pequena * 5);
+    expect(grande).toBeLessThan(4000);
+  });
+
+  it("o lugar livre mais perto do ponto de partida: a MEDIANA do excesso sobre o ótimo é de até 1 px (sem ordenar o fino ia a 7 px), e nunca além de uma célula da grade grossa", () => {
+    const pin: Caixa = { x0: 100, y0: 40, x1: 160, y1: 60 };
+    const excessos: number[] = [];
+    for (let ax = 96; ax <= 164; ax += 2) {
+      for (let ay = 36; ay <= 64; ay += 2) {
+        if (!(ax - 24 < pin.x1 && ax + 24 > pin.x0 && ay - 9 < pin.y1 && ay + 9 > pin.y0)) continue; // só com o ponto de partida tampado
+        const r = posicionarRotulo({ nome: "Ibatiba", poligonos: [[[[0, 0], [400, 0], [400, 300], [0, 300], [0, 0]]]], ancora: [ax, ay], area: { x0: 0, y0: 0, x1: 400, y1: 300 }, obstaculos: [pin], medir: () => 40, fontes: [12] });
+        expect(r).not.toBeNull();
+        const otimo = Math.min(Math.abs(pin.x0 - 24 - ax), Math.abs(pin.x1 + 24 - ax), Math.abs(pin.y0 - 9 - ay), Math.abs(pin.y1 + 9 - ay));
+        excessos.push(Math.hypot(r!.x - ax, r!.y - ay) - otimo);
+      }
+    }
+    excessos.sort((p, q) => p - q);
+    expect(excessos.length).toBeGreaterThan(300);
+    expect(excessos[Math.floor(excessos.length / 2)]).toBeLessThanOrEqual(1);
+    expect(excessos[excessos.length - 1]).toBeLessThanOrEqual(16);
   });
 });

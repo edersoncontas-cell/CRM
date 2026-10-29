@@ -160,12 +160,31 @@ const ALTURA_DICA = 90;
 const MEIA_ALTURA_DICA = 36;
 
 export type DirecaoDica = "top" | "bottom" | "left" | "right";
-export type DicaPosicionada = { direcao: DirecaoDica; /** Deslocamento [x, y] em px, na opção `offset` do tooltip do Leaflet. */ deslocamento: [number, number] };
+export type DicaPosicionada = {
+  direcao: DirecaoDica;
+  /** Deslocamento [x, y] em px, na opção `offset` do tooltip do Leaflet. */
+  deslocamento: [number, number];
+  /**
+   * Quanto empurrar a SETA da dica (px, ao longo da borda dela) para ela continuar apontando para o dedo:
+   * o Leaflet fixa a seta no meio da dica, e uma dica deslocada apontava para outra cidade. Vai para
+   * `--seta` no CSS (`.tip-municipio`).
+   */
+  seta: number;
+};
 /** Um retângulo em px do contêiner do mapa. */
 export type CaixaDoMapa = { x0: number; y0: number; x1: number; y1: number };
 
+/** Sem o -0 (que o `toEqual` do vitest distingue de 0). */
+const oposto = (v: number): number => (v === 0 ? 0 : -v);
+
 /** Seta + recuo entre o dedo e a dica quando ela abre de lado. */
 const FOLGA_SETA = 6;
+/**
+ * Encostar não é cobrir. Os deslocamentos que colam a dica na lateral de um botão acumulam erro de
+ * ponto flutuante (49 vira 48,99999999999999) quando o dedo tem fração — e o Leaflet entrega fração
+ * sempre que o mapa tem largura fracionária —, e a comparação estrita jogava a dica a 400 px dali.
+ */
+const TOLERANCIA_PX = 0.01;
 
 /**
  * Para onde abrir a dica da cidade, dado onde está o dedo/mouse no mapa (px do contêiner). Fixa
@@ -176,25 +195,31 @@ const FOLGA_SETA = 6;
  *  2. de lado, para o lado que tem mais espaço (colada no topo ou no pé, é empurrada para dentro,
  *     porque de lado ela fica centrada na vertical);
  *  3. em cima/embaixo mas DESLOCADA para o lado até caber (e, se há botões no caminho, até passar
- *     da lateral deles) — o único jeito em mapa estreito (o
- *     Dashboard no celular tem 324 px; a dica, 220 mais a seta, não cabe de lado em quase nenhum
- *     ponto). Se nem assim cabe (mapa mais estreito que a dica), alinha pela esquerda: o que
- *     corta é o fim do texto, não o nome da cidade.
+ *     da lateral deles) — o único jeito em mapa estreito (o Dashboard no celular tem 324 px; a
+ *     dica, 220 mais a seta, não cabe de lado em quase nenhum ponto);
+ *  4. em cima/embaixo deslocada também PARA CIMA ou PARA BAIXO, até passar do botão (nos 20 px do
+ *     pé do mapa a dica sobe acima dos créditos; no topo de um mapa estreito desce abaixo do +/−).
+ *     A seta já não aponta para o dedo, e o `seta` devolvido a traz de volta quando dá;
+ *  5. nenhuma escapa: a que menos cobre, em área. Se nem assim cabe (mapa mais estreito que a
+ *     dica), alinha pela esquerda: o que corta é o fim do texto, não o nome da cidade.
+ * O ponto é puxado para dentro do mapa antes de tudo: com a borda fracionária do contêiner o
+ * Leaflet entrega -0,75 na primeira linha de pixels, e sem isso nenhuma colocação "cabia".
  */
-export function direcaoDaDica(x: number, y: number, larguraDoMapa: number, alturaDoMapa: number, evitar: readonly CaixaDoMapa[] = []): DicaPosicionada {
+export function direcaoDaDica(xBruto: number, yBruto: number, larguraDoMapa: number, alturaDoMapa: number, evitar: readonly CaixaDoMapa[] = []): DicaPosicionada {
+  const x = Math.min(Math.max(xBruto, 0), larguraDoMapa);
+  const y = Math.min(Math.max(yBruto, 0), alturaDoMapa);
   const meia = LARGURA_MAXIMA_DICA / 2;
   type Candidata = DicaPosicionada & { caixa: CaixaDoMapa };
-  const vertical = (direcao: "top" | "bottom", dx: number): Candidata => ({
-    direcao,
-    deslocamento: [dx, 0],
-    caixa: { x0: x - meia + dx, x1: x + meia + dx, y0: direcao === "top" ? y - ALTURA_DICA : y, y1: direcao === "top" ? y : y + ALTURA_DICA },
-  });
+  const vertical = (direcao: "top" | "bottom", dx: number, dy = 0): Candidata => {
+    const y0 = (direcao === "top" ? y - ALTURA_DICA : y) + dy;
+    return { direcao, deslocamento: [dx, dy], seta: oposto(dx), caixa: { x0: x - meia + dx, x1: x + meia + dx, y0, y1: y0 + ALTURA_DICA } };
+  };
   const lado = (direcao: "left" | "right"): Candidata => {
     let dy = 0;
     if (y < MEIA_ALTURA_DICA) dy = MEIA_ALTURA_DICA - y;
     else if (y > alturaDoMapa - MEIA_ALTURA_DICA) dy = alturaDoMapa - MEIA_ALTURA_DICA - y;
     const x0 = direcao === "right" ? x + FOLGA_SETA : x - FOLGA_SETA - LARGURA_MAXIMA_DICA;
-    return { direcao, deslocamento: [0, dy], caixa: { x0, x1: x0 + LARGURA_MAXIMA_DICA, y0: y + dy - MEIA_ALTURA_DICA, y1: y + dy + MEIA_ALTURA_DICA } };
+    return { direcao, deslocamento: [0, dy], seta: oposto(dy), caixa: { x0, x1: x0 + LARGURA_MAXIMA_DICA, y0: y + dy - MEIA_ALTURA_DICA, y1: y + dy + MEIA_ALTURA_DICA } };
   };
   // O quanto empurrar a dica centrada para ela caber na largura (nunca além do ponto em que a borda esquerda sai do mapa).
   const esq = x - meia;
@@ -205,14 +230,29 @@ export function direcaoDaDica(x: number, y: number, larguraDoMapa: number, altur
   const lados: ["left" | "right", "left" | "right"] = x < larguraDoMapa - x ? ["right", "left"] : ["left", "right"];
   // Deslocamentos que encostam a dica na lateral de cada botão (o menor primeiro): tirar a dica de cima dele sem sair do mapa.
   const desvios = evitar.flatMap((o) => [o.x1 - esq, o.x0 - dir]).filter((v) => v !== 0).sort((a, b) => Math.abs(a) - Math.abs(b));
-  const candidatas = [
-    vertical(primeira, 0), vertical(segunda, 0), lado(lados[0]), lado(lados[1]), vertical(primeira, dx), vertical(segunda, dx),
+  const candidatas = [vertical(primeira, 0), vertical(segunda, 0), lado(lados[0]), lado(lados[1]), vertical(primeira, dx), vertical(segunda, dx)];
+  // Só se nenhuma das de cima servir: deslocar para o lado até a lateral de um botão, ou subir/descer até a borda
+  // dele (com o deslocamento lateral que já tinha). A que fica mais PERTO do dedo vem primeiro.
+  const distanciaAoDedo = (c: CaixaDoMapa) => Math.hypot(Math.max(c.x0 - x, 0, x - c.x1), Math.max(c.y0 - y, 0, y - c.y1));
+  const laterais = [...desvios, 0, dx];
+  const deslocadas = [
     ...desvios.flatMap((v) => [vertical(primeira, v), vertical(segunda, v)]),
-  ];
-  const dentro = (c: CaixaDoMapa) => c.x0 >= 0 && c.y0 >= 0 && c.x1 <= larguraDoMapa && c.y1 <= alturaDoMapa;
-  const cobre = (c: CaixaDoMapa) => evitar.some((o) => c.x0 < o.x1 && c.x1 > o.x0 && c.y0 < o.y1 && c.y1 > o.y0);
-  const escolhida = candidatas.find((c) => dentro(c.caixa) && !cobre(c.caixa)) ?? candidatas.find((c) => dentro(c.caixa)) ?? candidatas[4];
-  return { direcao: escolhida.direcao, deslocamento: escolhida.deslocamento };
+    ...laterais.flatMap((lateral) => evitar.flatMap((o) => [vertical("top", lateral, o.y0 - y), vertical("bottom", lateral, o.y1 - y)])),
+  ]
+    .filter((c) => (c.direcao === "top" ? c.deslocamento[1] <= 0 : c.deslocamento[1] >= 0))
+    .sort((p, q) => distanciaAoDedo(p.caixa) - distanciaAoDedo(q.caixa));
+  const dentro = (c: CaixaDoMapa) => c.x0 >= -TOLERANCIA_PX && c.y0 >= -TOLERANCIA_PX && c.x1 <= larguraDoMapa + TOLERANCIA_PX && c.y1 <= alturaDoMapa + TOLERANCIA_PX;
+  // A área da dica que cairia debaixo de algum botão (0 = livre); encostar não conta.
+  const coberta = (c: CaixaDoMapa) => evitar.reduce((soma, o) => {
+    const l = Math.min(c.x1, o.x1) - Math.max(c.x0, o.x0);
+    const a = Math.min(c.y1, o.y1) - Math.max(c.y0, o.y0);
+    return l > TOLERANCIA_PX && a > TOLERANCIA_PX ? soma + l * a : soma;
+  }, 0);
+  const cabem = [...candidatas, ...deslocadas].filter((c) => dentro(c.caixa));
+  const escolhida = cabem.find((c) => coberta(c.caixa) === 0)
+    ?? cabem.reduce<Candidata | undefined>((melhor, c) => (!melhor || coberta(c.caixa) < coberta(melhor.caixa) ? c : melhor), undefined)
+    ?? candidatas[4];
+  return { direcao: escolhida.direcao, deslocamento: escolhida.deslocamento, seta: escolhida.seta };
 }
 
 /** O texto que aparece ao passar o dedo / o mouse sobre a cidade. */

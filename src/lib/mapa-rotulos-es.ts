@@ -59,7 +59,14 @@ export const FONTES_ROTULO: readonly number[] = [12, 11, 10];
 export const FOLGA_X = 4;
 export const FOLGA_Y = 2;
 const ENTRELINHA = 1.15;
-/** Pontos (mais ou menos) da grade GROSSA da busca: o custo não cresce com o tamanho da janela (medido: 500 pontos custavam o dobro do código antigo no zoom de abertura; 100 igualam). */
+/**
+ * Pontos (mais ou menos) da grade GROSSA da busca. Numa janela pequena (a cidade no zoom de abertura,
+ * ~60×60 px) o custo fica nesta ordem; em tela de PC o passo é limitado pela metade do texto e a
+ * contagem cresce com a área da janela (pior caso medido: ~3 mil perguntas por variante em 1440×460).
+ * Medido no Chromium, zoom de abertura: com 500 pontos a conta custava ~2× o código antigo; com 100,
+ * de 1,3× (mediana) a 1,75× (pior caso) — conforme a tela e a CPU. Dali em diante, igual ou menor.
+ * `tests/mapa-rotulos-es.test.ts` guarda a contagem (não o relógio).
+ */
 const PONTOS_GROSSOS = 100;
 const PASSO_GROSSO_MINIMO = 4;
 const TAMANHO_AZULEJO = 256;
@@ -243,12 +250,13 @@ function acharLugar(W: number, H: number, poligonos: Poligono[], caixas: Caixa[]
   }
   const maisPerto = (a: Ponto, b: Ponto) => (a[0] - alvo[0]) ** 2 + (a[1] - alvo[1]) ** 2 - ((b[0] - alvo[0]) ** 2 + (b[1] - alvo[1]) ** 2);
 
-  // Duas passadas, do grosso para o fino — para o custo não depender do tamanho da janela:
+  // Duas passadas, do grosso para o fino — para o custo crescer devagar com o tamanho da janela:
   //  1. uma grade GROSSA (passo sx × sy) testada com o retângulo ENCOLHIDO em sx × sy. Se o texto
   //     cabe num ponto p, o retângulo (W−sx)×(H−sy) cabe em todo ponto a até sx/2 × sy/2 de p:
   //     então nenhum lugar escapa da grade grossa (o que ela descarta, não tinha lugar por perto);
   //  2. em volta de cada ponto grosso que passou, varre de 1 em 1 px com o retângulo inteiro.
-  // Resolução: ~1 px. Uma folga mais estreita que isso pode escapar.
+  // Resolução: ~1 px. Acha todo lugar com folga de pelo menos 1 px; um lugar mais apertado que isso (caixa livre
+  // menor que ~1 px) pode escapar — na comparação com uma varredura exaustiva de 1 px, cerca de 0,5% das telas.
   let total = 0;
   for (const j of janelas) total += (Math.floor(j.x1 - j.x0) + 1) * (Math.floor(j.y1 - j.y0) + 1);
   const passo = Math.max(PASSO_GROSSO_MINIMO, Math.ceil(Math.sqrt(total / PONTOS_GROSSOS)));
@@ -303,10 +311,48 @@ export function posicionarRotulo(o: {
 /**
  * O retângulo de um botão do mapa (+ / −, créditos) em px da projeção: `r` e `mapa` em px da tela
  * (getBoundingClientRect), `origem` = o canto de cima à esquerda da parte visível em px da projeção
- * (getPixelBounds().min). `folga` px de cada lado.
+ * (getPixelBounds().min). `folga` px de cada lado. `medida` desconta a escala e a borda do contêiner,
+ * como o Leaflet faz com o mouse (L.DomEvent.getMousePosition).
  */
-export function botaoEmPx(r: { left: number; top: number; right: number; bottom: number }, mapa: { left: number; top: number }, origem: { x: number; y: number }, folga = 3): Caixa {
-  return { x0: origem.x + r.left - mapa.left - folga, y0: origem.y + r.top - mapa.top - folga, x1: origem.x + r.right - mapa.left + folga, y1: origem.y + r.bottom - mapa.top + folga };
+export function botaoEmPx(
+  r: { left: number; top: number; right: number; bottom: number },
+  mapa: { left: number; top: number },
+  origem: { x: number; y: number },
+  folga = 3,
+  medida: { escala?: { x: number; y: number }; borda?: { x: number; y: number } } = {},
+): Caixa {
+  const ex = medida.escala?.x || 1;
+  const ey = medida.escala?.y || 1;
+  const bx = medida.borda?.x ?? 0;
+  const by = medida.borda?.y ?? 0;
+  return {
+    x0: origem.x + (r.left - mapa.left) / ex - bx - folga,
+    y0: origem.y + (r.top - mapa.top) / ey - by - folga,
+    x1: origem.x + (r.right - mapa.left) / ex - bx + folga,
+    y1: origem.y + (r.bottom - mapa.top) / ey - by + folga,
+  };
+}
+
+type Retangulo = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+
+/**
+ * Os botões do mapa (os `.leaflet-control`) como retângulos no sistema de coordenadas do próprio
+ * Leaflet. O contêiner do mapa pode ter borda (1 px) e largura fracionária — `getBoundingClientRect`
+ * devolve 719,33 enquanto `offsetWidth` devolve 719 —, e o Leaflet descontou as duas coisas ao medir
+ * o mouse; medir os botões sem descontar deixa os dois sistemas deslocados um do outro.
+ */
+export function botoesDoContainer(
+  container: { getBoundingClientRect(): Retangulo; offsetWidth: number; offsetHeight: number; clientLeft: number; clientTop: number },
+  botoes: Iterable<{ getBoundingClientRect(): Retangulo }>,
+  origem: { x: number; y: number },
+  folga: number,
+): Caixa[] {
+  const base = container.getBoundingClientRect();
+  const medida = {
+    escala: { x: container.offsetWidth ? base.width / container.offsetWidth : 1, y: container.offsetHeight ? base.height / container.offsetHeight : 1 },
+    borda: { x: container.clientLeft, y: container.clientTop },
+  };
+  return [...botoes].map((el) => botaoEmPx(el.getBoundingClientRect(), base, origem, folga, medida));
 }
 
 const caixaDoObstaculo = (o: ObstaculoRotulo, zoom: number): Caixa => {

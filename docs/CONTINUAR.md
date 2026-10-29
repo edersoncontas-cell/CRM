@@ -12,12 +12,54 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
-**24/10 — Mapa: duas revisões independentes e as correções.**
-Duas rodadas, cada uma com 5 revisores (regras/dependências, geometria/desempenho, ciclo
-Leaflet/React, visual/UX, testes) e 2 verificadores céticos por achado. A 1ª rodada achou 9
+Último commit com código: **Mapa por região — 3ª rodada de revisão independente (29/10)**;
+antes dele, os de 24/10 (2ª rodada) e o das Comissões Futuras (06/10).
+**1.695 testes passando** (126 arquivos), lint, tipos e build limpos; e2e do mapa 414/414.
+
+**24–29/10 — Mapa: três revisões independentes e as correções.**
+Três rodadas, cada uma com revisores por assunto (regras/dependências, geometria/desempenho,
+ciclo Leaflet/React, visual/UX, testes) e 2 verificadores céticos por achado. A 1ª rodada achou 9
 confirmados; a 2ª, sobre as correções da 1ª, achou 27 (16 confirmados, 4 prováveis, 7
 refutados) — **entre eles um defeito que eu mesmo introduzi** (a busca do lugar do nome ficou
-5 a 15× mais lenta na abertura) e que a 2ª rodada pegou.
+5 a 15× mais lenta na abertura) e que a 2ª rodada pegou; a 3ª, sobre as correções da 2ª,
+achou 20 confirmados (todos de gravidade baixa), 8 prováveis e 6 refutados. Cada correção
+abaixo foi posta à prova com uma versão QUEBRADA de propósito do código (mutação à mão): o teste
+tem de falhar. Os que sobreviveram na 3ª rodada ganharam teste novo.
+*3ª rodada (corrigido; medido na tela):*
+- **Dica que saltava 160 a 424 px** junto do +/−: dedo com fração (o Leaflet divide pela escala
+  do contêiner e o card do Dashboard no PC tem largura fracionária) e a comparação estrita
+  `<` tratava "encostar" como "cobrir" por 1 ulp. Agora há tolerância de 0,01 px.
+- **Seta da dica apontando para outra cidade** quando a dica é deslocada: `seta` vira `--seta`
+  no elemento e o CSS (`.tip-municipio.leaflet-tooltip-*:before`) a traz de volta (presa a
+  14 px das pontas). No e2e a seta aponta para o dedo até 3 px ou presa na ponta; num texto
+  curto deslocado no canto ela chega a ficar ~60 px do dedo (limite conhecido).
+- **Dica sob o +/− ou os créditos** quando nenhum lugar "cabia": agora ela também sobe ou desce
+  até a borda do botão (nos 20 px do pé do mapa sobe acima dos créditos; no Dashboard de
+  celular de 320 px desce abaixo do +/−), e se nada escapa fica a que MENOS cobre (antes: a
+  primeira que cabia no mapa). Varredura de 254 a 1100 px com os dois controles reais: 0 casos.
+- **Ponto do dedo 1 px fora do mapa** (borda fracionária) deixava a função sem lugar: o ponto é
+  puxado para dentro. A conta dos botões (`botoesDoContainer`, na lib, testada) desconta a borda
+  e a escala do contêiner como o Leaflet faz com o mouse; a dica e os nomes usam a MESMA.
+- **Testes da busca do nome**: bolsão livre de EXATOS 1×1 px (2000 casos) e de 1,01 a 8 px
+  (600), borda de baixo/cima/esquerda/direita, degraus da escada de letras (12 em 2 linhas,
+  11, 10, sem nome), piso de nomes por zoom no mapa real, contagem de perguntas por tamanho de
+  janela, ordem do lugar mais perto, guard de janelas vazias e corte diagonal pela esquerda.
+  Os mutantes que a revisão achou vivos (encolher só metade, varrer só até sx/4, tirar a borda de
+  baixo, tirar a letra 10, tirar o guard, PONTOS_GROSSOS 100→500…) agora morrem; a bateria que
+  rodei à mão tem 34 mutantes (busca do nome, dica, conta dos botões) e nenhum sobrevive.
+- **e2e**: os dados do seed ficaram REALIZADOS (visita agendada abre o "Visita feita?", que
+  cobre o mapa em dia útil depois do horário; o comentário do seed trocava UTC por Brasília),
+  e no fim de semana vão na segunda-feira que a tela mostra; entra e abre `/dashboard` antes de
+  guardar o banco (banco recém-criado não tinha tabela); `E2E_OUT` com ou sem `/`; o estado
+  original fica gravado no banco (um `kill -9` não faz a próxima execução tratar o sujo como
+  original); SIGTERM; o seed não sobrescreve a coordenada de município que já existe. Confere
+  agora o que a TELA pinta: z-index e opacidade lidos do navegador, estilo calculado da divisa
+  e tinta nos pixels de cada nome (com controle: nomes por baixo das cidades). Provado com
+  3 defeitos plantados no app (nomes em z-index 345, divisa magenta, nomes invisíveis): os 3 foram
+  pegos; antes passavam 279/279.
+*Registrado, sem mexer:* o quadrado de foco que fica na cidade clicada depois que a dica fecha
+(foco de teclado do SVG do Leaflet, defeito antigo, é acessibilidade); a lista da legenda num
+celular de 320 px rola e esconde a última região (altura fixa por regra da casa).
 *1ª rodada (corrigido; medido na tela, antes e depois no build antigo):*
 - **Nome de 2 linhas mais alto que o medido** — o `leaflet.css` (carrega depois) punha
   `display:block` e vencia o `.rotulo-municipio`; seletor com duas classes.
@@ -35,16 +77,18 @@ refutados) — **entre eles um defeito que eu mesmo introduzi** (a busca do luga
 - **Busca do lugar do nome, grosso para fino** (`acharLugar`): a varredura plana que eu tinha
   posto custava 5–15× o original no zoom de abertura. Agora uma grade grossa testada com o
   retângulo ENCOLHIDO (nenhum lugar escapa dela) e, em volta de cada ponto que passou, 1 px.
-  Medido no Chromium: no zoom 8 (abertura) custa ~2× o original (22 ms contra 8 ms no PC;
-  108 ms contra 47 ms com a CPU estrangulada 4×), do zoom 8,5 em diante é igual ou menor; e
-  acha todo lugar que uma busca exaustiva de 1 px acharia (0 faltando em 2 sementes de
-  teste, contra 81 e 87 faltando no original). O teste de custo conta as perguntas "cabe
-  aqui?" (não o relógio).
+  Medido no Chromium: no zoom 8 (abertura) custa de ~1,3× (mediana) a ~2× o original conforme
+  a tela e a CPU (22 ms contra 8 ms no PC; 108 ms contra 47 ms com a CPU estrangulada 4×; uma
+  medida da 3ª rodada deu até 5,9× no pior caso estrangulado), do zoom 8,5 em diante é igual
+  ou menor; acha todo lugar com folga de pelo menos 1 px (os ~0,5% mais apertados escapam; 0
+  faltando em 2 sementes de teste, contra 81 e 87 faltando no original). O teste de custo conta
+  as perguntas "cabe aqui?" (não o relógio).
 - **Dica em mapa estreito** (Dashboard no celular de 390 tem 324 px; de lado a dica de 220 +
   seta não cabia): `direcaoDaDica` escolhe pelo que CABE (centrada → de lado → deslocada) e
   desvia dos botões +/− e créditos (ficam POR CIMA da dica). Varredura em mapas de 288 a 1440:
   nenhuma dica sai do mapa; com o botão +/− no lugar de verdade, nenhuma cai embaixo dele
-  (antes, 1 em cada ~6 toques perto do canto).
+  (antes, no Visitas do celular, 1 em cada ~12 toques caía embaixo do +/− e 1 em 6 contando os
+  créditos — estes só foram tratados na 3ª rodada).
 - **Girar o celular com a dica aberta** deixava a dica presa e cortada: `resize` fecha.
 - **"Não atendo" na legenda** era o último item de uma lista que rola (altura fixa): com 9
   regiões ou mais ficava atrás da rolagem. Agora é o primeiro.
@@ -56,11 +100,13 @@ refutados) — **entre eles um defeito que eu mesmo introduzi** (a busca do luga
   reforçar o teste (a 1ª versão deixava passar a grade sem a meia caixa da ponta, o espelho
   esq/dir do obstáculo e a ordem dos lados da dica). Os testes de componente por texto do fonte
   seguem sendo fracos (ver T3 abaixo).
-- **e2e** (`scripts/e2e-mapa/`, README completo): 279 conferências nas quatro combinações
-  (PC/celular × claro/escuro, inclusive "aproximar"). Agora AFIRMA que há pins, trajeto,
-  cifrões e botões na tela (antes passou 243/243 com ZERO pins: o seed era de ontem), roda o
-  seed a cada vez (hoje, fuso de Brasília; cria os próprios clientes), tem trava `E2E_BANCO`,
-  devolve o banco no `finally` e sai com código ≠ 0 se algo falhar (inclusive com `SO`).
+- **e2e** (`scripts/e2e-mapa/`, README completo): hoje 414 conferências (as de visual nas
+  quatro combinações PC/celular × claro/escuro, inclusive "aproximar"; as de toque só no celular).
+  AFIRMA que há pins, trajeto, cifrões e botões na tela (antes passou 243/243 com ZERO pins: o
+  seed era de ontem), roda o seed a cada vez (dia de hoje, fuso de Brasília; cria os próprios
+  clientes), tem trava `E2E_BANCO`, devolve a lista de cidades atendidas e a marca "fora da área"
+  no `finally` (os dados `tmapa*` do seed FICAM no banco de teste) e sai com código ≠ 0 se algo
+  falhar (inclusive com `SO`).
 *Decidido NÃO mexer (registrado):*
 - **G3** — o nome de cidade muito grande "pula" quando o ponto de partida cruza a borda da tela
   (fora → meio da parte visível; dentro mas perto da borda → colado). Só aparece ao arrastar em
@@ -90,7 +136,8 @@ retângulo do texto inteiro dentro da cidade, dentro da tela, longe de pin, cifr
 botões do mapa e do trajeto do dia; 12 → 11 → 10 px, uma ou duas linhas). Cidade
 sem espaço fica sem nome — o nome continua na dica ao tocar, e aproximar com o (+)
 acrescenta nomes. **Limite físico:** na abertura (zoom ~8) só as cidades grandes
-têm nome (PC: ~5; celular: ~2); com 2 níveis a mais, 16-26. O mapa agora abre em
+têm nome (PC: 4–8; celular: ~2); com 2 níveis a mais, 15–17 no PC e 8–9 no celular (medido
+em 29/10; o "16-26" da época era de uma janela maior). O mapa agora abre em
 passos de 1/4 de zoom (`zoomSnap`) para aproveitar a caixa. A malha ganhou o ponto
 do nome (`c`) e os anéis foram arrumados (Vitória, Vila Velha, Guarapari e Ibiraçu
 vinham com as ilhas como anéis soltos e o contorno principal por último;
@@ -156,10 +203,6 @@ vez e publicar o app no Google Cloud (Público-alvo → Publicar app) — códig
 faz isso. Não feito: reenviar para a Agenda as visitas marcadas durante a queda.
 Prova: `tests/google-conexao.test.ts` (51) + e2e com Google falso local (48/48,
 PC e celular, dois temas). O Google de verdade não foi testado (sem rede aqui).
-
-Último commit com código: **"Comissões Futuras: toda venda faturada com a comissão
-pendente entra no relatório (não só CRD PME); sai o card da regra"** (06/10).
-**1.612 testes passando** (126 arquivos), lint e build limpos.
 
 **06/10 — Comissões Futuras** (print dele: 0 negociações / R$ 0 com faturadas
 pendentes). A tela `/financeiro/comissoes-futuras` e o card/painel do Financeiro

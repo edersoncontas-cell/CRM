@@ -533,6 +533,18 @@ img, video, iframe {
   width: max-content;
   max-width: 220px;
 }
+/* A seta fica no meio da dica (leaflet.css), mas a dica é empurrada para caber no mapa e fugir dos
+   botões. `--seta` (px, posto pelo CamadaMunicipiosES) traz a seta de volta para o dedo, sem sair
+   do canto arredondado da dica (14 px de cada ponta). Duas classes + `:before` vencem o
+   `.leaflet-tooltip-top:before` do leaflet.css, que carrega depois deste arquivo. */
+.tip-municipio.leaflet-tooltip-top:before,
+.tip-municipio.leaflet-tooltip-bottom:before {
+  left: clamp(14px, calc(50% + var(--seta, 0px)), calc(100% - 14px));
+}
+.tip-municipio.leaflet-tooltip-left:before,
+.tip-municipio.leaflet-tooltip-right:before {
+  top: clamp(14px, calc(50% + var(--seta, 0px)), calc(100% - 14px));
+}
 
 /* Letreiro de notícias do Dashboard (estilo bolsa): corre para a esquerda,
    conteúdo duplicado para o laço ser contínuo; pausa no hover/toque. */

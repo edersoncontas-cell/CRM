@@ -2,7 +2,8 @@
 // aparecia por baixo da cor antes de o preenchimento ficar opaco. (Pillow deste ambiente está quebrado.)
 const { chromium } = require("playwright");
 const fs = require("fs");
-const OUT = process.env.E2E_OUT || "/tmp/mapa-e2e/";
+const path = require("path");
+const OUT = path.resolve(process.env.E2E_OUT || "/tmp/mapa-e2e") + path.sep; // com ou sem "/" no fim
 const CHROMIUM = process.env.CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 fs.mkdirSync(OUT, { recursive: true });
 (async () => {

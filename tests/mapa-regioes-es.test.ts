@@ -323,8 +323,8 @@ describe("os dois mapas", () => {
   }
 
   it("a ORDEM das camadas: azulejos (200) < contorno do estado < cidades < nomes < rotas (400) < pins (600)", () => {
-    // Fora dessa ordem o mapa quebra sem erro nenhum: cidade opaca por cima dos nomes (K02),
-    // contorno grosso por cima das cidades (toda divisa interna viraria traço de 4 px, K03),
+    // Fora dessa ordem o mapa quebra sem erro nenhum: cidade opaca por cima dos nomes,
+    // contorno grosso por cima das cidades (toda divisa interna viraria traço de 4 px),
     // ou cidades por cima do trajeto e dos pins (não recebem o clique).
     expect(Z_CONTORNO_ESTADO).toBeGreaterThan(200);
     expect(Z_CONTORNO_ESTADO).toBeLessThan(Z_MUNICIPIOS);
@@ -407,7 +407,7 @@ describe("a dica da cidade abre para onde cabe", () => {
   const onde = (x: number, y: number, l = LARGURA_CELULAR, a = ALTURA_CELULAR) => direcaoDaDica(x, y, l, a);
 
   it("no meio do mapa e longe do topo: abre em cima, sem deslocar", () => {
-    expect(onde(LARGURA_CELULAR / 2, 250)).toEqual({ direcao: "top", deslocamento: [0, 0] });
+    expect(onde(LARGURA_CELULAR / 2, 250)).toEqual({ direcao: "top", deslocamento: [0, 0], seta: 0 });
     expect(onde(700, 300, 1400, 460).direcao).toBe("top");
   });
 
@@ -445,13 +445,13 @@ describe("a dica da cidade abre para onde cabe", () => {
   });
 
   // A caixa que a dica ocupa, pela geometria do Leaflet (escrita aqui de novo, não importada da conta):
-  // 220 de largura e até 90 de altura; em cima/embaixo ela fica centrada no dedo (+ o deslocamento); de lado,
+  // 220 de largura e até 90 de altura; em cima/embaixo ela fica centrada no dedo (+ o deslocamento, nos dois eixos); de lado,
   // a seta e o recuo somam 6 px e ela fica centrada na vertical (72 de altura útil, + o deslocamento).
   const caixaDaDica = (d: ReturnType<typeof direcaoDaDica>, x: number, y: number) => {
     const [dx, dy] = d.deslocamento;
     const L = LARGURA_MAXIMA_DICA;
-    if (d.direcao === "top") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y - 90, y1: y };
-    if (d.direcao === "bottom") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y, y1: y + 90 };
+    if (d.direcao === "top") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y - 90 + dy, y1: y + dy };
+    if (d.direcao === "bottom") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y + dy, y1: y + 90 + dy };
     if (d.direcao === "right") return { x0: x + 6, x1: x + 6 + L, y0: y + dy - 36, y1: y + dy + 36 };
     return { x0: x - 6 - L, x1: x - 6, y0: y + dy - 36, y1: y + dy + 36 };
   };
@@ -480,7 +480,7 @@ describe("a dica da cidade abre para onde cabe", () => {
       expect(d.deslocamento[0], `x=${x}`).not.toBe(0);
     }
     // Colatina tocada em x=216 (o caso medido: a dica abria à esquerda, em -10..210, e perdia o começo do nome).
-    expect(onde(216, 250, 324, 420)).toEqual({ direcao: "top", deslocamento: [-2, 0] });
+    expect(onde(216, 250, 324, 420)).toEqual({ direcao: "top", deslocamento: [-2, 0], seta: 2 });
   });
 
   it("quando nem em cima nem embaixo cabe (mapa baixo) e os DOIS lados cabem, abre para o lado com mais espaço", () => {
@@ -489,8 +489,12 @@ describe("a dica da cidade abre para onde cabe", () => {
   });
 
   it("mapa mais estreito que a dica: alinha pela esquerda (o que corta é o fim do texto, não o nome da cidade)", () => {
-    const d = onde(100, 250, 200, 420);
-    expect(caixaDaDica(d, 100, 250).x0).toBe(0);
+    // Dedo em x=150 num mapa de 200: a borda direita (260) passa do mapa e a esquerda (40) ainda está dentro — é a conta do
+    // `Math.max` (empurrar 60 para a esquerda sairia do mapa em -20; o limite é 40).
+    const d = onde(150, 250, 200, 420);
+    expect(caixaDaDica(d, 150, 250).x0).toBe(0);
+    // Dedo colado na esquerda: a borda esquerda (-100) sai do mapa — empurra para a direita, até x0 = 0.
+    expect(caixaDaDica(onde(10, 250, 200, 420), 10, 250).x0).toBe(0);
   });
 
   it("os botões do mapa (+ / − e os créditos) ficam POR CIMA da dica: ela escolhe outro lugar quando cairia embaixo deles", () => {
@@ -530,6 +534,141 @@ describe("a dica da cidade abre para onde cabe", () => {
     expect(com).toBe(0);
   });
 
+  // Os dois controles do Leaflet como o Chromium os mede (+/− 34×64 no canto de cima à esquerda a 11 px; créditos
+  // 180×17 colados embaixo à direita), com a folga de 4 px que o componente põe de cada lado.
+  const controlesReais = (l: number, a: number) => [
+    { x0: 11 - 4, y0: 11 - 4, x1: 45 + 4, y1: 75 + 4 },
+    { x0: l - 180 - 4, y0: a - 17 - 4, x1: l + 4, y1: a + 4 },
+  ];
+  const cobreAlgum = (c: { x0: number; y0: number; x1: number; y1: number }, evitar: { x0: number; y0: number; x1: number; y1: number }[]) =>
+    evitar.some((o) => Math.min(c.x1, o.x1) - Math.max(c.x0, o.x0) > 0.01 && Math.min(c.y1, o.y1) - Math.max(c.y0, o.y0) > 0.01);
+
+  it("com os DOIS controles de verdade (+/− e créditos), em mapas de 254 a 1100 px, a dica nunca cai embaixo de um controle nem sai do mapa (inclusive nos 20 px do pé, ao lado dos créditos, e no topo de um mapa estreito)", () => {
+    for (const [l, a] of [[254, 420], [288, 420], [324, 420], [358, 440], [358, 460], [717, 418], [1100, 460]]) {
+      const evitar = controlesReais(l, a);
+      for (let x = 0; x <= l; x += 3) {
+        for (let y = 0; y <= a; y += 4) {
+          if (evitar.some((o) => x > o.x0 + 4 && x < o.x1 - 4 && y > o.y0 + 4 && y < o.y1 - 4)) continue; // o dedo não toca no mapa por baixo do botão
+          const d = direcaoDaDica(x, y, l, a, evitar);
+          const c = caixaDaDica(d, x, y);
+          const rotulo = `mapa ${l}x${a}, dedo em ${x},${y} (${d.direcao} ${d.deslocamento})`;
+          expect(cobreAlgum(c, evitar), `cobre um controle: ${rotulo}`).toBe(false);
+          expect(c.x0 >= -0.01 && c.y0 >= -0.01 && c.x1 <= l + 0.01 && c.y1 <= a + 0.01, `sai do mapa: ${rotulo}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("casos medidos: celular de 320 px (mapa de 254), dedo em Sooretama no norte; e o pé do mapa ao lado dos créditos", () => {
+    // Antes: caía de lado, em 4..224 × 2..74, com o +/− em cima do começo do nome.
+    const pequeno = controlesReais(254, 420);
+    const d = direcaoDaDica(230, 38, 254, 420, pequeno);
+    expect(cobreAlgum(caixaDaDica(d, 230, 38), pequeno)).toBe(false);
+    expect(d.deslocamento[1]).toBeGreaterThan(0); // desceu até a borda de baixo do +/−
+    // Visitas no celular (358×460): a faixa dos 20 px do pé, à esquerda dos créditos. Antes a última linha da dica ficava sob eles.
+    const visitas = controlesReais(358, 460);
+    for (const [x, y] of [[54, 446], [108, 452], [150, 459], [2, 458]]) {
+      const e = direcaoDaDica(x, y, 358, 460, visitas);
+      expect(cobreAlgum(caixaDaDica(e, x, y), visitas), `dedo em ${x},${y}`).toBe(false);
+      expect(e.direcao, `dedo em ${x},${y}`).toBe("top");
+      expect(e.deslocamento[1], `dedo em ${x},${y}`).toBeLessThan(0); // subiu até a borda de cima dos créditos
+    }
+  });
+
+  it("dedo colado nos créditos (PC, mapa de 717 × 418): a dica SOBE alguns px acima deles em vez de ser jogada centenas de px para o lado — a seta continua perto do dedo", () => {
+    const evitar = controlesReais(717, 418);
+    for (const [x, y] of [[700, 400], [650, 410], [560, 402]]) {
+      const d = direcaoDaDica(x, y, 717, 418, evitar);
+      const c = caixaDaDica(d, x, y);
+      expect(cobreAlgum(c, evitar), `dedo em ${x},${y}`).toBe(false);
+      expect(d.direcao, `dedo em ${x},${y}`).toBe("top");
+      expect(Math.abs(d.deslocamento[0]), `dedo em ${x},${y}`).toBeLessThanOrEqual(100); // só o que cabe na largura do mapa
+      expect(d.deslocamento[1], `dedo em ${x},${y}`).toBeLessThan(0);
+      expect(d.deslocamento[1], `dedo em ${x},${y}`).toBeGreaterThan(-25);
+    }
+  });
+
+  it("nenhum lugar escapa: fica o que MENOS cobre (não o primeiro que cabe no mapa)", () => {
+    // Uma peça grande no meio cobre a dica de cima (18 000 px²) e a de baixo (18 000), mas só 6 768 px² da de lado.
+    const peca = [{ x0: 100, y0: 60, x1: 300, y1: 240 }];
+    const d = direcaoDaDica(200, 150, 460, 300, peca);
+    expect(d.direcao).toBe("right");
+    expect(cobreAlgum(caixaDaDica(d, 200, 150), peca)).toBe(true); // ainda cobre um pouco: não havia saída
+  });
+
+  it("sem necessidade, a dica não é deslocada: se a centrada em cima (ou embaixo) cabe e não cobre nada, é ela (varredura nos mapas reais)", () => {
+    for (const [l, a] of [[324, 420], [358, 460], [717, 418]]) {
+      const evitar = controlesReais(l, a);
+      for (let x = 0; x <= l; x += 3) {
+        for (let y = 0; y <= a; y += 4) {
+          const livre = (direcao: "top" | "bottom") => {
+            const c = caixaDaDica({ direcao, deslocamento: [0, 0], seta: 0 }, x, y);
+            return c.x0 >= 0 && c.y0 >= 0 && c.x1 <= l && c.y1 <= a && !cobreAlgum(c, evitar);
+          };
+          const primeira = y < 90 ? "bottom" : "top";
+          const segunda = primeira === "top" ? "bottom" : "top";
+          const esperada = livre(primeira) ? primeira : livre(segunda) ? segunda : null;
+          if (!esperada) continue;
+          expect(direcaoDaDica(x, y, l, a, evitar), `mapa ${l}x${a}, dedo em ${x},${y}`).toEqual({ direcao: esperada, deslocamento: [0, 0], seta: 0 });
+        }
+      }
+    }
+  });
+
+  it("dedo com fração (o Leaflet divide pela escala do contêiner e o card do Dashboard tem largura fracionária): encostar no +/− não conta como cobrir — a dica fica colada nele, não salta 400 px nem desvia à toa", () => {
+    // Antes: (x−110) + (49−(x−110)) dava 48,999999999999986 e a comparação estrita rejeitava o encosto.
+    const evitar = controlesReais(717, 418);
+    const escala = 1.000456;
+    let fracionarios = 0;
+    for (let k = 0; k <= 300; k++) {
+      const x = (k * 0.01) / escala; // dedo colado na borda esquerda do mapa, por baixo da altura do +/−
+      if (x - 110 + (49 - (x - 110)) < 49) fracionarios++; // quantos x a conta do deslocamento deixa 1 ulp abaixo do encosto
+      for (const y of [19.5, 30, 45, 60, 70]) {
+        const d = direcaoDaDica(x, y, 717, 418, evitar);
+        const c = caixaDaDica(d, x, y);
+        // O melhor lugar fica ENCOSTADO no +/−: ao lado dele (borda esquerda da dica em x=49) ou logo abaixo (y=79). Rejeitar o
+        // encosto jogava a dica para o candidato seguinte, bem mais longe do dedo.
+        const perto = Math.hypot(Math.max(c.x0 - x, 0, x - c.x1), Math.max(c.y0 - y, 0, y - c.y1));
+        expect(perto, `x=${x} y=${y} (${d.direcao} ${d.deslocamento})`).toBeLessThanOrEqual(49.02);
+      }
+    }
+    expect(fracionarios, "a varredura tem que pegar x em que a conta erra por 1 ulp (senão ela não prova nada)").toBeGreaterThan(10);
+  });
+
+  it("o ponto até 1 px fora do mapa (borda fracionária do contêiner) vale como o ponto na borda: a dica não cai em cima do +/−", () => {
+    const evitar = controlesReais(322, 418);
+    for (const [fx, fy, bx, by] of [[228, -0.75, 228, 0], [264, -0.5, 264, 0], [228, 418.75, 228, 418], [-0.5, 200, 0, 200], [322.6, 200, 322, 200]] as const) {
+      expect(direcaoDaDica(fx, fy, 322, 418, evitar), `${fx},${fy}`).toEqual(direcaoDaDica(bx, by, 322, 418, evitar));
+    }
+    // O caso medido: sem o ajuste, só os laterais passavam em "dentro" e o +/− ficava em cima do começo do nome.
+    const d = direcaoDaDica(228, -0.75, 322, 418, evitar);
+    expect(cobreAlgum(caixaDaDica(d, 228, 0), evitar)).toBe(false);
+  });
+
+  it("a seta continua apontando para o dedo: `seta` é o oposto do deslocamento ao longo da borda (em cima/embaixo: o de x; de lado: o de y)", () => {
+    for (const [l, a] of [[324, 420], [358, 460], [717, 418]]) {
+      const evitar = controlesReais(l, a);
+      for (let x = 0; x <= l; x += 5) {
+        for (let y = 0; y <= a; y += 7) {
+          const d = direcaoDaDica(x, y, l, a, evitar);
+          const c = caixaDaDica(d, x, y);
+          if (d.direcao === "top" || d.direcao === "bottom") expect((c.x0 + c.x1) / 2 + d.seta, `${l}x${a} ${x},${y}`).toBeCloseTo(x, 6);
+          else expect((c.y0 + c.y1) / 2 + d.seta, `${l}x${a} ${x},${y}`).toBeCloseTo(y, 6);
+        }
+      }
+    }
+  });
+
+  it("o CSS põe a seta de volta no dedo (--seta) sem deixá-la sair da dica, e o componente passa o valor também na PRIMEIRA vez (a dica ainda não está no DOM no 'mouseover')", () => {
+    const css = ler("src/app/globals.css");
+    expect(css).toMatch(/\.tip-municipio\.leaflet-tooltip-top:before,\s*\.tip-municipio\.leaflet-tooltip-bottom:before \{\s*left: clamp\(14px, calc\(50% \+ var\(--seta, 0px\)\), calc\(100% - 14px\)\);/);
+    expect(css).toMatch(/\.tip-municipio\.leaflet-tooltip-left:before,\s*\.tip-municipio\.leaflet-tooltip-right:before \{\s*top: clamp\(14px, calc\(50% \+ var\(--seta, 0px\)\), calc\(100% - 14px\)\);/);
+    const src = ler("src/components/CamadaMunicipiosES.tsx");
+    expect(src).toMatch(/setProperty\("--seta", `\$\{seta\}px`\)/);
+    expect(src).toMatch(/seta = onde\.seta/);
+    expect(src).toMatch(/tooltipopen: \(\) => aplicarSeta\(c\.getTooltip\(\)\)/);
+  });
+
   it("o componente escolhe a direção ANTES de ligar a dica (o Leaflet dispara na ordem em que os ouvintes foram ligados) e aplica também o deslocamento", () => {
     const s = ler("src/components/CamadaMunicipiosES.tsx");
     const escolhe = s.indexOf("c.on({ mouseover: abrirOndeCabe");
@@ -539,9 +678,11 @@ describe("a dica da cidade abre para onde cabe", () => {
     for (const ev of ["mouseover", "mousemove", "click"]) expect(s).toMatch(new RegExp(`${ev}: abrirOndeCabe`));
     expect(s).toMatch(/dica\.options\.direction = onde\.direcao/);
     expect(s).toMatch(/dica\.options\.offset = onde\.deslocamento/);
+    // Se a conta da posição lançar uma exceção, a dica ainda abre (o Leaflet interromperia os ouvintes seguintes, e o que abre a dica é um deles).
+    expect(s).toMatch(/const abrirOndeCabe = [\s\S]*?try \{[\s\S]*?direcaoDaDica\([\s\S]*?\} catch \{/);
     // E passa os botões do mapa (+ / −, créditos), que ficam por cima da dica.
     expect(s).toMatch(/direcaoDaDica\([^)]*botoesDoMapa\(\)\)/);
-    expect(s).toMatch(/querySelectorAll\("\.leaflet-control"\)/);
+    expect(s).toMatch(/botoesDoContainer\(container, container\.querySelectorAll\("\.leaflet-control"\), \{ x: 0, y: 0 \}, 4\)/);
   });
 
   it("no celular (sem mouse) a dica fica aberta até o próximo toque: o 'mouseout' que o Chromium manda logo depois do toque não a fecha", () => {
