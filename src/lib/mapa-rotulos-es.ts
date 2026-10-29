@@ -56,10 +56,12 @@ export const PESO_ROTULO = 700;
 export const FONTES_ROTULO: readonly number[] = [12, 11, 10];
 
 /** Folga entre o texto e a divisa (px). */
-const FOLGA_X = 4;
-const FOLGA_Y = 2;
+export const FOLGA_X = 4;
+export const FOLGA_Y = 2;
 const ENTRELINHA = 1.15;
-const MAX_CANDIDATOS = 3000;
+/** Pontos (mais ou menos) da grade GROSSA da busca: o custo não cresce com o tamanho da janela (medido: 500 pontos custavam o dobro do código antigo no zoom de abertura; 100 igualam). */
+const PONTOS_GROSSOS = 100;
+const PASSO_GROSSO_MINIMO = 4;
 const TAMANHO_AZULEJO = 256;
 
 // ───────── projeção (a mesma do Leaflet com o OpenStreetMap) ─────────
@@ -164,9 +166,61 @@ export function variantesDeLinhas(nome: string, fonte: number, medir: Medidor): 
 /** O traço (o trajeto do dia) é fino e tracejado; 3 px de cada lado cobrem a espessura e a folga. */
 const FOLGA_LINHA = 3;
 
-function acharLugar(W: number, H: number, poligonos: Poligono[], caixas: Caixa[], ancora: Ponto, area: Caixa, obstaculos: Caixa[], linhas: Ponto[][]): Ponto | null {
-  const livre = (cx: number, cy: number): boolean => {
-    const c: Caixa = { x0: cx - W / 2, y0: cy - H / 2, x1: cx + W / 2, y1: cy + H / 2 };
+/**
+ * A caixa da parte do anel que APARECE dentro de `area` (recorte de Sutherland–Hodgman), ou
+ * null se nada dele aparece. Cidade grande vista só como uma pontinha num canto da tela tem a
+ * caixa inteira enorme, mas a parte visível pequena — e é nela que o nome precisa caber.
+ */
+export function caixaVisivel(anel: Anel, area: Caixa): Caixa | null {
+  let pts: Ponto[] = anel.length > 1 && anel[0][0] === anel[anel.length - 1][0] && anel[0][1] === anel[anel.length - 1][1] ? anel.slice(0, -1) : anel.slice();
+  const cortes: [(p: Ponto) => boolean, (a: Ponto, b: Ponto) => Ponto][] = [
+    [(p) => p[0] >= area.x0, (a, b) => [area.x0, a[1] + ((b[1] - a[1]) * (area.x0 - a[0])) / (b[0] - a[0])]],
+    [(p) => p[0] <= area.x1, (a, b) => [area.x1, a[1] + ((b[1] - a[1]) * (area.x1 - a[0])) / (b[0] - a[0])]],
+    [(p) => p[1] >= area.y0, (a, b) => [a[0] + ((b[0] - a[0]) * (area.y0 - a[1])) / (b[1] - a[1]), area.y0]],
+    [(p) => p[1] <= area.y1, (a, b) => [a[0] + ((b[0] - a[0]) * (area.y1 - a[1])) / (b[1] - a[1]), area.y1]],
+  ];
+  for (const [dentro, cruza] of cortes) {
+    const saida: Ponto[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      if (dentro(a)) {
+        saida.push(a);
+        if (!dentro(b)) saida.push(cruza(a, b));
+      } else if (dentro(b)) saida.push(cruza(a, b));
+    }
+    pts = saida;
+    if (pts.length === 0) return null;
+  }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return { x0, y0, x1, y1 };
+}
+
+/**
+ * Onde o centro do texto (W×H) pode ficar: dentro da parte visível de cada pedaço da cidade, a
+ * meia caixa de texto da borda. Quase sempre vazio em zoom longe para cidade pequena.
+ */
+function janelasDoCentro(W: number, H: number, visiveis: readonly (Caixa | null)[]): Caixa[] {
+  const saida: Caixa[] = [];
+  for (const v of visiveis) {
+    if (!v) continue;
+    const j = { x0: v.x0 + W / 2, y0: v.y0 + H / 2, x1: v.x1 - W / 2, y1: v.y1 - H / 2 };
+    if (j.x1 >= j.x0 && j.y1 >= j.y0) saida.push(j);
+  }
+  return saida;
+}
+
+const dentroDe = (p: Ponto, c: Caixa): boolean => p[0] >= c.x0 && p[0] <= c.x1 && p[1] >= c.y0 && p[1] <= c.y1;
+
+/** Só para o teste de custo: quantas vezes a pergunta "o texto cabe aqui?" foi feita. */
+export type ContagemDeTestes = { testes: number };
+
+function acharLugar(W: number, H: number, poligonos: Poligono[], caixas: Caixa[], ancora: Ponto, area: Caixa, obstaculos: Caixa[], linhas: Ponto[][], visiveis: readonly (Caixa | null)[], contagem?: ContagemDeTestes): Ponto | null {
+  // "O retângulo w×h, com o centro em (cx, cy), cabe?" — com w×h = o texto, ou o texto ENCOLHIDO (busca grossa).
+  const livreCom = (w: number, h: number) => (cx: number, cy: number): boolean => {
+    if (contagem) contagem.testes++;
+    const c: Caixa = { x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2 };
     if (c.x0 < area.x0 || c.y0 < area.y0 || c.x1 > area.x1 || c.y1 > area.y1) return false; // cortado pela borda do mapa
     for (const o of obstaculos) if (caixasSeCruzam(c, o)) return false;
     const larga: Caixa = { x0: c.x0 - FOLGA_LINHA, y0: c.y0 - FOLGA_LINHA, x1: c.x1 + FOLGA_LINHA, y1: c.y1 + FOLGA_LINHA };
@@ -174,29 +228,49 @@ function acharLugar(W: number, H: number, poligonos: Poligono[], caixas: Caixa[]
     for (let i = 0; i < poligonos.length; i++) if (caixasSeCruzam(c, caixas[i]) && caixaDentro(c, poligonos[i])) return true;
     return false;
   };
+  const livre = livreCom(W, H);
   if (livre(ancora[0], ancora[1])) return ancora;
 
-  // Não coube no ponto de partida: varre a cidade (de perto para longe do ponto).
-  const candidatos: Ponto[] = [];
-  let passo = Math.max(3, Math.min(12, Math.round(Math.min(W, H) / 5)));
-  for (let volta = 0; volta < 4; volta++) {
-    candidatos.length = 0;
-    for (const caixa of caixas) {
-      const x0 = Math.max(caixa.x0 + W / 2, area.x0);
-      const x1 = Math.min(caixa.x1 - W / 2, area.x1);
-      const y0 = Math.max(caixa.y0 + H / 2, area.y0);
-      const y1 = Math.min(caixa.y1 - H / 2, area.y1);
-      for (let x = x0; x <= x1; x += passo) for (let y = y0; y <= y1; y += passo) candidatos.push([x, y]);
-    }
-    if (candidatos.length <= MAX_CANDIDATOS) break;
-    passo *= 2;
+  // Não coube no ponto de partida: procura na parte VISÍVEL da cidade, do lugar mais perto do ponto
+  // de partida para o mais longe. Se o ponto de partida está fora da tela (cidade grande, vista
+  // de perto), o nome vem para o MEIO do que aparece — e não para o canto mais perto do ponto.
+  const janelas = janelasDoCentro(W, H, visiveis);
+  if (janelas.length === 0) return null; // o que aparece da cidade é menor que o texto
+  let alvo = ancora;
+  if (!dentroDe(ancora, area)) {
+    const maior = janelas.reduce((m, j) => ((j.x1 - j.x0) * (j.y1 - j.y0) >= (m.x1 - m.x0) * (m.y1 - m.y0) ? j : m));
+    alvo = [(maior.x0 + maior.x1) / 2, (maior.y0 + maior.y1) / 2];
   }
-  candidatos.sort((a, b) => (a[0] - ancora[0]) ** 2 + (a[1] - ancora[1]) ** 2 - ((b[0] - ancora[0]) ** 2 + (b[1] - ancora[1]) ** 2));
-  for (const [x, y] of candidatos.slice(0, MAX_CANDIDATOS)) if (livre(x, y)) return [x, y];
+  const maisPerto = (a: Ponto, b: Ponto) => (a[0] - alvo[0]) ** 2 + (a[1] - alvo[1]) ** 2 - ((b[0] - alvo[0]) ** 2 + (b[1] - alvo[1]) ** 2);
+
+  // Duas passadas, do grosso para o fino — para o custo não depender do tamanho da janela:
+  //  1. uma grade GROSSA (passo sx × sy) testada com o retângulo ENCOLHIDO em sx × sy. Se o texto
+  //     cabe num ponto p, o retângulo (W−sx)×(H−sy) cabe em todo ponto a até sx/2 × sy/2 de p:
+  //     então nenhum lugar escapa da grade grossa (o que ela descarta, não tinha lugar por perto);
+  //  2. em volta de cada ponto grosso que passou, varre de 1 em 1 px com o retângulo inteiro.
+  // Resolução: ~1 px. Uma folga mais estreita que isso pode escapar.
+  let total = 0;
+  for (const j of janelas) total += (Math.floor(j.x1 - j.x0) + 1) * (Math.floor(j.y1 - j.y0) + 1);
+  const passo = Math.max(PASSO_GROSSO_MINIMO, Math.ceil(Math.sqrt(total / PONTOS_GROSSOS)));
+  // O encolhimento nunca passa de metade do lado (senão o retângulo some): janela enorme com texto
+  // pequeno ganha mais pontos grossos (a janela é a tela, então tem teto).
+  const sx = Math.max(1, Math.min(passo, Math.floor(W / 2)));
+  const sy = Math.max(1, Math.min(passo, Math.floor(H / 2)));
+  const cabeEncolhido = livreCom(W - sx, H - sy);
+  const grossos: Ponto[] = [];
+  for (const j of janelasDoCentro(W - sx, H - sy, visiveis)) for (let x = j.x0; x <= j.x1; x += sx) for (let y = j.y0; y <= j.y1; y += sy) grossos.push([x, y]);
+  grossos.sort(maisPerto);
+  for (const [qx, qy] of grossos) {
+    if (!cabeEncolhido(qx, qy)) continue;
+    const finos: Ponto[] = [];
+    for (let dx = -sx / 2; dx <= sx / 2; dx++) for (let dy = -sy / 2; dy <= sy / 2; dy++) finos.push([qx + dx, qy + dy]);
+    finos.sort(maisPerto);
+    for (const [x, y] of finos) if (livre(x, y)) return [x, y];
+  }
   return null;
 }
 
-const alturaDaLinha = (fonte: number) => Math.round(fonte * ENTRELINHA);
+export const alturaDaLinha = (fonte: number) => Math.round(fonte * ENTRELINHA);
 
 /** Tenta cada letra (do maior) e cada divisão em linhas até achar um lugar. null = não cabe neste zoom. */
 export function posicionarRotulo(o: {
@@ -208,19 +282,31 @@ export function posicionarRotulo(o: {
   linhas?: Ponto[][]; // traços por cima do mapa (o trajeto do dia), em px
   medir: Medidor;
   fontes?: readonly number[];
+  contagem?: ContagemDeTestes;
 }): RotuloPosto | null {
   const caixas = o.poligonos.map(caixaDo);
-  const maior = caixas.reduce((m, c) => ({ w: Math.max(m.w, c.x1 - c.x0), h: Math.max(m.h, c.y1 - c.y0) }), { w: 0, h: 0 });
+  // O que aparece de cada pedaço da cidade dentro da área: calculado uma vez, serve a todas as letras.
+  const visiveis = o.poligonos.map((p) => caixaVisivel(p[0], o.area));
+  const maior = visiveis.reduce((m, c) => (c ? { w: Math.max(m.w, c.x1 - c.x0), h: Math.max(m.h, c.y1 - c.y0) } : m), { w: 0, h: 0 });
   for (const fonte of o.fontes ?? FONTES_ROTULO) {
     for (const linhas of variantesDeLinhas(o.nome, fonte, o.medir)) {
       const largura = Math.ceil(Math.max(...linhas.map((l) => o.medir(l, fonte)))) + 2 * FOLGA_X;
       const altura = linhas.length * alturaDaLinha(fonte) + 2 * FOLGA_Y;
-      if (largura > maior.w || altura > maior.h) continue; // nem a caixa da cidade comporta
-      const lugar = acharLugar(largura, altura, o.poligonos, caixas, o.ancora, o.area, o.obstaculos, o.linhas ?? []);
+      if (largura > maior.w || altura > maior.h) continue; // nem a parte visível da cidade comporta
+      const lugar = acharLugar(largura, altura, o.poligonos, caixas, o.ancora, o.area, o.obstaculos, o.linhas ?? [], visiveis, o.contagem);
       if (lugar) return { nome: o.nome, x: lugar[0], y: lugar[1], linhas, fonte, largura, altura };
     }
   }
   return null;
+}
+
+/**
+ * O retângulo de um botão do mapa (+ / −, créditos) em px da projeção: `r` e `mapa` em px da tela
+ * (getBoundingClientRect), `origem` = o canto de cima à esquerda da parte visível em px da projeção
+ * (getPixelBounds().min). `folga` px de cada lado.
+ */
+export function botaoEmPx(r: { left: number; top: number; right: number; bottom: number }, mapa: { left: number; top: number }, origem: { x: number; y: number }, folga = 3): Caixa {
+  return { x0: origem.x + r.left - mapa.left - folga, y0: origem.y + r.top - mapa.top - folga, x1: origem.x + r.right - mapa.left + folga, y1: origem.y + r.bottom - mapa.top + folga };
 }
 
 const caixaDoObstaculo = (o: ObstaculoRotulo, zoom: number): Caixa => {

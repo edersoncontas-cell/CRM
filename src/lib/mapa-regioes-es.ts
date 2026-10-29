@@ -142,6 +142,79 @@ export const TEXTO_CLARO = "#ffffff";
 export const corDoTexto = (preenchimento: string): string =>
   contraste(preenchimento, TEXTO_ESCURO) >= contraste(preenchimento, TEXTO_CLARO) ? TEXTO_ESCURO : TEXTO_CLARO;
 
+/**
+ * A ordem das camadas do mapa por região (z-index), de baixo para cima: azulejos (200, do
+ * Leaflet) → contorno grosso do estado → cidades → nomes → rotas (400) → pins/cifrões (600).
+ * As cidades ficam abaixo das rotas e dos pins; os nomes, acima das cidades. Número fora dessa
+ * ordem esconde os nomes (cidade opaca por cima) ou faz toda divisa virar traço grosso.
+ */
+export const Z_CONTORNO_ESTADO = 340;
+export const Z_MUNICIPIOS = 350;
+export const Z_NOMES = 380;
+
+/** A dica da cidade tem no máximo isto de largura (espelha `.leaflet-tooltip.tip-municipio` no globals.css). */
+export const LARGURA_MAXIMA_DICA = 220;
+/** Altura de uma dica de 3 linhas + seta: acima disso, ela sobe e cabe; abaixo, vai para baixo do dedo. */
+const ALTURA_DICA = 90;
+/** Metade da altura máxima da dica: aberta de lado, ela fica centrada na vertical no dedo e precisa desta folga em cima e embaixo. */
+const MEIA_ALTURA_DICA = 36;
+
+export type DirecaoDica = "top" | "bottom" | "left" | "right";
+export type DicaPosicionada = { direcao: DirecaoDica; /** Deslocamento [x, y] em px, na opção `offset` do tooltip do Leaflet. */ deslocamento: [number, number] };
+/** Um retângulo em px do contêiner do mapa. */
+export type CaixaDoMapa = { x0: number; y0: number; x1: number; y1: number };
+
+/** Seta + recuo entre o dedo e a dica quando ela abre de lado. */
+const FOLGA_SETA = 6;
+
+/**
+ * Para onde abrir a dica da cidade, dado onde está o dedo/mouse no mapa (px do contêiner). Fixa
+ * em cima, ela saía cortada pela borda do mapa — e as cidades do norte, justo as cinzas, ficam
+ * coladas no topo e na direita. Escolhe pelo que CABE (a dica inteira dentro do mapa e sem cair
+ * debaixo de `evitar`, os botões + / − e os créditos, que ficam por cima dela), na ordem:
+ *  1. centrada em cima do dedo (ou embaixo, se ele está colado no topo);
+ *  2. de lado, para o lado que tem mais espaço (colada no topo ou no pé, é empurrada para dentro,
+ *     porque de lado ela fica centrada na vertical);
+ *  3. em cima/embaixo mas DESLOCADA para o lado até caber (e, se há botões no caminho, até passar
+ *     da lateral deles) — o único jeito em mapa estreito (o
+ *     Dashboard no celular tem 324 px; a dica, 220 mais a seta, não cabe de lado em quase nenhum
+ *     ponto). Se nem assim cabe (mapa mais estreito que a dica), alinha pela esquerda: o que
+ *     corta é o fim do texto, não o nome da cidade.
+ */
+export function direcaoDaDica(x: number, y: number, larguraDoMapa: number, alturaDoMapa: number, evitar: readonly CaixaDoMapa[] = []): DicaPosicionada {
+  const meia = LARGURA_MAXIMA_DICA / 2;
+  type Candidata = DicaPosicionada & { caixa: CaixaDoMapa };
+  const vertical = (direcao: "top" | "bottom", dx: number): Candidata => ({
+    direcao,
+    deslocamento: [dx, 0],
+    caixa: { x0: x - meia + dx, x1: x + meia + dx, y0: direcao === "top" ? y - ALTURA_DICA : y, y1: direcao === "top" ? y : y + ALTURA_DICA },
+  });
+  const lado = (direcao: "left" | "right"): Candidata => {
+    let dy = 0;
+    if (y < MEIA_ALTURA_DICA) dy = MEIA_ALTURA_DICA - y;
+    else if (y > alturaDoMapa - MEIA_ALTURA_DICA) dy = alturaDoMapa - MEIA_ALTURA_DICA - y;
+    const x0 = direcao === "right" ? x + FOLGA_SETA : x - FOLGA_SETA - LARGURA_MAXIMA_DICA;
+    return { direcao, deslocamento: [0, dy], caixa: { x0, x1: x0 + LARGURA_MAXIMA_DICA, y0: y + dy - MEIA_ALTURA_DICA, y1: y + dy + MEIA_ALTURA_DICA } };
+  };
+  // O quanto empurrar a dica centrada para ela caber na largura (nunca além do ponto em que a borda esquerda sai do mapa).
+  const esq = x - meia;
+  const dir = x + meia;
+  const dx = esq < 0 ? -esq : dir > larguraDoMapa ? Math.max(larguraDoMapa - dir, -esq) : 0;
+  const primeira = y < ALTURA_DICA ? "bottom" : "top";
+  const segunda = primeira === "top" ? "bottom" : "top";
+  const lados: ["left" | "right", "left" | "right"] = x < larguraDoMapa - x ? ["right", "left"] : ["left", "right"];
+  // Deslocamentos que encostam a dica na lateral de cada botão (o menor primeiro): tirar a dica de cima dele sem sair do mapa.
+  const desvios = evitar.flatMap((o) => [o.x1 - esq, o.x0 - dir]).filter((v) => v !== 0).sort((a, b) => Math.abs(a) - Math.abs(b));
+  const candidatas = [
+    vertical(primeira, 0), vertical(segunda, 0), lado(lados[0]), lado(lados[1]), vertical(primeira, dx), vertical(segunda, dx),
+    ...desvios.flatMap((v) => [vertical(primeira, v), vertical(segunda, v)]),
+  ];
+  const dentro = (c: CaixaDoMapa) => c.x0 >= 0 && c.y0 >= 0 && c.x1 <= larguraDoMapa && c.y1 <= alturaDoMapa;
+  const cobre = (c: CaixaDoMapa) => evitar.some((o) => c.x0 < o.x1 && c.x1 > o.x0 && c.y0 < o.y1 && c.y1 > o.y0);
+  const escolhida = candidatas.find((c) => dentro(c.caixa) && !cobre(c.caixa)) ?? candidatas.find((c) => dentro(c.caixa)) ?? candidatas[4];
+  return { direcao: escolhida.direcao, deslocamento: escolhida.deslocamento };
+}
+
 /** O texto que aparece ao passar o dedo / o mouse sobre a cidade. */
 export function rotuloDoMunicipio(nome: string, atendidos: ReadonlySet<string> | null, uf = "ES"): string {
   const regiao = regiaoDoMunicipio(nome).nome;

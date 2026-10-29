@@ -23,6 +23,7 @@ import {
   REGIOES_TURISTICAS, SEM_REGIAO, COR_NAO_ATENDO, COR_DIVISA, MUNICIPIOS_SEM_REGIAO, UFS_COM_MALHA,
   chaveMunicipio, regiaoDoMunicipio, municipiosDaRegiao, estiloDoMunicipio, estiloRealce, rotuloDoMunicipio, resumirMapa,
   clarear, contraste, luminancia, corDoTexto, TEXTO_ESCURO, TEXTO_CLARO,
+  Z_CONTORNO_ESTADO, Z_MUNICIPIOS, Z_NOMES, LARGURA_MAXIMA_DICA, direcaoDaDica,
 } from "@/lib/mapa-regioes-es";
 import { pontoDentro, poligonosDaFeicao } from "@/lib/mapa-rotulos-es";
 import { semAcento } from "@/lib/area-atuacao-regra";
@@ -321,19 +322,45 @@ describe("os dois mapas", () => {
     });
   }
 
-  it("as camadas ficam SOB as rotas, pins e cifrões (400 e 600): não capturam o clique deles", () => {
-    const s = ler("src/components/CamadaMunicipiosES.tsx");
-    const zs = [...s.matchAll(/zIndex: (\d+)/g)].map((m) => Number(m[1]));
-    expect(zs.length).toBeGreaterThanOrEqual(2); // contorno do estado e cidades
-    for (const z of zs) { expect(z).toBeGreaterThan(200); expect(z).toBeLessThan(400); } // acima dos azulejos (200), abaixo do overlayPane (400)
-    // Cidades em camada própria: lista nova recria a camada e, na das rotas (400), nasceria POR CIMA do trajeto do dia.
-    expect(s).toMatch(/<Pane name="municipios"/);
+  it("a ORDEM das camadas: azulejos (200) < contorno do estado < cidades < nomes < rotas (400) < pins (600)", () => {
+    // Fora dessa ordem o mapa quebra sem erro nenhum: cidade opaca por cima dos nomes (K02),
+    // contorno grosso por cima das cidades (toda divisa interna viraria traço de 4 px, K03),
+    // ou cidades por cima do trajeto e dos pins (não recebem o clique).
+    expect(Z_CONTORNO_ESTADO).toBeGreaterThan(200);
+    expect(Z_CONTORNO_ESTADO).toBeLessThan(Z_MUNICIPIOS);
+    expect(Z_MUNICIPIOS).toBeLessThan(Z_NOMES);
+    expect(Z_NOMES).toBeLessThan(400);
+  });
+
+  it("os componentes usam essas alturas (e não números soltos)", () => {
+    const c = ler("src/components/CamadaMunicipiosES.tsx");
+    expect(c).toMatch(/<Pane name="estado-base" style=\{\{ zIndex: Z_CONTORNO_ESTADO \}\}>/);
+    expect(c).toMatch(/<Pane name="municipios" style=\{\{ zIndex: Z_MUNICIPIOS \}\}>/); // cidades em camada própria: na das rotas (400) nasceriam POR CIMA do trajeto do dia
+    expect(c).not.toMatch(/zIndex: \d/);
+    expect(ler("src/components/RotulosMunicipiosES.tsx")).toMatch(/zIndex = String\(Z_NOMES\)/);
+  });
+
+  it("a camada do contorno fica SEMPRE montada: só o desenho some quando a lista falta (montar e desmontar deixava um renderizador SVG órfão)", () => {
+    const c = ler("src/components/CamadaMunicipiosES.tsx");
+    expect(c).toMatch(/<Pane name="estado-base"[^>]*>\s*\{conjunto && <GeoJSON/);
+    expect(c).not.toMatch(/\{conjunto && \(\s*<Pane/);
+  });
+
+  it("os estilos são estáveis: função nova a cada render faz o react-leaflet reaplicar o estilo nas 78 cidades e perder o realce do mouse", () => {
+    const c = ler("src/components/CamadaMunicipiosES.tsx");
+    expect(c).toMatch(/const estiloBase = useCallback\(/);
+    expect(c).toMatch(/style=\{estiloBase\}/);
+    expect(c).toMatch(/style=\{ESTILO_CONTORNO\}/);
+    expect(c).not.toMatch(/style=\{\(/); // nenhuma arrow inline em style
   });
 
   it("os nomes das cidades ficam entre as cidades e os pins, sem receber toque", () => {
     const s = ler("src/components/RotulosMunicipiosES.tsx");
-    expect(s).toMatch(/zIndex = "380"/);
     expect(s).toMatch(/pointerEvents = "none"/);
+    // Depois de aproximar/arrastar os nomes são refeitos; sem estes ouvintes eles sumiam no primeiro zoom.
+    expect(s).toMatch(/mapa\.on\("zoomend moveend", agendar\)/);
+    expect(s).toMatch(/mapa\.off\("zoomend moveend", agendar\)/);
+    expect(s).toMatch(/grupo\.clearLayers\(\)/); // sem limpar antes, os nomes empilhavam a cada movimento
     expect(s).toMatch(/interactive: false/);
     // Se a conta falhar o mapa NÃO cai: avisa pelo atributo e segue com cores e dica.
     expect(s).toMatch(/catch \{[\s\S]*dataset\.rotulos = "erro"/);
@@ -357,7 +384,194 @@ describe("os dois mapas", () => {
     for (const estado of ["desconhecida", "vazia", "ok"]) expect(s).toContain(`data-mapa-legenda="${estado}"`);
   });
 
+  it("'Não atendo' é o PRIMEIRO item da legenda: a lista rola em altura fixa e, no fim dela, o cinza escuro ficava atrás da rolagem com 9 regiões ou mais", () => {
+    const s = ler("src/components/LegendaMapaRegioes.tsx");
+    const naoAtendo = s.indexOf("Não atendo <b>");
+    const regioes = s.indexOf("resumo.regioes.map(");
+    expect(naoAtendo).toBeGreaterThan(0);
+    expect(regioes).toBeGreaterThan(0);
+    expect(naoAtendo).toBeLessThan(regioes);
+  });
+
   it("o ES tem divisas no código", () => {
     expect(UFS_COM_MALHA).toContain("ES");
+  });
+});
+
+// ── A dica da cidade e o CSS do nome ────────────────────────────────────────
+
+describe("a dica da cidade abre para onde cabe", () => {
+  const LARGURA_CELULAR = 358; // o mapa das Visitas no celular de 390
+  const ALTURA_CELULAR = 440;
+  const LARGURA_DASHBOARD = 323;
+  const onde = (x: number, y: number, l = LARGURA_CELULAR, a = ALTURA_CELULAR) => direcaoDaDica(x, y, l, a);
+
+  it("no meio do mapa e longe do topo: abre em cima, sem deslocar", () => {
+    expect(onde(LARGURA_CELULAR / 2, 250)).toEqual({ direcao: "top", deslocamento: [0, 0] });
+    expect(onde(700, 300, 1400, 460).direcao).toBe("top");
+  });
+
+  it("colado no topo: abre embaixo (em cima o nome sumia para fora do mapa)", () => {
+    expect(onde(LARGURA_CELULAR / 2, 25).direcao).toBe("bottom");
+    expect(onde(700, 89, 1400, 460).direcao).toBe("bottom");
+    expect(onde(700, 90, 1400, 460).direcao).toBe("top");
+  });
+
+  it("colado na esquerda: abre para a direita; colado na direita: abre para a esquerda", () => {
+    expect(onde(40, 230).direcao).toBe("right");
+    expect(onde(330, 230).direcao).toBe("left");
+    expect(onde(40, 230).deslocamento).toEqual([0, 0]); // no meio da altura não precisa empurrar
+  });
+
+  it("no canto: abre de lado E é empurrada para dentro (de lado ela fica centrada na vertical no dedo e subia para fora do mapa)", () => {
+    const sup = onde(1390, 4, 1400, 460);
+    expect(sup.direcao).toBe("left");
+    expect(sup.deslocamento[1]).toBeGreaterThanOrEqual(32); // 36 - 4
+    const esq = onde(10, 16, 1400, 460);
+    expect(esq.direcao).toBe("right");
+    expect(esq.deslocamento[1]).toBeGreaterThanOrEqual(20);
+    const pe = onde(10, 455, 1400, 460);
+    expect(pe.deslocamento[1]).toBeLessThan(0); // colado no pé: empurra para cima
+  });
+
+  it("de lado, a dica (centrada no dedo + o deslocamento) cabe na altura do mapa em TODO ponto", () => {
+    const metade = 36; // altura máxima da dica / 2
+    for (let y = 0; y <= ALTURA_CELULAR; y += 2) {
+      const d = onde(5, y);
+      expect(d.direcao).toBe("right");
+      expect(y + d.deslocamento[1] - metade, `y=${y}`).toBeGreaterThanOrEqual(0);
+      expect(y + d.deslocamento[1] + metade, `y=${y}`).toBeLessThanOrEqual(ALTURA_CELULAR);
+    }
+  });
+
+  // A caixa que a dica ocupa, pela geometria do Leaflet (escrita aqui de novo, não importada da conta):
+  // 220 de largura e até 90 de altura; em cima/embaixo ela fica centrada no dedo (+ o deslocamento); de lado,
+  // a seta e o recuo somam 6 px e ela fica centrada na vertical (72 de altura útil, + o deslocamento).
+  const caixaDaDica = (d: ReturnType<typeof direcaoDaDica>, x: number, y: number) => {
+    const [dx, dy] = d.deslocamento;
+    const L = LARGURA_MAXIMA_DICA;
+    if (d.direcao === "top") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y - 90, y1: y };
+    if (d.direcao === "bottom") return { x0: x - L / 2 + dx, x1: x + L / 2 + dx, y0: y, y1: y + 90 };
+    if (d.direcao === "right") return { x0: x + 6, x1: x + 6 + L, y0: y + dy - 36, y1: y + dy + 36 };
+    return { x0: x - 6 - L, x1: x - 6, y0: y + dy - 36, y1: y + dy + 36 };
+  };
+
+  it("em TODO ponto, em mapas de 288 a 1440 px de largura, a dica INTEIRA cabe no mapa (o Dashboard no celular tem 324: de lado ela não cabia em quase nenhum ponto)", () => {
+    for (const [l, a] of [[288, 420], [309, 420], [LARGURA_DASHBOARD + 1, 420], [327, 420], [LARGURA_CELULAR, ALTURA_CELULAR], [523, 400], [1440, 460]]) {
+      for (let x = 0; x <= l; x++) {
+        for (const y of [0, 5, 35, 36, 89, 90, 200, a - 37, a - 36, a - 5, a]) {
+          const d = onde(x, y, l, a);
+          const c = caixaDaDica(d, x, y);
+          const rotulo = `mapa ${l}x${a}, dedo em ${x},${y} (${d.direcao} ${d.deslocamento})`;
+          expect(c.x0, rotulo).toBeGreaterThanOrEqual(-1e-9);
+          expect(c.x1, rotulo).toBeLessThanOrEqual(l + 1e-9);
+          expect(c.y0, rotulo).toBeGreaterThanOrEqual(-1e-9);
+          expect(c.y1, rotulo).toBeLessThanOrEqual(a + 1e-9);
+        }
+      }
+    }
+  });
+
+  it("mapa estreito: as duas faixas em que nem a dica centrada nem a de lado cabiam (x≈99–109 e 215–225 num mapa de 324) abrem em cima/embaixo, deslocadas para dentro", () => {
+    for (const x of [99, 104, 109, 215, 220, 225]) {
+      const d = onde(x, 250, 324, 420);
+      expect(["top", "bottom"], `x=${x}`).toContain(d.direcao);
+      expect(d.deslocamento[1]).toBe(0);
+      expect(d.deslocamento[0], `x=${x}`).not.toBe(0);
+    }
+    // Colatina tocada em x=216 (o caso medido: a dica abria à esquerda, em -10..210, e perdia o começo do nome).
+    expect(onde(216, 250, 324, 420)).toEqual({ direcao: "top", deslocamento: [-2, 0] });
+  });
+
+  it("quando nem em cima nem embaixo cabe (mapa baixo) e os DOIS lados cabem, abre para o lado com mais espaço", () => {
+    expect(direcaoDaDica(300, 50, 1400, 120).direcao).toBe("right");
+    expect(direcaoDaDica(1100, 50, 1400, 120).direcao).toBe("left");
+  });
+
+  it("mapa mais estreito que a dica: alinha pela esquerda (o que corta é o fim do texto, não o nome da cidade)", () => {
+    const d = onde(100, 250, 200, 420);
+    expect(caixaDaDica(d, 100, 250).x0).toBe(0);
+  });
+
+  it("os botões do mapa (+ / − e os créditos) ficam POR CIMA da dica: ela escolhe outro lugar quando cairia embaixo deles", () => {
+    const botoes = [{ x0: 6, y0: 6, x1: 48, y1: 88 }];
+    // Em cima do dedo (150,100) a dica ocuparia 40–260 × 10–100: debaixo do botão "+". Sem os botões, abre em cima.
+    expect(onde(150, 100).direcao).toBe("top");
+    const com = direcaoDaDica(150, 100, LARGURA_CELULAR, ALTURA_CELULAR, botoes);
+    expect(com.direcao).toBe("bottom");
+    const c = caixaDaDica(com, 150, 100);
+    expect(c.x0 < 48 && c.x1 > 6 && c.y0 < 88 && c.y1 > 6, "a dica cobre o botão").toBe(false);
+    // Longe dos botões nada muda.
+    expect(direcaoDaDica(250, 300, LARGURA_CELULAR, ALTURA_CELULAR, botoes)).toEqual(onde(250, 300));
+  });
+
+  it("se NENHUM lugar escapa dos botões, ela ainda abre (dentro do mapa) em vez de sumir", () => {
+    const tudo = [{ x0: -10, y0: -10, x1: 400, y1: 460 }];
+    const d = direcaoDaDica(150, 200, LARGURA_CELULAR, ALTURA_CELULAR, tudo);
+    expect(d).toEqual(onde(150, 200));
+  });
+
+  it("varrendo o mapa do celular com o botão +/− no lugar de verdade: em nenhum toque a dica cai embaixo dele (sem a regra, um em cada ~10 cai)", () => {
+    const botoes = [{ x0: 6, y0: 6, x1: 48, y1: 88 }];
+    const cobre = (d: ReturnType<typeof direcaoDaDica>, x: number, y: number) => {
+      const c = caixaDaDica(d, x, y);
+      return c.x0 < 48 && c.x1 > 6 && c.y0 < 88 && c.y1 > 6;
+    };
+    let com = 0;
+    let sem = 0;
+    for (let x = 0; x <= LARGURA_CELULAR; x += 2) {
+      for (let y = 0; y <= ALTURA_CELULAR; y += 6) {
+        if (x >= 6 && x <= 48 && y >= 6 && y <= 88) continue; // o dedo não toca no mapa por baixo do botão
+        if (cobre(direcaoDaDica(x, y, LARGURA_CELULAR, ALTURA_CELULAR, botoes), x, y)) com++;
+        if (cobre(onde(x, y), x, y)) sem++;
+      }
+    }
+    expect(sem).toBeGreaterThan(500);
+    expect(com).toBe(0);
+  });
+
+  it("o componente escolhe a direção ANTES de ligar a dica (o Leaflet dispara na ordem em que os ouvintes foram ligados) e aplica também o deslocamento", () => {
+    const s = ler("src/components/CamadaMunicipiosES.tsx");
+    const escolhe = s.indexOf("c.on({ mouseover: abrirOndeCabe");
+    const liga = s.indexOf("c.bindTooltip(");
+    expect(escolhe).toBeGreaterThan(0);
+    expect(liga).toBeGreaterThan(escolhe);
+    for (const ev of ["mouseover", "mousemove", "click"]) expect(s).toMatch(new RegExp(`${ev}: abrirOndeCabe`));
+    expect(s).toMatch(/dica\.options\.direction = onde\.direcao/);
+    expect(s).toMatch(/dica\.options\.offset = onde\.deslocamento/);
+    // E passa os botões do mapa (+ / −, créditos), que ficam por cima da dica.
+    expect(s).toMatch(/direcaoDaDica\([^)]*botoesDoMapa\(\)\)/);
+    expect(s).toMatch(/querySelectorAll\("\.leaflet-control"\)/);
+  });
+
+  it("no celular (sem mouse) a dica fica aberta até o próximo toque: o 'mouseout' que o Chromium manda logo depois do toque não a fecha", () => {
+    const s = ler("src/components/CamadaMunicipiosES.tsx");
+    expect(s).toMatch(/matchMedia\("\(hover: none\)"\)/);
+    expect(s).toMatch(/c\.off\("mouseout", c\.closeTooltip\)/);
+    // Quem fecha: o toque em outra cidade, o toque no mapa vazio e mover/aproximar o mapa.
+    expect(s).toMatch(/mapa\.on\("click movestart zoomstart resize", fechar\)/);
+    expect(s).toMatch(/mapa\.off\("click movestart zoomstart resize", fechar\)/);
+    expect(s).toMatch(/clique === atual\.clique/); // o clique que ABRIU não pode fechar a própria dica
+    // A dica aberta só pelo "mouseover" (tablet com mouse) também é registrada: senão aproximar o mapa não a fecharia.
+    expect(s).toMatch(/c\.on\(\{ mouseover: marcar, click: marcar \}\)/);
+  });
+
+  it("a largura que a conta supõe é a do CSS", () => {
+    expect(ler("src/app/globals.css")).toMatch(new RegExp(`\\.leaflet-tooltip\\.tip-municipio \\{[^}]*max-width: ${LARGURA_MAXIMA_DICA}px`));
+  });
+});
+
+describe("o CSS do nome da cidade vence o do Leaflet", () => {
+  const css = ler("src/app/globals.css");
+
+  it("o seletor tem DUAS classes: o leaflet.css (carrega depois, junto do mapa) põe display:block no .leaflet-marker-icon e com uma classe só ele vencia", () => {
+    // Com display:block, cada linha do nome ocupava 18 px em vez de 14 e o nome de duas linhas
+    // saía mais alto que a caixa medida — encostando na divisa.
+    expect(css).toMatch(/\.leaflet-marker-icon\.rotulo-municipio \{[^}]*display: flex/);
+    expect(css).not.toMatch(/(^|\n)\.rotulo-municipio \{/);
+  });
+
+  it("o mapa importa o leaflet.css (e é por isso que a ordem de CSS importa)", () => {
+    expect(ler("src/components/MapaVisitasES.tsx")).toMatch(/leaflet\/dist\/leaflet\.css/);
   });
 });

@@ -18,7 +18,8 @@ o **nome de cada cidade escrito dentro dela**.
 | Nomes escritos dentro das cidades (regra, puro) | `src/lib/mapa-rotulos-es.ts` |
 | Nomes no Leaflet (camada própria, não recebe toque) | `src/components/RotulosMunicipiosES.tsx` |
 | Legenda embaixo do mapa | `src/components/LegendaMapaRegioes.tsx` |
-| Testes | `tests/mapa-regioes-es.test.ts` |
+| Testes (unidade) | `tests/mapa-regioes-es.test.ts` (malha, regiões, cor, camadas, dica) e `tests/mapa-rotulos-es.test.ts` (onde o nome cabe) |
+| Prova na tela (PC 1440 e celular 390, claro e escuro) | `scripts/e2e-mapa/` — precisa de navegador, banco de teste e build; como rodar no README de lá |
 
 ## Como decide a cor
 
@@ -62,9 +63,55 @@ com o (+) acrescenta nomes (zoom 9: ~46 de 78; zoom 10: ~70).
   de fundo para combinar com o texto. Se a conta falhar, o mapa segue só com cores e
   dica, e o contêiner marca `data-rotulos="erro"`.
 - Camadas: azulejos (200) → contorno grosso do estado (340) → cidades (350) → nomes
-  (380) → trajeto/pins/cifrões (400/600). O contorno grosso é o mesmo desenho em traço de
-  4 px por BAIXO das cidades opacas: só a metade de fora aparece (sem as ilhotas, que
-  viravam bolhas pretas no mar).
+  (380) → trajeto/pins/cifrões (400/600). As alturas são constantes (`Z_CONTORNO_ESTADO`,
+  `Z_MUNICIPIOS`, `Z_NOMES` em `mapa-regioes-es.ts`) e o teste trava a ORDEM: fora dela o
+  mapa quebra sem erro nenhum (cidade opaca por cima dos nomes, ou toda divisa interna
+  virando traço de 4 px). O contorno grosso é o mesmo desenho em traço de 4 px por BAIXO das
+  cidades opacas: só a metade de fora aparece (sem as ilhotas, que viravam bolhas pretas
+  no mar). A camada do contorno fica sempre montada (só o desenho some sem a lista):
+  montar/desmontar deixava um renderizador SVG órfão no mapa.
+- **Onde o nome é procurado** (revisão independente, 24/10): na parte da cidade que
+  APARECE na tela (`caixaVisivel`, recorte do anel pela tela), não na caixa da cidade
+  inteira. Cidade grande vista de perto, com o ponto `c` fora da tela, ganha o nome no MEIO
+  do que aparece (antes ia para o canto mais perto do ponto). A busca é do grosso para o
+  fino (`acharLugar`): uma grade grossa, testada com o retângulo do texto ENCOLHIDO (se o texto
+  cabe num ponto, o encolhido cabe em tudo que está a até meio passo dele — nenhum lugar
+  escapa), e, em volta de cada ponto que passou, 1 px com o retângulo inteiro. O custo não
+  cresce com o tamanho da janela (teto: a tela), e a resolução é ~1 px — uma folga mais estreita
+  que isso pode escapar. O passo fixo de 4 px do começo saltava por cima de faixas estreitas, e
+  a busca na caixa INTEIRA da cidade custava > 1 s por arrasto num polígono sintético de 6000
+  vértices (a malha real tem no máximo 263 por anel; no real o antigo gastava ~100 ms no
+  celular, zoom 13).
+- **CSS do nome**: `.leaflet-marker-icon.rotulo-municipio` (DUAS classes) em `globals.css`.
+  O `leaflet.css` carrega depois, junto do mapa, e com uma classe só o `display:block` dele
+  vencia o `flex`: cada linha ocupava 18 px em vez de 14 e o nome de duas linhas saía mais alto
+  que a caixa medida, encostando na divisa. O teste lê o seletor; o e2e confere `display:flex`
+  e que o texto está inteiro e centrado dentro da caixa.
+
+## A dica da cidade (passar o mouse / tocar)
+
+"Cachoeiro de Itapemirim · Sul Capixaba dos Vales e Café · você atende". É por ela que ele
+lê o nome das cidades onde o texto não cabe (na abertura são poucas).
+
+- **Direção pelo que CABE** (`direcaoDaDica`), nesta ordem: centrada em cima (embaixo se ele
+  está colado no topo) → de lado, para o lado com mais espaço (nos cantos é empurrada para dentro,
+  porque aberta de lado ela fica centrada na vertical) → em cima/embaixo mas DESLOCADA para o lado
+  até caber (o único jeito em mapa estreito: o Dashboard no celular tem 324 px e a dica, 220 mais a
+  seta). Os botões +/− e os créditos ficam POR CIMA da dica (z-index maior), então ela desvia do
+  retângulo deles. Antes era fixa em cima e saía do mapa em todas as bordas (medido, inclusive
+  no PC) — e as cidades do norte, justo as cinzas, ficam coladas no topo e na direita.
+- **Celular (sem mouse, `(hover: none)`)**: abre ao tocar e FICA aberta até ele tocar em outra
+  cidade (troca, nunca duas), tocar no mapa vazio, mover/aproximar o mapa ou girar o aparelho. O
+  Leaflet fecha a dica no `mouseout`, e o Chromium em modo celular manda um logo depois do
+  toque: antes desta mudança a dica abria e sumia na hora (A/B contra o build anterior).
+  **Num celular de verdade (iPhone/Android) isto não foi visto.** No PC só a direção da dica
+  mudou; abrir ao passar e fechar ao sair é igual. Em aparelho com `(hover: none)` e mouse a
+  dica só fecha no próximo clique (decisão registrada em `CONTINUAR.md`).
+- O realce da cidade sob o mouse (divisa 3) não se perde quando o mapa atualiza: as funções de
+  estilo são estáveis (antes o `setStyle` reaplicava o estilo nas 78 cidades a cada render).
+- Não conferido: o toque emulado do Chromium aproxima 1 nível ao tocar no mapa vazio (igual no
+  build anterior; vem do Leaflet com o toque emulado). Se acontecer num celular de verdade, é
+  um defeito antigo, não desta mudança.
 
 ## Se ele quiser outro agrupamento
 

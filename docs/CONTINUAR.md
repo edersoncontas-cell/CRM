@@ -12,6 +12,71 @@ Repositório: `edersoncontas-cell/CRM`
 
 ## Onde parei
 
+**24/10 — Mapa: duas revisões independentes e as correções.**
+Duas rodadas, cada uma com 5 revisores (regras/dependências, geometria/desempenho, ciclo
+Leaflet/React, visual/UX, testes) e 2 verificadores céticos por achado. A 1ª rodada achou 9
+confirmados; a 2ª, sobre as correções da 1ª, achou 27 (16 confirmados, 4 prováveis, 7
+refutados) — **entre eles um defeito que eu mesmo introduzi** (a busca do lugar do nome ficou
+5 a 15× mais lenta na abertura) e que a 2ª rodada pegou.
+*1ª rodada (corrigido; medido na tela, antes e depois no build antigo):*
+- **Nome de 2 linhas mais alto que o medido** — o `leaflet.css` (carrega depois) punha
+  `display:block` e vencia o `.rotulo-municipio`; seletor com duas classes.
+- **Dica cortada pela borda do mapa** (em todas as bordas, no PC também): a direção
+  vem da posição do ponteiro.
+- **Dica no celular abria e sumia** (o `mouseout` que o Chromium manda depois do toque;
+  defeito ANTIGO, A/B contra e53eae5): em aparelho sem mouse ela fica até o próximo toque.
+- **Nomes**: busca na parte VISÍVEL da cidade (antes na caixa inteira: com um polígono
+  SINTÉTICO de 6000 vértices o código antigo gastava 1.401 ms por chamada — a malha real tem
+  no máximo 263 vértices por anel, e o pior caso real medido no antigo foi ~100 ms no celular
+  no zoom 13) e nome colado no canto.
+- Realce do mouse perdido a cada atualização do mapa; renderizador SVG órfão; alturas das
+  camadas viraram constantes com teste de ORDEM; altura de linha duplicada.
+*2ª rodada (corrigido):*
+- **Busca do lugar do nome, grosso para fino** (`acharLugar`): a varredura plana que eu tinha
+  posto custava 5–15× o original no zoom de abertura. Agora uma grade grossa testada com o
+  retângulo ENCOLHIDO (nenhum lugar escapa dela) e, em volta de cada ponto que passou, 1 px.
+  Medido no Chromium: no zoom 8 (abertura) custa ~2× o original (22 ms contra 8 ms no PC;
+  108 ms contra 47 ms com a CPU estrangulada 4×), do zoom 8,5 em diante é igual ou menor; e
+  acha todo lugar que uma busca exaustiva de 1 px acharia (0 faltando em 2 sementes de
+  teste, contra 81 e 87 faltando no original). O teste de custo conta as perguntas "cabe
+  aqui?" (não o relógio).
+- **Dica em mapa estreito** (Dashboard no celular de 390 tem 324 px; de lado a dica de 220 +
+  seta não cabia): `direcaoDaDica` escolhe pelo que CABE (centrada → de lado → deslocada) e
+  desvia dos botões +/− e créditos (ficam POR CIMA da dica). Varredura em mapas de 288 a 1440:
+  nenhuma dica sai do mapa; com o botão +/− no lugar de verdade, nenhuma cai embaixo dele
+  (antes, 1 em cada ~6 toques perto do canto).
+- **Girar o celular com a dica aberta** deixava a dica presa e cortada: `resize` fecha.
+- **"Não atendo" na legenda** era o último item de uma lista que rola (altura fixa): com 9
+  regiões ou mais ficava atrás da rolagem. Agora é o primeiro.
+- Testes que faltavam: obstáculo com esq/dir/cima/baixo diferentes (o sinal errado passava),
+  as quatro divisas, o corte diagonal, a folga em números literais, cidade em dois pedaços,
+  `botaoEmPx` (a conta dos botões saiu do componente para a lib), a altura de linha. Cada
+  um foi posto à prova com mutações feitas à mão (grade sem encolher, sem a ponta, sem o fino,
+  sinais do obstáculo, lado da dica, divisa pulada…): todas morreram, mas três só depois de eu
+  reforçar o teste (a 1ª versão deixava passar a grade sem a meia caixa da ponta, o espelho
+  esq/dir do obstáculo e a ordem dos lados da dica). Os testes de componente por texto do fonte
+  seguem sendo fracos (ver T3 abaixo).
+- **e2e** (`scripts/e2e-mapa/`, README completo): 279 conferências nas quatro combinações
+  (PC/celular × claro/escuro, inclusive "aproximar"). Agora AFIRMA que há pins, trajeto,
+  cifrões e botões na tela (antes passou 243/243 com ZERO pins: o seed era de ontem), roda o
+  seed a cada vez (hoje, fuso de Brasília; cria os próprios clientes), tem trava `E2E_BANCO`,
+  devolve o banco no `finally` e sai com código ≠ 0 se algo falhar (inclusive com `SO`).
+*Decidido NÃO mexer (registrado):*
+- **G3** — o nome de cidade muito grande "pula" quando o ponto de partida cruza a borda da tela
+  (fora → meio da parte visível; dentro mas perto da borda → colado). Só aparece ao arrastar em
+  passos pequenos com uma cidade maior que a tela; a correção sugerida (alvo contínuo) não foi
+  testada e pode piorar o caso comum.
+- **L4** — em aparelho que diz `(hover: none)` mas tem mouse, a dica não fecha ao sair da
+  cidade (só no próximo clique/toque). A decisão por `matchMedia` é tomada ao criar a camada;
+  o inverso (decidir por evento) reabre o defeito do toque. O celular dele não tem mouse.
+- **T3** — o comportamento dos componentes (`CamadaMunicipiosES`, `RotulosMunicipiosES`) só é
+  travado por teste de texto do fonte + pelo e2e (que não roda no `npm test`): refatoração
+  inofensiva pode quebrar o teste de texto, e um defeito real de comportamento só aparece no e2e.
+**Não conferido:** OpenStreetMap real, iPhone/Safari e Android de verdade (o toque foi medido
+no Chromium em modo celular); o toque emulado aproxima 1 nível no mapa vazio (igual no build
+antigo). **WhatsApp:** continua a Evolution parada na VPS dele (`docs/PROMPT-RELIGAR-VPS.md`);
+o código não liga a VPS e o envio segue PAUSADO.
+
 **23/10 (2) — Mapa refeito: sem textura, divisa preta, cinza escuro, nomes DENTRO
 das cidades.** Print dele: "não gostei da textura, sobrepondo o nome das cidades,
 não enquadrados… contorno do limite entre os municípios de preto e as que não

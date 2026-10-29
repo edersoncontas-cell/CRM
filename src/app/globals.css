@@ -508,8 +508,12 @@ img, video, iframe {
 
 /* Nome da cidade escrito dentro dela no mapa por região (RotulosMunicipiosES).
    Cor, letra e tamanho vão inline no próprio nome (a conta de "cabe" mediu com eles).
-   Não recebe toque: o toque é da cidade (dica com região e "você atende"). */
-.rotulo-municipio {
+   Não recebe toque: o toque é da cidade (dica com região e "você atende").
+   DUAS classes de propósito: o leaflet.css (que carrega DEPOIS deste arquivo, junto do
+   mapa) põe `.leaflet-marker-icon { display: block }`, e com uma classe só ele vencia —
+   a caixa deixava de ser flex, cada linha ocupava 18 px em vez de 14 e o nome de duas
+   linhas saía mais alto do que foi medido, encostando na divisa. */
+.leaflet-marker-icon.rotulo-municipio {
   display: flex;
   align-items: center;
   justify-content: center;

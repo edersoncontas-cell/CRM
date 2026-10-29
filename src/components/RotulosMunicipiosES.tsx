@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 import malha from "@/lib/malha-es.json";
-import { calcularRotulos, desprojetar, FAMILIA_ROTULO, PESO_ROTULO, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
-import { corDoTexto, COR_NAO_ATENDO, regiaoDoMunicipio, chaveMunicipio, TEXTO_ESCURO } from "@/lib/mapa-regioes-es";
+import { alturaDaLinha, botaoEmPx, calcularRotulos, desprojetar, FAMILIA_ROTULO, PESO_ROTULO, type FeicaoMalha, type ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
+import { corDoTexto, COR_NAO_ATENDO, regiaoDoMunicipio, chaveMunicipio, TEXTO_ESCURO, Z_NOMES } from "@/lib/mapa-regioes-es";
 
 // O nome de cada cidade escrito DENTRO dela, só onde cabe (regras em
 // lib/mapa-rotulos-es.ts). Fica numa camada própria, acima das divisas e abaixo
@@ -30,7 +30,7 @@ export function RotulosMunicipiosES({ atendidos, obstaculos, rota }: { atendidos
 
     const conjunto = new Set(atendidos);
     const painel = mapa.getPane(PANE) ?? mapa.createPane(PANE);
-    painel.style.zIndex = "380";
+    painel.style.zIndex = String(Z_NOMES);
     painel.style.pointerEvents = "none";
     const grupo = L.layerGroup().addTo(mapa);
 
@@ -60,10 +60,7 @@ export function RotulosMunicipiosES({ atendidos, obstaculos, rota }: { atendidos
         const visao = { x0: x0 + folga, y0: y0 + folga, x1: tela.max!.x - folga, y1: tela.max!.y - folga };
         // Os botões do mapa (+ / − e os créditos) também ficam por cima: o nome não vai embaixo deles.
         const caixaMapa = container.getBoundingClientRect();
-        const obstaculosPx = [...container.querySelectorAll(".leaflet-control")].map((el) => {
-          const r = el.getBoundingClientRect();
-          return { x0: x0 + r.left - caixaMapa.left - 3, y0: y0 + r.top - caixaMapa.top - 3, x1: x0 + r.right - caixaMapa.left + 3, y1: y0 + r.bottom - caixaMapa.top + 3 };
-        });
+        const obstaculosPx = [...container.querySelectorAll(".leaflet-control")].map((el) => botaoEmPx(el.getBoundingClientRect(), caixaMapa, { x: x0, y: y0 }));
         const rotulos = calcularRotulos({ feicoes: FEICOES, zoom, visao, obstaculos, obstaculosPx, rota, medir });
         for (const r of rotulos) {
           const fundo = conjunto.has(chaveMunicipio("ES", r.nome)) ? regiaoDoMunicipio(r.nome).cor : COR_NAO_ATENDO;
@@ -74,7 +71,7 @@ export function RotulosMunicipiosES({ atendidos, obstaculos, rota }: { atendidos
             className: "rotulo-municipio",
             iconSize: [r.largura, r.altura],
             iconAnchor: [r.largura / 2, r.altura / 2],
-            html: `<span style="font:${PESO_ROTULO} ${r.fonte}px/${Math.round(r.fonte * 1.15)}px ${FAMILIA_ROTULO};color:${cor};text-shadow:0 0 3px ${halo}">${r.linhas.map(escapar).join("<br>")}</span>`,
+            html: `<span style="font:${PESO_ROTULO} ${r.fonte}px/${alturaDaLinha(r.fonte)}px ${FAMILIA_ROTULO};color:${cor};text-shadow:0 0 3px ${halo}">${r.linhas.map(escapar).join("<br>")}</span>`,
           });
           L.marker([lat, lng], { icon: icone, pane: PANE, interactive: false, keyboard: false }).addTo(grupo);
         }
