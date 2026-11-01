@@ -109,7 +109,15 @@ async function healthChecks(): Promise<number> {
 }
 
 // ── 2. Fila de trabalho (fallback do webhook) ───────────────────────────────
-async function filaDeTrabalho(): Promise<{ processadas: number; erros: number }> {
+// O cron `zeus-pipeline` já roda esta mesma fila (processarPendentes) a cada
+// passada de 15 min, em paralelo a este tick (os dois são disparados juntos
+// por rodarPassada em lib/agendador.ts) — chamar de novo aqui duplicava o
+// trabalho (e a chamada de IA) sempre que havia mensagem pendente. No tick
+// automático do cron (viaCronAutomatico=true) pulamos esta etapa; o botão
+// "Forçar tick" do painel /zeus (que chama executarZeusTick sem esse sinal)
+// continua processando a fila normalmente, sob demanda.
+async function filaDeTrabalho(viaCronAutomatico: boolean): Promise<{ processadas: number; erros: number }> {
+  if (viaCronAutomatico) return { processadas: 0, erros: 0 };
   return processarPendentes(40);
 }
 
@@ -122,7 +130,10 @@ async function higieneDados() {
   let negociacoesPropostasParaArquivar = 0;
 
   // Telefones mal formatados (normaliza para só dígitos).
-  const clientesComTelefone = await db.cliente.findMany({ where: { telefone: { not: null } }, select: { id: true, telefone: true } });
+  // `nome` já vem junto aqui — antes a checagem de duplicados mais abaixo
+  // fazia uma consulta extra ao banco POR CLIENTE só para ler esse campo
+  // (até centenas de idas ao banco a mais por passada, à toa).
+  const clientesComTelefone = await db.cliente.findMany({ where: { telefone: { not: null } }, select: { id: true, telefone: true, nome: true } });
   for (const c of clientesComTelefone) {
     const limpo = (c.telefone ?? "").replace(/\D/g, "");
     if (limpo && limpo !== c.telefone) {
@@ -139,8 +150,7 @@ async function higieneDados() {
   for (const c of clientesComTelefone) {
     const chave = (c.telefone ?? "").replace(/\D/g, "").slice(-8);
     if (chave.length < 8) continue;
-    const nome = (await db.cliente.findUnique({ where: { id: c.id }, select: { nome: true } }))?.nome ?? "?";
-    porTelefone.set(chave, [...(porTelefone.get(chave) ?? []), { id: c.id, nome }]);
+    porTelefone.set(chave, [...(porTelefone.get(chave) ?? []), { id: c.id, nome: c.nome ?? "?" }]);
   }
   for (const [chave, grupo] of porTelefone) {
     if (grupo.length < 2) continue;
@@ -177,12 +187,24 @@ async function higieneDados() {
   // para clientes cujas conversas nunca passaram pela análise de IA).
   const semMunicipio = await db.cliente.findMany({ where: { municipioId: null }, select: { id: true }, take: 30 });
   if (semMunicipio.length > 0) {
-    const municipios = await db.municipio.findMany({ select: { id: true, nome: true } });
+    // Antes: uma consulta de conversa POR CLIENTE (até 30 idas ao banco a
+    // mais por passada). Agora: uma consulta só, trazendo a conversa de
+    // todos de uma vez (e guardando a primeira por cliente, igual ao
+    // `findFirst` de antes).
+    const idsSemMunicipio = semMunicipio.map((c) => c.id);
+    const [municipios, conversas] = await Promise.all([
+      db.municipio.findMany({ select: { id: true, nome: true } }),
+      db.whatsAppConversation.findMany({
+        where: { clienteId: { in: idsSemMunicipio } },
+        select: { clienteId: true, messages: { orderBy: { sentAt: "desc" }, take: 30, select: { body: true } } },
+      }),
+    ]);
+    const conversaPorCliente = new Map<string, (typeof conversas)[number]>();
+    for (const conv of conversas) {
+      if (conv.clienteId && !conversaPorCliente.has(conv.clienteId)) conversaPorCliente.set(conv.clienteId, conv);
+    }
     for (const c of semMunicipio) {
-      const conv = await db.whatsAppConversation.findFirst({
-        where: { clienteId: c.id },
-        select: { messages: { orderBy: { sentAt: "desc" }, take: 30, select: { body: true } } },
-      });
+      const conv = conversaPorCliente.get(c.id);
       if (!conv) continue;
       const texto = conv.messages.map((m) => m.body).join(" \n ").toLowerCase();
       const achados = municipios.filter((m) => m.nome.length >= 4 && new RegExp(`\\b${m.nome.toLowerCase()}\\b`).test(texto));
@@ -214,17 +236,30 @@ async function higieneDados() {
   }
 
   // Cliente.aguardandoResposta "fantasma" — última mensagem já é minha (OUT).
+  // Antes: uma consulta de conversa POR CLIENTE (até 100 idas ao banco a
+  // mais por passada) e uma atualização por cliente. Agora: uma consulta e
+  // uma atualização em lote.
   const aguardando = await db.cliente.findMany({ where: { aguardandoResposta: true }, select: { id: true }, take: 100 });
-  for (const c of aguardando) {
-    const conv = await db.whatsAppConversation.findFirst({
-      where: { clienteId: c.id },
-      select: { messages: { orderBy: { sentAt: "desc" }, take: 1, select: { direction: true } } },
+  if (aguardando.length > 0) {
+    const idsAguardando = aguardando.map((c) => c.id);
+    // Ordenado por lastMessageAt desc: ao varrer e guardar só a primeira
+    // ocorrência de cada clienteId, sobra a conversa mais recente dele —
+    // igual ao `findFirst` + `orderBy` cliente por cliente de antes.
+    const conversas = await db.whatsAppConversation.findMany({
+      where: { clienteId: { in: idsAguardando } },
+      select: { clienteId: true, messages: { orderBy: { sentAt: "desc" }, take: 1, select: { direction: true } } },
       orderBy: { lastMessageAt: "desc" },
     });
-    const ultima = conv?.messages[0];
-    if (ultima?.direction === "OUT") {
-      await db.cliente.update({ where: { id: c.id }, data: { aguardandoResposta: false } });
-      aguardandoRespostaCorrigido++;
+    const conversaPorCliente = new Map<string, (typeof conversas)[number]>();
+    for (const conv of conversas) {
+      if (conv.clienteId && !conversaPorCliente.has(conv.clienteId)) conversaPorCliente.set(conv.clienteId, conv);
+    }
+    const idsParaCorrigir = aguardando
+      .filter((c) => conversaPorCliente.get(c.id)?.messages[0]?.direction === "OUT")
+      .map((c) => c.id);
+    if (idsParaCorrigir.length > 0) {
+      await db.cliente.updateMany({ where: { id: { in: idsParaCorrigir } }, data: { aguardandoResposta: false } });
+      aguardandoRespostaCorrigido = idsParaCorrigir.length;
     }
   }
   if (aguardandoRespostaCorrigido > 0) {
@@ -503,7 +538,9 @@ async function diagnosticarErros(): Promise<number> {
 }
 
 // ── Orquestração ─────────────────────────────────────────────────────────────
-export async function executarZeusTick(): Promise<ResumoTick> {
+// `viaCronAutomatico: true` só é passado pela rota /api/cron/zeus-tick (a
+// chamada automática a cada 15 min) — ver comentário em filaDeTrabalho.
+export async function executarZeusTick(opts?: { viaCronAutomatico?: boolean }): Promise<ResumoTick> {
   // A contagem diária de negociações esfriando (Números do piloto, critério
   // 2) roda mesmo com o ZEUS pausado: não manda nada a ninguém, e o dia que
   // não for anotado não dá para reconstruir depois. Uma leitura por passada;
@@ -523,7 +560,7 @@ export async function executarZeusTick(): Promise<ResumoTick> {
   }
 
   const eventosNovos = await healthChecks().catch((e) => { console.error("[zeus-tick] health:", e); return 0; });
-  const fila = await filaDeTrabalho().catch((e) => { console.error("[zeus-tick] fila:", e); return { processadas: 0, erros: 0 }; });
+  const fila = await filaDeTrabalho(opts?.viaCronAutomatico ?? false).catch((e) => { console.error("[zeus-tick] fila:", e); return { processadas: 0, erros: 0 }; });
   const higiene = await higieneDados().catch((e) => {
     console.error("[zeus-tick] higiene:", e);
     return { telefonesNormalizados: 0, municipiosVinculados: 0, aguardandoRespostaCorrigido: 0, duplicadosDetectados: 0, negociacoesPropostasParaArquivar: 0 };
