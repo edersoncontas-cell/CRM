@@ -529,68 +529,10 @@ export async function aprenderMeuEstilo(): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
-// ---------- WhatsApp: responder direto do CRM ----------
-// Envia a resposta pela Z-API e registra na MESMA conversa de /atendimento
-// (WhatsAppConversation/WhatsAppMessage) — assim a resposta do cliente
-// continua a thread normalmente, em vez de cair num sistema paralelo morto.
-//
-// `automatico`: o envio em massa e o parabéns automático passam por aqui
-// também, e gravam um rótulo próprio no lugar de "Você". Não é enfeite: o
-// tempo até a primeira resposta (Números do piloto) não pode contar campanha
-// como se fosse o vendedor respondendo o cliente que estava esperando.
-export async function enviarResposta(
-  clienteId: string,
-  texto: string,
-  automatico?: "massa" | "aniversario"
-): Promise<{ ok: boolean; erro?: string }> {
-  const conteudo = texto.trim();
-  if (!conteudo) return { ok: false, erro: "Mensagem vazia." };
-  const rotulo = automatico === "massa" ? ROTULO_ENVIO_MASSA : automatico === "aniversario" ? ROTULO_ANIVERSARIO : "Você";
-
-  const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
-  if (!cliente?.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
-  if (!zapi.isEnabled()) return { ok: false, erro: "WhatsApp não está conectado. Configure em /conexao." };
-
-  const { conv } = await acharOuCriarConversa({
-    phone: cliente.telefone, lid: null, isGroup: false, contactName: cliente.nome,
-  });
-
-  try {
-    const zapiMessageId = await zapi.sendText(conv.externalPhone, conteudo);
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: conteudo, origin: "CRM", operatorDisplayName: rotulo,
-      zapiMessageId, sendStatus: "SENT",
-    });
-  } catch (e) {
-    const unconfirmed = e instanceof zapi.EnvioNaoConfirmadoError;
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: conteudo, origin: "CRM", operatorDisplayName: rotulo,
-      sendStatus: unconfirmed ? "UNCONFIRMED" : "FAILED",
-    });
-    if (!unconfirmed) {
-      return { ok: false, erro: `O WhatsApp recusou o envio: ${String(e).slice(0, 200)} — verifique a conexão em /conexao.` };
-    }
-  }
-
-  await db.cliente.update({
-    where: { id: clienteId },
-    data: { aguardandoResposta: false, ultimoContato: new Date() },
-  });
-  await registrarAudit({
-    acao: "mensagem_enviada",
-    origem: "usuario",
-    descricao: `Mensagem enviada via WhatsApp para ${cliente.nome}`,
-    entidade: "Cliente",
-    entidadeId: clienteId,
-    clienteId,
-    extra: { chars: conteudo.length },
-  });
-
-  revalidatePath("/atendimento");
-  revalidatePath("/dashboard");
-  revalidatePath(`/clientes/${clienteId}`);
-  return { ok: true };
-}
+// ---------- WhatsApp: o CRM não responde conversa ----------
+// Pedido do vendedor (02/11): o WhatsApp no CRM só ESPELHA o que ele manda e
+// recebe pelo celular. O envio automático (campanha e parabéns) mora em
+// lib/envio-massa.ts, que não é server action — o navegador não chega lá.
 
 // Normaliza telefone para 11 dígitos (remove 55 do início se tiver 13 dígitos).
 function normalizarTelefone(raw: string): string | null {

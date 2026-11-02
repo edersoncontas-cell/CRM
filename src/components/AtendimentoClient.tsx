@@ -15,7 +15,7 @@ import {
   DownloadCloud, Loader2, Brain, Trash2, X, FileText, Handshake, Link2, ListChecks,
   CheckCircle2, Compass, Flame, ThermometerSun, Snowflake, Calendar, Repeat,
   ChevronUp, PanelRightOpen, Sparkles, AlertTriangle, MapPin, Wallet, Bell,
-  Paperclip, Mic, Square, CheckSquare, Zap, RefreshCw, FileDown, Plus,
+  Square, CheckSquare, Zap, RefreshCw, FileDown, Plus,
 } from "lucide-react";
 import { unzipSync, strFromU8 } from "fflate";
 import { parseWhatsAppLines, montarChat, nomeDoArquivo, type ParsedChat } from "@/lib/whatsapp-export-parser";
@@ -34,6 +34,7 @@ import { situacaoRecebimento } from "@/lib/recebimento-regra";
 import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao } from "@/lib/negociacao-verificada";
 import { descreverPedido } from "@/lib/orientador-pedidos";
 import { soResumo } from "@/lib/cliente-status";
+import { linkWhatsApp } from "@/lib/whatsapp-link";
 
 export type ConvLista = {
   id: string;
@@ -177,34 +178,6 @@ function ItemVerificado({ rotulo, valor, falta }: { rotulo: string; valor: strin
   );
 }
 
-type Anexo = { kind: "image" | "audio" | "document"; base64: string; mimeType: string; fileName: string; preview: string | null; thumb: string | null; tamanho: number };
-
-function blobParaBase64(blob: Blob): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).replace(/^data:[^;]+;base64,/, ""));
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(blob);
-  });
-}
-
-// Reduz a foto no navegador (máx. 1600px, JPEG) para caber no limite de envio
-// e gera uma miniatura (480px) que fica guardada na mensagem enviada.
-async function prepararImagem(file: File): Promise<{ base64: string; thumb: string; mimeType: string }> {
-  const bitmap = await createImageBitmap(file);
-  const desenhar = (max: number, q: number) => {
-    const escala = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(bitmap.width * escala);
-    c.height = Math.round(bitmap.height * escala);
-    c.getContext("2d")!.drawImage(bitmap, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", q);
-  };
-  const grande = desenhar(1600, 0.82);
-  const thumb = desenhar(480, 0.7);
-  return { base64: grande.replace(/^data:[^;]+;base64,/, ""), thumb, mimeType: "image/jpeg" };
-}
-
 // {nome}: primeiro nome da pessoa; nome inteiro quando o contato é uma
 // empresa (Construtora X, Pedreira Y, Prefeitura...) ou está vazio.
 function aplicarPlaceholders(texto: string, nomeContato: string, vendedor: string): string {
@@ -260,7 +233,6 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
   const [buscaMsg, setBuscaMsg] = useState<string | null>(null);
   const [resultadosBusca, setResultadosBusca] = useState<Mensagem[] | null>(null);
   const [texto, setTexto] = useState("");
-  const [enviando, setEnviando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [sincNomes, setSincNomes] = useState(false);
@@ -312,11 +284,6 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
   // resumo da conversa — ver lib/cliente-status.ts.
   const naoCliente = soResumo(contexto?.cliente?.status);
   const [topo, setTopo] = useState(0);
-  const [anexo, setAnexo] = useState<Anexo | null>(null);
-  const [legenda, setLegenda] = useState("");
-  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
-  const [gravando, setGravando] = useState(false);
-  const [segundos, setSegundos] = useState(0);
   const [respostasAbertas, setRespostasAbertas] = useState(false);
   const [respostas, setRespostas] = useState<RespostaPronta[] | null>(null);
   const [reanalisando, setReanalisando] = useState(false);
@@ -329,10 +296,6 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
   const [pedidoAviso, setPedidoAviso] = useState<string | null>(null);
   const [pedidoAmbiguos, setPedidoAmbiguos] = useState<{ id: string; nome: string }[]>([]);
   const [notaAviso, setNotaAviso] = useState<string | null>(null);
-  const anexoRef = useRef<HTMLInputElement>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -415,14 +378,13 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
     router.refresh();
   }
 
-  async function draftAction(messageId: string, action: "send" | "discard", body?: string) {
+  async function draftAction(messageId: string, action: "discard") {
     if (!selId) return;
     const r = await fetch(`/api/conversations/${selId}/drafts`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId, action, body }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId, action }),
     }).then((res) => res.json()).catch(() => null);
-    if (!r?.ok) { if (action === "send") window.alert(r?.erro ?? "Não foi possível enviar."); return; }
-    if (action === "discard") setMensagens((p) => p.filter((m) => m.id !== messageId));
-    else if (r.message) setMensagens((p) => p.map((m) => (m.id === messageId ? r.message : m)));
+    if (!r?.ok) { window.alert(r?.erro ?? "Não foi possível descartar a sugestão."); return; }
+    setMensagens((p) => p.filter((m) => m.id !== messageId));
     router.refresh();
   }
 
@@ -436,76 +398,6 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
     setTexto(textoResposta);
     textareaRef.current?.focus();
     if (selId) registrarUsoRespostaAction(selId).catch(() => {});
-  }
-
-  async function escolherAnexo(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    try {
-      if (file.type.startsWith("image/")) {
-        const img = await prepararImagem(file);
-        setAnexo({ kind: "image", base64: img.base64, mimeType: img.mimeType, fileName: file.name, preview: img.thumb, thumb: img.thumb, tamanho: Math.round(img.base64.length * 0.75) });
-      } else {
-        if (file.size > 3 * 1024 * 1024) { window.alert("Arquivo acima de 3 MB. Reduza o tamanho antes de enviar."); return; }
-        setAnexo({ kind: "document", base64: await blobParaBase64(file), mimeType: file.type || "application/octet-stream", fileName: file.name, preview: null, thumb: null, tamanho: file.size });
-      }
-      setLegenda("");
-    } catch (err) {
-      console.error(err);
-      window.alert("Não foi possível ler o arquivo.");
-    }
-  }
-
-  async function iniciarGravacao() {
-    if (gravando) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/mp4"].find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) ?? "";
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
-      rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType || mime || "audio/webm" });
-        if (blob.size < 1000) return;
-        const base64 = await blobParaBase64(blob);
-        const tipo = (blob.type || "audio/webm").split(";")[0];
-        setAnexo({ kind: "audio", base64, mimeType: tipo, fileName: "audio", preview: URL.createObjectURL(blob), thumb: null, tamanho: blob.size });
-      };
-      rec.start();
-      recorderRef.current = rec;
-      setGravando(true);
-      setSegundos(0);
-      timerRef.current = setInterval(() => setSegundos((v) => v + 1), 1000);
-    } catch {
-      window.alert("Sem acesso ao microfone. Libere a permissão no navegador.");
-    }
-  }
-
-  function pararGravacao() {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    setGravando(false);
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-  }
-
-  async function enviarAnexo() {
-    if (!anexo || !selId || enviandoAnexo) return;
-    setEnviandoAnexo(true);
-    autoScrollRef.current = true;
-    try {
-      const r = await fetch(`/api/conversations/${selId}/media`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: anexo.kind, base64: anexo.base64, mimeType: anexo.mimeType, fileName: anexo.fileName, caption: legenda.trim(), thumb: anexo.thumb }),
-      }).then((res) => res.json()).catch(() => null);
-      if (!r?.ok) { window.alert(r?.erro ?? "Não foi possível enviar."); return; }
-      if (r.message) mergeMsgs([r.message]);
-      setAnexo(null); setLegenda("");
-      router.refresh();
-    } finally {
-      setEnviandoAnexo(false);
-    }
   }
 
   async function abrirRespostas() {
@@ -787,25 +679,33 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
     setResultadosBusca(d?.messages ?? []);
   }
 
-  async function enviar() {
+  // O CRM não manda mais mensagem de conversa (pedido do vendedor, 02/11):
+  // o WhatsApp aqui só ESPELHA o que ele manda e recebe pelo celular. A caixa
+  // virou rascunho — o botão abre o WhatsApp do aparelho na conversa do
+  // cliente com o texto já digitado; ele aperta enviar lá, e a mensagem volta
+  // para cá pelo webhook ("Enviada fora do CRM").
+  function abrirNoWhatsApp(t: string): boolean {
+    const conv = conversas.find((c) => c.id === selId);
+    const link = conv && !conv.isGroup ? linkWhatsApp(conv.externalPhone, t) : null;
+    if (!link) {
+      window.alert("Não dá para abrir esta conversa no WhatsApp pelo CRM (grupo ou contato sem número de telefone). Responda direto no celular.");
+      return false;
+    }
+    window.open(link, "_blank", "noopener");
+    return true;
+  }
+
+  function enviar() {
     const t = texto.trim();
     if (!t || !selId) return;
+    if (!abrirNoWhatsApp(t)) return;
     setTexto("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    setEnviando(true);
-    autoScrollRef.current = true;
-    const temp: Mensagem = { id: `tmp-${Date.now()}`, direction: "OUT", body: t, senderName: null, operatorDisplayName: "Você", mediaType: null, mediaUrl: null, sentAt: new Date().toISOString(), sendStatus: "QUEUED", isDraft: false };
-    setMensagens((p) => [...p, temp]);
-    try {
-      const r = await fetch(`/api/conversations/${selId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t }) });
-      const d = await r.json();
-      if (d?.message) setMensagens((p) => p.map((m) => (m.id === temp.id ? d.message : m)));
-      if (d?.ok) marcarRespondidoAction(selId).catch(() => {});
-    } catch {
-      setMensagens((p) => p.map((m) => (m.id === temp.id ? { ...m, sendStatus: "FAILED" } : m)));
-    } finally {
-      setEnviando(false);
-    }
+  }
+
+  function abrirDraft(m: Mensagem) {
+    if (!abrirNoWhatsApp(m.body)) return;
+    draftAction(m.id, "discard");
   }
 
   const naoLidas = conversas.filter((c) => curr(c).naoLida).length;
@@ -1085,10 +985,10 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
                       return (
                         <div key={m.id} className="mb-2 flex justify-end">
                           <div className="w-full max-w-[85%] rounded-2xl rounded-tr-sm border border-dashed border-agro-400/60 bg-agro-400/10 p-3 text-sm sm:max-w-[70%]">
-                            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-agro-300"><Brain size={12} /> Sugestão do Orientador · revise antes de enviar</div>
+                            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-agro-300"><Brain size={12} /> Sugestão do Orientador · revise e mande pelo celular</div>
                             <p className="whitespace-pre-wrap break-words text-brand-50">{m.body}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <button onClick={() => draftAction(m.id, "send")} disabled={!conexao.conectado} className="inline-flex items-center gap-1 rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black hover:bg-agro-300 disabled:opacity-40" style={{ minHeight: 30 }}><Send size={12} /> Enviar</button>
+                              <button onClick={() => abrirDraft(m)} className="inline-flex items-center gap-1 rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black hover:bg-agro-300" style={{ minHeight: 30 }}><Send size={12} /> Abrir no WhatsApp</button>
                               <button onClick={() => editarDraft(m)} className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/15" style={{ minHeight: 30 }}>Editar</button>
                               <button onClick={() => draftAction(m.id, "discard")} className="rounded-full px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/10" style={{ minHeight: 30 }}>Descartar</button>
                             </div>
@@ -1196,45 +1096,17 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
                   <span className="line-clamp-2"><b className="text-agro-300">Usar resposta do Orientador:</b> {contexto.orientador.melhorResposta}</span>
                 </button>
               )}
-              {anexo && (
-                <div className="mb-2 flex items-start gap-3 rounded-xl bg-white/[0.05] p-2.5">
-                  {anexo.kind === "image" && anexo.preview && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={anexo.preview} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
-                  )}
-                  {anexo.kind === "document" && <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand-800 text-agro-300"><FileDown size={20} /></div>}
-                  {anexo.kind === "audio" && anexo.preview && <audio controls src={anexo.preview} className="h-9 max-w-[220px]" />}
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-semibold text-white">{anexo.kind === "audio" ? "Áudio gravado" : anexo.fileName} <span className="font-normal text-brand-400">· {Math.max(1, Math.round(anexo.tamanho / 1024))} KB</span></div>
-                    {anexo.kind !== "audio" && (
-                      <input value={legenda} onChange={(e) => setLegenda(e.target.value)} placeholder="Legenda (opcional)" style={{ paddingLeft: 10, paddingRight: 10 }}
-                        className="mt-1 w-full rounded-lg bg-brand-800 py-1.5 text-sm text-white placeholder:text-brand-400 outline-none" />
-                    )}
-                    <div className="mt-2 flex gap-2">
-                      <button onClick={enviarAnexo} disabled={enviandoAnexo || !conexao.conectado} className="inline-flex items-center gap-1 rounded-full bg-agro-400 px-3 py-1 text-xs font-bold text-black disabled:opacity-40" style={{ minHeight: 30 }}>
-                        {enviandoAnexo ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Enviar {anexo.kind === "image" ? "foto" : anexo.kind === "audio" ? "áudio" : "arquivo"}
-                      </button>
-                      <button onClick={() => setAnexo(null)} className="rounded-full px-3 py-1 text-xs font-semibold text-brand-300 hover:bg-white/10" style={{ minHeight: 30 }}>Cancelar</button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <p className="mb-1.5 text-[11px] leading-snug text-brand-400">
+                O CRM só espelha o seu WhatsApp: o que você manda e recebe no celular aparece aqui sozinho.
+              </p>
               <div className="flex items-end gap-1.5">
-                <input ref={anexoRef} type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" onChange={escolherAnexo} className="hidden" />
-                <button onClick={() => anexoRef.current?.click()} disabled={!conexao.conectado} title="Enviar foto ou documento" className={cn(botaoIcone, "h-11 disabled:opacity-40")}><Paperclip size={18} /></button>
-                <button onClick={gravando ? pararGravacao : iniciarGravacao} disabled={!conexao.conectado} title={gravando ? "Parar gravação" : "Gravar áudio"} className={cn(botaoIcone, "h-11 disabled:opacity-40", gravando && "bg-red-500/20 text-red-300")}>
-                  {gravando ? <Square size={16} /> : <Mic size={18} />}
-                </button>
-                {gravando && <span className="self-center text-xs font-bold text-red-300">{Math.floor(segundos / 60)}:{String(segundos % 60).padStart(2, "0")}</span>}
                 <button onClick={abrirRespostas} title="Respostas prontas" className={cn(botaoIcone, "h-11")}><Zap size={18} /></button>
                 <textarea ref={textareaRef} value={texto}
                   onChange={(e) => { setTexto(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
-                  rows={1} placeholder={conexao.conectado ? "Escreva a mensagem (Enter envia, Shift+Enter quebra linha)" : "WhatsApp desconectado — conecte em /conexao"}
-                  disabled={!conexao.conectado}
-                  className="max-h-36 flex-1 resize-none rounded-xl bg-brand-800 px-3 py-2.5 text-sm text-white placeholder:text-brand-400 outline-none ring-1 ring-transparent focus:ring-agro-400/60 disabled:opacity-60" />
-                <button onClick={enviar} disabled={enviando || !texto.trim() || !conexao.conectado} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-agro-400 text-black transition hover:bg-agro-300 disabled:opacity-40" aria-label="Enviar">
-                  {enviando ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                  rows={1} placeholder="Rascunho da resposta"
+                  className="max-h-36 flex-1 resize-none rounded-xl bg-brand-800 px-3 py-2.5 text-sm text-white placeholder:text-brand-400 outline-none ring-1 ring-transparent focus:ring-agro-400/60" />
+                <button onClick={enviar} disabled={!texto.trim()} title="Abrir no WhatsApp do celular com este texto" className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-agro-400 px-3 text-xs font-bold text-black transition hover:bg-agro-300 disabled:opacity-40" aria-label="Abrir no WhatsApp">
+                  <Send size={16} /> <span className="hidden sm:inline">Abrir no WhatsApp</span>
                 </button>
               </div>
             </div>

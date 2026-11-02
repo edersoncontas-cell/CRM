@@ -7,16 +7,17 @@ import {
 } from "lucide-react";
 import { WheelDatePicker, WheelTimePicker } from "@/components/WheelDatePicker";
 import {
-  programarEnvioAction, listarEnviosProgramadosAction, cancelarEnvioProgramadoAction,
+  programarEnvioAction, enviarAgoraNaFilaAction, listarEnviosProgramadosAction, cancelarEnvioProgramadoAction,
+  lerRitmoEnvioAction, definirRitmoEnvioAction,
   type EnvioProgramadoLista,
 } from "@/lib/envio-programado-actions";
-import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia, MAX_CLIENTES_POR_ENVIO, cabemPorRodada, ondasEstimadas } from "@/lib/envio-programado";
+import { checarAgendamento, quandoPorExtenso, hojeEmBrasilia, MAX_CLIENTES_POR_ENVIO, RITMOS_ENVIO } from "@/lib/envio-programado";
 import {
-  listarPublicoAction, gerarTextoMensagemAction, enviarMensagemClientesAction, checarEnvioAgoraAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
+  listarPublicoAction, gerarTextoMensagemAction, checarEnvioAgoraAction, lerAutomaticoAniversarioAction, definirAutomaticoAniversarioAction,
   type ClienteAlvo,
 } from "@/lib/mensagem-clientes-actions";
 import type { ConfigAniversario } from "@/lib/aniversario-automatico";
-import { personalizarTexto, dividirEmLotes } from "@/lib/abordagem-cidade-regra";
+import { personalizarTexto } from "@/lib/abordagem-cidade-regra";
 import { juntarVariacoes, versaoDoCliente, textosDoEnvio, MAX_VARIACOES } from "@/lib/envio-variacoes";
 import { motivosDeFora } from "@/lib/envio-limites";
 import {
@@ -101,15 +102,22 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   const [pickerEnvio, setPickerEnvio] = useState<"data" | "hora" | null>(null);
   const [erroAgenda, setErroAgenda] = useState<string | null>(null);
   const [agendado, setAgendado] = useState<string | null>(null);
+  // O ritmo da fila (5 por hora…) e quanto a lista leva — dito na hora em que
+  // ela entra na fila, para ele não achar que travou depois das 5 primeiras.
+  const [ritmoFila, setRitmoFila] = useState<string | null>(null);
+  // "manter um padrão de envio, por exemplo 5 clientes a cada hora": o
+  // seletor mora aqui, ao lado do botão — Configurações não tem mais a tela
+  // de travas (saiu a pedido dele em 01/10). null = ainda lendo.
+  const [porHora, setPorHora] = useState<number | null>(null);
+  const [salvandoRitmo, setSalvandoRitmo] = useState(false);
+  const [erroRitmo, setErroRitmo] = useState<string | null>(null);
   const [avisoPublico, setAvisoPublico] = useState<string | null>(null);
   // Quem REALMENTE vai receber, conferido no servidor assim que a relação
   // muda. Serve para o botão dizer o número verdadeiro ANTES do clique: ler
   // "Enviar para 1298" e receber 8 é o tipo de mentira que faz ele parar de
   // confiar na tela e voltar a mandar na mão.
-  const [previa, setPrevia] = useState<{ liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string } | null>(null);
+  const [previa, setPrevia] = useState<{ liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string; ritmo?: string } | null>(null);
   const [programados, setProgramados] = useState<EnvioProgramadoLista[]>([]);
-  const [progresso, setProgresso] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ enviados: number; falhas: { nome: string; erro: string }[] } | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
   // Parabéns automático (todo dia às 8h): ligado/desligado + texto modelo.
   const [automatico, setAutomatico] = useState<ConfigAniversario | null>(null);
@@ -124,6 +132,23 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
       .catch(() => {});
     return () => { vivo = false; };
   }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    lerRitmoEnvioAction()
+      .then((n) => { if (vivo) setPorHora(n); })
+      .catch(() => { if (vivo) setErroRitmo("Não consegui ler o ritmo agora — vale o que estava salvo."); });
+    return () => { vivo = false; };
+  }, []);
+
+  async function mudarRitmo(n: number) {
+    setSalvandoRitmo(true);
+    setErroRitmo(null);
+    const r = await definirRitmoEnvioAction(n).catch(() => ({ ok: false, erro: "Falha ao salvar o ritmo — confira a internet." } as { ok: boolean; erro?: string; porHora?: number }));
+    setSalvandoRitmo(false);
+    if (!r.ok) { setErroRitmo(r.erro ?? "Não deu para salvar o ritmo."); return; }
+    setPorHora(r.porHora ?? n);
+  }
 
   useEffect(() => {
     if (tipo !== "aniversario" || automatico) return;
@@ -149,7 +174,6 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
 
   function carregar(p: Publico) {
     setRemovidos(new Set()); // trocar o público devolve quem tinha saído
-    setResultado(null);
     setClientes([]);
     setTitulo("");
     if (p.modo === "cidade" && !p.municipioId) return;
@@ -231,7 +255,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   // A prévia só DESABILITA quando ela já respondeu e o resultado é zero:
   // enquanto não respondeu, o botão continua vivo — travar por causa de uma
   // consulta lenta seria pior que deixar o servidor recusar depois.
-  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && !previa?.bloqueio && (textoFinal !== "" || !!anexo);
+  const podeEnviar = !enviando && !subindo && comTelefone.length > 0 && previa?.liberados !== 0 && (textoFinal !== "" || !!anexo);
 
   // Confere a relação no servidor sempre que ela muda (trocou o público,
   // tirou alguém da lista). A chave é a lista de ids: sem ela o efeito
@@ -244,7 +268,8 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
       .then((r) => { if (vivo) setPrevia(r); })
       .catch(() => { if (vivo) setPrevia(null); });
     return () => { vivo = false; };
-  }, [chaveRelacao]);
+    // porHora entra na chave: mudou o ritmo, a previsão "leva X horas" muda.
+  }, [chaveRelacao, porHora]);
 
   // O número do botão é o do servidor quando ele já respondeu. Enquanto não
   // respondeu, o da tela — nunca um número inventado.
@@ -270,6 +295,7 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     // Quem ficou de fora, e por quê. Sem isto ele escolhe 1.298, lê
     // "programado" e acha que os 1.298 vão receber.
     setAvisoPublico(("aviso" in r && r.aviso) || null);
+    setRitmoFila(("ritmo" in r && r.ritmo) || null);
     setProgramados(await listarEnviosProgramadosAction().catch(() => []));
   }
 
@@ -279,6 +305,10 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     setProgramados(await listarEnviosProgramadosAction().catch(() => []));
   }
 
+  // "Enviar agora" põe a lista na FILA para agora: quem manda é o
+  // despachante, no ritmo por hora (5/h por padrão, uma a cada 12 min), e
+  // continua mandando com a tela fechada. Antes o navegador mandava em lotes
+  // enquanto a tela estava aberta — sem ritmo e parando se ele saísse.
   async function enviar() {
     if (!podeEnviar) return;
     // Pergunta ao servidor quem REALMENTE vai receber antes de perguntar a
@@ -286,49 +316,34 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
     // recebem — o CRM teria acertado e mentido ao mesmo tempo.
     setEnviando(true);
     setAvisoPublico(null);
+    setAgendado(null);
     const check = await checarEnvioAgoraAction(comTelefone.map((c) => c.id)).catch(() => null);
     setEnviando(false);
-    if (check?.bloqueio) { setAvisoPublico(check.bloqueio); return; }
     if (check && !check.liberados) {
-      setAvisoPublico(`Ninguém desta lista pode receber campanha agora: ${motivosDeFora(check)}.`);
+      setAvisoPublico(`Ninguém desta lista pode receber campanha: ${motivosDeFora(check)}.`);
       return;
     }
-    // Só os liberados entram no laço. Percorrer os 1.298 em lotes de 3 para
-    // mandar para 7 seriam 433 idas ao servidor que não mandam nada, com ele
-    // olhando "Enviando… 12/1298" andar por minutos.
-    const alvos = check ? check.ids : comTelefone.map((c) => c.id);
-    const alvo = alvos.length;
+    const alvo = check ? check.liberados : comTelefone.length;
     const deFora = check ? motivosDeFora(check) : "";
     const amostra = versaoExemplo?.texto
       ? personalizarTexto(versaoExemplo.texto, exemplo?.nome ?? "") + (totalVersoes > 1 ? `\n\n(esta é a versão ${versaoExemplo.numero} de ${totalVersoes}; cada cliente recebe uma delas)` : "")
       : "(só o anexo)";
     const ok = confirm(
-      `Mandar pelo WhatsApp para ${alvo} cliente(s) (${titulo})?` +
+      `Pôr na fila para ${alvo} cliente(s) (${titulo})? Sai aos poucos, no ritmo por hora, mesmo com o CRM fechado.` +
+      (check?.bloqueio ? `\n\nAgora: ${check.bloqueio} A fila espera e continua sozinha.` : "") +
       (deFora ? `\n\nFicam de fora: ${deFora}.` : "") +
       (anexo ? `\n\nCom anexo: ${anexo.nome}` : "") + `\n\n${amostra}`
     );
     if (!ok) return;
     setEnviando(true);
-    setResultado(null);
-    if (deFora) setAvisoPublico(`${alvo} ${alvo === 1 ? "vai" : "vão"} receber. Ficam de fora ${deFora}.`);
-    const total = { enviados: 0, falhas: [] as { nome: string; erro: string }[] };
-    let feitos = 0;
-    for (const lote of dividirEmLotes(alvos, 3)) {
-      setProgresso(`Enviando… ${feitos}/${alvo}`);
-      const r = await enviarMensagemClientesAction(lote, textoFinal, anexo?.id ?? null).catch((e) => ({
-        enviados: [] as string[],
-        falhas: lote.map((id) => ({ id, nome: comTelefone.find((c) => c.id === id)?.nome ?? id, erro: e instanceof Error ? e.message : "falha" })),
-      }));
-      total.enviados += r.enviados.length;
-      total.falhas.push(...r.falhas.map((f) => ({ nome: f.nome, erro: f.erro })));
-      feitos += lote.length;
-      // A trava do dia pode bater no meio da lista: parar aqui e avisar é
-      // melhor que continuar batendo na porta do WhatsApp.
-      if ("bloqueio" in r && r.bloqueio) { setAvisoPublico(r.bloqueio); break; }
-    }
-    setProgresso(null);
+    const r = await enviarAgoraNaFilaAction(comTelefone.map((c) => c.id), textoFinal, anexo?.id ?? null)
+      .catch(() => ({ ok: false, erro: "Falha ao pôr na fila — confira a internet e tente de novo." } as { ok: boolean; erro?: string; aviso?: string; ritmo?: string }));
     setEnviando(false);
-    setResultado(total);
+    if (!r.ok) { setAvisoPublico(r.erro ?? "Não deu para pôr na fila."); return; }
+    setAgendado("agora");
+    setAvisoPublico(r.aviso || null);
+    setRitmoFila(r.ritmo ?? null);
+    setProgramados(await listarEnviosProgramadosAction().catch(() => []));
   }
 
   const placeholder =
@@ -638,19 +653,11 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                A mensagem sai <b>a partir</b> do horário escolhido — o robô confere de 15 em 15 minutos, então pode
-                sair alguns minutos depois. Nunca antes.
+                A lista começa a sair <b>a partir</b> do horário escolhido, no ritmo por hora — nunca antes.
               </p>
               {/* Lista grande não cabe numa rodada só: ele precisa saber que
                   vai levar horas ANTES de programar, e não descobrir vendo o
                   contador subir devagar. */}
-              {comTelefone.length > cabemPorRodada() && (
-                <p className="mt-1 text-[11px] text-slate-500">
-                  São {comTelefone.length} — o robô manda aos poucos, para o WhatsApp não bloquear o seu número.
-                  Leva umas <b>{ondasEstimadas(comTelefone.length)} rodadas</b> (cerca de {ondasEstimadas(comTelefone.length) * 15} min) para
-                  terminar, e a lista aqui embaixo mostra quantos já saíram.
-                </p>
-              )}
               {comTelefone.length > MAX_CLIENTES_POR_ENVIO && (
                 <p className="mt-1 text-xs text-red-600">No máximo {MAX_CLIENTES_POR_ENVIO} clientes por envio.</p>
               )}
@@ -663,9 +670,9 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
               inteira, aperta e só então descobre — foi assim que ele passou
               um dia achando que tinha cancelado envio que continuava saindo. */}
           {!avisoPublico && !agendado && previa?.bloqueio && (
-            <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800">
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900">
               <AlertTriangle size={15} className="mt-px shrink-0" />
-              <span>{previa.bloqueio}</span>
+              <span>Agora não sai nada: {previa.bloqueio} Pode pôr na fila mesmo assim — ela espera e continua sozinha.</span>
             </div>
           )}
 
@@ -687,6 +694,31 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
             </p>
           )}
 
+          {/* O ritmo dito ANTES do clique: 5 por hora numa lista de 40 é um
+              dia de envio, e ele tem que saber disso antes de confirmar. */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <label htmlFor="ritmo-envio" className="text-xs font-semibold text-slate-600">Ritmo</label>
+            <select
+              id="ritmo-envio"
+              value={porHora ?? ""}
+              disabled={porHora === null || salvandoRitmo}
+              onChange={(e) => mudarRitmo(Number(e.target.value))}
+              className="min-w-[4.5rem] rounded-lg border border-slate-300 bg-white py-1 pl-3 pr-8 text-sm text-slate-800 disabled:opacity-60"
+            >
+              {porHora === null && <option value="">lendo…</option>}
+              {porHora !== null && !(RITMOS_ENVIO as readonly number[]).includes(porHora) && <option value={porHora}>{porHora}</option>}
+              {RITMOS_ENVIO.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <span className="text-xs text-slate-600">clientes por hora</span>
+            {salvandoRitmo && <Loader2 size={13} className="animate-spin text-slate-400" />}
+            <span className="w-full text-[11px] text-slate-500">Vale também para o que já está na fila.</span>
+            {erroRitmo && <span className="w-full text-[11px] font-semibold text-red-600">{erroRitmo}</span>}
+          </div>
+
+          {!agendado && previa?.ritmo && vaoReceber > 0 && (
+            <p className="mt-2 text-xs text-slate-500">{previa.ritmo}</p>
+          )}
+
           <button
             type="button"
             onClick={quando === "depois" ? programar : enviar}
@@ -694,16 +726,17 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-50"
           >
             {enviando ? <Loader2 size={15} className="animate-spin" /> : quando === "depois" ? <CalendarClock size={15} /> : <Send size={15} />}
-            {progresso ?? (quando === "depois"
+            {quando === "depois"
               ? (vaoReceber ? `Programar para ${vaoReceber} cliente(s)` : "Programar envio")
-              : (vaoReceber ? `Enviar para ${vaoReceber} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp"))}
+              : (vaoReceber ? `Enviar para ${vaoReceber} cliente(s) · ${titulo}` : "Enviar pelo WhatsApp")}
           </button>
 
           {agendado && (
             <div className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-800">
-              <div className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={15} /> Programado para {agendado}</div>
+              <div className="flex items-center gap-1.5 font-bold"><CheckCircle2 size={15} /> {agendado === "agora" ? "Na fila — começa a sair agora" : `Programado para ${agendado}`}</div>
+              {ritmoFila && <p className="mt-1.5 text-xs">{ritmoFila}</p>}
               {avisoPublico && <p className="mt-1.5 text-xs font-semibold">{avisoPublico}</p>}
-              <p className="mt-1 text-xs opacity-80">Você pode cancelar na lista abaixo enquanto não sair.</p>
+              <p className="mt-1 text-xs opacity-80">Continua saindo com o CRM fechado. Você pode cancelar na lista abaixo enquanto não terminar.</p>
             </div>
           )}
 
@@ -743,20 +776,6 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
             </div>
           )}
 
-          {resultado && (
-            <div className={`mt-3 rounded-xl p-3 text-sm ${resultado.falhas.length === 0 ? "bg-green-50 text-green-800" : resultado.enviados === 0 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
-              <div className="flex items-center gap-1.5 font-bold">
-                {resultado.falhas.length === 0 ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-                {resultado.enviados} enviada(s){resultado.falhas.length ? ` · ${resultado.falhas.length} falhou(aram)` : ""}
-              </div>
-              {resultado.falhas.length > 0 && (
-                <ul className="mt-1 space-y-0.5 text-xs">
-                  {resultado.falhas.map((f, i) => <li key={i}><b>{f.nome}</b>: {f.erro}</li>)}
-                </ul>
-              )}
-              {resultado.enviados > 0 && <p className="mt-1 text-xs opacity-80">As respostas chegam no <Link href="/atendimento" className="underline">Atendimento</Link>.</p>}
-            </div>
-          )}
         </div>
       </div>
 

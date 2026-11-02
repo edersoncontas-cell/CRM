@@ -5,7 +5,8 @@ import { Card } from "@/components/ui";
 import { CampoNumero } from "@/components/CampoNumero";
 import { calcular, textoRetorno, brl, brl2, type DadosProposta, type MaquinaCalc, type CalcProposta } from "@/lib/proposta";
 import type { ContextoProposta } from "@/lib/proposta-pdf";
-import { salvarPropostaAction, enviarPropostaWhatsAppAction } from "@/lib/proposta-actions";
+import { salvarPropostaAction, marcarPropostaEnviadaAction } from "@/lib/proposta-actions";
+import { linkWhatsApp } from "@/lib/whatsapp-link";
 import { cn } from "@/lib/utils";
 import { Calculator, FileText, Save, Loader2, Send, ExternalLink, ArrowRight, CheckCircle2, Plus, X } from "lucide-react";
 
@@ -95,14 +96,22 @@ export function PropostaClient({ negociacaoId, dadosIniciais, contexto, enviadaE
     });
   }
 
+  // O CRM não manda mais nada pela conversa (02/11): abre o WhatsApp do
+  // celular na conversa do cliente com a legenda pronta. O PDF ele anexa lá
+  // (Abrir PDF → compartilhar). A janela abre ANTES de qualquer espera — o
+  // Safari bloqueia janela aberta depois de um await.
+  const legenda = `${contexto.clienteNome.split(" ")[0]}, segue a proposta ${contexto.maquina ? `da ${contexto.maquina} ` : ""}em uma página, com a conta que fizemos.${d.validade ? ` Válida até ${new Date(`${d.validade}T12:00:00-03:00`).toLocaleDateString("pt-BR")}.` : ""}${d.proximoPasso ? ` ${d.proximoPasso}` : ""}`;
+  const linkWa = linkWhatsApp(contexto.clienteTelefone, legenda);
+
   function onEnviar() {
-    if (!confirm(`Enviar a proposta em PDF pelo WhatsApp para ${contexto.clienteNome}${contexto.clienteTelefone ? ` (${contexto.clienteTelefone})` : ""}?`)) return;
+    if (!linkWa) return;
+    window.open(linkWa, "_blank", "noopener");
     setMsg(null);
     startEnviar(async () => {
       if (!(await salvar())) return;
-      const res = await enviarPropostaWhatsAppAction(negociacaoId);
-      if (res.ok) { setEnviada(new Date().toISOString()); setMsg({ ok: true, texto: "Proposta enviada pelo WhatsApp. Ela aparece na conversa do cliente." }); }
-      else setMsg({ ok: false, texto: res.erro ?? "Falha ao enviar." });
+      const res = await marcarPropostaEnviadaAction(negociacaoId);
+      if (res.ok) { setEnviada(new Date().toISOString()); setMsg({ ok: true, texto: "WhatsApp aberto com o texto pronto. Anexe o PDF (Abrir PDF → compartilhar) e envie pelo celular — a conversa aparece no Atendimento sozinha." }); }
+      else setMsg({ ok: false, texto: res.erro ?? "Não deu para registrar a data de envio." });
     });
   }
 
@@ -126,7 +135,7 @@ export function PropostaClient({ negociacaoId, dadosIniciais, contexto, enviadaE
           {enviada && <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700"><CheckCircle2 size={13} /> enviada em {new Date(enviada).toLocaleString("pt-BR")}</span>}
           <button onClick={onSalvar} disabled={salvando} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{salvando ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar</button>
           <button onClick={onAbrirPdf} disabled={salvando} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60"><ExternalLink size={14} /> Abrir PDF</button>
-          <button onClick={onEnviar} disabled={enviando || !whatsapp} title={whatsapp ? "Envia o PDF pelo WhatsApp do cliente" : "WhatsApp não configurado ou cliente sem telefone"} className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50">{enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar pelo WhatsApp</button>
+          <button onClick={onEnviar} disabled={enviando || !whatsapp || !linkWa} title={whatsapp && linkWa ? "Abre o WhatsApp do celular na conversa do cliente, com o texto pronto" : "Cliente sem telefone válido no cadastro"} className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50">{enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Abrir no WhatsApp</button>
         </div>
       </div>
       {msg && <div className={cn("rounded-xl border px-3 py-2 text-sm", msg.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700")}>{msg.texto}</div>}

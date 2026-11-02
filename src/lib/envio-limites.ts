@@ -29,6 +29,11 @@ export type LimitesEnvio = {
   /** Pausa entre uma mensagem e a seguinte, sorteada nesta faixa. */
   pausaMinMs: number;
   pausaMaxMs: number;
+  /**
+   * Ritmo: quantas mensagens automáticas por hora, no máximo, espaçadas por
+   * igual (5 por hora = uma a cada 12 min). Zero = nada sai.
+   */
+  porHora: number;
 };
 
 // Padrões conservadores de propósito. 80/dia é baixo para quem está
@@ -41,6 +46,7 @@ export const LIMITES_PADRAO: LimitesEnvio = {
   somenteDiasUteis: true,
   pausaMinMs: 12_000,
   pausaMaxMs: 25_000,
+  porHora: 5,
 };
 
 const FUSO = "America/Sao_Paulo";
@@ -119,6 +125,92 @@ export function explicarBloqueio(motivo: MotivoBloqueio, lim: LimitesEnvio = LIM
 export function pausaHumanaMs(lim: LimitesEnvio = LIMITES_PADRAO, sorteio: number = Math.random()): number {
   const faixa = Math.max(0, lim.pausaMaxMs - lim.pausaMinMs);
   return Math.round(lim.pausaMinMs + faixa * Math.min(1, Math.max(0, sorteio)));
+}
+
+// ── RITMO POR HORA ─────────────────────────────────────────────────────────
+//
+// "manter um padrão de envio, por exemplo enviar para 5 clientes a cada hora"
+//
+// A lista selecionada sai aos poucos: no máximo `porHora` mensagens em
+// qualquer janela de 60 minutos, e espaçadas por igual (5 por hora = uma a
+// cada 12 min). Espaçar é o ponto: 5 de uma vez e 55 minutos parado ainda é
+// rajada de robô; uma a cada 12 minutos parece gente.
+
+const HORA_MS = 3_600_000;
+
+/** O espaço mínimo entre duas mensagens automáticas. */
+export function intervaloDoRitmoMs(lim: LimitesEnvio = LIMITES_PADRAO): number {
+  return lim.porHora > 0 ? Math.ceil(HORA_MS / lim.porHora) : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Quando a próxima mensagem pode sair, pelo ritmo. null = pode agora.
+ *
+ * `recentes` são os instantes das mensagens que já saíram (qualquer ordem;
+ * as de mais de uma hora atrás são ignoradas). Ritmo zerado ou inválido
+ * devolve "nunca" (Infinity como data inválida não serve: devolve agora + 1
+ * ano) — o padrão que não machuca é não mandar.
+ */
+export function proximaNoRitmo(recentes: Date[], agora: Date, lim: LimitesEnvio = LIMITES_PADRAO): Date | null {
+  if (!(lim.porHora > 0) || !Number.isFinite(lim.porHora)) return new Date(agora.getTime() + 365 * 86_400_000);
+  const t = agora.getTime();
+  const naHora = recentes
+    .map((d) => d.getTime())
+    .filter((x) => Number.isFinite(x) && x > t - HORA_MS && x <= t)
+    .sort((a, b) => a - b);
+  let livre = t;
+  if (naHora.length) livre = Math.max(livre, naHora[naHora.length - 1] + intervaloDoRitmoMs(lim));
+  if (naHora.length >= lim.porHora) livre = Math.max(livre, naHora[naHora.length - lim.porHora] + HORA_MS);
+  return livre > t ? new Date(livre) : null;
+}
+
+/** "10:24" em Brasília. */
+function horaMinBrasilia(d: Date): string {
+  return d.toLocaleTimeString("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+export function explicarRitmo(proxima: Date, lim: LimitesEnvio = LIMITES_PADRAO): string {
+  if (!(lim.porHora > 0)) return "Ritmo de envio zerado em Configurações — nenhuma mensagem automática sai.";
+  return `Ritmo de ${lim.porHora} por hora: a próxima sai por volta das ${horaMinBrasilia(proxima)}.`;
+}
+
+/**
+ * Por alto, quantas horas DE JANELA a lista leva para sair no ritmo. Não conta
+ * a noite nem o fim de semana: é "horas de envio", e a tela diz isso.
+ */
+export function horasParaTerminar(total: number, lim: LimitesEnvio = LIMITES_PADRAO): number {
+  if (!(lim.porHora > 0) || total <= 0) return 0;
+  return Math.ceil(total / lim.porHora);
+}
+
+/** Quantos dias úteis de janela a lista ocupa, no ritmo e no teto do dia. */
+export function diasParaTerminar(total: number, lim: LimitesEnvio = LIMITES_PADRAO): number {
+  if (total <= 0) return 0;
+  const porDiaRitmo = Math.max(0, lim.horaFim - lim.horaInicio) * Math.max(0, lim.porHora);
+  const porDia = Math.min(porDiaRitmo, Math.max(0, lim.tetoDiario));
+  if (porDia <= 0) return Number.POSITIVE_INFINITY;
+  return Math.ceil(total / porDia);
+}
+
+/**
+ * A frase que a tela mostra ANTES e DEPOIS de pôr a lista na fila: o ritmo,
+ * a janela e quanto tempo leva. Sem ela ele marca 40, vê 5 saírem na primeira
+ * hora e acha que o resto travou.
+ */
+export function descreverRitmo(total: number, lim: LimitesEnvio = LIMITES_PADRAO): string {
+  if (!(lim.porHora > 0)) return "O ritmo de envio está zerado em Configurações — a lista fica na fila e nada sai até mudar.";
+  const minutos = Math.round(60 / lim.porHora);
+  const janela = `das ${lim.horaInicio}h às ${lim.horaFim}h${lim.somenteDiasUteis ? ", em dias úteis" : ""}`;
+  const base = `Sai no ritmo de ${lim.porHora} por hora (uma a cada ${minutos} min), ${janela}.`;
+  if (total <= 0) return base;
+  const horas = horasParaTerminar(total, lim);
+  const dias = diasParaTerminar(total, lim);
+  const prazo = !Number.isFinite(dias)
+    ? " Com o teto do dia zerado, nada sai."
+    : dias <= 1
+      ? ` ${total} ${total === 1 ? "cliente leva" : "clientes levam"} cerca de ${horas} ${horas === 1 ? "hora" : "horas"} de envio.`
+      : ` ${total} clientes levam cerca de ${dias} dias de envio.`;
+  return base + prazo;
 }
 
 // ── SAÍDA DA LISTA ─────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 
 import { db } from "@/lib/db";
 import { getConfig, setConfig } from "@/lib/config";
-import { enviarResposta } from "@/lib/actions";
+import { enviarTextoAutomatico } from "@/lib/envio-massa";
 import { registrarAudit } from "@/lib/audit";
 import { lerParametros } from "@/lib/parametros";
 import { personalizarTexto } from "@/lib/abordagem-cidade-regra";
@@ -77,7 +77,9 @@ export async function enviarAniversariosDoDia(hoje = new Date()): Promise<Result
     // pega de onde ficou, dentro da janela.
     if (porQueNaoEnviar(new Date(), jaHoje, lim)) break;
     try {
-      const res = await enviarResposta(c.id, personalizarTexto(cfg.texto, c.nome), "aniversario");
+      const res = await enviarTextoAutomatico(c.id, personalizarTexto(cfg.texto, c.nome), "aniversario");
+      // Pausa geral: para sem marcar ninguém, o cron do dia seguinte retoma.
+      if (res.pausado) break;
       if (!res.ok) { r.falhas.push({ nome: c.nome, erro: res.erro ?? "Falha ao enviar." }); continue; }
       await setConfig(`${PREFIXO_ENVIADO}${c.id}`, String(ano));
       await registrarAudit({

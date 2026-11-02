@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
-import { enviarMensagemClientesAction } from "@/lib/mensagem-clientes-actions";
+import { enviarMensagemClientes } from "@/lib/envio-massa";
 import { registrarAudit } from "@/lib/audit";
 import { PRAZO_RODADA_MS, fecharRodada } from "@/lib/envio-programado";
-import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs } from "@/lib/envio-limites";
-import { lerLimitesEnvio, enviadasHoje } from "@/lib/envio-guarda";
+import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, proximaNoRitmo, explicarRitmo } from "@/lib/envio-limites";
+import { lerLimitesEnvio, enviadasHoje, enviosDaUltimaHora } from "@/lib/envio-guarda";
 import { envioPausado } from "@/lib/whatsapp-pausa";
 
 // O DESPACHANTE das mensagens programadas.
@@ -37,6 +37,10 @@ const TRAVA_PRESA_MS = 10 * 60_000;
 // Uma mensagem por vez. Antes eram 5 a cada 0,7s — foi parte do que restringiu
 // o número do vendedor por 24h. Ninguém digita cinco mensagens em sete
 // décimos de segundo.
+//
+// TEM que ser 1: com o ritmo por hora, o funil pode mandar o primeiro do lote
+// e barrar o segundo; com bloqueio o cursor não anda, e o primeiro receberia
+// de novo na rodada seguinte. Com lote de 1 isso não existe.
 const POR_VEZ = 1;
 
 export type ResultadoDespacho = {
@@ -93,6 +97,18 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
       return saida;
     }
 
+    // Ritmo por hora (5/h = uma a cada 12 min). Conferido aqui ANTES de pegar
+    // a trava do envio: o despachante roda a cada minuto, e 11 de cada 12
+    // passadas não têm vez — não precisam escrever nada no banco para saber.
+    // O funil confere de novo a cada mensagem (lib/envio-massa.ts).
+    const recentes = await enviosDaUltimaHora(agora);
+    const vez = recentes ? proximaNoRitmo(recentes, agora, lim) : null;
+    if (!recentes || vez) {
+      saida.bloqueio = vez ? explicarRitmo(vez, lim) : "Não deu para conferir o ritmo de envio — tento de novo na próxima passada.";
+      saida.continuam = devidos.length;
+      return saida;
+    }
+
     const limite = Date.now() + PRAZO_RODADA_MS;
     for (const envio of devidos) {
       if (Date.now() > limite) break;
@@ -141,7 +157,7 @@ export async function despacharEnviosProgramados(agora: Date = new Date()): Prom
           // Peneirar de novo agora, e não só na hora de montar a lista, é o
           // ponto: o envio pode ter sido programado dias antes, e nesse
           // meio-tempo alguém respondeu SAIR.
-          const r = await enviarMensagemClientesAction(lote, texto, envio.midiaId);
+          const r = await enviarMensagemClientes(lote, texto, envio.midiaId);
           // Trava batida no meio da rodada (o teto do dia estourou com a
           // resposta automática mandando junto): para SEM andar o cursor, para
           // a próxima rodada retomar exatamente daqui.

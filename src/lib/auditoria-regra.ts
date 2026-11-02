@@ -61,6 +61,7 @@ export const ROTULO_ACAO: Record<AcaoAudit, string> = {
   chave_ia_alterada: "Chave de IA alterada",
   dados_provisorio_trazidos: "Dados do banco provisório trazidos",
   area_atuacao_alterada: "Área de atuação alterada",
+  ritmo_envio_alterado: "Ritmo do envio em massa alterado",
   offline_sincronizado: "Subiu do modo sem sinal",
 };
 

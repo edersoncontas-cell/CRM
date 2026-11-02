@@ -25,7 +25,9 @@ export type AcaoAudit =
   // O que o vendedor fez no modo sem sinal e subiu quando a internet voltou.
   | "offline_sincronizado"
   // Estado(s) e municípios que ele atende (Configurações → Área de atuação).
-  | "area_atuacao_alterada";
+  | "area_atuacao_alterada"
+  // Ritmo do envio em massa (Marketing → "Ritmo": mensagens por hora).
+  | "ritmo_envio_alterado";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

@@ -34,6 +34,9 @@ export async function lerLimitesEnvio(): Promise<LimitesEnvio> {
       somenteDiasUteis: typeof p.somenteDiasUteis === "boolean" ? p.somenteDiasUteis : LIMITES_PADRAO.somenteDiasUteis,
       pausaMinMs: Number.isFinite(p.pausaMinMs) ? Number(p.pausaMinMs) : LIMITES_PADRAO.pausaMinMs,
       pausaMaxMs: Number.isFinite(p.pausaMaxMs) ? Number(p.pausaMaxMs) : LIMITES_PADRAO.pausaMaxMs,
+      // Gravado antes de o ritmo existir → vale o padrão (5/h), nunca "sem
+      // limite". Negativo vira zero (nada sai), que é o lado seguro.
+      porHora: Number.isFinite(p.porHora) ? Math.max(0, Math.floor(Number(p.porHora))) : LIMITES_PADRAO.porHora,
     };
   } catch {
     return LIMITES_PADRAO;
@@ -53,9 +56,37 @@ export async function gravarLimitesEnvio(l: LimitesEnvio): Promise<void> {
  */
 export async function enviadasHoje(agora: Date = new Date()): Promise<number> {
   const inicio = new Date(`${diaBrasilia(agora)}T00:00:00-03:00`);
+  // isDraft: false — a sugestão do Orientador é gravada como OUT/CRM, mas
+  // não saiu para ninguém; contava no teto e comia as mensagens do dia.
   return db.whatsAppMessage.count({
-    where: { direction: "OUT", origin: "CRM", sentAt: { gte: inicio } },
+    where: { direction: "OUT", origin: "CRM", isDraft: false, sentAt: { gte: inicio } },
   }).catch(() => 0);
+}
+
+/**
+ * Os instantes das mensagens que o CRM mandou na última hora — a base do
+ * ritmo por hora (lib/envio-limites.ts, proximaNoRitmo). Conta também a que
+ * falhou: a tentativa bateu no WhatsApp do mesmo jeito.
+ *
+ * Banco fora do ar devolve null, e quem chama NÃO manda: sem saber quantas
+ * saíram, o padrão que não machuca é esperar a próxima rodada.
+ */
+export async function enviosDaUltimaHora(agora: Date = new Date()): Promise<Date[] | null> {
+  try {
+    const desde = new Date(agora.getTime() - 3_600_000);
+    // O reenvio de falha (cron whatsapp-retry) não muda o sentAt: grava em
+    // lastRetryAt. Sem olhar os dois, o reenvio passaria por fora do ritmo.
+    // Um OR só (dois OR no mesmo objeto se apagam no Prisma).
+    const rows = await db.whatsAppMessage.findMany({
+      where: { direction: "OUT", origin: "CRM", isDraft: false, OR: [{ sentAt: { gte: desde } }, { lastRetryAt: { gte: desde } }] },
+      select: { sentAt: true, lastRetryAt: true },
+      orderBy: { sentAt: "desc" },
+      take: 200,
+    });
+    return rows.flatMap((r) => [r.sentAt, r.lastRetryAt].filter((d): d is Date => !!d && d >= desde));
+  } catch {
+    return null;
+  }
 }
 
 export type Elegibilidade = {

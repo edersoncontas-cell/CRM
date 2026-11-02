@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { checarAgendamento, quandoPorExtenso, MAX_CLIENTES_POR_ENVIO } from "@/lib/envio-programado";
+import { checarAgendamento, quandoPorExtenso, MAX_CLIENTES_POR_ENVIO, RITMOS_ENVIO } from "@/lib/envio-programado";
 import { registrarAudit } from "@/lib/audit";
-import { separarElegiveis } from "@/lib/envio-guarda";
-import { motivosDeFora } from "@/lib/envio-limites";
+import { separarElegiveis, lerLimitesEnvio, gravarLimitesEnvio } from "@/lib/envio-guarda";
+import { motivosDeFora, descreverRitmo } from "@/lib/envio-limites";
 
 // Agendar, listar e cancelar a mensagem em massa marcada para sair mais tarde.
 // A regra de data/hora (fuso de Brasília) e o teto da lista moram em
@@ -32,7 +32,34 @@ export async function programarEnvioAction(
   midiaId: string | null,
   diaISO: string,
   horaHM: string,
-): Promise<{ ok: boolean; erro?: string; quandoTexto?: string; aviso?: string }> {
+): Promise<ResultadoFila> {
+  const check = checarAgendamento(diaISO, horaHM);
+  if (!check.ok) return { ok: false, erro: check.erro };
+  return porNaFila(clienteIds, texto, midiaId, check.quando);
+}
+
+/**
+ * "Enviar agora" do Marketing: a lista entra na fila para AGORA, e o
+ * despachante manda no ritmo (5 por hora, por padrão). Antes o navegador
+ * mandava em lotes enquanto a tela ficava aberta — sem ritmo nenhum além da
+ * pausa entre mensagens, e parando se ele fechasse a tela.
+ */
+export async function enviarAgoraNaFilaAction(
+  clienteIds: string[],
+  texto: string,
+  midiaId: string | null,
+): Promise<ResultadoFila> {
+  return porNaFila(clienteIds, texto, midiaId, new Date());
+}
+
+export type ResultadoFila = { ok: boolean; erro?: string; quandoTexto?: string; aviso?: string; ritmo?: string };
+
+async function porNaFila(
+  clienteIds: string[],
+  texto: string,
+  midiaId: string | null,
+  quando: Date,
+): Promise<ResultadoFila> {
   const ids = Array.from(new Set(clienteIds)).filter(Boolean);
   if (!ids.length) return { ok: false, erro: "Nenhum cliente selecionado." };
   if (ids.length > MAX_CLIENTES_POR_ENVIO) return { ok: false, erro: `No máximo ${MAX_CLIENTES_POR_ENVIO} clientes por envio.` };
@@ -57,12 +84,9 @@ export async function programarEnvioAction(
   const corpo = (texto ?? "").trim();
   if (!corpo && !midiaId) return { ok: false, erro: "Escreva a mensagem ou anexe um arquivo." };
 
-  const check = checarAgendamento(diaISO, horaHM);
-  if (!check.ok) return { ok: false, erro: check.erro };
-
   try {
     await db.envioProgramado.create({
-      data: { quando: check.quando, texto: corpo, clienteIds: elegiveis.liberados, midiaId: midiaId || null },
+      data: { quando, texto: corpo, clienteIds: elegiveis.liberados, midiaId: midiaId || null },
     });
   } catch (e) {
     console.error("[envio-programado] gravar:", e);
@@ -71,7 +95,7 @@ export async function programarEnvioAction(
 
   await registrarAudit({
     acao: "mensagem_enviada", origem: "usuario",
-    descricao: `Mensagem programada para ${elegiveis.liberados.length} cliente(s) em ${quandoPorExtenso(check.quando)}${cortados ? ` (${cortados} fora da campanha)` : ""}.`,
+    descricao: `Mensagem programada para ${elegiveis.liberados.length} cliente(s) em ${quandoPorExtenso(quando)}${cortados ? ` (${cortados} fora da campanha)` : ""}.`,
   }).catch(() => {});
 
   revalidatePath("/marketing");
@@ -85,7 +109,8 @@ export async function programarEnvioAction(
           semTelefone: elegiveis.semTelefone.length,
         })} — mandar para quem nunca falou com você é o que derruba o número.`
     : undefined;
-  return { ok: true, quandoTexto: quandoPorExtenso(check.quando), aviso };
+  const ritmo = descreverRitmo(elegiveis.liberados.length, await lerLimitesEnvio());
+  return { ok: true, quandoTexto: quandoPorExtenso(quando), aviso, ritmo };
 }
 
 export async function listarEnviosProgramadosAction(): Promise<EnvioProgramadoLista[]> {
@@ -152,4 +177,31 @@ export async function cancelarTodosEnviosAction(): Promise<{ ok: boolean; cancel
   }).catch(() => {});
   revalidatePath("/marketing");
   return { ok: true, cancelados: r.count };
+}
+
+const RITMOS_PERMITIDOS: number[] = [...RITMOS_ENVIO];
+
+export async function lerRitmoEnvioAction(): Promise<number> {
+  return (await lerLimitesEnvio()).porHora;
+}
+
+/**
+ * Muda o ritmo da fila (Marketing → "Ritmo"). Vale para o que já está na fila
+ * também: o despachante lê o ritmo a cada passada. Só aceita os valores do
+ * seletor — um número digitado errado (500 por hora) é o disparo em rajada
+ * que derrubou o número.
+ */
+export async function definirRitmoEnvioAction(porHora: number): Promise<{ ok: boolean; erro?: string; porHora?: number }> {
+  const n = Math.floor(Number(porHora));
+  if (!RITMOS_PERMITIDOS.includes(n)) return { ok: false, erro: "Ritmo fora das opções." };
+  try {
+    const atual = await lerLimitesEnvio();
+    await gravarLimitesEnvio({ ...atual, porHora: n });
+  } catch (e) {
+    console.error("[envio-programado] ritmo:", e);
+    return { ok: false, erro: "Não deu para salvar o ritmo (banco sem resposta). Continua o anterior." };
+  }
+  await registrarAudit({ acao: "ritmo_envio_alterado", origem: "usuario", descricao: `Ritmo do envio em massa mudou para ${n} por hora.` }).catch(() => {});
+  revalidatePath("/marketing");
+  return { ok: true, porHora: n };
 }

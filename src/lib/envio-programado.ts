@@ -152,3 +152,10 @@ export function fecharRodada(
     erro: erroFatal ?? `Saiu para ${cursor} de ${total}. O resto sai na próxima rodada.`,
   };
 }
+
+/**
+ * As opções do seletor "Ritmo" do Marketing (mensagens por hora). Mora aqui
+ * porque a tela ("use client") e a action ("use server", que não exporta
+ * constante) usam a mesma lista. 20/h é o teto: uma a cada 3 min.
+ */
+export const RITMOS_ENVIO = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20] as const;

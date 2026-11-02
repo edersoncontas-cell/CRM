@@ -5,7 +5,6 @@ import { PageHeader } from "@/components/ui";
 import { PropostaClient } from "@/components/PropostaClient";
 import { carregarProposta } from "@/lib/proposta-actions";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
-import { isEnabled as whatsappHabilitado } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +20,14 @@ export default async function PropostaPage({ params }: { params: { id: string } 
       </Link>
       <PageHeader
         titulo={`Proposta · ${carregado.contexto.clienteNome}`}
-        subtitulo={`${carregado.contexto.maquina ?? "Máquina a definir"}${carregado.contexto.clienteMunicipio ? ` · ${carregado.contexto.clienteMunicipio}` : ""}. Calcule o custo por hora com os números do cliente, monte a proposta de uma página e envie pelo WhatsApp.`}
+        subtitulo={`${carregado.contexto.maquina ?? "Máquina a definir"}${carregado.contexto.clienteMunicipio ? ` · ${carregado.contexto.clienteMunicipio}` : ""}. Calcule o custo por hora com os números do cliente, monte a proposta de uma página e mande pelo WhatsApp do celular.`}
       />
       <PropostaClient
         negociacaoId={params.id}
         dadosIniciais={carregado.dados}
         contexto={carregado.contexto}
         enviadaEm={carregado.enviadaEm}
-        whatsapp={whatsappHabilitado() && !!carregado.contexto.clienteTelefone}
+        whatsapp={!!carregado.contexto.clienteTelefone}
       />
     </div>
   );

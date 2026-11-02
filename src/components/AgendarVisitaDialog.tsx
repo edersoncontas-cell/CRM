@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { enviarResposta } from "@/lib/actions";
-import { Calendar, MessageCircle, X, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { linkWhatsApp } from "@/lib/whatsapp-link";
+import { Calendar, MessageCircle, X } from "lucide-react";
 
 function saudacao(): string {
   const hora = new Date().getHours();
@@ -22,8 +22,10 @@ function mensagemPadrao(nomeCliente: string): string {
   return `${saudacaoFormatada} ${nome}, estou planejando de passar na região esta semana e gostaria de fazer uma visita, qual o melhor dia posso te encontrar? Você prefere na parte da manhã ou de tarde?`;
 }
 
+// O CRM não manda mais mensagem de conversa (02/11): o botão abre o WhatsApp
+// do celular na conversa do cliente com o convite já escrito. A resposta dele
+// chega ao CRM pelo webhook, e a IA continua achando o dia e a hora nela.
 export function AgendarVisitaDialog({
-  clienteId,
   clienteNome,
   clienteTelefone,
 }: {
@@ -33,32 +35,21 @@ export function AgendarVisitaDialog({
 }) {
   const [aberto, setAberto] = useState(false);
   const [mensagem, setMensagem] = useState("");
-  const [enviando, startEnviar] = useTransition();
-  const [resultado, setResultado] = useState<{ ok: boolean; msg: string } | null>(null);
+  const link = linkWhatsApp(clienteTelefone, mensagem);
 
   function abrir() {
     setMensagem(mensagemPadrao(clienteNome));
-    setResultado(null);
     setAberto(true);
   }
 
   function fechar() {
-    if (enviando) return;
     setAberto(false);
-    setResultado(null);
   }
 
   function enviar() {
-    setResultado(null);
-    startEnviar(async () => {
-      const r = await enviarResposta(clienteId, mensagem);
-      if (r.ok) {
-        setResultado({ ok: true, msg: "✅ Mensagem enviada! Quando o cliente responder com o dia e horário, o CRM adiciona automaticamente à agenda e ao pipeline." });
-        setTimeout(() => { setAberto(false); setResultado(null); }, 3500);
-      } else {
-        setResultado({ ok: false, msg: r.erro ?? "Erro ao enviar." });
-      }
-    });
+    if (!link) return;
+    window.open(link, "_blank", "noopener");
+    setAberto(false);
   }
 
   return (
@@ -84,7 +75,6 @@ export function AgendarVisitaDialog({
               </div>
               <button
                 onClick={fechar}
-                disabled={enviando}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
               >
                 <X size={18} />
@@ -95,7 +85,7 @@ export function AgendarVisitaDialog({
             <div className="p-5">
               {!clienteTelefone && (
                 <div className="mb-4 rounded-lg bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                  ⚠️ Nenhum telefone cadastrado. Adicione o número antes de enviar.
+                  ⚠️ Nenhum telefone válido no cadastro. Adicione o número antes.
                 </div>
               )}
 
@@ -106,50 +96,29 @@ export function AgendarVisitaDialog({
                 value={mensagem}
                 onChange={(e) => setMensagem(e.target.value)}
                 rows={5}
-                disabled={enviando}
                 className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:opacity-60"
               />
               <p className="mt-2 text-xs text-slate-400">
-                💡 Quando o cliente responder com dia e horário, a IA detecta automaticamente e registra na agenda e no pipeline.
+                💡 Abre o WhatsApp do seu celular com o texto pronto — é só apertar enviar lá. Quando o cliente responder com dia e horário, a IA detecta e registra na agenda e no pipeline.
               </p>
 
-              {resultado && (
-                <div
-                  className={`mt-3 rounded-xl px-4 py-3 text-sm ${
-                    resultado.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"
-                  }`}
-                >
-                  {resultado.msg}
-                  {!resultado.ok && (
-                    <a
-                      href="/conexao"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 flex items-center gap-1 font-semibold underline"
-                    >
-                      <ExternalLink size={12} /> Verificar conexão WhatsApp
-                    </a>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Footer */}
             <div className="flex justify-end gap-2 border-t px-5 py-4">
               <button
                 onClick={fechar}
-                disabled={enviando}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Cancelar
               </button>
               <button
                 onClick={enviar}
-                disabled={enviando || !mensagem.trim() || !clienteTelefone}
+                disabled={!mensagem.trim() || !link}
                 className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1da851] disabled:opacity-50"
               >
                 <MessageCircle size={15} />
-                {enviando ? "Enviando…" : "Enviar pelo WhatsApp"}
+                Abrir no WhatsApp
               </button>
             </div>
           </div>

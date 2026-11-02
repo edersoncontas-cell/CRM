@@ -1,30 +1,24 @@
 "use server";
 
-// Mensagem para clientes (tela de Visitas): lista o público (todos, uma
-// cidade ou os aniversariantes), gera o texto por tipo e manda pelo WhatsApp
-// — com ou sem anexo. O envio reaproveita a conversa do Atendimento: a
-// resposta do cliente continua a thread.
+// Mensagem para clientes (Marketing): lista o público (todos, uma cidade ou
+// os aniversariantes) e gera o texto por tipo. O ENVIO não mora aqui: a tela
+// põe a lista na fila (envio-programado-actions.ts) e o despachante manda no
+// ritmo por hora, pelo funil de lib/envio-massa.ts — que não é server action,
+// para o navegador não conseguir mandar por fora da fila.
 
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import * as zapi from "@/lib/zapi";
 import { llmTexto, iaHabilitada } from "@/lib/ai";
-import { enviarResposta } from "@/lib/actions";
-import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
-import { registrarAudit } from "@/lib/audit";
 import { lerParametros } from "@/lib/parametros";
 import { semCodigoPais, diasDesde } from "@/lib/utils";
 import { personalizarTexto, periodoSemanaQueVem } from "@/lib/abordagem-cidade-regra";
 import { diaMes, diasAteAniversario, aniversarioNaJanela } from "@/lib/aniversario-regra";
-import { lerMidiaEnvio, type MidiaGuardada } from "@/lib/midia-envio";
-import { porQueNaoEnviar, explicarBloqueio, pausaHumanaMs, comRodapeDeSaida } from "@/lib/envio-limites";
-import { textoParaCliente } from "@/lib/envio-variacoes";
-import { ROTULO_ENVIO_MASSA } from "@/lib/piloto-regra";
+import { porQueNaoEnviar, explicarBloqueio, descreverRitmo } from "@/lib/envio-limites";
 import { lerLimitesEnvio, enviadasHoje, separarElegiveis } from "@/lib/envio-guarda";
 import { envioPausado } from "@/lib/whatsapp-pausa";
 import { lerConfigAniversario, definirConfigAniversario, textoPadraoAniversario, type ConfigAniversario } from "@/lib/aniversario-automatico";
 import {
-  DATAS_COMEMORATIVAS, modeloPadrao, legendaDaMidia, type Publico, type TipoMensagem,
+  DATAS_COMEMORATIVAS, modeloPadrao, type Publico, type TipoMensagem,
 } from "@/lib/mensagem-clientes-regra";
 
 export type ClienteAlvo = {
@@ -144,120 +138,6 @@ No máximo um emoji, sem título, sem aspas, sem assinatura além do nome ${vend
   }
 }
 
-export type ResultadoEnvio = {
-  enviados: string[];
-  falhas: { id: string; nome: string; erro: string }[];
-  /** Quem a guarda tirou do caminho: saiu da lista, contato frio, sem telefone. */
-  pulados?: { frios: number; pediramSaida: number; semTelefone: number };
-  /** Por que nada saiu: fora da janela, fim de semana, teto do dia estourado. */
-  bloqueio?: string;
-};
-
-async function enviarComMidia(cliente: { id: string; nome: string; telefone: string | null }, midia: MidiaGuardada, legenda: string): Promise<{ ok: boolean; erro?: string }> {
-  if (!cliente.telefone) return { ok: false, erro: "Cliente sem telefone cadastrado." };
-  if (!zapi.isEnabled()) return { ok: false, erro: "WhatsApp não está conectado. Configure em /conexao." };
-  const { conv } = await acharOuCriarConversa({ phone: cliente.telefone, lid: null, isGroup: false, contactName: cliente.nome });
-  const corpo = legenda.trim() || legendaDaMidia(midia.tipo, midia.nome);
-  try {
-    const zapiMessageId =
-      midia.tipo === "image" ? await zapi.sendImageBase64(conv.externalPhone, midia.base64, midia.mimeType, legenda) :
-      midia.tipo === "video" ? await zapi.sendVideoBase64(conv.externalPhone, midia.base64, midia.mimeType, legenda, midia.nome) :
-      await zapi.sendDocumentBase64(conv.externalPhone, midia.base64, midia.nome, midia.mimeType, legenda);
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: ROTULO_ENVIO_MASSA,
-      mediaType: midia.tipo, mediaName: midia.nome, zapiMessageId, sendStatus: "SENT",
-    });
-  } catch (e) {
-    const naoConfirmado = e instanceof zapi.EnvioNaoConfirmadoError;
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: corpo, origin: "CRM", operatorDisplayName: ROTULO_ENVIO_MASSA,
-      mediaType: midia.tipo, mediaName: midia.nome, sendStatus: naoConfirmado ? "UNCONFIRMED" : "FAILED",
-    });
-    if (!naoConfirmado) return { ok: false, erro: `O WhatsApp recusou o envio: ${String(e).slice(0, 160)}` };
-  }
-  await db.cliente.update({ where: { id: cliente.id }, data: { aguardandoResposta: false, ultimoContato: new Date() } });
-  await registrarAudit({
-    acao: "mensagem_enviada", origem: "usuario", entidade: "Cliente", entidadeId: cliente.id,
-    descricao: `${midia.tipo === "image" ? "Imagem" : midia.tipo === "video" ? "Vídeo" : "Documento"} enviado via WhatsApp para ${cliente.nome}`,
-  }).catch(() => {});
-  return { ok: true };
-}
-
-// Manda para um LOTE de clientes (a tela chama em lotes pequenos). Cada um
-// recebe o texto com o próprio nome; com anexo, o texto vai de legenda.
-//
-// ESTE É O FUNIL ÚNICO de toda mensagem em massa do CRM: a tela de Marketing
-// no "enviar agora" e o despachante do envio programado passam os dois por
-// aqui. Por isso as travas moram AQUI dentro e não em quem chama — a trava que
-// só existe em um dos caminhos não é trava, é decoração. O botão "Enviar
-// pelo WhatsApp" da tela não tinha nenhuma, e é o caminho que restringiu o
-// número do vendedor por 24h.
-//
-// São quatro, nesta ordem:
-//   1. janela e teto do dia — fora do horário ou passado do teto, não sai nada;
-//   2. peneira — quem pediu para sair e quem NUNCA falou com a gente ficam de
-//      fora (contato frio é o que vira denúncia, e denúncia derruba número
-//      muito mais rápido que volume);
-//   3. rodapé com a saída da lista, para quem não quer receber ter um botão
-//      que não seja o de denunciar;
-//   4. pausa de gente entre uma mensagem e outra, no lugar dos 0,7s fixos.
-export async function enviarMensagemClientesAction(clienteIds: string[], texto: string, midiaId: string | null): Promise<ResultadoEnvio> {
-  const base = texto.trim();
-  const r: ResultadoEnvio = { enviados: [], falhas: [] };
-  const midia = midiaId ? await lerMidiaEnvio(midiaId) : null;
-  if (midiaId && !midia) {
-    return { enviados: [], falhas: clienteIds.map((id) => ({ id, nome: id, erro: "O anexo expirou — escolha o arquivo de novo." })) };
-  }
-  if (!base && !midia) return r;
-
-  // A TRAVA GERAL vem antes de tudo. E devolve "bloqueio", nunca "falhas":
-  // marcar todo mundo como falha faria o despachante ANDAR o cursor pela lista
-  // inteira com o envio pausado — e quando fosse liberado, os clientes que
-  // "falharam" nunca mais receberiam.
-  if (await envioPausado()) {
-    return { ...r, bloqueio: "Envio de WhatsApp está PAUSADO no CRM — nenhuma mensagem sai." };
-  }
-
-  const lim = await lerLimitesEnvio();
-  let jaHoje = await enviadasHoje();
-  const trava = porQueNaoEnviar(new Date(), jaHoje, lim);
-  if (trava) return { ...r, bloqueio: explicarBloqueio(trava, lim) };
-
-  const pedidos = Array.from(new Set(clienteIds)).slice(0, 5);
-  const elegiveis = await separarElegiveis(pedidos);
-  r.pulados = {
-    frios: elegiveis.frios.length,
-    pediramSaida: elegiveis.pediramSaida.length,
-    semTelefone: elegiveis.semTelefone.length,
-  };
-  const ids = elegiveis.liberados;
-  if (!ids.length) return r;
-
-  // O texto pode ter até 3 versões que se revezam (lib/envio-variacoes.ts):
-  // cada cliente recebe sempre a mesma. O rodapé entra em CADA versão, uma
-  // vez só: comRodapeDeSaida não repete se o texto já falar em SAIR (o
-  // despachante também chama, e texto com dois rodapés é pior que nenhum).
-  const clientes = await db.cliente.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, telefone: true } });
-  const porId = new Map(clientes.map((c) => [c.id, c]));
-  for (let i = 0; i < ids.length; i++) {
-    // O teto é conferido a cada mensagem: a resposta automática está mandando
-    // ao mesmo tempo, e o WhatsApp conta o número, não o motivo.
-    if (porQueNaoEnviar(new Date(), jaHoje, lim)) break;
-    const c = porId.get(ids[i]);
-    if (!c) { r.falhas.push({ id: ids[i], nome: ids[i], erro: "Cliente não encontrado." }); continue; }
-    try {
-      const pessoal = textoParaCliente(base, c);
-      const res = midia ? await enviarComMidia(c, midia, pessoal) : await enviarResposta(c.id, pessoal, "massa");
-      if (res.ok) { r.enviados.push(c.id); jaHoje += 1; }
-      else r.falhas.push({ id: c.id, nome: c.nome, erro: res.erro ?? "Falha ao enviar." });
-    } catch (e) {
-      r.falhas.push({ id: c.id, nome: c.nome, erro: e instanceof Error ? e.message : String(e) });
-    }
-    if (i < ids.length - 1) await new Promise((ok) => setTimeout(ok, pausaHumanaMs(lim)));
-  }
-  return r;
-}
-
 /**
  * O que vai acontecer se ele apertar "enviar agora", ANTES de apertar.
  *
@@ -269,6 +149,8 @@ export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
   /** Os ids que podem receber — a tela manda só para estes. */
   ids: string[];
   liberados: number; frios: number; pediramSaida: number; semTelefone: number; bloqueio?: string;
+  /** "Sai no ritmo de 5 por hora… 40 clientes levam cerca de 8 horas." */
+  ritmo: string;
 }> {
   const lim = await lerLimitesEnvio();
   const pausado = await envioPausado();
@@ -284,6 +166,7 @@ export async function checarEnvioAgoraAction(clienteIds: string[]): Promise<{
     frios: e.frios.length,
     pediramSaida: e.pediramSaida.length,
     semTelefone: e.semTelefone.length,
+    ritmo: descreverRitmo(e.liberados.length, lim),
     bloqueio: pausado
       ? "Envio de WhatsApp está PAUSADO no CRM — nenhuma mensagem sai."
       : trava ? explicarBloqueio(trava, lim) : undefined,

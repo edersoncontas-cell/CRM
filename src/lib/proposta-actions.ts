@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { lerParametros } from "@/lib/parametros";
 import { normalizarDados, calcPadrao, type DadosProposta } from "@/lib/proposta";
-import { gerarPdfProposta, type ContextoProposta } from "@/lib/proposta-pdf";
-import { sendDocumentBase64, isEnabled as whatsappHabilitado } from "@/lib/zapi";
-import { acharOuCriarConversa, inserirMensagem } from "@/lib/whatsapp-store";
+import type { ContextoProposta } from "@/lib/proposta-pdf";
 import { registrarAudit } from "@/lib/audit";
 
 // Proposta inicial: puxa o que já existe na negociação, no cadastro do cliente,
@@ -87,29 +85,17 @@ export async function salvarPropostaAction(negociacaoId: string, dados: DadosPro
   return { ok: true };
 }
 
-export async function enviarPropostaWhatsAppAction(negociacaoId: string): Promise<{ ok: boolean; erro?: string }> {
-  if (!whatsappHabilitado()) return { ok: false, erro: "WhatsApp não configurado (Conexão WhatsApp)." };
-  const carregado = await carregarProposta(negociacaoId);
-  if (!carregado) return { ok: false, erro: "Negociação não encontrada." };
-  const neg = await db.negociacao.findUnique({ where: { id: negociacaoId }, select: { clienteId: true, cliente: { select: { nome: true, telefone: true } } } });
-  if (!neg?.cliente.telefone) return { ok: false, erro: "O cliente não tem telefone cadastrado." };
-  const { dados, contexto } = carregado;
-  const p = await lerParametros();
+// O CRM não manda mais nada pela conversa (02/11): a tela abre o WhatsApp do
+// celular com a legenda pronta e ele anexa o PDF lá. Isto só registra QUANDO
+// ele foi mandar, para a negociação não perder a data — sem enviar nada.
+export async function marcarPropostaEnviadaAction(negociacaoId: string): Promise<{ ok: boolean; erro?: string }> {
+  const neg = await db.negociacao.findUnique({ where: { id: negociacaoId }, select: { clienteId: true, cliente: { select: { nome: true } } } });
+  if (!neg) return { ok: false, erro: "Negociação não encontrada." };
   try {
-    const pdf = gerarPdfProposta(dados, contexto);
-    const nomeArquivo = `Proposta-${(contexto.maquina ?? "maquina").replace(/[^A-Za-z0-9]+/g, "-")}-${contexto.numero}.pdf`;
-    const legenda = `${neg.cliente.nome.split(" ")[0]}, segue a proposta ${contexto.maquina ? `da ${contexto.maquina} ` : ""}em uma página, com a conta que fizemos. Válida até ${new Date(`${dados.validade}T12:00:00-03:00`).toLocaleDateString("pt-BR")}. ${dados.proximoPasso}`;
-    const messageId = await sendDocumentBase64(neg.cliente.telefone, pdf.toString("base64"), nomeArquivo, "application/pdf", legenda);
-    const { conv } = await acharOuCriarConversa({ phone: neg.cliente.telefone, lid: null, isGroup: false, contactName: neg.cliente.nome });
-    await inserirMensagem(conv.id, {
-      direction: "OUT", body: `📎 ${nomeArquivo}\n${legenda}`, mediaType: "document", mediaName: nomeArquivo,
-      zapiMessageId: messageId || null, origin: "CRM", operatorDisplayName: p.nomeVendedor, sendStatus: messageId ? "SENT" : "UNCONFIRMED",
-    });
-    await db.proposta.update({ where: { negociacaoId }, data: { enviadaEm: new Date() } }).catch(() => {});
+    await db.proposta.update({ where: { negociacaoId }, data: { enviadaEm: new Date() } });
     await db.negociacao.update({ where: { id: negociacaoId }, data: { ultimoContato: new Date() } }).catch(() => {});
-    await registrarAudit({ acao: "mensagem_enviada", origem: "usuario", descricao: `Proposta em PDF enviada pelo WhatsApp para ${neg.cliente.nome}.`, entidade: "Negociacao", entidadeId: negociacaoId, clienteId: neg.clienteId }).catch(() => {});
+    await registrarAudit({ acao: "mensagem_enviada", origem: "usuario", descricao: `Proposta aberta no WhatsApp do celular para ${neg.cliente.nome}.`, entidade: "Negociacao", entidadeId: negociacaoId, clienteId: neg.clienteId }).catch(() => {});
     revalidatePath(`/negociacoes/${negociacaoId}/proposta`);
-    revalidatePath("/atendimento");
     return { ok: true };
   } catch (e) {
     return { ok: false, erro: e instanceof Error ? e.message : String(e) };
