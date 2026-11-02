@@ -1,4 +1,4 @@
-# CRM do Edy — continuação
+# CRMaquinas — continuação
 
 Este arquivo é o ponto de partida de uma sessão nova. Cole o conteúdo dele (ou
 mande ler este caminho) e continue de onde parou.

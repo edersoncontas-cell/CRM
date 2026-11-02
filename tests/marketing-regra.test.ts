@@ -10,7 +10,7 @@ const pedido: PedidoPost = {
   canal: "instagram",
   maquina: "CA25 D",
   instrucoes: null,
-  vendedor: "Ederson",
+  vendedor: "Carlos",
   empresa: "New Holland Construction · Dynapac",
   marcas: "New Holland Construction e Dynapac",
   regiao: "sul do Espírito Santo",

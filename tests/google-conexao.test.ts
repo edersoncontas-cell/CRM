@@ -16,7 +16,7 @@ import {
 const CONECTOU = "2026-10-08T12:00:00.000Z";
 const CAIU_EM_7_DIAS = "2026-10-15T12:30:00.000Z";
 const resumo = (p: Partial<{ em: string; ok: boolean; erro: string }> = {}) => ({ em: "2026-10-20T10:00:00.000Z", ok: true, ...p });
-const tokens = (p: Partial<{ conectadoEm: string; email: string | null; problema: ProblemaGoogle }> = {}) => ({ conectadoEm: CONECTOU, email: "edy@x.com", ...p });
+const tokens = (p: Partial<{ conectadoEm: string; email: string | null; problema: ProblemaGoogle }> = {}) => ({ conectadoEm: CONECTOU, email: "vendedor@x.com", ...p });
 
 describe("ehErroDeReconexao", () => {
   it("reconhece o que o Google devolve e a frase gravada no resumo", () => {
@@ -78,7 +78,7 @@ describe("situacaoGoogle", () => {
   it("token com a marca do problema: reconectar (com dias e modo teste)", () => {
     const problema = { em: CAIU_EM_7_DIAS, codigo: "invalid_grant", descricao: "Token has been expired or revoked." };
     const s = situacaoGoogle({ configurado: true, tokens: tokens({ problema }), resumo: null });
-    expect(s).toMatchObject({ tipo: "reconectar", email: "edy@x.com", desde: CAIU_EM_7_DIAS, modoTeste: true });
+    expect(s).toMatchObject({ tipo: "reconectar", email: "vendedor@x.com", desde: CAIU_EM_7_DIAS, modoTeste: true });
   });
 
   it("A CONTA DO PRINT: token sem marca (versão antiga) + última rodada com o erro do Google → reconectar", () => {
@@ -192,7 +192,7 @@ vi.mock("@/lib/contatos-bloqueados", () => ({
 
 const CHAVE = "google.oauth";
 const gravarTokens = (p: Record<string, unknown> = {}) => memoria.set(CHAVE, JSON.stringify({
-  refreshToken: "rt-velho", accessToken: "", expiraEm: 0, email: "edy@x.com", conectadoEm: CONECTOU, ...p,
+  refreshToken: "rt-velho", accessToken: "", expiraEm: 0, email: "vendedor@x.com", conectadoEm: CONECTOU, ...p,
 }));
 const lerGravado = () => JSON.parse(memoria.get(CHAVE) ?? "null");
 
@@ -277,7 +277,7 @@ describe("reconectar", () => {
     const g = await import("@/lib/integrations/google");
     gravarTokens({ problema: { em: CAIU_EM_7_DIAS, codigo: "invalid_grant", descricao: "x" } });
     fetchFalso.mockImplementation(async (url: string) => ({
-      json: async () => (String(url).includes("userinfo") ? { email: "edy@x.com" } : { access_token: "at-novo", refresh_token: "rt-novo", expires_in: 3600 }),
+      json: async () => (String(url).includes("userinfo") ? { email: "vendedor@x.com" } : { access_token: "at-novo", refresh_token: "rt-novo", expires_in: 3600 }),
     }));
     await g.trocarCodigoGoogle("codigo");
     const t = lerGravado();

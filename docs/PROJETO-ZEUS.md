@@ -129,7 +129,7 @@
   qualquer remetente de WhatsApp a um `Cliente`, sem revisão humana, e a tool `detalhes_cliente` do Cérebro
   expondo o corpo bruto dessas mensagens ao modelo) abriram o primeiro caminho de um remetente externo não
   autenticado até esse sink — um contato mandando `&lt;img src=x onerror=...&gt;` no WhatsApp podia rodar
-  JavaScript na sessão autenticada do Ederson se ele pedisse ao Cérebro para citar a mensagem. Corrigido
+  JavaScript na sessão autenticada do vendedor se ele pedisse ao Cérebro para citar a mensagem. Corrigido
   escapando o texto ANTES das substituições de markdown em `renderMarkdown()`. Outros achados do scan
   (SSRF via `mediaUrl` do webhook, rotas sem `APP_PASSWORD` configurado) ficaram abaixo do limiar de confiança
   exigido — dependem de configurações que já são escolhas conscientes de segurança documentadas fora do
@@ -490,7 +490,7 @@ Novo agente interno que governa o CRM. Implementação realista sobre a infra ex
    - **Fila de trabalho**: processar mensagens com `processedAt=null` (pipeline da Fase 2 como fallback do webhook), transcrever áudios pendentes, reprocessar falhas.
    - **Higiene de dados (auto-correção)**: clientes duplicados por telefone (fundir/sugerir fusão), conversas duplicadas, clientes sem município com cidade detectável nas conversas, telefones mal formatados (normalizar), negociações abertas sem `ultimoContato` há 30+ dias (sugerir arquivamento), `Cliente.aguardandoResposta` fantasma (já respondido).
    - **Alertas comerciais para a tabela `Alerta`** (hoje órfã): cliente esfriando (sem contato há X dias com negociação aberta), visita amanhã sem confirmação, concorrente citado em conversa recente, cliente aguardando resposta há mais de N horas.
-3. **Cron `/api/cron/zeus-diario` (6h da manhã)** — **Briefing matinal via WhatsApp para o próprio vendedor** (enviar para o número do Ederson via Z-API): visitas do dia, quem está aguardando resposta, top 3 negociações para atacar hoje (score), alertas abertos, saúde do sistema. Gerado pelo modelo com as tools de leitura da Fase 3.
+3. **Cron `/api/cron/zeus-diario` (6h da manhã)** — **Briefing matinal via WhatsApp para o próprio vendedor** (enviar para o número do vendedor via Z-API): visitas do dia, quem está aguardando resposta, top 3 negociações para atacar hoje (score), alertas abertos, saúde do sistema. Gerado pelo modelo com as tools de leitura da Fase 3.
 4. **Painel `/zeus`** (nova página, tema "centro de comando"): status ao vivo dos health checks, feed do `ZeusEvent` + `AuditLog`, contadores (mensagens processadas, ações automáticas, correções de dados), botões de controle (pausar auto-resposta, modo auditoria, forçar tick), e o **relatório de bugs de código** que o ZEUS detectar (erros repetidos em runtime) formatado para colar numa sessão do Claude Code.
 5. **Captura de erros de runtime**: helper `zeusReport(err, contexto)` usado nos catch das rotas críticas + `global-error.tsx` no App Router → grava `ZeusEvent tipo:"erro"`; o tick agrupa erros repetidos e gera diagnóstico com IA (arquivo provável, causa provável). É assim que "o ZEUS encontra bugs" — a correção de código é sugerida, não auto-deployada.
 6. **Auto-reparo dentro do possível**: retries com backoff (mensagens, transcrição, chamadas IA), re-agendamento de respostas perdidas, reconciliação de `sendStatus` UNCONFIRMED consultando a Z-API, limpeza de rascunhos órfãos.

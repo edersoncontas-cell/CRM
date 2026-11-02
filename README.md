@@ -1,4 +1,4 @@
-# CRM do Edy — vendas de máquinas pesadas com IA
+# CRMaquinas — vendas de máquinas pesadas com IA
 
 CRM pessoal de um vendedor de **New Holland Construction** (retroescavadeiras,
 escavadeiras, pás-carregadeiras, motoniveladoras) e **Dynapac** (rolos) no sul
@@ -82,5 +82,5 @@ de Configurações, não em variáveis.
 
 - `docs/GRATUITO.md` — operação com custo zero.
 - `docs/GOOGLE.md` — Google Agenda e Contatos.
-- `docs/PROJETO-ZEUS.md`, `docs/PROJETO-ZEUS-FASE-2B.md`, `docs/ROADMAP-CRM-EDY.md`
+- `docs/PROJETO-ZEUS.md`, `docs/PROJETO-ZEUS-FASE-2B.md`, `docs/ROADMAP-CRMAQUINAS.md`
   — histórico de construção e roadmap.

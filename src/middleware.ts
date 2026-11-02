@@ -11,7 +11,7 @@ export async function middleware(req: NextRequest) {
   // rodava em produção. Protegido pelo próprio CRON_SECRET (x-cron-secret),
   // igual às rotas /api/cron/*.
   // As demais rotas /api/zapi/* (status, qr) exigem login — o navegador do
-  // Ederson manda o cookie, então funcionam normalmente para ele.
+  // o vendedor manda o cookie, então funcionam normalmente para ele.
   // /sw.js e /manifest.json não têm nada de sigiloso e PRECISAM abrir sem
   // login: o navegador recusa service worker desviado para /login ("script
   // behind a redirect") e busca o manifesto sem cookie. Atrás do login, o

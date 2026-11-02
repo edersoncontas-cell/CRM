@@ -15,7 +15,7 @@ const inter = Inter({
 
 export async function generateMetadata(): Promise<Metadata> {
   const p = await lerParametros().catch(() => null);
-  const nome = p?.nomeCrm ?? "CRM DO EDY";
+  const nome = p?.nomeCrm ?? "CRMaquinas";
   return {
   title: `${nome} — Vendas Inteligentes`,
   description: `CRM com IA para vendas de máquinas pesadas (${p?.marcas ?? "New Holland · Dynapac"}).`,

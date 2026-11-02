@@ -225,7 +225,7 @@ export function gerarPdfRelatorio(linhas: LinhaRelatorio[], periodo: { de: Date;
   for (let p = 1; p <= paginas; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(150);
-    doc.text(`CRM New Holland / Dynapac  •  Página ${p} de ${paginas}`, 210 - margem, 297 - 8, { align: "right" });
+    doc.text(`CRMaquinas  •  New Holland / Dynapac  •  Página ${p} de ${paginas}`, 210 - margem, 297 - 8, { align: "right" });
   }
 
   return Buffer.from(doc.output("arraybuffer"));

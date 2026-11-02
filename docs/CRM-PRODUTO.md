@@ -1,4 +1,4 @@
-# CRM do Edy — de ferramenta pessoal a produto da concessionária
+# CRMaquinas — de ferramenta pessoal a produto da concessionária
 
 Documento de trabalho para o teste de um mês e a apresentação à diretoria.
 Escrito em 22/09/2026.

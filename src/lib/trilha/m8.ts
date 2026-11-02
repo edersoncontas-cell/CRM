@@ -203,7 +203,7 @@ export const M8: Modulo = {
           { quem: "vendedor", texto: "Combinado. Enquanto isso, eu vou pedir ao banco a simulação com 6 meses de carência, que você comentou. Te ligo quinta às 10h com o número. Quinta está bom, ou prefere sexta?" },
           { quem: "cliente", texto: "Quinta tá bom." },
           { quem: "nota", texto: "Valor (simulação nova), data (quinta 10h) e alternativa de horário. Na quinta, a ligação é esperada — o cliente atende." },
-          { quem: "vendedor", texto: "(quinta, 10h) Seu Nelson, Edy. Saiu a simulação com carência: parcela de 12.400 começando em março. Mando o print agora. Você chegou a olhar a proposta? Ficou alguma ponta solta?" },
+          { quem: "vendedor", texto: "(quinta, 10h) Seu Nelson, Rafael. Saiu a simulação com carência: parcela de 12.400 começando em março. Mando o print agora. Você chegou a olhar a proposta? Ficou alguma ponta solta?" },
           { quem: "cliente", texto: "Olhei. Só quero ver se a entrega segura mesmo os 20 dias." },
           { quem: "vendedor", texto: "Confirmo com a fábrica por escrito e te mando até amanhã 12h. Se confirmar, a gente assina segunda?" },
         ] },
@@ -439,7 +439,7 @@ export const M8: Modulo = {
           ["Ganha: 'preço bom'", "'Você foi o único que veio na obra e fez a conta comigo'", "Diagnóstico e conta ao vivo", "4 e 5 (repetir)"],
         ] },
         { tipo: "dialogo", titulo: "A ligação de perda", falas: [
-          { quem: "vendedor", texto: "Seu Jorge, é o Edy. Não estou ligando para reabrir nada; sei que você fechou com a outra marca e desejo que dê tudo certo. Estou ligando para aprender: o que pesou mais na decisão?" },
+          { quem: "vendedor", texto: "Seu Jorge, é o Rafael. Não estou ligando para reabrir nada; sei que você fechou com a outra marca e desejo que dê tudo certo. Estou ligando para aprender: o que pesou mais na decisão?" },
           { quem: "cliente", texto: "Olha, o preço deles foi um pouco menor, mas não foi isso. O vendedor deles trouxe o gerente da pedreira do Zé pra conversar comigo. Eu vi a máquina funcionando lá. Você me falou da máquina, mas eu não vi." },
           { quem: "vendedor", texto: "Entendi. Se eu tivesse levado você na pedreira do Roberto, em Vargem Alta, teria mudado alguma coisa?" },
           { quem: "cliente", texto: "Provavelmente. Eu queria ver." },

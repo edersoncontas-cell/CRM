@@ -4,9 +4,9 @@
 // montado com `${nomeDoVendedor}: ${body}`, e o body de uma mídia é o nome do
 // arquivo ou um rótulo com emoji. Uma linha como
 //
-//     [15/09 10:22] Ederson: Ficha_tecnica_E145C.pdf
+//     [15/09 10:22] Carlos: Ficha_tecnica_E145C.pdf
 //
-// não diz que aquilo é anexo, nem de que lado veio — e "Ederson" é só um nome
+// não diz que aquilo é anexo, nem de que lado veio — e "Carlos" é só um nome
 // próprio qualquer para o modelo. Daí sai "o cliente enviou documentos".
 //
 // Estes testes prendem o formato novo, que é a base de toda a correção.

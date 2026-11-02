@@ -157,7 +157,7 @@ describe("NEGOCIAÇÃO é fase aberta, não venda", () => {
 describe("a cor vem do papel, nunca do título", () => {
   it("renomear a coluna não muda a cor de lugar", () => {
     expect(corDaColuna({ titulo: "OPORTUNIDADE", papel: "em_negociacao" }))
-      .toBe(corDaColuna({ titulo: "Nome que o Edy inventar", papel: "em_negociacao" }));
+      .toBe(corDaColuna({ titulo: "Nome que o Marcos inventar", papel: "em_negociacao" }));
   });
 
   it("cada papel tem a sua variável, e nenhuma se repete", () => {

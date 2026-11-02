@@ -68,7 +68,7 @@ describe("limpeza das mensagens que falharam acha TODAS as versões", () => {
     expect(trechosDoDisparo(t)).toEqual([trechoInvariante(V1), trechoInvariante(V2)]);
   });
   it("mensagem da versão 2 é reconhecida como do disparo", () => {
-    const msg2 = personalizarTexto(comRodapeDeSaida(V2), "Edy");
+    const msg2 = personalizarTexto(comRodapeDeSaida(V2), "Marcos");
     expect(ehDeAlgumTrecho(msg2, trechosDoDisparo(t))).toBe(true);
     expect(ehDeAlgumTrecho("Passo aí terça de manhã, pode ser?", trechosDoDisparo(t))).toBe(false);
   });

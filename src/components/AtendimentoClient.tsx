@@ -83,7 +83,7 @@ type Conexao = { configurado: boolean; conectado: boolean; provedor: "evolution"
 type Recebimento = { ultimaEntrega: string | null; ultimoStatus: string | null; provisorioPendente: boolean };
 type Filtro = "todas" | "nao_lidas" | "aguardando" | "rascunho" | "sem_vinculo";
 
-// Chips visíveis na barra de filtros — só os dois pedidos pelo Edy. Os demais
+// Chips visíveis na barra de filtros — só os dois pedidos pelo o vendedor. Os demais
 // valores de Filtro continuam existindo (setFiltro("nao_lidas") no badge de
 // não lidas, por exemplo), só não ganham botão aqui.
 const FILTROS: { id: Filtro; label: string }[] = [

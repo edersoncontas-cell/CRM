@@ -76,7 +76,7 @@ export type ContextoTexto = { cidade?: string; periodo?: string; data?: DataCome
 
 // Texto que vale mesmo sem IA configurada — sempre com {nome}.
 export function modeloPadrao(tipo: TipoMensagem, ctx: ContextoTexto): string {
-  const vendedor = ctx.vendedor || "Edy";
+  const vendedor = ctx.vendedor || "Vendedor";
   const marcas = ctx.marcas || "New Holland Construction e Dynapac";
   if (tipo === "visita") return modeloAbordagemPadrao(ctx.cidade || "sua cidade", ctx.periodo || "na semana que vem");
   if (tipo === "promocao") {

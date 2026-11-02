@@ -823,7 +823,7 @@ export const SCRIPTS_WHATSAPP: ScriptWhatsApp[] = [
   {
     situacao: "Primeiro contato — lead frio",
     contexto: "Cliente nunca conversou com voce antes",
-    mensagem: "Bom dia, [Nome]. Meu nome e Ederson, trabalho com maquinas New Holland e Dynapac aqui no sul do ES. Vi que voce atua com [tipo de obra] e quero entender se faz sentido conversar sobre como reduzir o custo operacional da sua frota. Tem 10 minutos esta semana?",
+    mensagem: "Bom dia, [Nome]. Meu nome e [Seu nome], trabalho com maquinas New Holland e Dynapac aqui no sul do ES. Vi que voce atua com [tipo de obra] e quero entender se faz sentido conversar sobre como reduzir o custo operacional da sua frota. Tem 10 minutos esta semana?",
     followUp: "Oi [Nome], so para nao perder o contato — conseguiu ver minha mensagem anterior? Qualquer duvida sobre as maquinas New Holland, pode me chamar."
   },
   {

@@ -88,7 +88,7 @@ function ContadorAlertas({ href, total, alta }: { href: string; total: number; a
   );
 }
 
-export function Sidebar({ nome = "CRM DO EDY", sub = "New Holland · Dynapac" }: { nome?: string; sub?: string } = {}) {
+export function Sidebar({ nome = "CRMaquinas", sub = "New Holland · Dynapac" }: { nome?: string; sub?: string } = {}) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
   const [ocultos, setOcultos] = useState<string[]>([]);

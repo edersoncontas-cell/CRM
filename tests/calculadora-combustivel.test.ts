@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calcularCombustivel, calcCombustivelPadrao } from "@/lib/calculadora-combustivel";
 
 describe("calculadora de combustível", () => {
-  it("exemplo do Edy: 12 L/h × 10 L/h, R$ 6, 150 h/mês, 5 anos", () => {
+  it("exemplo do Marcos: 12 L/h × 10 L/h, R$ 6, 150 h/mês, 5 anos", () => {
     const r = calcularCombustivel({ ...calcCombustivelPadrao(), concorrente: { nome: "PC130", valor: 590000, consumoLh: 12 }, newHolland: { nome: "E145C", valor: 650000, consumoLh: 10 } });
     expect(r.difLh).toBe(2);
     expect(r.litrosMes).toBe(300);

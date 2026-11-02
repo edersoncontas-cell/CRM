@@ -1,6 +1,6 @@
 {
-  "name": "CRM DO EDY — Vendas NH",
-  "short_name": "CRM Edy",
+  "name": "CRMaquinas — Vendas NH",
+  "short_name": "CRMaquinas",
   "description": "CRM pessoal com IA para vendas de máquinas pesadas (New Holland · Dynapac).",
   "start_url": "/dashboard",
   "display": "standalone",

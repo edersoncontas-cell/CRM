@@ -64,13 +64,13 @@ Tamanho: **P** = um dia, **M** = alguns dias, **G** = uma semana ou mais.
   pós-venda** — **M** cada.
 - **Compromisso fixo da semana** ("REUNIÃO PME VITÓRIA" toda segunda) — **P**.
   Fixo em Visitas e no calendário.
-- **Academia** (trilha m1–m10 cita "Edy", NH e ES) — **G**: precisa de
+- **Academia** (trilha m1–m10 cita um vendedor fictício, NH e ES) — **G**: precisa de
   conteúdo novo, não só de troca de nome.
 
 ### Identidade
-- **Logo, ícone e cores** — **M**. "CRM DO EDY" no `manifest.json`, abertura,
+- **Logo, ícone e cores** — **M**. "CRMaquinas" no `manifest.json`, abertura,
   login, rodapé do menu ("Vendas com IA · Sul do ES"), título do push
-  ("CRM Edy"), ícone de escavadeira e o amarelo NH.
+  ("CRMaquinas"), ícone de escavadeira e o amarelo NH.
 - **Telefone dele no código** (`28999798168` em `telefone-valido`,
   `google-contatos-util`, `actions.ts`, `ImportarClientes`) — **P**: vira o
   telefone do vendedor em Parâmetros.
@@ -95,7 +95,7 @@ Tamanho: **P** = um dia, **M** = alguns dias, **G** = uma semana ou mais.
 
 ## 4. Antes de vender: armadilhas de instalação nova
 
-Coisas que hoje são do Edy e **machucariam** outro vendedor se ficassem como
+Coisas que hoje são do vendedor original e **machucariam** outro vendedor se ficassem como
 estão:
 
 1. `DATA_CORTE_INICIAL` (16/09/2026) apagaria as conversas anteriores de quem

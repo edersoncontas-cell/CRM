@@ -20,7 +20,7 @@ const TERMOS_NAO_CLIENTE = [
   "consultoria", "bcnh", "hotel",
 ];
 
-// Regiões de outros vendedores — com os novos nomes solicitados pelo Ederson.
+// Regiões de outros vendedores — com os novos nomes solicitados pelo o vendedor.
 export const REGIOES_FORA_AREA = ["Cliente Cristiano", "Cliente Welligton"];
 
 const MUNICIPIOS_REMOVER = ["Palantino", "Palatino", "TINAPÁ", "Tinapá", "Interior de Goias", "Interior de Goiás", "Patrocínio", "Patrocinio"];
@@ -38,7 +38,7 @@ const MUNICIPIOS_GARANTIDOS: { nome: string; lat: number; lng: number }[] = [
   { nome: "Alfredo Chaves", lat: -20.6367, lng: -40.7508 },
 ];
 
-// Agrupamento de municípios em regiões, definido pelo Ederson para direcionar
+// Agrupamento de municípios em regiões, definido pelo o vendedor para direcionar
 // rotas de visita. Municípios que não aparecem em nenhuma lista abaixo ficam
 // sem região atribuída (null) — reportados separadamente para confirmação.
 export const REGIOES_MUNICIPIOS: Record<string, string[]> = {

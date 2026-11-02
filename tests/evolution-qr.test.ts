@@ -21,7 +21,7 @@ describe("extrairBase64Qr", () => {
   });
 
   it("devolve null quando não há QR nenhum (só o estado)", () => {
-    expect(extrairBase64Qr({ instance: { instanceName: "edy", state: "connecting" } })).toBeNull();
+    expect(extrairBase64Qr({ instance: { instanceName: "crm", state: "connecting" } })).toBeNull();
     expect(extrairBase64Qr({ base64: "curto" })).toBeNull();
     expect(extrairBase64Qr({})).toBeNull();
   });

@@ -8,7 +8,7 @@ custo. Leva uns 10 minutos, uma vez só.
 ## 1. Criar o projeto no Google Cloud
 
 1. Abra <https://console.cloud.google.com/> logado com a sua conta Google.
-2. No topo, clique no seletor de projeto → **Novo projeto** → nome `CRM do Edy`
+2. No topo, clique no seletor de projeto → **Novo projeto** → nome `CRMaquinas`
    → **Criar**. Selecione o projeto criado.
 
 ## 2. Ativar as duas APIs
@@ -22,7 +22,7 @@ custo. Leva uns 10 minutos, uma vez só.
 1. Menu ☰ → **Google Auth Platform** (antes chamado **Tela de permissão OAuth**;
    em inglês, "OAuth consent screen").
 2. Tipo de usuário: **Externo** → **Criar**.
-3. Nome do app: `CRM do Edy`; e-mail de suporte e de contato: o seu. **Salvar**.
+3. Nome do app: `CRMaquinas`; e-mail de suporte e de contato: o seu. **Salvar**.
 4. Em **Público-alvo / Usuários de teste**, clique em **Adicionar usuários** e
    coloque o seu próprio e-mail Google.
 5. **Publique o app** (ainda em **Público-alvo**, em inglês *Audience*): em
@@ -72,7 +72,7 @@ custo. Leva uns 10 minutos, uma vez só.
 2. Escolha a sua conta, aceite as permissões (agenda e contatos — leitura e
    gravação, para os clientes do CRM poderem ir para a sua agenda).
    Se aparecer "O Google não verificou este app", clique em **Avançado** →
-   **Acessar CRM do Edy** (é o seu próprio app).
+   **Acessar CRMaquinas** (é o seu próprio app).
 3. De volta ao CRM, o card mostra o e-mail conectado. Pronto:
    - toda visita nova (formulário, voz, IA ou WhatsApp) entra na agenda;
    - remover a visita no CRM apaga o evento;

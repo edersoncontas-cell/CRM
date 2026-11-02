@@ -261,7 +261,7 @@ export const M9: Modulo = {
         { tipo: "p", texto: "Os clientes da sua carteira estão na lista de prospecção de todos os concorrentes, com um sinal muito forte: 'já compra máquina nova'. Eles vão visitar, oferecer avaliação da sua máquina para troca, prometer entrega rápida e preço menor. A defesa não é falar mal deles nem pedir lealdade: é ser tão presente e tão útil que a visita do concorrente pareça um incômodo. Quem tem os números da operação do cliente (horas, consumo, custo real), quem antecipa a troca antes de a máquina dar problema e quem conhece o operador, o mecânico e o sócio é quem fica com a próxima compra." },
         { tipo: "framework", nome: "As 5 camadas de defesa", origem: "Account management defensivo (Konrath; prática de key accounts)", passos: [
           "Presença nos marcos: 30/60/180/365 cumpridos sem falha. Cliente visitado quatro vezes ao ano por você e uma vez pelo concorrente não muda.",
-          "Dados que só você tem: custo/hora real, consumo medido, histórico de chamados e revisões, valor de revenda estimado. Ao concorrente, o cliente diz 'o Edy tem a conta inteira da minha máquina'.",
+          "Dados que só você tem: custo/hora real, consumo medido, histórico de chamados e revisões, valor de revenda estimado. Ao concorrente, o cliente diz 'o Rafael tem a conta inteira da minha máquina'.",
           "Antecipação da troca: a partir de 6.000–8.000 horas (ou 4 anos), traga o plano de troca antes de a máquina dar problema, com a usada valendo o máximo. Concorrente chega quando ela já está quebrando; você chega antes.",
           "Relação em rede: operador, mecânico, sócio, contador, encarregado. Se você só conhece o dono, uma mudança de humor perde a conta. Se conhece cinco pessoas, a conta tem cinco defensores.",
           "Reação rápida a problema: a conta se perde no chamado mal atendido, não na visita do concorrente. Cada problema resolvido com presença é uma camada a mais.",
@@ -431,7 +431,7 @@ export const M9: Modulo = {
           ["Manutenção que evita parada: os 10 itens diários", "Operadores e mecânicos", "Relação com o usuário; cross-sell de plano e peças"],
         ] },
         { tipo: "dialogo", titulo: "Convite da associação", falas: [
-          { quem: "cliente", texto: "(presidente da associação de empreiteiros) Edy, o pessoal vive reclamando de máquina parada. Você toparia falar na reunião do mês que vem? Mas não pode ser propaganda." },
+          { quem: "cliente", texto: "(presidente da associação de empreiteiros) Rafael, o pessoal vive reclamando de máquina parada. Você toparia falar na reunião do mês que vem? Mas não pode ser propaganda." },
           { quem: "vendedor", texto: "Topo, e concordo: nada de propaganda. Vou falar de como fazer a conta de custo por hora e o que olhar antes de comprar qualquer marca. Levo a calculadora e a gente faz a conta ao vivo com os números de quem quiser. Vinte minutos e depois perguntas." },
           { quem: "nota", texto: "Aceita a condição, define o formato de ensino, oferece a conta ao vivo. As perguntas do fim são os leads." },
           { quem: "cliente", texto: "Assim é bom. Vai ter uns 30 empreiteiros." },

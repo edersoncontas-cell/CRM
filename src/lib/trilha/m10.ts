@@ -213,7 +213,7 @@ export const M10: Modulo = {
           "Sexta à tarde é sagrada para aprender: win/loss, treino com IA, revisão espaçada, painel. É a hora em que o vendedor mediano 'fecha a semana mais cedo' e o de elite afia o machado.",
         ] },
         { tipo: "dialogo", titulo: "Protegendo o bloco sem perder o cliente", falas: [
-          { quem: "cliente", texto: "(8h10, terça, mensagem) Edy, passa aqui hoje de manhã pra gente ver aquela proposta? Coisa rápida." },
+          { quem: "cliente", texto: "(8h10, terça, mensagem) Rafael, passa aqui hoje de manhã pra gente ver aquela proposta? Coisa rápida." },
           { quem: "vendedor", texto: "(às 9h, no fim do bloco) Bom dia, seu Marcos! Hoje de manhã estou com a agenda fechada. Quinta é o meu dia em Guaçuí: passo aí às 9h com a simulação nova de carência, que muda a proposta a seu favor. Se for algo que não pode esperar quinta, me liga que eu ajusto." },
           { quem: "nota", texto: "Respondeu na janela, ofereceu dia e hora com valor novo, e deixou a porta da urgência real aberta (ligação). Nove em dez 'coisa rápida' cabem na quinta." },
           { quem: "cliente", texto: "Quinta tá ótimo. Era só pra ver a parcela mesmo." },

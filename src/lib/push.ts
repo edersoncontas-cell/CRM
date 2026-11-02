@@ -8,7 +8,7 @@ export async function enviarPushNotificacao(opts: {
 }): Promise<void> {
   const pubKey = process.env.VAPID_PUBLIC_KEY;
   const privKey = process.env.VAPID_PRIVATE_KEY;
-  const email = process.env.VAPID_CONTACT_EMAIL ?? "mailto:ederson@crm.app";
+  const email = process.env.VAPID_CONTACT_EMAIL ?? "mailto:contato@crm.app";
 
   if (!pubKey || !privKey) return;
 

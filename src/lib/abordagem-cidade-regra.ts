@@ -23,7 +23,7 @@ export function personalizarTexto(texto: string, nome: string): string {
 
 // Texto que vale mesmo sem IA configurada.
 export function modeloAbordagemPadrao(cidade: string, periodo: string): string {
-  return `Olá {nome}, tudo bem? Aqui é o Edy, da New Holland Construction. ` +
+  return `Olá {nome}, tudo bem? Aqui é da New Holland Construction. ` +
     `Vou estar em ${cidade} ${periodo} visitando alguns clientes e queria passar aí para conversar sobre máquinas ` +
     `e ver como posso ajudar na sua operação. Qual dia fica melhor para você?`;
 }

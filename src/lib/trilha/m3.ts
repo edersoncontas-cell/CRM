@@ -41,7 +41,7 @@ export const M3: Modulo = {
           ["Locadoras", "Locatário recorrente há 12+ meses", "Conta do aluguel acumulado × parcela"],
         ] },
         { tipo: "dialogo", titulo: "O sinal da usada anunciada", falas: [
-          { quem: "vendedor", texto: "Seu Gilson, é o Edy, da New Holland de Cachoeiro. Vi o anúncio da sua 580 no Mercado Livre. Está trocando ou reduzindo a frota?" },
+          { quem: "vendedor", texto: "Seu Gilson, é o Rafael, da New Holland de Cachoeiro. Vi o anúncio da sua 580 no Mercado Livre. Está trocando ou reduzindo a frota?" },
           { quem: "cliente", texto: "Trocando. Ela tá com 11 mil horas, não compensa mais." },
           { quem: "vendedor", texto: "Faz sentido. Já decidiu pela próxima ou ainda está olhando?" },
           { quem: "cliente", texto: "Tô olhando. Vou ver uma da JCB semana que vem." },
@@ -121,7 +121,7 @@ export const M3: Modulo = {
           ["E-mail", "Formal; serve para engenheiro e compras", "Interior lê pouco e-mail", "Prefeituras, construtoras com setor de compras"],
         ] },
         { tipo: "dialogo", titulo: "O toque 4: 'passei aqui'", falas: [
-          { quem: "vendedor", texto: "(na obra) Seu Nelson? Edy, da New Holland. Te mandei mensagem semana passada sobre a obra do loteamento. Tava passando pra Alegre e resolvi parar dois minutos: trouxe a conta da B95C pra vala que você está abrindo aqui. Não vou tomar seu tempo, só deixo com você." },
+          { quem: "vendedor", texto: "(na obra) Seu Nelson? Rafael, da New Holland. Te mandei mensagem semana passada sobre a obra do loteamento. Tava passando pra Alegre e resolvi parar dois minutos: trouxe a conta da B95C pra vala que você está abrindo aqui. Não vou tomar seu tempo, só deixo com você." },
           { quem: "cliente", texto: "Ah, você que mandou o negócio do consumo. Vi sim, só não respondi. Deixa eu ver isso aí." },
           { quem: "nota", texto: "A presença física com um motivo concreto (a conta) e a promessa de brevidade tiram a barreira. O prospect lembra dos toques anteriores: a familiaridade trabalhou." },
           { quem: "vendedor", texto: "Isso aqui é com 150 horas por mês; se você me disser quantas horas roda, eu ajusto. Quantas está rodando a que você tem?" },
@@ -130,8 +130,8 @@ export const M3: Modulo = {
         ] },
         { tipo: "caso", titulo: "Caso: o vendedor que desistia no segundo toque", situacao: "Ao revisar o CRM, o gerente viu que o vendedor cadastrava 25 leads por mês, mas 70% tinham só um ou dois contatos registrados e status 'sem retorno'.", acao: "Implantou a cadência 7×21 com tarefas automáticas no CRM: cada lead novo recebia sete próximas ações datadas, cada uma com o conteúdo de valor a enviar.", resultado: "A taxa de resposta dos leads subiu de 11% para 38% em dois meses. As visitas dobraram sem aumentar o número de leads cadastrados.", licao: "O problema não era falta de leads: era desistir no toque em que a maioria das respostas ainda não veio. Cadência é disciplina, e disciplina se agenda." },
         { tipo: "script", titulo: "Os sete toques prontos (adapte o sinal)", itens: [
-          "T1 (WhatsApp): 'Seu Nelson, Edy da New Holland Cachoeiro. Vi que vocês começaram o loteamento na ES-181. Fiz a conta de custo/hora de uma B95C pra vala nesse tipo de solo — te mando? É uma página.'",
-          "T2 (ligação): 'Seu Nelson, Edy. Vinte segundos: te mandei a conta da retro pra vala do loteamento. Queria passar aí quinta 20 minutos pra ver o solo e ajustar os números. Às 8h ou às 16h?'",
+          "T1 (WhatsApp): 'Seu Nelson, Rafael da New Holland Cachoeiro. Vi que vocês começaram o loteamento na ES-181. Fiz a conta de custo/hora de uma B95C pra vala nesse tipo de solo — te mando? É uma página.'",
+          "T2 (ligação): 'Seu Nelson, Rafael. Vinte segundos: te mandei a conta da retro pra vala do loteamento. Queria passar aí quinta 20 minutos pra ver o solo e ajustar os números. Às 8h ou às 16h?'",
           "T3 (WhatsApp): 'O Marcos, da Rio Novo, fez rede de água igual à sua com a B110B: 3.400 h em 2 anos sem parar. Foto dela na vala segue aqui. Se quiser, passo o contato dele.'",
           "T4 (visita): 'passei aqui' com a conta impressa e a promessa de dois minutos.",
           "T5 (indicação): 'Comentei com o Marcos que você está no loteamento; ele disse que te conhece da associação. Ele ficou de te mandar mensagem.'",
@@ -193,8 +193,8 @@ export const M3: Modulo = {
           "Formato: 3 a 5 linhas, nome do cliente, seu nome e empresa, sem emoji em excesso, sem catálogo anexado, sem áudio.",
         ] },
         { tipo: "tabela", titulo: "Antes e depois", colunas: ["Mensagem que não recebe resposta", "Mensagem PVP"], linhas: [
-          ["'Bom dia! Sou o Edy da New Holland, gostaria de apresentar nossa linha de escavadeiras. Posso te ligar?'", "'Seu Carlos, Edy da New Holland Cachoeiro. Vi que a Rocha Forte ganhou a pavimentação de Guaçuí. Fiz a conta de rolo CA2500 × aluguel pra 14 km de base — dá uma diferença que vale olhar. Te mando? É uma página.'"],
-          ["'Olá, tudo bem? Segue nosso catálogo com toda a linha. Qualquer dúvida estou à disposição!'", "'Dona Rita, Edy da New Holland. O Sr. Osmar, da cooperativa, comentou do carreador novo do sítio. Tenho uma B95C usada revisada, 2.900 h, que os produtores de Iúna estão usando pra isso. Quer que eu mande a foto e o preço?'"],
+          ["'Bom dia! Sou o Rafael da New Holland, gostaria de apresentar nossa linha de escavadeiras. Posso te ligar?'", "'Seu Carlos, Rafael da New Holland Cachoeiro. Vi que a Rocha Forte ganhou a pavimentação de Guaçuí. Fiz a conta de rolo CA2500 × aluguel pra 14 km de base — dá uma diferença que vale olhar. Te mando? É uma página.'"],
+          ["'Olá, tudo bem? Segue nosso catálogo com toda a linha. Qualquer dúvida estou à disposição!'", "'Dona Rita, Rafael da New Holland. O Sr. Osmar, da cooperativa, comentou do carreador novo do sítio. Tenho uma B95C usada revisada, 2.900 h, que os produtores de Iúna estão usando pra isso. Quer que eu mande a foto e o preço?'"],
           ["'Bom dia, alguma novidade sobre a proposta que enviei?'", "'Seu Jorge, uma coisa que pode mudar a conta que te mandei: saiu a linha do Plano Safra com juros menores esta semana. Vale eu refazer a parcela? Responde só sim que eu mando hoje.'"],
         ] },
         { tipo: "dialogo", titulo: "O que acontece depois do 'manda'", falas: [
@@ -224,10 +224,10 @@ export const M3: Modulo = {
       missao: "Envie cinco primeiras mensagens PVP esta semana, uma por lead com sinal, sem catálogo e sem áudio. Registre no CRM o texto enviado e se houve resposta em 48 h. Meta: pelo menos duas respostas.",
       quiz: [
         { pergunta: "Qual das mensagens tem a maior chance de resposta de um empreiteiro que acabou de ganhar uma pavimentação?", opcoes: [
-          "'Seu Carlos, Edy da New Holland. Vi que vocês ganharam a pavimentação de Guaçuí. Fiz a conta de rolo próprio × aluguel pros 14 km. Te mando? É uma página.'",
+          "'Seu Carlos, Rafael da New Holland. Vi que vocês ganharam a pavimentação de Guaçuí. Fiz a conta de rolo próprio × aluguel pros 14 km. Te mando? É uma página.'",
           "'Seu Carlos, parabéns pela licitação de Guaçuí! Segue nosso catálogo completo de rolos e motoniveladoras para a sua avaliação, com as condições vigentes.'",
           "'Olá Carlos, tudo bem? Vi a notícia da pavimentação. Como está o planejamento de frota para a obra nova? Fico à disposição para ajudar no que precisar.'",
-          "'Bom dia, Carlos! Sou o Edy da New Holland de Cachoeiro e gostaria de apresentar nossa linha de rolos compactadores para a obra de Guaçuí. Posso te ligar?'",
+          "'Bom dia, Carlos! Sou o Rafael da New Holland de Cachoeiro e gostaria de apresentar nossa linha de rolos compactadores para a obra de Guaçuí. Posso te ligar?'",
         ], correta: 0, explicacao: "Pertinência (o edital ganho), valor (uma conta feita para a obra dele) e pergunta fácil ('te mando?'). As outras falam do vendedor, anexam propaganda ou fazem pergunta aberta que dá trabalho. A resposta 'manda' é o começo do diagnóstico." },
         { pergunta: "Por que 'posso te apresentar a linha?' é uma pergunta ruim para a primeira mensagem?", opcoes: [
           "Porque uma pergunta desse tipo deveria ser feita por ligação, onde o vendedor pode explicar o motivo, e não por texto",
@@ -262,7 +262,7 @@ export const M3: Modulo = {
       blocos: [
         { tipo: "p", texto: "Texto é fácil de ignorar; voz, não. Por isso a ligação converte 3x mais que a mensagem no segundo toque, e por isso a maioria dos vendedores foge dela. O medo vem de não saber o que dizer nos primeiros segundos e de tentar vender a máquina ao telefone. Ligação fria não vende máquina: vende a visita. Vinte segundos de abertura, uma pergunta, uma proposta de horário. Se ele disser 'não', você aprendeu algo; se disser 'sim', você tem uma visita que valeria dez mensagens." },
         { tipo: "framework", nome: "Abertura de 20 segundos (4 partes)", origem: "Blount (telephone prospecting) e Weinberg (sales story), adaptado ao interior", passos: [
-          "Identificação curta: 'Seu Nelson? Edy, da New Holland de Cachoeiro.' Sem 'tudo bem?', sem 'você tem um minutinho?'.",
+          "Identificação curta: 'Seu Nelson? Rafael, da New Holland de Cachoeiro.' Sem 'tudo bem?', sem 'você tem um minutinho?'.",
           "Motivo pertinente: 'Vi o anúncio da sua retro' / 'O Marcos, da Rio Novo, me passou seu contato' / 'Vocês começaram o loteamento na 181'.",
           "Valor em uma frase: 'Estou avaliando usadas da região pra entrada em máquina nova e fazendo a conta de custo por hora pra quem está trocando.'",
           "Pedido único com alternativa de horário: 'Queria passar aí 20 minutos pra ver a máquina e te deixar a conta. Quinta 8h ou sexta 16h fica melhor?'",
@@ -273,7 +273,7 @@ export const M3: Modulo = {
           "'Já tenho fornecedor' → 'Imaginei, e não vim tirar ninguém. Vim te dar uma segunda referência de preço e de assistência, que não custa nada ter. Se eu passar quinta às 8h, atrapalho?'",
         ] },
         { tipo: "dialogo", titulo: "Ligação de 90 segundos que virou visita", falas: [
-          { quem: "vendedor", texto: "Seu Nelson? Edy, da New Holland de Cachoeiro. O Marcos, da Rio Novo, me passou seu contato — ele disse que você pegou o loteamento em Alegre." },
+          { quem: "vendedor", texto: "Seu Nelson? Rafael, da New Holland de Cachoeiro. O Marcos, da Rio Novo, me passou seu contato — ele disse que você pegou o loteamento em Alegre." },
           { quem: "cliente", texto: "Peguei. Mas tô cheio de coisa, fala rápido." },
           { quem: "vendedor", texto: "Vinte segundos. Estou fazendo a conta de custo por hora pra quem está abrindo vala em solo igual ao daí, e avaliando usada pra entrada. Queria passar 20 minutos na obra e te deixar isso na mão. Quinta 8h ou sexta 16h?" },
           { quem: "cliente", texto: "Manda por WhatsApp que eu vejo." },
@@ -336,7 +336,7 @@ export const M3: Modulo = {
       id: "m3a5", titulo: "Indicação como sistema, não como sorte", minutos: 13,
       resumo: "Indicação é o lead mais barato e o que mais converte. Mas quase ninguém pede — e quem pede, pede errado. Gatilho, pedido específico, facilitação e retorno: quatro passos que transformam cliente satisfeito em fonte permanente.",
       blocos: [
-        { tipo: "p", texto: "Um lead indicado fecha de 3 a 5 vezes mais do que um lead frio e custa perto de zero. Ainda assim, pesquisas com vendedores B2B mostram que menos de 20% pedem indicação de forma sistemática. O motivo é o desconforto: parece pedir favor. O consultor entende diferente: cliente satisfeito GOSTA de indicar — é reciprocidade e é status ('fui eu que indiquei o Edy'). O que falta não é vontade do cliente; é um pedido claro, no momento certo, com facilitação." },
+        { tipo: "p", texto: "Um lead indicado fecha de 3 a 5 vezes mais do que um lead frio e custa perto de zero. Ainda assim, pesquisas com vendedores B2B mostram que menos de 20% pedem indicação de forma sistemática. O motivo é o desconforto: parece pedir favor. O consultor entende diferente: cliente satisfeito GOSTA de indicar — é reciprocidade e é status ('fui eu que indiquei o Rafael'). O que falta não é vontade do cliente; é um pedido claro, no momento certo, com facilitação." },
         { tipo: "framework", nome: "Sistema de indicação em 4 passos (GPFR)", origem: "Prática de referral selling (Bill Cates) adaptada ao pós-venda de máquinas", passos: [
           "Gatilho: peça em momentos de satisfação medida — entrega técnica bem feita, marco de 30 dias sem problema, chamado de assistência resolvido rápido, revisão em dia. Nunca no meio de um problema.",
           "Pedido específico: não 'conhece alguém?' (resposta: 'vou pensar'). Sim: 'Você conhece algum empreiteiro em Alegre que esteja com máquina velha ou pegando obra nova?' — nicho + cidade + sinal.",
@@ -361,7 +361,7 @@ export const M3: Modulo = {
           ["Revisão de 500 h / 1.000 h", "Contato de rotina, sem venda na mesa", "'E os vizinhos, alguém pegando obra?'"],
           ["Segunda compra", "Confiança máxima", "Pedir apresentação em grupo/associação"],
         ] },
-        { tipo: "caso", titulo: "Caso: a cooperativa que virou canal", situacao: "Vendedor vendeu uma B95C para um produtor influente de uma cooperativa em Iúna. Fez a entrega técnica com capricho e visitou aos 30 dias.", acao: "No 30º dia, pediu uma apresentação no grupo de WhatsApp da cooperativa — não uma venda, uma apresentação: 'o Edy é quem fez a conta do meu carreador'. O produtor postou e marcou o vendedor.", resultado: "Onze produtores pediram a conta em duas semanas; quatro compraram em 8 meses (duas novas, duas usadas). O custo de prospecção dessas quatro vendas foi um almoço.", licao: "Uma indicação em grupo vale trinta ligações frias. Mas só existe se a entrega e o pós-venda forem impecáveis — indicação é o dividendo da confiança." },
+        { tipo: "caso", titulo: "Caso: a cooperativa que virou canal", situacao: "Vendedor vendeu uma B95C para um produtor influente de uma cooperativa em Iúna. Fez a entrega técnica com capricho e visitou aos 30 dias.", acao: "No 30º dia, pediu uma apresentação no grupo de WhatsApp da cooperativa — não uma venda, uma apresentação: 'o Rafael é quem fez a conta do meu carreador'. O produtor postou e marcou o vendedor.", resultado: "Onze produtores pediram a conta em duas semanas; quatro compraram em 8 meses (duas novas, duas usadas). O custo de prospecção dessas quatro vendas foi um almoço.", licao: "Uma indicação em grupo vale trinta ligações frias. Mas só existe se a entrega e o pós-venda forem impecáveis — indicação é o dividendo da confiança." },
         { tipo: "script", titulo: "Pedidos específicos por nicho", itens: [
           "Pedreira: 'Você conhece outra pedreira ou mineração que esteja aumentando produção ou reclamando de máquina parada?'",
           "Prefeitura (engenheiro): 'Você conhece o engenheiro de algum município vizinho que esteja montando termo de referência de frota?'",
@@ -396,7 +396,7 @@ export const M3: Modulo = {
           "Porque o cliente que indicou pode esperar uma comissão ou vantagem pela venda gerada, e o retorno esclarece isso",
           "Porque o programa de relacionamento da fábrica exige registrar a origem de cada venda e informar o indicador",
         ], correta: 0, explicacao: "Indicar é um ato social; o indicador quer saber se valeu. 'Marquei com o Paulinho, obrigado' fecha o ciclo e reforça o comportamento. Quem não dá retorno recebe uma indicação só. O retorno não é para pedir outra na hora: é para manter a fonte viva." },
-        { pergunta: "Um produtor influente postou no grupo da cooperativa 'o Edy é quem fez a conta do meu carreador'. O que esse tipo de apresentação tem de diferente de uma indicação individual?", opcoes: [
+        { pergunta: "Um produtor influente postou no grupo da cooperativa 'o Rafael é quem fez a conta do meu carreador'. O que esse tipo de apresentação tem de diferente de uma indicação individual?", opcoes: [
           "É menos eficaz, porque mensagens em grupo são ignoradas e ninguém responde em público sobre compra de máquina",
           "É equivalente a uma indicação individual, porque o que conta é a confiança em quem indica, não o número de pessoas",
           "Multiplica a prova social para dezenas de pares ao mesmo tempo, com o peso de alguém que eles conhecem, a custo zero",
@@ -432,7 +432,7 @@ export const M3: Modulo = {
           "No retorno, antes de chegar em casa: registre tudo no CRM (o que viu, quem decide, próxima ação datada). Memória de estrada dura 24 horas.",
         ] },
         { tipo: "dialogo", titulo: "Visita fria: a obra vista da estrada", falas: [
-          { quem: "vendedor", texto: "(no canteiro, para o encarregado) Bom dia. Edy, da New Holland de Cachoeiro. Vi a terraplenagem da estrada e parei. Obra é de quem?" },
+          { quem: "vendedor", texto: "(no canteiro, para o encarregado) Bom dia. Rafael, da New Holland de Cachoeiro. Vi a terraplenagem da estrada e parei. Obra é de quem?" },
           { quem: "cliente", texto: "Da Construtora Vale Verde, de Guaçuí. O engenheiro vem de tarde." },
           { quem: "vendedor", texto: "Que máquinas estão aqui? Vi uma escavadeira e um rolo." },
           { quem: "cliente", texto: "A escavadeira é nossa, o rolo é alugado. O rolo dá problema direto." },

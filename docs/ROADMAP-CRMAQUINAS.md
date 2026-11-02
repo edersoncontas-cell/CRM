@@ -1,11 +1,11 @@
-# Roadmap do CRM DO EDY — Visão completa
+# Roadmap do CRMaquinas — Visão completa
 
 > Documento vivo. Registra TUDO que foi pedido para o CRM, organizado em módulos,
 > para construção em fases. Também serve como apresentação do projeto (caso a ideia
 > seja vendida no futuro). Última atualização: 2026-06-21.
 
 ## Quem usa
-Ederson — vendedor de máquinas pesadas **New Holland / Dynapac** no sul do Espírito
+O vendedor — vendedor de máquinas pesadas **New Holland / Dynapac** no sul do Espírito
 Santo. CRM pessoal, "vivo", com IA (Agnes) que lê conversas, entende o cliente,
 conduz a negociação e ajuda a fechar vendas.
 
@@ -114,6 +114,6 @@ fila e processam quando a internet voltar. Telas de consulta nunca dependem da n
 - CRM base: clientes, pipeline, dashboard, máquinas, marketing, simulador, etc.
 
 ## Próximos passos
-A ordem de construção será definida com o Ederson (ver conversa). Recomendação de
+A ordem de construção será definida com o vendedor (ver conversa). Recomendação de
 início: **Módulo A (Máquinas inteligentes)** — é a base que alimenta o modo vendedor
 da IA (Módulo E) e as propostas (Módulo F).

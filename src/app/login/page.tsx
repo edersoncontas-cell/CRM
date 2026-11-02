@@ -121,7 +121,7 @@ export default function LoginPage({
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg ring-4 ring-agro-400/30">
             <LogoEscavadeira size={80} />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">CRM DO EDY</h1>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">CRMaquinas</h1>
           <p className="text-sm text-slate-500">Vendas inteligentes com IA · New Holland · Dynapac</p>
         </div>
         <label className="mb-1 block text-sm font-medium text-slate-700">Senha</label>

@@ -1,6 +1,6 @@
 // Calculadora de economia de combustível: New Holland × concorrente.
 //
-// Regra combinada com o Edy:
+// Regra combinada com o o vendedor:
 //   diferença de consumo (L/h) = concorrente − New Holland
 //   economia/mês  = diferença × preço do diesel × horas trabalhadas no mês
 //   economia/ano  = economia/mês × 12

@@ -530,7 +530,7 @@ self.addEventListener("fetch", (e) => {
 // ── Notificações push ────────────────────────────────────────────────────────
 
 self.addEventListener("push", (e) => {
-  let data = { title: "CRM Edy", body: "Nova mensagem recebida!", url: "/atendimento", tag: "msg" };
+  let data = { title: "CRMaquinas", body: "Nova mensagem recebida!", url: "/atendimento", tag: "msg" };
   try { data = { ...data, ...e.data.json() }; } catch {}
 
   e.waitUntil(

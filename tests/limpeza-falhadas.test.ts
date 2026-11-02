@@ -42,25 +42,25 @@ describe("a mensagem saiu deste disparo?", () => {
   const trecho = trechoInvariante(texto)!;
 
   it("acha as personalizadas, com nomes diferentes", () => {
-    expect(ehDoDisparo("Oi Edy, chegou retroescavadeira nova na loja com taxa zero.", trecho)).toBe(true);
+    expect(ehDoDisparo("Oi Marcos, chegou retroescavadeira nova na loja com taxa zero.", trecho)).toBe(true);
     expect(ehDoDisparo("Oi João Carlos, chegou retroescavadeira nova na loja com taxa zero.", trecho)).toBe(true);
   });
 
   it("acha mesmo com o rodapé do SAIR colado depois", () => {
-    expect(ehDoDisparo("Oi Edy, chegou retroescavadeira nova na loja com taxa zero.\n\nSe não quiser mais receber, responda SAIR.", trecho)).toBe(true);
+    expect(ehDoDisparo("Oi Marcos, chegou retroescavadeira nova na loja com taxa zero.\n\nSe não quiser mais receber, responda SAIR.", trecho)).toBe(true);
   });
 
   it("NÃO pega a mensagem individual que ele digitou", () => {
-    expect(ehDoDisparo("Bom dia Edy, consegue falar agora?", trecho)).toBe(false);
+    expect(ehDoDisparo("Bom dia Marcos, consegue falar agora?", trecho)).toBe(false);
     expect(ehDoDisparo("Passo aí terça de manhã, pode ser?", trecho)).toBe(false);
   });
 
   it("NÃO pega o disparo de outra máquina", () => {
-    expect(ehDoDisparo("Oi Edy, chegou escavadeira nova na loja com taxa zero.", trecho)).toBe(false);
+    expect(ehDoDisparo("Oi Marcos, chegou escavadeira nova na loja com taxa zero.", trecho)).toBe(false);
   });
 
   it("não se confunde com espaço e quebra de linha a mais", () => {
-    expect(ehDoDisparo("Oi   Edy,\n\nchegou retroescavadeira nova   na loja com taxa zero.", trecho)).toBe(true);
+    expect(ehDoDisparo("Oi   Marcos,\n\nchegou retroescavadeira nova   na loja com taxa zero.", trecho)).toBe(true);
   });
 
   it("corpo vazio não quebra e não casa", () => {

@@ -495,7 +495,7 @@ export async function atualizarCotacaoCafeAction(formData: FormData): Promise<{ 
   return { ok: true };
 }
 
-// Aprende o estilo de fala do Ederson a partir das mensagens que ele já enviou
+// Aprende o estilo de fala do o vendedor a partir das mensagens que ele já enviou
 // e salva no banco para a IA imitar nas respostas.
 // CRÍTICO: excluir TODAS as mensagens geradas por IA (Cérebro, Orientador de
 // Vendas, e os antigos gravados como "Agnes") — sem isso a IA aprende o estilo

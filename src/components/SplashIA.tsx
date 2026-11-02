@@ -42,7 +42,7 @@ export function SplashIA({ saindo = false }: { saindo?: boolean }) {
           <LogoEscavadeira size={124} />
         </div>
         <div className="mt-7 text-center">
-          <div className="text-[24px] font-black tracking-tight text-white">CRM DO EDY</div>
+          <div className="text-[24px] font-black tracking-tight text-white">CRMaquinas</div>
           <div className="mt-1.5 text-[10px] font-semibold tracking-[0.32em] text-agro-400">NEW HOLLAND CONSTRUCTION · DYNAPAC</div>
         </div>
       </div>

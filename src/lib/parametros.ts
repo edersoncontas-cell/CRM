@@ -22,8 +22,8 @@ export type Parametros = {
 const CHAVE = "parametros.negocio";
 
 export const PARAMETROS_PADRAO: Parametros = {
-  nomeCrm: "CRM DO EDY",
-  nomeVendedor: "Ederson",
+  nomeCrm: "CRMaquinas",
+  nomeVendedor: "Vendedor",
   nomeEmpresa: "New Holland Construction · Dynapac",
   marcas: "New Holland Construction e Dynapac",
   regiao: "sul do Espírito Santo",
@@ -72,7 +72,7 @@ export async function gravarParametros(p: Parametros): Promise<void> {
   await setConfig(CHAVE, JSON.stringify(p));
 }
 
-// Frase pronta para os prompts: "Ederson, vendedor de máquinas pesadas New
+// Frase pronta para os prompts: "Vendedor, vendedor de máquinas pesadas New
 // Holland Construction e Dynapac no sul do Espírito Santo".
 export function descricaoVendedor(p: Parametros): string {
   return `${p.nomeVendedor}, vendedor de máquinas pesadas ${p.marcas} no ${p.regiao}`;

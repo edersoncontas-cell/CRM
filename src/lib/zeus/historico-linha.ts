@@ -14,11 +14,11 @@
 // "📄 Documento", imagem vira a legenda ou "📷 Imagem"). Ou seja, uma linha
 // como
 //
-//     [15/09 10:22] Ederson: Ficha_tecnica_E145C.pdf
+//     [15/09 10:22] Carlos: Ficha_tecnica_E145C.pdf
 //
 // chega à IA como se o vendedor tivesse DIGITADO o nome de um arquivo. Não há
 // nada dizendo que é anexo, nem de que lado ele veio. Some-se a isso o rótulo
-// "Ederson:" — um primeiro nome que o modelo não tem como saber que é o
+// "Carlos:" — um primeiro nome que o modelo não tem como saber que é o
 // vendedor — e "documento apareceu na conversa" vira "o cliente mandou
 // documentos" com a maior facilidade.
 //

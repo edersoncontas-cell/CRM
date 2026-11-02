@@ -107,7 +107,7 @@ export type PedidoTexto = { tipo: TipoMensagem; cidade?: string; dataId?: string
 
 export async function gerarTextoMensagemAction(pedido: PedidoTexto): Promise<{ texto: string; geradoPorIA: boolean }> {
   const p = await lerParametros().catch(() => null);
-  const vendedor = p?.nomeVendedor || "Edy";
+  const vendedor = p?.nomeVendedor || "Vendedor";
   const marcas = p?.marcas || "New Holland Construction e Dynapac";
   const data = pedido.tipo === "comemorativa" ? DATAS_COMEMORATIVAS.find((d) => d.id === pedido.dataId) : undefined;
   const periodo = periodoSemanaQueVem();
