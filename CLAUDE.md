@@ -6,6 +6,61 @@ e do que fazer para não repetir. Cada regra existe porque custou alguma coisa.
 
 ---
 
+## 00. MODELO E ESFORÇO — dizer ANTES de começar, em toda tarefa
+
+O consumo de tokens do vendedor está alto e ele não tem como controlar o limite
+por dentro da sessão. Prioridade é a segurança do código; custo vem depois, mas
+modelo caro que não se paga não entra.
+
+**Regra:** a PRIMEIRA linha da resposta a qualquer pedido de trabalho (alterar,
+investigar, revisar) é esta, antes de abrir arquivo ou rodar comando:
+
+```
+Modelo e esforço: <Haiku 5.5 | Sonnet 5.5 | Opus 5.5 | Fable 5.1> · <low|medium|high|xhigh> — <motivo em uma frase>
+```
+
+Pergunta puramente conversacional ("o que falta?", "como funciona X?") também
+leva a linha, mas pode ser só `Sonnet 5.5 · low`. **A ausência da linha denuncia
+que a regra não rodou** (mesma lógica da Conferência).
+
+### Como escolher (pela pior coisa que o erro pode causar, não pelo tamanho do diff)
+
+Os custos abaixo são RELATIVOS (Haiku < Sonnet < Opus < Fable; low < medium <
+high < xhigh < max). Não há tabela de preço verificada aqui — não inventar valor.
+
+| Tipo de tarefa | Recomendação |
+|---|---|
+| Ler código, responder pergunta, explicar, listar pendências | Sonnet 5.5 · low |
+| Texto de tela, copy, doc, renomear, ajuste de CSS isolado | Haiku 5.5 · medium (ou Sonnet · low) |
+| Tela/funcionalidade comum com a bateria (item 10) | Sonnet 5.5 · medium |
+| Bug que mexe em vários arquivos, filtro Prisma com `OR`, ação "use server" | Sonnet 5.5 · high |
+| **Schema/migração**, `lib/db.ts`, `banco-do-zero`, `trazer-provisorio`, manutenção | Opus 5.5 · high |
+| **Envio de WhatsApp** (trava, ondas, cancelamento, agendador), rótulos `NAO_E_RESPOSTA` | Opus 5.5 · high |
+| **Trava de gasto de IA** (`pagoLiberado`, `IA_SOMENTE_GRATUITOS`, teto do orientador) | Opus 5.5 · high |
+| **Modo sem sinal** (`sw-codigo`, `/sem-sinal`, pacote) | Opus 5.5 · high |
+| Mudança que o vendedor já viu quebrar de forma grave (itens 1 e 8 deste arquivo) e é arquitetural | Opus 5.5 · xhigh |
+| Fable 5.1 | só se o Opus 5.5 · xhigh já tentou e não resolveu, ou ele pedir |
+
+### Limites de gasto que não se cruzam sozinho
+
+- **`max` e `Workflow`/vários agentes só quando ele pedir** (as três rodadas de
+  revisão do mapa saíram caras). Quando eu achar que valeria, digo o motivo e
+  pergunto — não rodo.
+- Não subo o esforço no meio da tarefa para "garantir": se a primeira tentativa
+  não resolveu, digo e recomendo o próximo degrau, com o motivo.
+- **Sessão no modelo errado:** se a sessão está rodando num modelo diferente do
+  recomendado, a linha diz isso e dá a alternativa — mais barata (se a tarefa é
+  leve e o modelo é caro) ou mais segura (se a tarefa é de risco e o modelo é
+  fraco). Quem troca é ele (`/model`, `/effort`); eu não consigo trocar.
+- Na dúvida entre dois degraus, vale o mais seguro **somente** nas áreas em
+  negrito da tabela; fora delas, o mais barato que ainda roda a bateria.
+- Mensagem que mistura tarefa leve e de risco: recomendo pelo risco e sugiro
+  separar em dois pedidos.
+- Ver também `docs/consumo-invocacoes.md` (consumo do banco, outro assunto) e
+  `docs/modelo-e-esforco.md` (por que a tabela é assim e como gastar menos).
+
+---
+
 ## 0. AS 3 PERGUNTAS — obrigatórias em toda alteração
 
 Padrão definido pelo vendedor. Vale para **toda alteração que vai para o
