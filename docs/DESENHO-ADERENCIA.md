@@ -291,7 +291,7 @@ commit.
   que entrou, **dias nesta etapa**, e o **próximo passo sugerido** da etapa.
   Para chegar nos passos do seu prompt (contato, proposta, documentos,
   financiamento, contrato, entrega), o gestor cria essas colunas no funil.
-  Isso é decisão sua (seção 12).
+  Isso é decisão sua (seção 16).
 - No celular o fluxo vira **vertical**; no PC, horizontal. Desenho com
   HTML e SVG simples, sem biblioteca de grafos (peso no celular). Animação
   leve só por CSS e desligada quando o aparelho pede menos movimento.
@@ -381,7 +381,7 @@ Depende das etapas de identidade, metas, uso e jornada.
      natural, com teto diário e `pagoLiberado()`. Nunca gera sozinha a cada
      abertura da tela.
 - **O que o gestor enxerga** é uma matriz configurável pelo dono (decisão da
-  seção 12). O padrão seguro é o de `crm-como-produto.md`: sem nome e
+  seção 16). O padrão seguro é o de `crm-como-produto.md`: sem nome e
   telefone de cliente, sem valor por negociação, sem comissão, sem conversa
   de WhatsApp.
 
