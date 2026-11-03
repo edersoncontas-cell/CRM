@@ -11,7 +11,6 @@ import { UFS_COM_MALHA } from "@/lib/mapa-regioes-es";
 import type { ObstaculoRotulo } from "@/lib/mapa-rotulos-es";
 import { CamadaMunicipiosES } from "@/components/CamadaMunicipiosES";
 import { LegendaMapaRegioes } from "@/components/LegendaMapaRegioes";
-import type { PontoVenda } from "@/lib/vendas-dashboard";
 import { melhorRota, kmDoTrajeto, linkGoogleMaps, paradasForaDoLink, kmPorExtenso } from "@/lib/rota-visitas";
 import { Navigation, Home } from "lucide-react";
 
@@ -33,32 +32,15 @@ export type DiaMapa = { iso: string; nome: string; label: string; ehHoje: boolea
 /** Cidade de onde ele sai para a melhor rota do dia. */
 export type CidadeOrigem = { nome: string; lat: number; lng: number };
 
-// Preferências deste aparelho (cidade de saída, ida e volta, vendas à vista).
+// Preferências deste aparelho (cidade de saída, ida e volta).
 // Só conveniência: sem armazenamento, a tela funciona com o padrão.
 const CHAVE_ORIGEM = "crm.visitas.origemRota";
 const CHAVE_VOLTAR = "crm.visitas.voltarRota";
-const CHAVE_VENDAS = "crm.visitas.mostrarVendas";
 function lerLocal(chave: string): string | null {
   try { return window.localStorage.getItem(chave); } catch { return null; }
 }
 function gravarLocal(chave: string, valor: string): void {
   try { window.localStorage.setItem(chave, valor); } catch { /* sem armazenamento: só não lembra */ }
-}
-
-// Vendas por cidade no mapa de Visitas (03/11: "no mapa das visitas também").
-// Círculo verde com o NÚMERO de máquinas faturadas — diferente do pino de
-// visita (gota amarela/preta), para não confundir parada com venda.
-const TAMANHO_VENDA = 24;
-function iconeVendas(n: number): L.DivIcon {
-  const fonte = n >= 100 ? 9 : n >= 10 ? 11 : 12;
-  return L.divIcon({
-    className: "",
-    iconSize: [TAMANHO_VENDA, TAMANHO_VENDA],
-    iconAnchor: [TAMANHO_VENDA / 2, TAMANHO_VENDA / 2],
-    popupAnchor: [0, -TAMANHO_VENDA / 2],
-    html: `<div style="width:${TAMANHO_VENDA}px;height:${TAMANHO_VENDA}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;
-      background:#16a34a;color:#fff;font-weight:900;font-size:${fonte}px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);">${n}</div>`,
-  });
 }
 
 const iconeOrigem = L.divIcon({
@@ -94,10 +76,6 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
   const [dia, setDia] = useState(diaInicial);
   const [origemNome, setOrigemNome] = useState("");
   const [voltar, setVoltar] = useState(true);
-  const [mostrarVendas, setMostrarVendas] = useState(true);
-  const [vendas, setVendas] = useState<PontoVenda[] | null>(null);
-  const [erroVendas, setErroVendas] = useState(false);
-  const anoVendas = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).slice(0, 4);
 
   // Preferências guardadas neste aparelho (lidas só no navegador).
   useEffect(() => {
@@ -105,19 +83,8 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
     if (o && origens.some((c) => c.nome === o)) setOrigemNome(o);
     const v = lerLocal(CHAVE_VOLTAR);
     if (v === "0") setVoltar(false);
-    if (lerLocal(CHAVE_VENDAS) === "0") setMostrarVendas(false);
   }, [origens]);
 
-  // Vendas por cidade do ano (a mesma rota do mapa do Dashboard). Uma vez ao
-  // abrir: a rota consulta o banco (docs/consumo-invocacoes.md).
-  useEffect(() => {
-    let ativo = true;
-    fetch(`/api/dashboard/vendas-mapa?ano=${anoVendas}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (!ativo) return; if (d?.ok) setVendas(d.pontos as PontoVenda[]); else setErroVendas(true); })
-      .catch(() => { if (ativo) setErroVendas(true); });
-    return () => { ativo = false; };
-  }, [anoVendas]);
   const [contornos, setContornos] = useState<GeoJsonObject[]>([]);
 
   // Divisas entre as cidades: vão junto com o código (ES). Só o estado SEM
@@ -159,20 +126,17 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
     return voltar ? [o, ...paradas, o] : [o, ...paradas];
   }, [ordem, pontosDia, origem, voltar]);
 
-  const vendasVisiveis = useMemo(() => (mostrarVendas ? vendas ?? [] : []), [mostrarVendas, vendas]);
-  // Pins, vendas e a saída ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles.
+  // Pins e a saída ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles.
   const obstaculos = useMemo<ObstaculoRotulo[]>(
     () => [
       ...comCoord.map((v) => ({ lng: v.lng!, lat: v.lat!, esq: -(TAMANHO_PIN / 2 + 2), dir: TAMANHO_PIN / 2 + 2, cima: -(TAMANHO_PIN + 4), baixo: 2 })),
-      ...vendasVisiveis.map((p) => { const r = TAMANHO_VENDA / 2 + 3; return { lng: p.lng, lat: p.lat, esq: -r, dir: r, cima: -r, baixo: r }; }),
       ...(origem ? [{ lng: origem.lng, lat: origem.lat, esq: -25, dir: 25, cima: -13, baixo: 13 }] : []),
     ],
-    [comCoord, vendasVisiveis, origem],
+    [comCoord, origem],
   );
 
   function escolherOrigem(nome: string) { setOrigemNome(nome); gravarLocal(CHAVE_ORIGEM, nome); }
   function trocarVoltar(v: boolean) { setVoltar(v); gravarLocal(CHAVE_VOLTAR, v ? "1" : "0"); }
-  function trocarVendas(v: boolean) { setMostrarVendas(v); gravarLocal(CHAVE_VENDAS, v ? "1" : "0"); }
 
   return (
     <div>
@@ -255,16 +219,6 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
                 ? <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 3, opacity: 0.75 }} />
                 : <Polyline positions={rota} pathOptions={{ color: "#141416", weight: 2, dashArray: "6 6", opacity: 0.6 }} />
             )}
-            {vendasVisiveis.map((p) => (
-              <Marker key={`venda:${p.municipioId}`} position={[p.lat, p.lng]} icon={iconeVendas(p.vendas)} zIndexOffset={-500}>
-                <Popup>
-                  <div className="text-sm">
-                    <b>{p.nome}</b><br />
-                    {p.vendas} máquina{p.vendas === 1 ? "" : "s"} faturada{p.vendas === 1 ? "" : "s"} em {anoVendas}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
             {origem && <Marker position={[origem.lat, origem.lng]} icon={iconeOrigem} zIndexOffset={500} />}
             {comCoord.map((v, i) => (
               <Marker key={v.id} position={[v.lat!, v.lng!]} icon={iconeNumero(posicao.get(i) ?? i + 1, !!diaSel?.ehHoje)} zIndexOffset={1000}>
@@ -279,15 +233,6 @@ export default function MapaVisitasES({ visitas, dias, diaInicial, proximos7 = [
               </Marker>
             ))}
           </MapContainer>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: "var(--sobre-fundo-texto)" }}>
-            <label className="flex items-center gap-1.5">
-              <input type="checkbox" checked={mostrarVendas} onChange={(e) => trocarVendas(e.target.checked)} className="h-4 w-4" />
-              <span className="inline-block h-3 w-3 rounded-full bg-green-600" /> máquinas faturadas por cidade em {anoVendas}
-            </label>
-            {mostrarVendas && vendas === null && !erroVendas && <span className="opacity-70">carregando vendas…</span>}
-            {mostrarVendas && erroVendas && <span className="font-semibold text-red-600">Não consegui carregar as vendas agora — recarregue a página.</span>}
-            {mostrarVendas && vendas !== null && vendas.length === 0 && <span className="opacity-70">nenhuma venda faturada com cidade no cadastro em {anoVendas}.</span>}
-          </div>
           {comDivisas && <LegendaMapaRegioes atendidos={mapa.atendidos} texto="var(--sobre-fundo-texto)" />}
         </div>
         {/* OS PRÓXIMOS 7 DIAS, e não só o dia aberto.
