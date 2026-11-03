@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical, WifiOff,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical, WifiOff, BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +54,8 @@ export const GRUPOS: GrupoMenu[] = [
       { href: "/vendas-perdidas", label: "Vendas Perdidas", icon: TrendingDown },
       // O que volta para a diretoria no fim do piloto (proposta, seções 4.4 e 10).
       { href: "/piloto", label: "Números do piloto", icon: FlaskConical },
+      // Quais telas ele usa, quais não, as metas e o que melhorar (03/11).
+      { href: "/relatorio", label: "Relatório de uso", icon: BarChart3 },
     ],
   },
   {

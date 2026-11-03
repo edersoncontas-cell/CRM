@@ -72,6 +72,10 @@ export function ParametrosNegocioForm({ p }: { p: Parametros }) {
           <label className={rotulo} htmlFor="param-metaNegocios">Meta de negociações novas por semana</label>
           <input id="param-metaNegocios" name="metaNegociosSemana" type="number" min={1} defaultValue={p.metaNegociosSemana} className={campo} />
         </div>
+        <div>
+          <label className={rotulo} htmlFor="param-metaDiasUso">Meta de dias no CRM por semana (Relatório de uso)</label>
+          <input id="param-metaDiasUso" name="metaDiasUsoSemana" type="number" min={1} max={7} defaultValue={p.metaDiasUsoSemana} className={campo} />
+        </div>
         <div className="flex items-center gap-3 md:col-span-2">
           <button type="submit" disabled={salvando} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-agro-400 hover:bg-slate-800 disabled:opacity-60">
             {salvando ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar parâmetros

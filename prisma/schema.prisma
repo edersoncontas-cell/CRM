@@ -459,6 +459,25 @@ model ClienteRedirecionamento {
   @@index([unificacaoId])
 }
 
+// Relatório de uso (v45): quanto cada tela é aberta, quanto tempo fica na
+// frente, de que aparelho e em que hora. Uma linha por dia × hora × tela ×
+// aparelho × dispositivo (não é um registro por clique) — pouca linha, pouco
+// banco. tela = "/clientes" (o item do menu) ou "(entrada)" para cada vez que
+// ele entrou no CRM depois de 30 min sem ele. O dispositivo (sorteado e
+// guardado no navegador) manda o TOTAL da linha, e o banco fica com o maior:
+// mandar de novo não conta em dobro (ver api/uso).
+model UsoTela {
+  dia         String // AAAA-MM-DD, Brasília
+  hora        Int    // 0–23, Brasília
+  tela        String
+  aparelho    String // pc | celular
+  dispositivo String
+  aberturas   Int    @default(0)
+  segundos    Int    @default(0)
+  @@id([dia, hora, tela, aparelho, dispositivo])
+  @@index([dia])
+}
+
 model AlertaOculto {
   id        String   @id @default(cuid())
   chave     String   @unique

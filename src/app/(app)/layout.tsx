@@ -9,6 +9,7 @@ import { modoAtual } from "@/lib/tema-servidor";
 import { LembreteVisitasDoDia } from "@/components/LembreteVisitasDoDia";
 import { SincronizadorOffline } from "@/components/SincronizadorOffline";
 import { BatidaDoAgendador } from "@/components/BatidaDoAgendador";
+import { RegistroDeUso } from "@/components/RegistroDeUso";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { lerParametros } from "@/lib/parametros";
 import { carregarChavesIA } from "@/lib/ai/chaves";
@@ -104,6 +105,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           há mais de 20 min, o servidor roda a passada (vigia do WhatsApp, lembretes).
           Só com o banco de pé — não adianta bater num banco que não responde. */}
       {saude.ok && !recemCriado && <BatidaDoAgendador />}
+      {/* Relatório de uso: conta aberturas, tempo e entradas (sem desenhar
+          nada). Fica de fora com o banco caído — não haveria onde somar, e a
+          contagem guardada no aparelho sobe depois. */}
+      {saude.ok && !recemCriado && <RegistroDeUso />}
     </div>
   );
 }

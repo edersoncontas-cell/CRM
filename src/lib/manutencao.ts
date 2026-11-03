@@ -101,7 +101,11 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v44: a TRAVA GERAL de envio. Depois do segundo bloqueio do número, nenhuma
 // mensagem sai do CRM até ele liberar na tela — e a fila de envios em massa
 // que sobrou do dia é cancelada, para não retomar sozinha quando ele liberar.
-export const CHAVE_MANUTENCAO = "manutencao.v44";
+//
+// v45: tabela UsoTela — o Relatório de uso (quanto cada tela é aberta, de que
+// aparelho, em que hora). E a parada da fila de envio (v44) passa a rodar UMA
+// vez só: sem isso, esta chave nova cancelaria a fila do Marketing de novo.
+export const CHAVE_MANUTENCAO = "manutencao.v45";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

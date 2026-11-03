@@ -16,6 +16,7 @@ export type Parametros = {
   metaAnualVendas: number;  // máquinas por ano
   metaVisitasSemana: number;  // visitas por semana (ritmo)
   metaNegociosSemana: number; // negociações novas por semana (ritmo)
+  metaDiasUsoSemana: number;  // dias por semana com entrada no CRM (Relatório de uso)
   whatsappBriefing: string | null; // número (só dígitos, com DDI) que recebe o briefing diário do ZEUS
 };
 
@@ -31,6 +32,7 @@ export const PARAMETROS_PADRAO: Parametros = {
   metaAnualVendas: 40,
   metaVisitasSemana: 20,
   metaNegociosSemana: 5,
+  metaDiasUsoSemana: 5,
   whatsappBriefing: process.env.ZEUS_WHATSAPP_DESTINO?.replace(/\D/g, "") || null,
 };
 
@@ -61,6 +63,7 @@ export const lerParametros = cache(async (): Promise<Parametros> => {
       metaAnualVendas: Math.round(limparNumero(p.metaAnualVendas, PARAMETROS_PADRAO.metaAnualVendas, 1, 100000)),
       metaVisitasSemana: Math.round(limparNumero(p.metaVisitasSemana, PARAMETROS_PADRAO.metaVisitasSemana, 1, 1000)),
       metaNegociosSemana: Math.round(limparNumero(p.metaNegociosSemana, PARAMETROS_PADRAO.metaNegociosSemana, 1, 1000)),
+      metaDiasUsoSemana: Math.round(limparNumero(p.metaDiasUsoSemana, PARAMETROS_PADRAO.metaDiasUsoSemana, 1, 7)),
       whatsappBriefing: typeof p.whatsappBriefing === "string" && p.whatsappBriefing.replace(/\D/g, "") ? p.whatsappBriefing.replace(/\D/g, "") : PARAMETROS_PADRAO.whatsappBriefing,
     };
   } catch {

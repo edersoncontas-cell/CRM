@@ -441,6 +441,22 @@ export async function aplicarMigracoes(): Promise<void> {
         CONSTRAINT "Evento_pkey" PRIMARY KEY ("id")
       )
     `);
+
+    // UsoTela (v45): o Relatório de uso. Uma linha por dia × hora × tela ×
+    // aparelho × dispositivo, com o total que o dispositivo mandou (ver api/uso).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "UsoTela" (
+        "dia" TEXT NOT NULL,
+        "hora" INTEGER NOT NULL,
+        "tela" TEXT NOT NULL,
+        "aparelho" TEXT NOT NULL,
+        "dispositivo" TEXT NOT NULL,
+        "aberturas" INTEGER NOT NULL DEFAULT 0,
+        "segundos" INTEGER NOT NULL DEFAULT 0,
+        CONSTRAINT "UsoTela_pkey" PRIMARY KEY ("dia","hora","tela","aparelho","dispositivo")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UsoTela_dia_idx" ON "UsoTela" ("dia")`);
     await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Evento_inicio_fim_idx" ON "Evento" ("inicio", "fim")`);
 
     // ConversaExcluida.motivo (v27): separa a conversa que o vendedor apagou
@@ -937,6 +953,13 @@ export async function reestruturarFunilOportunidade(): Promise<{ renomeadas: num
  * a fila antes que isso possa acontecer.
  */
 export async function pararEnviosEmMassa(): Promise<void> {
+  // UMA vez só. A manutenção roda de novo a cada chave nova (v45 em diante),
+  // e desde 03/11 a fila do Marketing é legítima — sair cancelando tudo a cada
+  // migração mataria a campanha que ele montou. A linha da trava existir é a
+  // prova de que esta parada já aconteceu (ela grava a linha) ou de que ele já
+  // mexeu na trava pela tela: nos dois casos, nada a fazer.
+  const jaParou = await db.configuracao.findUnique({ where: { chave: "whatsapp.pausa.v1" } }).then((r) => !!r).catch(() => false);
+  if (jaParou) return;
   const r = await db.envioProgramado.updateMany({
     where: { status: { in: ["pendente", "enviando"] } },
     data: { status: "cancelado", processadoEm: new Date() },

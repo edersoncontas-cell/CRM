@@ -4,7 +4,7 @@
 //
 // A estrutura INTEIRA do banco, na ordem certa (tabelas, índices, chaves
 // estrangeiras), para o CRM nascer num banco vazio. Ver lib/banco-do-zero.ts.
-// 40 tabelas · 38 índices · 15 chaves estrangeiras.
+// 41 tabelas · 39 índices · 15 chaves estrangeiras.
 
 export const DDL_DO_ZERO: readonly string[] = [
   "CREATE TABLE \"Municipio\" (\n    \"id\" TEXT NOT NULL,\n    \"nome\" TEXT NOT NULL,\n    \"regiao\" TEXT NOT NULL DEFAULT 'Sul do Espírito Santo',\n    \"lat\" DOUBLE PRECISION,\n    \"lng\" DOUBLE PRECISION,\n    \"foraDeArea\" BOOLEAN NOT NULL DEFAULT false,\n\n    CONSTRAINT \"Municipio_pkey\" PRIMARY KEY (\"id\")\n)",
@@ -28,6 +28,7 @@ export const DDL_DO_ZERO: readonly string[] = [
   "CREATE TABLE \"EnvioProgramado\" (\n    \"id\" TEXT NOT NULL,\n    \"quando\" TIMESTAMP(3) NOT NULL,\n    \"texto\" TEXT NOT NULL,\n    \"clienteIds\" TEXT[],\n    \"midiaId\" TEXT,\n    \"status\" TEXT NOT NULL DEFAULT 'pendente',\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"processadoEm\" TIMESTAMP(3),\n    \"enviados\" INTEGER NOT NULL DEFAULT 0,\n    \"falhas\" INTEGER NOT NULL DEFAULT 0,\n    \"enviadosAte\" INTEGER NOT NULL DEFAULT 0,\n    \"erro\" TEXT,\n\n    CONSTRAINT \"EnvioProgramado_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"MidiaEnvio\" (\n    \"id\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"mimeType\" TEXT NOT NULL,\n    \"nome\" TEXT NOT NULL,\n    \"tipo\" TEXT NOT NULL,\n    \"origem\" TEXT NOT NULL,\n    \"base64\" TEXT NOT NULL,\n\n    CONSTRAINT \"MidiaEnvio_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"ClienteRedirecionamento\" (\n    \"deId\" TEXT NOT NULL,\n    \"paraId\" TEXT NOT NULL,\n    \"unificacaoId\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"ClienteRedirecionamento_pkey\" PRIMARY KEY (\"deId\")\n)",
+  "CREATE TABLE \"UsoTela\" (\n    \"dia\" TEXT NOT NULL,\n    \"hora\" INTEGER NOT NULL,\n    \"tela\" TEXT NOT NULL,\n    \"aparelho\" TEXT NOT NULL,\n    \"dispositivo\" TEXT NOT NULL,\n    \"aberturas\" INTEGER NOT NULL DEFAULT 0,\n    \"segundos\" INTEGER NOT NULL DEFAULT 0,\n\n    CONSTRAINT \"UsoTela_pkey\" PRIMARY KEY (\"dia\",\"hora\",\"tela\",\"aparelho\",\"dispositivo\")\n)",
   "CREATE TABLE \"AlertaOculto\" (\n    \"id\" TEXT NOT NULL,\n    \"chave\" TEXT NOT NULL,\n    \"clienteId\" TEXT,\n    \"ocultoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"AlertaOculto_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"ColunaFunil\" (\n    \"id\" TEXT NOT NULL,\n    \"titulo\" TEXT NOT NULL,\n    \"cor\" TEXT NOT NULL DEFAULT 'border-t-slate-400',\n    \"ordem\" INTEGER NOT NULL DEFAULT 0,\n    \"fixa\" BOOLEAN NOT NULL DEFAULT false,\n    \"papel\" TEXT,\n    \"probabilidade\" INTEGER NOT NULL DEFAULT 50,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"ColunaFunil_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"MaquinaUsada\" (\n    \"id\" TEXT NOT NULL,\n    \"marca\" TEXT NOT NULL,\n    \"modelo\" TEXT NOT NULL,\n    \"categoria\" TEXT NOT NULL DEFAULT 'outro',\n    \"ano\" INTEGER,\n    \"horimetro\" INTEGER,\n    \"preco\" DOUBLE PRECISION,\n    \"estado\" TEXT NOT NULL DEFAULT 'boa',\n    \"localizacao\" TEXT,\n    \"descricao\" TEXT,\n    \"fotoUrl\" TEXT,\n    \"status\" TEXT NOT NULL DEFAULT 'disponivel',\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"atualizadoEm\" TIMESTAMP(3) NOT NULL,\n\n    CONSTRAINT \"MaquinaUsada_pkey\" PRIMARY KEY (\"id\")\n)",
@@ -66,6 +67,7 @@ export const DDL_DO_ZERO: readonly string[] = [
   "CREATE INDEX \"Evento_inicio_fim_idx\" ON \"Evento\"(\"inicio\", \"fim\")",
   "CREATE INDEX \"EnvioProgramado_status_quando_idx\" ON \"EnvioProgramado\"(\"status\", \"quando\")",
   "CREATE INDEX \"ClienteRedirecionamento_unificacaoId_idx\" ON \"ClienteRedirecionamento\"(\"unificacaoId\")",
+  "CREATE INDEX \"UsoTela_dia_idx\" ON \"UsoTela\"(\"dia\")",
   "CREATE UNIQUE INDEX \"AlertaOculto_chave_key\" ON \"AlertaOculto\"(\"chave\")",
   "CREATE INDEX \"WhatsAppConversation_lid_idx\" ON \"WhatsAppConversation\"(\"lid\")",
   "CREATE INDEX \"WhatsAppConversation_lastMessageAt_idx\" ON \"WhatsAppConversation\"(\"lastMessageAt\")",

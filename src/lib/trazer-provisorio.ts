@@ -62,7 +62,10 @@ export type Etapa = {
   lote?: number;
 };
 
-export const TABELAS_QUE_NAO_VEM = ["UnificacaoClientes", "LimpezaClientes", "ClienteRedirecionamento"] as const;
+// UsoTela (Relatório de uso) não vem: é contagem de cliques, não dado de
+// venda — somar a do provisório pediria somar linha a linha, e perder os dias
+// de uso no provisório não custa negócio nenhum.
+export const TABELAS_QUE_NAO_VEM = ["UnificacaoClientes", "LimpezaClientes", "ClienteRedirecionamento", "UsoTela"] as const;
 
 const baixo = (v: unknown) => String(v ?? "").trim().toLowerCase();
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v ?? ""));
