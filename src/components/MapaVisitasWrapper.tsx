@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { VisitaMapa, DiaMapa, AgendaProxima } from "./MapaVisitasES";
+import type { VisitaMapa, DiaMapa, AgendaProxima, CidadeOrigem } from "./MapaVisitasES";
 import type { MapaDaArea } from "@/lib/area-atuacao-regra";
 import { SemMapaSemInternet } from "@/components/SemMapaSemInternet";
 
@@ -14,7 +14,7 @@ const Mapa = dynamic(() => import("./MapaVisitasES"), {
 // dentro deste bloco. Sem isso eles competiam com o resto da página e o mapa
 // cobria qualquer janela aberta por cima — o formulário de nova visita ficava
 // atrás dele.
-export function MapaVisitasWrapper(props: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[]; mapa: MapaDaArea }) {
+export function MapaVisitasWrapper(props: { visitas: VisitaMapa[]; dias: DiaMapa[]; diaInicial: string; proximos7?: AgendaProxima[]; mapa: MapaDaArea; origens?: CidadeOrigem[] }) {
   return (
     <div className="isolate relative z-0">
       {/* Sem internet o arquivo do mapa não chega: só ele avisa, a tela fica. */}

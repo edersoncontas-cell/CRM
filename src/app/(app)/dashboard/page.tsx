@@ -463,7 +463,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── Linha 3: mapa da área de atuação + linhas/cidades ── */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Painel className="lg:col-span-2" titulo={`Vendas por cidade — ${mapa.titulo}`} subtitulo="cifrão = cidade com máquina faturada (município do cadastro do cliente); atualiza sozinho">
+        <Painel className="lg:col-span-2" titulo={`Vendas por cidade — ${mapa.titulo}`} subtitulo="número = máquinas faturadas na cidade (município do cadastro do cliente); atualiza sozinho">
           <MapaVendasWrapper pontosIniciais={resumo.pontosMapa} pontosTudoIniciais={resumo.pontosMapaTudo} ano={anoSel} mapa={mapa} />
         </Painel>
         <div className="grid grid-cols-1 gap-3">

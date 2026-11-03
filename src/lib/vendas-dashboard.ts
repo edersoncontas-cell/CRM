@@ -45,7 +45,7 @@ export async function carregarVendasFaturadas(): Promise<VendaDash[]> {
     },
   });
   // Cidade sem coordenada no banco: a da base do IBGE, nos estados da área
-  // de atuação (Configurações) — senão a venda não vira cifrão no mapa.
+  // de atuação (Configurações) — senão a venda não vira número no mapa.
   const area = await lerAreaAtuacao().catch(() => AREA_PADRAO);
   const comCoordenada = (m: VendaDash["municipio"]): VendaDash["municipio"] => {
     if (!m || (m.lat != null && m.lng != null)) return m;

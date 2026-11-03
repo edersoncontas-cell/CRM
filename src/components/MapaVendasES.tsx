@@ -20,18 +20,23 @@ import type { PontoVenda } from "@/lib/vendas-dashboard";
 // Contorno dos estados da área de atuação (IBGE, gratuito, sem chave). Se a
 // busca falhar, o mapa segue só com os azulejos escuros — nada quebra.
 
-const tamanhoDoCifrao = (vendas: number, max: number) => Math.round(26 + (vendas / max) * 22);
+// 03/11: "substitua os cifrões por números" — o círculo mostra QUANTAS
+// máquinas foram faturadas na cidade, e continua crescendo com o número.
+const tamanhoDoPino = (vendas: number, max: number) => Math.round(26 + (vendas / max) * 22);
 
-function iconeCifrao(vendas: number, max: number): L.DivIcon {
-  const tamanho = tamanhoDoCifrao(vendas, max);
+function iconeVendas(vendas: number, max: number): L.DivIcon {
+  const tamanho = tamanhoDoPino(vendas, max);
+  const digitos = String(vendas).length;
+  // Mais dígitos, letra menor: "128" tem que caber no círculo de 26 px.
+  const fonte = Math.round(tamanho * (digitos >= 3 ? 0.36 : digitos === 2 ? 0.45 : 0.55));
   return L.divIcon({
     className: "",
     iconSize: [tamanho, tamanho],
     iconAnchor: [tamanho / 2, tamanho / 2],
     popupAnchor: [0, -tamanho / 2],
     html: `<div style="width:${tamanho}px;height:${tamanho}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;
-      background:radial-gradient(circle at 30% 30%, #ffe27a, #ffb81c 60%, #e09e00);color:#111;font-weight:900;font-size:${Math.round(tamanho * 0.55)}px;
-      box-shadow:0 0 0 3px rgba(255,184,28,0.25), 0 6px 16px rgba(0,0,0,0.5);border:2px solid #fff3c4;">$</div>`,
+      background:radial-gradient(circle at 30% 30%, #ffe27a, #ffb81c 60%, #e09e00);color:#111;font-weight:900;font-size:${fonte}px;line-height:1;
+      box-shadow:0 0 0 3px rgba(255,184,28,0.25), 0 6px 16px rgba(0,0,0,0.5);border:2px solid #fff3c4;">${vendas}</div>`,
   });
 }
 
@@ -93,9 +98,9 @@ export default function MapaVendasES({
 
   const pontos = modo === "ano" ? pontosAno : pontosTudo;
   const max = useMemo(() => Math.max(1, ...pontos.map((p) => p.vendas)), [pontos]);
-  // Os cifrões ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles (anel de 3 px + sombra).
+  // Os números ficam por cima do mapa: o nome da cidade não pode ser escrito embaixo deles (anel de 3 px + sombra).
   const obstaculos = useMemo<ObstaculoRotulo[]>(
-    () => pontos.map((p) => { const r = tamanhoDoCifrao(p.vendas, max) / 2 + 5; return { lng: p.lng, lat: p.lat, esq: -r, dir: r, cima: -r, baixo: r }; }),
+    () => pontos.map((p) => { const r = tamanhoDoPino(p.vendas, max) / 2 + 5; return { lng: p.lng, lat: p.lat, esq: -r, dir: r, cima: -r, baixo: r }; }),
     [pontos, max],
   );
   const totalVendas = pontos.reduce((s, p) => s + p.vendas, 0);
@@ -138,7 +143,7 @@ export default function MapaVendasES({
           <GeoJSON key={i} data={c} style={{ color: T.rosa, weight: 1.5, fillColor: T.violeta, fillOpacity: 0.10 }} interactive={false} />
         ))}
         {pontos.map((p) => (
-          <Marker key={p.municipioId} position={[p.lat, p.lng]} icon={iconeCifrao(p.vendas, max)}>
+          <Marker key={p.municipioId} position={[p.lat, p.lng]} icon={iconeVendas(p.vendas, max)}>
             <Popup maxWidth={320}>
               <div className="text-sm">
                 <b>{p.nome}</b><br />
@@ -164,7 +169,7 @@ export default function MapaVendasES({
       {comDivisas && <LegendaMapaRegioes atendidos={mapa.atendidos} texto={T.texto2} />}
       {pontos.length === 0 && (
         <p className="mt-2 text-xs" style={{ color: T.mudo }}>
-          Nenhuma venda faturada com município no cadastro do cliente {modo === "ano" ? `em ${ano}` : ""}. Preencha a cidade no cadastro e o cifrão aparece aqui.
+          Nenhuma venda faturada com município no cadastro do cliente {modo === "ano" ? `em ${ano}` : ""}. Preencha a cidade no cadastro e o número aparece aqui.
         </p>
       )}
     </div>

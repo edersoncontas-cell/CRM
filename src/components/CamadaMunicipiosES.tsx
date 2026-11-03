@@ -19,7 +19,7 @@ import { RotulosMunicipiosES } from "@/components/RotulosMunicipiosES";
 // teste de ordem): azulejos (200) → contorno grosso do estado → cidades → nomes →
 // rotas/pins/cifrões (400/600). As cidades ficam em camadas PRÓPRIAS, e não na das
 // rotas (400): lista nova recria a camada das cidades e, na camada das rotas, ela
-// nasceria POR CIMA do trajeto do dia. Pins e popups das visitas e o cifrão das
+// nasceria POR CIMA do trajeto do dia. Pins e popups das visitas e o número de vendas das
 // vendas continuam recebendo o clique por cima.
 
 const DADOS = malha as unknown as GeoJsonObject;

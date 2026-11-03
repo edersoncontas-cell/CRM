@@ -13,6 +13,7 @@ import type { VisitaMapa, AgendaProxima } from "@/components/MapaVisitasES";
 import { coordenadasMunicipioES } from "@/lib/municipios-es";
 import { lerAreaAtuacao, cidadesParaSugerir, coordenadasNaArea, mapaDaAreaOuPadrao } from "@/lib/area-atuacao";
 import { AREA_PADRAO } from "@/lib/area-atuacao-regra";
+import { municipiosDaUf } from "@/lib/municipios-brasil";
 import { sugerirVisitasNaViagem } from "@/lib/visitas-na-viagem";
 import { lerSituacaoGoogle } from "@/lib/google-contatos";
 import { AvisoGoogleReconectar } from "@/components/AvisoGoogleReconectar";
@@ -143,6 +144,13 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
     hora: REUNIAO_SEGUNDA.hora, dataIso: dias[0].iso, lat: coordVitoria?.lat ?? null, lng: coordVitoria?.lng ?? null, fixo: true,
   });
   const diasMapa = dias.map((d) => ({ iso: d.iso, nome: d.nome, label: d.label, ehHoje: d.ehHoje }));
+  // Cidades de onde ele pode sair para a "melhor rota" do dia: as dos estados
+  // da área de atuação (com coordenada do IBGE). Com mais de um estado, o nome
+  // leva a UF para não confundir cidades homônimas.
+  const variasUfs = area.ufs.length > 1;
+  const origensRota = area.ufs
+    .flatMap((uf) => municipiosDaUf(uf).map((m) => ({ nome: variasUfs ? `${m.nome} (${m.uf})` : m.nome, lat: m.lat, lng: m.lng })))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const diaInicial = dias.find((d) => d.ehHoje)?.iso ?? dias[0].iso;
 
   // ── O QUE VEM PELA FRENTE: 7 DIAS ──────────────────────────────────────
@@ -303,7 +311,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: { cl
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-bold text-slate-200 uppercase tracking-wide">Mapa da semana · clique no dia</h2>
-        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} proximos7={proximos7} mapa={mapa} />
+        <MapaVisitasWrapper visitas={visitasMapa} dias={diasMapa} diaInicial={diaInicial} proximos7={proximos7} mapa={mapa} origens={origensRota} />
       </section>
 
       <section className="mb-6">

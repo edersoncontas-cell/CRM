@@ -26,7 +26,7 @@ export type Anel = Ponto[];
 export type Poligono = Anel[];
 export type Caixa = { x0: number; y0: number; x1: number; y1: number };
 
-/** Coisa que fica por cima do mapa e que o nome não pode cobrir (pin de visita, cifrão de venda). Deslocamentos em px a partir do ponto. */
+/** Coisa que fica por cima do mapa e que o nome não pode cobrir (pin de visita, número de vendas). Deslocamentos em px a partir do ponto. */
 export type ObstaculoRotulo = { lng: number; lat: number; esq: number; cima: number; dir: number; baixo: number };
 
 export type FeicaoMalha = {
