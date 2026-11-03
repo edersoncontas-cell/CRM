@@ -62,6 +62,7 @@ export const ROTULO_ACAO: Record<AcaoAudit, string> = {
   dados_provisorio_trazidos: "Dados do banco provisório trazidos",
   area_atuacao_alterada: "Área de atuação alterada",
   ritmo_envio_alterado: "Ritmo do envio em massa alterado",
+  trava_envio_alterada: "Trava de envio do WhatsApp alterada",
   offline_sincronizado: "Subiu do modo sem sinal",
 };
 

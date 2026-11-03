@@ -6,12 +6,14 @@ import { envioPausado, definirPausa } from "@/lib/whatsapp-pausa";
 import { registrarAudit } from "@/lib/audit";
 import { lerConfigAniversario } from "@/lib/aniversario-automatico";
 import { lerParametros } from "@/lib/parametros";
+import { lerLimitesEnvio } from "@/lib/envio-guarda";
+import { descreverRitmo } from "@/lib/envio-limites";
+import { PALAVRA_LIBERAR, confirmouLiberar } from "@/lib/whatsapp-pausa-regra";
 
-// SEM TELA desde 01/10. O card que chamava estas duas ações (Configurações →
-// "Envio de mensagens PAUSADO") foi removido a pedido do vendedor: o envio em
-// massa para todos deixou de existir, só clientes de cada cidade. Ficam aqui,
-// prontas, para o botão de liberar morar na tela do envio por cidade — não
-// reescrever do zero, e não liberar por outro caminho: a trava geral é esta.
+// 03/11: o card voltou, agora no topo do Marketing (components/TravaEnvio.tsx).
+// Ficou sem tela de 01/10 a 03/11 — e sem tela a trava nascia pausada e NUNCA
+// podia ser liberada, então nenhuma campanha saía. Não liberar por outro
+// caminho: a trava geral é esta.
 
 export type ItemFila = { o_que: string; quantos: number; onde: string | null };
 
@@ -21,6 +23,8 @@ export type EstadoPausa = {
   naFila: number;
   /** TUDO que voltaria a sair se ele liberasse — uma linha por caminho. */
   fila: ItemFila[];
+  /** "Sai no ritmo de 5 por hora… das 8h às 18h, em dias úteis." */
+  ritmo: string;
 };
 
 /**
@@ -37,7 +41,7 @@ export type EstadoPausa = {
  * pela trava geral; esta lista diz o que cada um tem engatilhado.
  */
 export async function lerPausaAction(): Promise<EstadoPausa> {
-  const [pausado, naFila, falhadas, aniv, params] = await Promise.all([
+  const [pausado, naFila, falhadas, aniv, params, lim] = await Promise.all([
     envioPausado(),
     db.envioProgramado.count({ where: { status: { in: ["pendente", "enviando"] } } }).catch(() => 0),
     // retryCount < 3 é a condição do cron de reenvio: acima disso ele desiste,
@@ -47,6 +51,7 @@ export async function lerPausaAction(): Promise<EstadoPausa> {
     }).catch(() => 0),
     lerConfigAniversario().catch(() => ({ ativo: false, texto: "" })),
     lerParametros().catch(() => null),
+    lerLimitesEnvio(),
   ]);
 
   const fila: ItemFila[] = [];
@@ -62,21 +67,36 @@ export async function lerPausaAction(): Promise<EstadoPausa> {
   if (params?.whatsappBriefing) {
     fila.push({ o_que: "Briefing diário no seu próprio número está ligado", quantos: 0, onde: "/configuracoes" });
   }
-  return { pausado, naFila, fila };
+  return { pausado, naFila, fila, ritmo: descreverRitmo(0, lim) };
 }
 
 /**
  * Liberar ou pausar o envio.
  *
- * Liberar é ato consciente e por isso exige a confirmação por escrito na tela:
- * foi um "pode mandar" implícito que derrubou o número duas vezes. Pausar, ao
- * contrário, é imediato e sem pergunta — na hora do aperto ninguém deve ter
- * que responder nada.
+ * Liberar é ato consciente e por isso exige a confirmação por escrito
+ * (digitar LIBERAR): foi um "pode mandar" implícito que derrubou o número duas
+ * vezes. A exigência é conferida AQUI, no servidor, e não só na tela — uma tela
+ * antiga, ou qualquer chamada direta, não libera sem a palavra. Pausar, ao
+ * contrário, é imediato e sem pergunta: na hora do aperto ninguém deve ter que
+ * responder nada.
  */
-export async function definirPausaAction(pausar: boolean): Promise<{ ok: boolean; pausado: boolean }> {
-  await definirPausa(pausar);
+export async function definirPausaAction(
+  pausar: boolean,
+  confirmacao?: string,
+): Promise<{ ok: boolean; pausado: boolean; erro?: string }> {
+  if (!pausar && !confirmouLiberar(confirmacao)) {
+    return { ok: false, pausado: await envioPausado(), erro: `Para liberar, digite ${PALAVRA_LIBERAR} na caixa.` };
+  }
+  try {
+    await definirPausa(pausar);
+  } catch (e) {
+    console.error("[trava-envio] gravar:", e);
+    // Falha ao gravar: o estado real é o que o banco ainda tem — e na dúvida,
+    // pausado (envioPausado devolve true quando não consegue ler).
+    return { ok: false, pausado: await envioPausado(), erro: "Não consegui gravar (banco sem resposta). Nada mudou." };
+  }
   await registrarAudit({
-    acao: "perfil_atualizado", origem: "usuario",
+    acao: "trava_envio_alterada", origem: "usuario",
     descricao: pausar
       ? "Envio de WhatsApp PAUSADO: nenhuma mensagem sai do CRM."
       : "Envio de WhatsApp LIBERADO pelo vendedor.",

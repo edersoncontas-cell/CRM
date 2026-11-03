@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { db } from "@/lib/db";
 import { MensagemClientes } from "@/components/MensagemClientes";
+import { TravaEnvio } from "@/components/TravaEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export default async function MarketingPage() {
         titulo="Marketing"
         subtitulo="Mensagem em massa para a carteira: visita na cidade, promoção, data comemorativa ou aniversário. Dá para mandar na hora ou programar dia e horário (fuso de Brasília)."
       />
+      {/* A trava geral fica no topo: é ela que decide se a fila sai. */}
+      <TravaEnvio />
       <MensagemClientes cidades={cidadesComClientes} />
     </div>
   );

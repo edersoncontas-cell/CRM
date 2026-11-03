@@ -127,10 +127,13 @@ export function MensagemClientes({ cidades }: { cidades: { id: string; nome: str
   // marcou antes de marcar mais um.
   useEffect(() => {
     let vivo = true;
-    listarEnviosProgramadosAction()
+    const recarregar = () => listarEnviosProgramadosAction()
       .then((r) => { if (vivo) setProgramados(r); })
       .catch(() => {});
-    return () => { vivo = false; };
+    recarregar();
+    // O card da trava (TravaEnvio) cancela a fila inteira na mesma página.
+    window.addEventListener("crm:fila-envio-mudou", recarregar);
+    return () => { vivo = false; window.removeEventListener("crm:fila-envio-mudou", recarregar); };
   }, []);
 
   useEffect(() => {

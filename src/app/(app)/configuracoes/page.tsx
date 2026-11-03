@@ -80,9 +80,10 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
           fixo no canto — components/AlternarTema.tsx), "Travas de envio do
           WhatsApp" e "Exportar dados". "A realidade do seu negócio" e "O que
           o Orientador aprendeu com você" foram para a Central Inteligente.
-          A trava geral de envio CONTINUA ligada (lib/whatsapp-pausa.ts nasce
-          pausada) e o teto/janela/ritmo (lib/envio-limites.ts) continuam
-          valendo — só não há mais tela para mexer neles. */}
+          A trava geral de envio nasce pausada (lib/whatsapp-pausa.ts) e
+          desde 03/11 é liberada/pausada no topo do Marketing, junto com o
+          ritmo por hora; teto e janela (lib/envio-limites.ts) seguem sem
+          tela. */}
 
       <ParametrosNegocioForm p={parametros} />
 

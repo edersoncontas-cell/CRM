@@ -27,7 +27,9 @@ export type AcaoAudit =
   // Estado(s) e municípios que ele atende (Configurações → Área de atuação).
   | "area_atuacao_alterada"
   // Ritmo do envio em massa (Marketing → "Ritmo": mensagens por hora).
-  | "ritmo_envio_alterado";
+  | "ritmo_envio_alterado"
+  // Trava geral do envio de WhatsApp liberada ou pausada (Marketing).
+  | "trava_envio_alterada";
 
 export type OrigemAudit = "ia" | "usuario" | "sistema" | "zeus" | "cerebro";
 

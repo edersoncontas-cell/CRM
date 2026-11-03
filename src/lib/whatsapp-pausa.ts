@@ -13,11 +13,8 @@
 // mandar": foi confiando em regra mais acima que o número caiu duas vezes.
 // Para voltar a enviar é preciso um ato explícito do vendedor numa tela.
 //
-// ATENÇÃO (01/10): hoje NENHUMA tela tem esse botão. O card "Envio de
-// mensagens PAUSADO" saiu de Configurações a pedido dele, quando o envio em
-// massa para todos deixou de existir (só clientes de cada cidade). A trava
-// continua ligada e nada sai. Quando o envio por cidade tiver tela, o botão de
-// liberar mora lá — o ato já está pronto em lib/whatsapp-pausa-actions.ts.
+// A tela: card no topo do Marketing (components/TravaEnvio.tsx, 03/11).
+// Liberar pede a palavra LIBERAR, conferida no servidor.
 
 import { getConfig, setConfig } from "@/lib/config";
 
