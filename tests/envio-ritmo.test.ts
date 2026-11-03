@@ -291,3 +291,14 @@ describe("o funil da campanha (lib/envio-massa.ts)", () => {
     expect(r.bloqueio).toMatch(/zerado/);
   });
 });
+
+describe("o teste de recebimento diz o motivo por extenso (o card Últimos eventos saiu)", () => {
+  it("cada motivo de descarte tem explicação, e o desconhecido não some", async () => {
+    const { explicarDescarte } = await import("@/lib/whatsapp-resgate-regra");
+    for (const st of ["grupo", "status", "sem-texto", "sem-telefone", "antiga", "bloqueado"]) {
+      expect(explicarDescarte(st).length).toBeGreaterThan(20);
+    }
+    expect(explicarDescarte("erro: coluna")).toMatch(/falhou ao gravar/);
+    expect(explicarDescarte("qualquer-coisa")).toMatch(/deixada de fora/);
+  });
+});

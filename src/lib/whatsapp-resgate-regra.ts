@@ -7,7 +7,8 @@
 //      morta por dentro, ou a Evolution do servidor com defeito);
 //   2. chega na Evolution, mas o aviso (webhook) não vem ao CRM → o CRM puxa
 //      direto da Evolution (o "resgate") e reaponta o webhook;
-//   3. chega ao CRM e é descartada → o motivo está em "Últimos eventos".
+//   3. chega ao CRM e é descartada → o motivo vai por extenso na própria
+//      conclusão (o card "Últimos eventos" saiu da tela Conexão em 03/11).
 // Aqui ficam: quais mensagens puxar, a memória do que já foi visto e a
 // conclusão do "Testar recebimento".
 
@@ -148,6 +149,20 @@ export type Situacao =
 export type Conclusao = { situacao: Situacao; final: boolean; titulo: string; texto: string; refazer?: boolean };
 
 const RECUSA_WEBHOOK = new Set(["chave-recusada", "outra-instancia"]);
+/** O que cada motivo de descarte quer dizer, em português de gente. */
+export const EXPLICACAO_DESCARTE: Record<string, string> = {
+  grupo: "é de um grupo — grupos não entram no CRM.",
+  status: "é story/status do WhatsApp — ignorado.",
+  "sem-texto": "chegou sem texto (figurinha, reação, mídia sem legenda) — nada para registrar.",
+  "sem-telefone": "veio sem número de origem — ignorada.",
+  antiga: "é anterior à data de corte da importação ou a uma exclusão sua — não entra.",
+  bloqueado: "o contato está barrado pelo filtro de nomes ou já foi bloqueado — não entra no CRM.",
+};
+
+export function explicarDescarte(status: string): string {
+  return EXPLICACAO_DESCARTE[status] ?? (status.startsWith("erro") ? "o CRM falhou ao gravar a mensagem — tente de novo; se repetir, me mande esta tela." : "foi deixada de fora pelo CRM.");
+}
+
 const DESCARTE = new Set(["grupo", "status", "sem-texto", "sem-telefone", "antiga", "bloqueado"]);
 
 export function concluirTeste(e: EntradaConclusao): Conclusao {
@@ -179,7 +194,7 @@ export function concluirTeste(e: EntradaConclusao): Conclusao {
     return {
       situacao: "descartada", final: true,
       titulo: "A mensagem chegou ao CRM, mas foi deixada de fora.",
-      texto: `Motivo: "${descarte}" — veja a explicação em Últimos eventos, logo abaixo nesta tela.`,
+      texto: `Motivo: "${descarte}" — a mensagem ${explicarDescarte(descarte)}`,
     };
   }
   if (e.recebidasNaEvolution > 0 && e.faltandoNoCrm === 0) {

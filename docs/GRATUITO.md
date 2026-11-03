@@ -130,8 +130,8 @@ lugar ligado 24h.
    Aparelhos conectados → Conectar um aparelho*). Se a instância não existir, a
    própria tela oferece o botão **"Criar instância e gerar QR"**; se o webhook
    estiver fora do lugar, ela corrige sozinha.
-5. Peça uma mensagem de teste. Em **/conexao → Diagnóstico do recebimento**
-   deve aparecer "recebida" e a conversa entra em **/atendimento**.
+5. Peça uma mensagem de teste. Em **/conexao**, o botão **"Testar recebimento"**
+   confirma que ela chegou, e a conversa entra em **/atendimento**.
 
 Pronto. O resto desta seção é o caminho manual, para quem preferir.
 

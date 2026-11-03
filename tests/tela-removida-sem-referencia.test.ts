@@ -27,6 +27,13 @@ describe("textos que apontam para telas removidas", () => {
     "Configurações → Exportar",
     "Configurações → Mensagens com erro",
     "Configurações → \"Atualizar aprendizado agora\"",
+    // 03/11: saíram da tela Conexão os cards "Importar conversas", "Diagnóstico
+    // do recebimento" e "Como funciona".
+    "Diagnóstico do recebimento",
+    "Importar conversas para o Atendimento",
+    "Últimos eventos, logo abaixo",
+    "veja \"Últimos eventos\"",
+    "no card de cima",
   ]) {
     it(`ninguém manda o vendedor para "${frase}"`, () => {
       const onde = fontes.filter((f) => f.s.includes(frase)).map((f) => f.p);

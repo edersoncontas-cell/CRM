@@ -917,7 +917,7 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
       // na Evolution mas morrendo num 404 ou numa tela de login parecia tudo ok)
       const teste = await testarWebhookDeFora(w?.enabled ? w.url : null);
       etapas.push({ etapa: "Chamada de teste no webhook", ok: teste.ok, detalhe: teste.detalhe });
-      if (teste.ok && ok) return fim("Tudo certo: número pareado, webhook no lugar e a chamada de teste chegou no CRM. Se ainda assim nada aparece, mande uma mensagem de teste e veja \"Últimos eventos\" abaixo.");
+      if (teste.ok && ok) return fim("Tudo certo: número pareado, webhook no lugar e a chamada de teste chegou no CRM. Se ainda assim nada aparece, use o botão \"Testar recebimento\".");
       if (teste.ok) {
         // O endereço da instância ENTREGA neste banco (o teste provou): é ele
         // que fica. Antes o vigia "corrigia" para o endereço guardado — que,
@@ -947,7 +947,7 @@ export async function diagnosticarConexao(origemNavegador: string | null = null)
           const r = await configurarWebhookEvolution(candidata).catch(() => ({ ok: false, erro: "falhou" }));
           etapas.push({ etapa: "Webhook reapontado", ok: r.ok, detalhe: r.ok ? `agora em ${candidata.replace(/apikey=.*$/, "apikey=…")}` : `não consegui: ${"erro" in r ? r.erro : ""}` });
           return fim(r.ok
-            ? `Corrigido: o webhook apontava para ${baseAtual || "um endereço errado"}, que não é o CRM (por isso nada chegava). Reapontei para ${origemNavegador}, que é o endereço que você usa — mande uma mensagem de teste e veja "Últimos eventos" abaixo. Se quiser deixar a variável certa também: NEXTAUTH_URL = ${origemNavegador} na Vercel.`
+            ? `Corrigido: o webhook apontava para ${baseAtual || "um endereço errado"}, que não é o CRM (por isso nada chegava). Reapontei para ${origemNavegador}, que é o endereço que você usa — mande uma mensagem de teste e use o botão "Testar recebimento". Se quiser deixar a variável certa também: NEXTAUTH_URL = ${origemNavegador} na Vercel.`
             : `O endereço certo é ${origemNavegador} (a chamada de teste chegou por ele), mas não consegui reapontar o webhook na Evolution. Clique em "Configurar webhook agora".`);
         }
       }
