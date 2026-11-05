@@ -344,7 +344,7 @@ export async function mesclarClientes(
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${principalId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/zeus");
+  revalidatePath("/cerebro");
   return { ok: true };
 }
 
@@ -1529,7 +1529,7 @@ export async function ocultarItemCentralAction(chave: string, clienteId?: string
     // (já resolvida por AlertaOculto) e ela nunca voltaria a aparecer.
     const id = chave.split(":")[1];
     if (id) await db.zeusEvent.update({ where: { id }, data: { resolvido: true } }).catch(() => {});
-    revalidatePath("/alertas"); revalidatePath("/zeus");
+    revalidatePath("/alertas"); revalidatePath("/cerebro");
     return { ok: true };
   }
   // Guarda a chave ESTÁVEL (ver lib/alerta-chave.ts): a chave longa carregava

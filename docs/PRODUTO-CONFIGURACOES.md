@@ -24,7 +24,7 @@ sumir — o vendedor tem que saber que existe e por que não mexe.
 | Itens do menu (por aparelho) | Configurações → Visibilidade do menu |
 | Tema claro/escuro | sol/lua no canto |
 | Regras do negócio que a IA respeita | Central Inteligente → "A realidade do seu negócio" |
-| Liberar IA paga (nasce travada) | `/zeus` |
+| Liberar IA paga (nasce travada) | Central Inteligente → aba ZEUS (`/cerebro?aba=zeus`) |
 | Google (agenda e contatos) | Configurações → Google |
 
 ## 2. Pode virar configuração (o vendedor muda)

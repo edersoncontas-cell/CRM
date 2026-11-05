@@ -23,7 +23,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
           <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Algo deu errado</h1>
           <p style={{ fontSize: 13, color: "#a1a1aa", maxWidth: 360, marginBottom: 20 }}>
-            O erro já foi registrado no ZEUS (veja em /zeus) para diagnóstico. Tente novamente.
+            O erro já foi registrado no ZEUS (veja em Central Inteligente → ZEUS) para diagnóstico. Tente novamente.
           </p>
           <button
             onClick={reset}

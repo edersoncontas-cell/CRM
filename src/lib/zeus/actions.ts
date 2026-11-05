@@ -15,7 +15,7 @@ export async function alternarZeusAtivoAction(ativo: boolean): Promise<{ ok: boo
     origem: "usuario",
     descricao: ativo ? "ZEUS reativado pelo vendedor." : "ZEUS pausado pelo vendedor (kill-switch).",
   });
-  revalidatePath("/zeus");
+  revalidatePath("/cerebro");
   return { ok: true };
 }
 
@@ -23,7 +23,7 @@ export async function alternarZeusAtivoAction(ativo: boolean): Promise<{ ok: boo
 export async function alternarAuditModeAction(auditMode: boolean): Promise<{ ok: boolean }> {
   const s = await getWaSettings();
   await db.whatsAppSettings.update({ where: { id: s.id }, data: { auditMode } });
-  revalidatePath("/zeus");
+  revalidatePath("/cerebro");
   revalidatePath("/atendimento");
   return { ok: true };
 }
@@ -31,13 +31,13 @@ export async function alternarAuditModeAction(auditMode: boolean): Promise<{ ok:
 // Botão "Forçar tick" — roda a mesma função do cron, sob demanda.
 export async function forcarZeusTickAction(): Promise<ResumoTick> {
   const resumo = await executarZeusTick();
-  revalidatePath("/zeus");
+  revalidatePath("/cerebro");
   return resumo;
 }
 
 export async function resolverZeusEventoAction(id: string): Promise<{ ok: boolean }> {
   await db.zeusEvent.update({ where: { id }, data: { resolvido: true } });
-  revalidatePath("/zeus");
+  revalidatePath("/cerebro");
   return { ok: true };
 }
 

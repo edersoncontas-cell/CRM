@@ -14,7 +14,9 @@ import { RealidadeNegocioCard } from "@/components/RealidadeNegocioCard";
 import { AprendizadoOrientadorCard } from "@/components/AprendizadoOrientadorCard";
 import { TODAS_AULAS } from "@/lib/academia-trilha";
 import { inicioDoDiaBrasilia } from "@/lib/utils";
-import { Brain } from "lucide-react";
+import { Brain, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ZeusAba } from "./zeus-aba";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +57,75 @@ async function contagens(): Promise<Record<string, { total: number; rotulo: stri
   };
 }
 
-export default async function CerebroPage() {
+function Cabecalho({ nomeCrm }: { nomeCrm?: string | null }) {
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl" style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.35)" }}>
+        <Brain size={24} style={{ color: "#38bdf8" }} />
+      </div>
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold text-white sm:text-2xl">Central Inteligente</h1>
+        <p className="text-[11px] leading-snug text-zinc-500 sm:text-xs">
+          O Cérebro do {nomeCrm ?? "CRM"} vê tudo, analisa tudo e conecta tudo: cada sessão manda o que aconteceu, ele devolve o que fazer.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Duas abas: o Cérebro (o que ele analisa e aprende) e o ZEUS (a saúde do
+// sistema e os provedores de IA), que até 05/11 era uma tela própria no menu.
+// Cada aba só consulta o que ela mostra — abrir a Central não paga as
+// consultas do ZEUS, e vice-versa (cota do banco grátis).
+type Aba = "cerebro" | "zeus";
+
+function Abas({ ativa }: { ativa: Aba }) {
+  const abas: { id: Aba; label: string; href: string; icon: typeof Brain; cor: string }[] = [
+    { id: "cerebro", label: "Cérebro", href: "/cerebro", icon: Brain, cor: "#38bdf8" },
+    { id: "zeus", label: "ZEUS · centro de comando", href: "/cerebro?aba=zeus", icon: ShieldCheck, cor: "#BFDE4D" },
+  ];
+  return (
+    <nav className="mb-5 flex gap-2 overflow-x-auto" aria-label="Abas da Central Inteligente">
+      {abas.map(({ id, label, href, icon: Icon, cor }) => {
+        const ativo = id === ativa;
+        return (
+          <Link
+            key={id}
+            href={href}
+            aria-current={ativo ? "page" : undefined}
+            className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:brightness-125 sm:text-sm"
+            style={{
+              background: ativo ? "#111a24" : "transparent",
+              border: `1px solid ${ativo ? cor : "#1e2a36"}`,
+              color: ativo ? "#ffffff" : "#71809a",
+            }}
+          >
+            <Icon size={16} style={{ color: ativo ? cor : "#71809a" }} />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export default async function CerebroPage({ searchParams }: { searchParams?: { aba?: string } }) {
+  const aba: Aba = searchParams?.aba === "zeus" ? "zeus" : "cerebro";
+
+  if (aba === "zeus") {
+    const parametros = await lerParametros().catch(() => null);
+    return (
+      <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
+        <Cabecalho nomeCrm={parametros?.nomeCrm} />
+        <Abas ativa="zeus" />
+        <p className="mb-4 text-[11px] leading-snug text-zinc-500 sm:text-xs">
+          Governança autônoma 24/7 · saúde do sistema · higiene de dados · alertas · provedores de IA
+        </p>
+        <ZeusAba />
+      </div>
+    );
+  }
+
   await garantirManutencaoSeNecessario();
 
   const [numeros, relatorios, ideias, memorias, audits, parametros, regras, aprendizado] = await Promise.all([
@@ -81,17 +151,8 @@ export default async function CerebroPage() {
 
   return (
     <div style={{ background: "#09090b", minHeight: "100%" }} className="-m-4 p-4 sm:-m-6 sm:p-6 md:-m-8 md:p-8">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl" style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.35)" }}>
-          <Brain size={24} style={{ color: "#38bdf8" }} />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-white sm:text-2xl">Central Inteligente</h1>
-          <p className="text-[11px] leading-snug text-zinc-500 sm:text-xs">
-            O Cérebro do {parametros?.nomeCrm ?? "CRM"} vê tudo, analisa tudo e conecta tudo: cada sessão manda o que aconteceu, ele devolve o que fazer.
-          </p>
-        </div>
-      </div>
+      <Cabecalho nomeCrm={parametros?.nomeCrm} />
+      <Abas ativa="cerebro" />
 
       <div className="mb-5">
         <CerebroGrafo nos={nos} />

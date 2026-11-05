@@ -49,7 +49,7 @@ export async function salvarChaveIAAction(
 
   // Fora do try de propósito: a chave JÁ está salva. Um revalidate que falha
   // não pode fazer a tela dizer que não salvou.
-  try { revalidatePath("/zeus"); revalidatePath("/configuracoes"); } catch { /* fora do request */ }
+  try { revalidatePath("/cerebro"); revalidatePath("/configuracoes"); } catch { /* fora do request */ }
   return { ok: true };
 }
 
@@ -70,7 +70,7 @@ export async function apagarChaveIAAction(provedor: string): Promise<{ ok: boole
     descricao: `Chave de IA do ${NOME_PROVEDOR[provedor]} apagada pela tela do CRM.`,
     entidade: "Configuracao", entidadeId: chaveConfig(provedor),
   }).catch(() => {});
-  try { revalidatePath("/zeus"); revalidatePath("/configuracoes"); } catch { /* fora do request */ }
+  try { revalidatePath("/cerebro"); revalidatePath("/configuracoes"); } catch { /* fora do request */ }
   return { ok: true };
 }
 
@@ -100,6 +100,6 @@ export async function definirSomenteGratuitosAction(somenteGratuitos: boolean): 
       : "Trava de gasto DESLIGADA: o CRM passa a usar provedor pago quando os gratuitos recusarem.",
     entidade: "Configuracao", entidadeId: CHAVE_SOMENTE_GRATUITOS,
   }).catch(() => {});
-  try { revalidatePath("/zeus"); } catch { /* fora do request */ }
+  try { revalidatePath("/cerebro"); } catch { /* fora do request */ }
   return { ok: true };
 }

@@ -3,7 +3,7 @@
 
 import {
   LayoutDashboard, Users, Settings, Swords, MessageCircle, Banknote, ClipboardList, Smartphone,
-  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, ShieldCheck, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical, WifiOff, BarChart3,
+  GraduationCap, FileText, Truck, Brain, Handshake, ListTodo, MapPin, Compass, Bell, Calculator, Megaphone, TrendingDown, UserRound, FlaskConical, WifiOff, BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,7 +62,8 @@ export const GRUPOS: GrupoMenu[] = [
     label: "Sistema",
     links: [
       { href: "/cerebro", label: "Central Inteligente", icon: Brain, fixo: true },
-      { href: "/zeus", label: "ZEUS", icon: ShieldCheck, fixo: true },
+      // O ZEUS mora dentro da Central Inteligente, aba "ZEUS" (05/11).
+      // /zeus continua existindo e redireciona para /cerebro?aba=zeus.
       { href: "/conexao", label: "Conexão WhatsApp", icon: Smartphone },
       { href: "/auditoria", label: "Auditoria", icon: ClipboardList },
       { href: "/configuracoes", label: "Configurações", icon: Settings, fixo: true },

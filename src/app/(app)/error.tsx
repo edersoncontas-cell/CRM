@@ -82,7 +82,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-white/70 p-2 text-[11px] text-slate-700">
           {error.message || "(sem mensagem)"}{error.digest ? `\ndigest: ${error.digest}` : ""}{"\n"}{typeof window !== "undefined" ? window.location.pathname + window.location.search : ""}
         </pre>
-        <p className="mt-1 text-[11px] text-red-600">O erro também foi registrado no ZEUS (menu Sistema → ZEUS).</p>
+        <p className="mt-1 text-[11px] text-red-600">O erro também foi registrado no ZEUS (Central Inteligente → aba ZEUS).</p>
       </details>
     </div>
   );
