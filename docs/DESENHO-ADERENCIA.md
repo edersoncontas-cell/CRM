@@ -124,7 +124,16 @@ depois como coluna aditiva.
 
 ---
 
-## 4. Etapa 1 — Suporte e sugestões
+## 4. Etapa 1 — Suporte e sugestões (CONSTRUÍDA em 05/11, nasce desligada)
+
+Liga em Configurações → Suporte e sugestões. Diferenças do desenho abaixo:
+- Com o login único, quem responde pela tela `/suporte` aparece como
+  "Suporte"; o vendedor continua a conversa abrindo outro pedido. Separa de
+  verdade quando existirem usuários (Etapa 2).
+- O prompt pronto sai do modelo fixo. A melhoria da redação pela IA gratuita
+  **não foi feita**.
+- Envio por rota (`/api/suporte`), não por ação "use server", porque os
+  prints passam de 1 MB.
 
 Não depende da Etapa 0 (funciona com a senha única; `autor` fica em branco ou
 "vendedor" até existirem usuários).
@@ -155,11 +164,10 @@ Não depende da Etapa 0 (funciona com a senha única; `autor` fica em branco ou
 - Tela **Meus pedidos**: conversa de cada ticket e resposta do admin.
 - Tela **Admin → Suporte** (só `dono`): lista por status, filtro, conversa com
   imagens, botão responder, mudar status, copiar o prompt.
-- **Notificação:** ticket novo cria um alerta na central (usando `Alerta`,
-  origem nova `suporte`, chave `suporte:<ticketId>`) e uma notificação push.
-  O contador "tickets novos" entra no mesmo cálculo de alertas que o menu já
-  faz, com uma contagem indexada. Sem consulta extra por tela. Resposta do
-  admin gera push para quem abriu.
+- **Notificação:** a tabela `Alerta` exige um cliente em cada linha, então
+  não serve para pedido de suporte (corrigido ao construir). O aviso é o
+  número de pedidos novos no próprio botão (uma contagem indexada, feita no
+  layout só com o recurso ligado, sem polling) e uma notificação push.
 
 ### 4.3 O "prompt pronto"
 Gerado **uma vez**, no momento em que o ticket é criado, em segundo plano
@@ -375,8 +383,8 @@ Depende das etapas de identidade, metas, uso e jornada.
 - **Sugestões por vendedor em duas camadas:**
   1. **Regras fixas, grátis e previsíveis**, rodadas **uma vez por dia** pelo
      cron: "5 negócios parados há 10+ dias", "20% abaixo do ritmo da meta",
-     "3 dias sem acessar". Viram linhas em `Alerta` com origem `gestor` e
-     chave de deduplicação (a mesma mecânica que já evita alerta repetido).
+     "3 dias sem acessar". `Alerta` exige cliente em cada linha, então estas
+     sugestões vão para uma tabela própria, com chave de deduplicação.
   2. **IA opcional, sob botão**, que reescreve a recomendação em linguagem
      natural, com teto diário e `pagoLiberado()`. Nunca gera sozinha a cada
      abertura da tela.

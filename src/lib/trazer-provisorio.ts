@@ -62,7 +62,13 @@ export type Etapa = {
   lote?: number;
 };
 
-export const TABELAS_QUE_NAO_VEM = ["UnificacaoClientes", "LimpezaClientes", "ClienteRedirecionamento"] as const;
+// Ticket/TicketMensagem/TicketAnexo: pedidos de suporte feitos no banco provisório
+// não voltam (recurso novo, nasce desligado; a conversa de suporte não é dado de
+// venda). Decisão registrada em docs/DESENHO-ADERENCIA.md.
+export const TABELAS_QUE_NAO_VEM = [
+  "UnificacaoClientes", "LimpezaClientes", "ClienteRedirecionamento",
+  "Ticket", "TicketMensagem", "TicketAnexo",
+] as const;
 
 const baixo = (v: unknown) => String(v ?? "").trim().toLowerCase();
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v ?? ""));

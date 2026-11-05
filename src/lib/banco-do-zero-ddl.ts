@@ -4,7 +4,7 @@
 //
 // A estrutura INTEIRA do banco, na ordem certa (tabelas, índices, chaves
 // estrangeiras), para o CRM nascer num banco vazio. Ver lib/banco-do-zero.ts.
-// 40 tabelas · 38 índices · 15 chaves estrangeiras.
+// 43 tabelas · 41 índices · 17 chaves estrangeiras.
 
 export const DDL_DO_ZERO: readonly string[] = [
   "CREATE TABLE \"Municipio\" (\n    \"id\" TEXT NOT NULL,\n    \"nome\" TEXT NOT NULL,\n    \"regiao\" TEXT NOT NULL DEFAULT 'Sul do Espírito Santo',\n    \"lat\" DOUBLE PRECISION,\n    \"lng\" DOUBLE PRECISION,\n    \"foraDeArea\" BOOLEAN NOT NULL DEFAULT false,\n\n    CONSTRAINT \"Municipio_pkey\" PRIMARY KEY (\"id\")\n)",
@@ -47,6 +47,9 @@ export const DDL_DO_ZERO: readonly string[] = [
   "CREATE TABLE \"PostMarketing\" (\n    \"id\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"tipo\" TEXT NOT NULL,\n    \"tema\" TEXT NOT NULL,\n    \"legenda\" TEXT NOT NULL,\n    \"hashtags\" TEXT NOT NULL DEFAULT '',\n    \"maquina\" TEXT,\n    \"imagemBase64\" TEXT,\n    \"imagemMime\" TEXT,\n    \"agendadoPara\" TIMESTAMP(3),\n    \"status\" TEXT NOT NULL DEFAULT 'rascunho',\n    \"publicadoEm\" TIMESTAMP(3),\n    \"canal\" TEXT,\n\n    CONSTRAINT \"PostMarketing_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"MemoriaCerebro\" (\n    \"id\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"titulo\" TEXT NOT NULL,\n    \"conteudo\" TEXT NOT NULL,\n    \"origem\" TEXT NOT NULL DEFAULT 'texto',\n    \"sessao\" TEXT,\n\n    CONSTRAINT \"MemoriaCerebro_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE TABLE \"NotaContextoCliente\" (\n    \"id\" TEXT NOT NULL,\n    \"clienteId\" TEXT NOT NULL,\n    \"texto\" TEXT NOT NULL,\n    \"origem\" TEXT NOT NULL DEFAULT 'vendedor',\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"NotaContextoCliente_pkey\" PRIMARY KEY (\"id\")\n)",
+  "CREATE TABLE \"Ticket\" (\n    \"id\" TEXT NOT NULL,\n    \"assunto\" TEXT NOT NULL,\n    \"descricao\" TEXT NOT NULL,\n    \"porQueImporta\" TEXT,\n    \"tela\" TEXT,\n    \"contexto\" TEXT,\n    \"status\" TEXT NOT NULL DEFAULT 'novo',\n    \"promptPronto\" TEXT,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"atualizadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"Ticket_pkey\" PRIMARY KEY (\"id\")\n)",
+  "CREATE TABLE \"TicketMensagem\" (\n    \"id\" TEXT NOT NULL,\n    \"ticketId\" TEXT NOT NULL,\n    \"lado\" TEXT NOT NULL,\n    \"texto\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"TicketMensagem_pkey\" PRIMARY KEY (\"id\")\n)",
+  "CREATE TABLE \"TicketAnexo\" (\n    \"id\" TEXT NOT NULL,\n    \"mensagemId\" TEXT NOT NULL,\n    \"mimeType\" TEXT NOT NULL,\n    \"nome\" TEXT NOT NULL,\n    \"tamanho\" INTEGER NOT NULL,\n    \"base64\" TEXT NOT NULL,\n    \"criadoEm\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\n    CONSTRAINT \"TicketAnexo_pkey\" PRIMARY KEY (\"id\")\n)",
   "CREATE UNIQUE INDEX \"Municipio_nome_key\" ON \"Municipio\"(\"nome\")",
   "CREATE INDEX \"Cliente_leadScore_idx\" ON \"Cliente\"(\"leadScore\")",
   "CREATE INDEX \"Cliente_googleContatoId_idx\" ON \"Cliente\"(\"googleContatoId\")",
@@ -85,6 +88,9 @@ export const DDL_DO_ZERO: readonly string[] = [
   "CREATE INDEX \"PostMarketing_criadoEm_idx\" ON \"PostMarketing\"(\"criadoEm\")",
   "CREATE INDEX \"MemoriaCerebro_criadoEm_idx\" ON \"MemoriaCerebro\"(\"criadoEm\")",
   "CREATE INDEX \"NotaContextoCliente_clienteId_criadoEm_idx\" ON \"NotaContextoCliente\"(\"clienteId\", \"criadoEm\")",
+  "CREATE INDEX \"Ticket_status_atualizadoEm_idx\" ON \"Ticket\"(\"status\", \"atualizadoEm\")",
+  "CREATE INDEX \"TicketMensagem_ticketId_criadoEm_idx\" ON \"TicketMensagem\"(\"ticketId\", \"criadoEm\")",
+  "CREATE INDEX \"TicketAnexo_mensagemId_idx\" ON \"TicketAnexo\"(\"mensagemId\")",
   "ALTER TABLE \"Cliente\" ADD CONSTRAINT \"Cliente_municipioId_fkey\" FOREIGN KEY (\"municipioId\") REFERENCES \"Municipio\"(\"id\") ON DELETE SET NULL ON UPDATE CASCADE",
   "ALTER TABLE \"Cliente\" ADD CONSTRAINT \"Cliente_indicadoPorId_fkey\" FOREIGN KEY (\"indicadoPorId\") REFERENCES \"Cliente\"(\"id\") ON DELETE SET NULL ON UPDATE CASCADE",
   "ALTER TABLE \"Cadencia\" ADD CONSTRAINT \"Cadencia_clienteId_fkey\" FOREIGN KEY (\"clienteId\") REFERENCES \"Cliente\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
@@ -100,4 +106,6 @@ export const DDL_DO_ZERO: readonly string[] = [
   "ALTER TABLE \"WhatsAppMessage\" ADD CONSTRAINT \"WhatsAppMessage_conversationId_fkey\" FOREIGN KEY (\"conversationId\") REFERENCES \"WhatsAppConversation\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
   "ALTER TABLE \"CerebroMessage\" ADD CONSTRAINT \"CerebroMessage_sessionId_fkey\" FOREIGN KEY (\"sessionId\") REFERENCES \"CerebroSession\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
   "ALTER TABLE \"NotaContextoCliente\" ADD CONSTRAINT \"NotaContextoCliente_clienteId_fkey\" FOREIGN KEY (\"clienteId\") REFERENCES \"Cliente\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
+  "ALTER TABLE \"TicketMensagem\" ADD CONSTRAINT \"TicketMensagem_ticketId_fkey\" FOREIGN KEY (\"ticketId\") REFERENCES \"Ticket\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
+  "ALTER TABLE \"TicketAnexo\" ADD CONSTRAINT \"TicketAnexo_mensagemId_fkey\" FOREIGN KEY (\"mensagemId\") REFERENCES \"TicketMensagem\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
 ];

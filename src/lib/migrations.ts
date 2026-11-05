@@ -573,6 +573,64 @@ export async function aplicarMigracoes(): Promise<void> {
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     `);
 
+    // Suporte e sugestões (v45): só TABELAS novas, nenhuma coluna em tabela
+    // existente — código novo com banco velho não quebra (e o recurso nasce
+    // desligado). TicketAnexo guarda a imagem à parte para a lista não pesar.
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Ticket" (
+        "id" TEXT NOT NULL,
+        "assunto" TEXT NOT NULL,
+        "descricao" TEXT NOT NULL,
+        "porQueImporta" TEXT,
+        "tela" TEXT,
+        "contexto" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'novo',
+        "promptPronto" TEXT,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "atualizadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Ticket_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Ticket_status_atualizadoEm_idx" ON "Ticket" ("status", "atualizadoEm")`);
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "TicketMensagem" (
+        "id" TEXT NOT NULL,
+        "ticketId" TEXT NOT NULL,
+        "lado" TEXT NOT NULL,
+        "texto" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "TicketMensagem_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TicketMensagem_ticketId_criadoEm_idx" ON "TicketMensagem" ("ticketId", "criadoEm")`);
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "TicketMensagem"
+          ADD CONSTRAINT "TicketMensagem_ticketId_fkey"
+          FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "TicketAnexo" (
+        "id" TEXT NOT NULL,
+        "mensagemId" TEXT NOT NULL,
+        "mimeType" TEXT NOT NULL,
+        "nome" TEXT NOT NULL,
+        "tamanho" INTEGER NOT NULL,
+        "base64" TEXT NOT NULL,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "TicketAnexo_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TicketAnexo_mensagemId_idx" ON "TicketAnexo" ("mensagemId")`);
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "TicketAnexo"
+          ADD CONSTRAINT "TicketAnexo_mensagemId_fkey"
+          FOREIGN KEY ("mensagemId") REFERENCES "TicketMensagem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+
     // ── Nota do vendedor para o Orientador (v32) ───────────────────────────
     // O que o vendedor sabe e o WhatsApp não mostra (conversa por telefone,
     // visita, o que o cliente falou por fora). Ele escreve na tela e vai

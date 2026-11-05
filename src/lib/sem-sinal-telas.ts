@@ -30,7 +30,7 @@ export const TELAS_PRINCIPAIS = ["/dashboard", "/negociacoes", "/visitas", "/cli
  * as demais não são telas do CRM.
  */
 export const TELAS_SEM_COPIA = [
-  "/atendimento", "/conexao", "/configuracoes", "/cerebro", "/zeus", "/auditoria",
+  "/atendimento", "/conexao", "/configuracoes", "/cerebro", "/zeus", "/auditoria", "/suporte",
   "/login", "/sem-sinal", "/config-necessaria", "/api", "/_next",
 ];
 

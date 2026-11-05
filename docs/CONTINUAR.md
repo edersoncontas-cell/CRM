@@ -1,7 +1,17 @@
 # CRMaquinas — continuação
 
+
 Este arquivo é o ponto de partida de uma sessão nova. Cole o conteúdo dele (ou
 mande ler este caminho) e continue de onde parou.
+
+**05/11 — Suporte e sugestões (Etapa 1 do desenho de aderência), nasce DESLIGADO.**
+Ligar: Configurações → Suporte e sugestões (`recurso.suporte` = "ligado"; só a
+palavra exata liga). Botão flutuante em todas as telas, Ctrl+V cola print
+(reduzido no aparelho, até 3 por mensagem, 400 KB cada), Enter envia. Tela
+`/suporte`: lista por status, conversa com prints, resposta, prompt pronto
+para o Claude Code. Tabelas novas `Ticket`, `TicketMensagem`, `TicketAnexo`
+(manutenção v45, só tabelas; não vêm do banco provisório). Provado com código
+novo e banco velho num Postgres local. Desenho: `docs/DESENHO-ADERENCIA.md`.
 
 Você está continuando o trabalho num CRM em Next.js (App Router) + Prisma +
 Postgres, feito sob medida para **um** vendedor de máquinas pesadas New Holland

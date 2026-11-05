@@ -26,11 +26,13 @@ import { AreaAtuacaoCard } from "@/components/AreaAtuacaoCard";
 import { estadoInicialDaArea } from "@/lib/area-atuacao";
 import { ESTADOS_BR } from "@/lib/municipios-brasil";
 import { UFS_LIBERADAS } from "@/lib/area-atuacao-regra";
+import { SuporteLigarCard } from "@/components/suporte/SuporteLigarCard";
+import { suporteLigado } from "@/lib/suporte";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracoesPage({ searchParams }: { searchParams: { google?: string; msg?: string } }) {
-  const [cotacoes, google, parametros, situacaoGoogle, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio, area] = await Promise.all([
+  const [cotacoes, google, parametros, situacaoGoogle, enviarContatos, bloqueio, filtro, duplicados, limpeza, provisorio, area, suporte] = await Promise.all([
     obterCotacoes(),
     statusGoogle(),
     lerParametros(),
@@ -42,6 +44,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     lerEstadoLimpezaAction().catch(() => ({ previa: { apagar: 0, consertar: 0, porMotivo: {}, exemplos: [] }, historico: [] })),
     lerEstadoProvisorio(),
     estadoInicialDaArea().catch(() => null),
+    suporteLigado(),
   ]);
 
   const integracoes = [
@@ -85,6 +88,9 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
           valendo — só não há mais tela para mexer neles. */}
 
       <ParametrosNegocioForm p={parametros} />
+
+      {/* Suporte e sugestões: nasce desligado (lib/suporte-regra.ts). */}
+      <SuporteLigarCard ligado={suporte} />
 
       {/* Municípios que ele atende — vale para o CRM inteiro (05/10). Por
           enquanto só o ES (UFS_LIBERADAS em lib/area-atuacao-regra.ts). */}

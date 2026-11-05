@@ -15,6 +15,8 @@ import { carregarChavesIA } from "@/lib/ai/chaves";
 import { conferirBanco } from "@/lib/saude-banco";
 import { BancoForaDoAr } from "@/components/BancoForaDoAr";
 import { garantirBancoDoZero } from "@/lib/banco-do-zero";
+import { BotaoSuporte } from "@/components/suporte/BotaoSuporte";
+import { suporteLigado, contarTicketsNovos } from "@/lib/suporte";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // por este layout.) Ver lib/ai/chaves.ts.
   await carregarChavesIA().catch(() => {});
   const parametros = await lerParametros().catch(() => null);
+  // Suporte e sugestões: nasce desligado. Ligado, uma contagem indexada dos
+  // pedidos novos (sem polling: atualiza quando a tela é montada).
+  const comSuporte = saude.ok && !recemCriado && (await suporteLigado());
+  const pedidosNovos = comSuporte ? await contarTicketsNovos() : null;
 
   return (
     // --rodape-mercado: a altura do letreiro fixo. Vira variável CSS porque
@@ -104,6 +110,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           há mais de 20 min, o servidor roda a passada (vigia do WhatsApp, lembretes).
           Só com o banco de pé — não adianta bater num banco que não responde. */}
       {saude.ok && !recemCriado && <BatidaDoAgendador />}
+      {/* Botão "Suporte / Sugerir melhoria" em todas as telas (recurso.suporte). */}
+      {comSuporte && <BotaoSuporte novos={pedidosNovos} />}
     </div>
   );
 }

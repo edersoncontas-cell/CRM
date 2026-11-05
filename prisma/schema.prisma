@@ -748,3 +748,52 @@ model NotaContextoCliente {
   criadoEm  DateTime @default(now())
   @@index([clienteId, criadoEm])
 }
+
+// ── Suporte e sugestões (recurso.suporte, nasce DESLIGADO) ──────────────────
+// Pedido do vendedor dentro do CRM: o que aconteceu / o que quer, por que
+// importa, em que tela estava. O "promptPronto" é o texto que ele cola no
+// Claude Code para implementar. Sem dono por enquanto (login único); quando
+// existirem usuários, entra autorId. Ver docs/DESENHO-ADERENCIA.md.
+model Ticket {
+  id             String   @id @default(cuid())
+  assunto        String
+  descricao      String
+  porQueImporta  String?
+  tela           String?
+  contexto       String?   // navegador e tamanho da janela, só para diagnóstico
+  status         String   @default("novo") // novo | em_analise | aprovado | implementado | descartado
+  promptPronto   String?
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @default(now())
+
+  mensagens TicketMensagem[]
+
+  @@index([status, atualizadoEm])
+}
+
+model TicketMensagem {
+  id        String   @id @default(cuid())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId  String
+  lado      String   // vendedor | admin
+  texto     String
+  criadoEm  DateTime @default(now())
+
+  anexos TicketAnexo[]
+
+  @@index([ticketId, criadoEm])
+}
+
+// Imagem numa tabela à parte: a lista de pedidos nunca carrega base64.
+model TicketAnexo {
+  id          String         @id @default(cuid())
+  mensagem    TicketMensagem @relation(fields: [mensagemId], references: [id], onDelete: Cascade)
+  mensagemId  String
+  mimeType    String
+  nome        String
+  tamanho     Int
+  base64      String
+  criadoEm    DateTime @default(now())
+
+  @@index([mensagemId])
+}

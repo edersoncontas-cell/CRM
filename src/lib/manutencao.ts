@@ -101,7 +101,9 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v44: a TRAVA GERAL de envio. Depois do segundo bloqueio do número, nenhuma
 // mensagem sai do CRM até ele liberar na tela — e a fila de envios em massa
 // que sobrou do dia é cancelada, para não retomar sozinha quando ele liberar.
-export const CHAVE_MANUTENCAO = "manutencao.v44";
+// v45: tabelas do Suporte e sugestões (Ticket, TicketMensagem, TicketAnexo) —
+// só tabelas novas, o recurso nasce desligado.
+export const CHAVE_MANUTENCAO = "manutencao.v45";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 
