@@ -9,7 +9,7 @@ import { SlidersHorizontal, Loader2, Save } from "lucide-react";
 const campo = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200";
 const rotulo = "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500";
 
-export function ParametrosNegocioForm({ p }: { p: Parametros }) {
+export function ParametrosNegocioForm({ p, metaAnualDeMetas = null }: { p: Parametros; metaAnualDeMetas?: number | null }) {
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   const [salvando, start] = useTransition();
 
@@ -63,6 +63,12 @@ export function ParametrosNegocioForm({ p }: { p: Parametros }) {
         <div>
           <label className={rotulo} htmlFor="param-meta">Meta anual (máquinas)</label>
           <input id="param-meta" name="metaAnualVendas" type="number" min={1} defaultValue={p.metaAnualVendas} className={campo} />
+          {metaAnualDeMetas != null && (
+            <p className="mt-1 text-xs text-amber-700">
+              Em uso: {metaAnualDeMetas} — vem da tela <a href="/metas" className="font-semibold underline">Metas</a>.
+              Este número só vale se você apagar a meta anual de lá.
+            </p>
+          )}
         </div>
         <div>
           <label className={rotulo} htmlFor="param-metaVisitas">Meta de visitas por semana</label>

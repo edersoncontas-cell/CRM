@@ -211,6 +211,28 @@ menu por papel. Registro de auditoria passa a gravar `usuarioId`.
 
 ## 6. Etapa 3 — Metas e supermetas
 
+> **CONSTRUÍDA em 15/11, nasce desligada** (`recurso.metas`; Configurações →
+> Metas e supermetas; tela `/metas`). Onde ficou diferente do desenho abaixo:
+> - **Metas de exemplo por botão**, não sozinhas na primeira abertura: a tela não
+>   grava ao ser montada. Estado vazio: "Criar minha primeira meta" ou "Usar
+>   metas de exemplo" (a partir da meta anual de Parâmetros; só cria se não houver
+>   nenhuma meta).
+> - **Sem cache de 5 minutos**: a tela conta na hora (poucas metas, tabela
+>   pequena). Não existe índice em `faturadoEm` (índice é migração à parte); se a
+>   tabela crescer e a tela pesar, é o primeiro remédio.
+> - **Período = tipo + mês de início** (o servidor calcula o fim). "Fim antes do
+>   início" não tem como acontecer.
+> - **Recompensa**: texto livre, com valor opcional, gravado em `Recompensa`.
+>   Só exibe; registrar pagamento continua sendo a decisão 5 (seção 16).
+> - `escopo` e `usuarioId` existem na tabela mas ficam sem uso até haver login
+>   por pessoa (Etapa 2, adiada a pedido). Hoje toda meta é "do dono".
+> - **Meta anual única**: com o recurso ligado, a meta anual de máquinas cadastrada
+>   em Metas (anual, janeiro a dezembro) vale no Dashboard, no ritmo do Zeus e no
+>   agente (`lib/metas-cadastro.ts` → `metaAnualDoAno`). Sem ela, desligado ou com
+>   o banco fora do ar, vale Parâmetros, como sempre. Os campos semanais de visitas
+>   e negociações continuam só em Parâmetros.
+> - Meta/Recompensa **não vêm do banco provisório** (`TABELAS_QUE_NAO_VEM`).
+
 ### 6.1 Tabelas novas
 - `Meta`: id, `escopo` (`vendedor` | `equipe`), `usuarioId?`, `periodo`
   (`mensal` | `bimestral` | `trimestral` | `semestral` | `anual`), `inicio`,

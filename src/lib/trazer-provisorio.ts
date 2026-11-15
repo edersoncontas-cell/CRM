@@ -64,10 +64,12 @@ export type Etapa = {
 
 // Ticket/TicketMensagem/TicketAnexo: pedidos de suporte feitos no banco provisório
 // não voltam (recurso novo, nasce desligado; a conversa de suporte não é dado de
-// venda). Decisão registrada em docs/DESENHO-ADERENCIA.md.
+// venda). Meta/Recompensa: metas feitas no provisório também não voltam (recurso
+// novo, nasce desligado; refazer uma meta leva um minuto e o número "oficial" da
+// meta anual continua em Parâmetros). Decisão registrada em docs/DESENHO-ADERENCIA.md.
 export const TABELAS_QUE_NAO_VEM = [
   "UnificacaoClientes", "LimpezaClientes", "ClienteRedirecionamento",
-  "Ticket", "TicketMensagem", "TicketAnexo",
+  "Ticket", "TicketMensagem", "TicketAnexo", "Meta", "Recompensa",
 ] as const;
 
 const baixo = (v: unknown) => String(v ?? "").trim().toLowerCase();

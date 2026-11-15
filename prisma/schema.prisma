@@ -797,3 +797,37 @@ model TicketAnexo {
 
   @@index([mensagemId])
 }
+
+// Metas e supermetas (Etapa 3 do desenho de aderência, nasce DESLIGADO em
+// recurso.metas). Uma linha por meta: indicador + período + número. Sem dono
+// por enquanto (login único): usuarioId/criadoPorId ficam vazios e a meta é "do
+// dono"; quando existirem usuários, entram preenchidos. exemplo = criada pelo
+// botão "usar metas de exemplo" (aviso "ajuste os números" até ele editar).
+model Meta {
+  id           String      @id @default(cuid())
+  escopo       String      @default("vendedor") // vendedor | equipe
+  usuarioId    String?
+  periodo      String      // mensal | bimestral | trimestral | semestral | anual
+  inicio       DateTime    // 00:00 de Brasília do primeiro dia
+  fim          DateTime    // 00:00 de Brasília do dia SEGUINTE ao último (exclusivo)
+  indicador    String      // maquinas_faturadas | faturamento | visitas | negociacoes_novas
+  meta         Float
+  supermeta    Float?
+  recompensaId String?
+  recompensa   Recompensa? @relation(fields: [recompensaId], references: [id], onDelete: SetNull)
+  exemplo      Boolean     @default(false)
+  criadoPorId  String?
+  criadoEm     DateTime    @default(now())
+  atualizadoEm DateTime    @default(now()) @updatedAt
+
+  @@index([inicio, fim])
+}
+
+model Recompensa {
+  id         String   @id @default(cuid())
+  descricao  String
+  valorReais Float?
+  ativa      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+  metas      Meta[]
+}

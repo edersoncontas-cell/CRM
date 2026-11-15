@@ -5,6 +5,9 @@
 // O que NÃO entra aqui: consulta ao banco (relatorio-pedido.ts) e a geração do
 // arquivo (relatorio-pedido-arquivo.ts).
 
+import { DIA_MS as DIA, diaBR, meiaNoiteBR, MESES_PT as MESES, fmtDiaBR } from "@/lib/fuso-brasilia";
+export { fmtDiaBR };
+
 export const TIPOS_RELATORIO = ["vendas", "funil", "visitas", "parados", "sem_resposta"] as const;
 export type TipoRelatorio = (typeof TIPOS_RELATORIO)[number];
 
@@ -43,28 +46,6 @@ export type Pedido = {
   periodo: Periodo | null;     // null nos retratos de agora
   diasParado: number;          // só vale em "parados"
 };
-
-const DIA = 24 * 60 * 60 * 1000;
-const BRT = 3 * 60 * 60 * 1000; // Brasília = UTC−3 o ano todo
-
-// Dia civil de Brasília de um instante: devolve ano/mês(0-11)/dia.
-function diaBR(d: Date): { a: number; m: number; d: number } {
-  const x = new Date(d.getTime() - BRT);
-  return { a: x.getUTCFullYear(), m: x.getUTCMonth(), d: x.getUTCDate() };
-}
-
-// 00:00 de Brasília do dia civil dado, como instante UTC. Aceita mês/dia fora
-// da faixa (Date.UTC normaliza: mês 12 vira janeiro do ano seguinte).
-function meiaNoiteBR(a: number, m: number, d: number): Date {
-  return new Date(Date.UTC(a, m, d) + BRT);
-}
-
-const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-
-export function fmtDiaBR(d: Date): string {
-  const x = diaBR(d);
-  return `${String(x.d).padStart(2, "0")}/${String(x.m + 1).padStart(2, "0")}/${x.a}`;
-}
 
 /** "este mês", "a semana"… viram datas. `agora` é injetado para o teste. */
 export function resolverPeriodo(nome: PeriodoNome, agora: Date = new Date()): Periodo {

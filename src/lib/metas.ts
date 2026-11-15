@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { lerParametros } from "@/lib/parametros";
+import { metaAnualDoAno } from "@/lib/metas-cadastro";
 import { inicioDoDiaBrasilia, diaSemanaBrasilia } from "@/lib/utils";
 
 const DIA = 24 * 60 * 60 * 1000;
@@ -70,7 +71,8 @@ export async function calcularRitmoMetas(agora = new Date()): Promise<RitmoMetas
     db.negociacao.count({ where: { criadoEm: { gte: inicioSemana, lt: fimSemana } } }),
   ]);
 
-  const metaAnual = p.metaAnualVendas;
+  // Metas ligado e meta anual do ano cadastrada lá: ela vale; senão, Parâmetros.
+  const metaAnual = (await metaAnualDoAno(ano, p.metaAnualVendas)).valor;
   const metaMes = metaAnual / 12;
   const metaTrimestre = metaAnual / 4;
   const fracaoAno = Math.min(1, Math.max(0, (agora.getTime() - inicioAno.getTime()) / (fimAno.getTime() - inicioAno.getTime())));

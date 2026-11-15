@@ -4,6 +4,17 @@
 Este arquivo é o ponto de partida de uma sessão nova. Cole o conteúdo dele (ou
 mande ler este caminho) e continue de onde parou.
 
+**15/11 — Metas e supermetas (Etapa 3), nasce DESLIGADO.** Ligar: Configurações
+→ Metas e supermetas (`recurso.metas` = "ligado"). Tela `/metas`: progresso de
+máquinas, faturamento, visitas ou negociações por período (mensal a anual), com
+falta, dias restantes, ritmo e supermeta; "usar metas de exemplo" parte da meta
+anual de Parâmetros. Ligado, a meta anual cadastrada lá vale no Dashboard, no
+Zeus e no agente; o campo de Parâmetros avisa quando não é ele que vale.
+Tabelas novas `Meta` e `Recompensa` (manutenção v46, só tabelas; não vêm do
+banco provisório). Provado com código novo e banco velho. Login por pessoa
+(Etapa 2) ficou para depois, a pedido; por isso toda meta é "do dono". Próximas
+sem login: Dashboard "Meu mês" (Etapa 4) e Jornada do lead (Etapa 5, Opus).
+
 **15/11 — Agente: Fase 1 (relatório sob demanda + comando por voz).**
 O chat do agente (`CerebroChat`) existia mas **nenhuma tela o montava**: agora
 está em `/cerebro`, logo abaixo do grafo (se foi retirado de propósito antes,

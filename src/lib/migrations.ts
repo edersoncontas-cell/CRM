@@ -631,6 +631,46 @@ export async function aplicarMigracoes(): Promise<void> {
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     `);
 
+    // Metas e supermetas (v46): só TABELAS novas, nenhuma coluna em tabela
+    // existente — código novo com banco velho não quebra (recurso nasce desligado).
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Recompensa" (
+        "id" TEXT NOT NULL,
+        "descricao" TEXT NOT NULL,
+        "valorReais" DOUBLE PRECISION,
+        "ativa" BOOLEAN NOT NULL DEFAULT true,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Recompensa_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Meta" (
+        "id" TEXT NOT NULL,
+        "escopo" TEXT NOT NULL DEFAULT 'vendedor',
+        "usuarioId" TEXT,
+        "periodo" TEXT NOT NULL,
+        "inicio" TIMESTAMP(3) NOT NULL,
+        "fim" TIMESTAMP(3) NOT NULL,
+        "indicador" TEXT NOT NULL,
+        "meta" DOUBLE PRECISION NOT NULL,
+        "supermeta" DOUBLE PRECISION,
+        "recompensaId" TEXT,
+        "exemplo" BOOLEAN NOT NULL DEFAULT false,
+        "criadoPorId" TEXT,
+        "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "atualizadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Meta_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Meta_inicio_fim_idx" ON "Meta" ("inicio", "fim")`);
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "Meta"
+          ADD CONSTRAINT "Meta_recompensaId_fkey"
+          FOREIGN KEY ("recompensaId") REFERENCES "Recompensa"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    `);
+
     // ── Nota do vendedor para o Orientador (v32) ───────────────────────────
     // O que o vendedor sabe e o WhatsApp não mostra (conversa por telefone,
     // visita, o que o cliente falou por fora). Ele escreve na tela e vai

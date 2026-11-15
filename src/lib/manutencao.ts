@@ -103,7 +103,8 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // que sobrou do dia é cancelada, para não retomar sozinha quando ele liberar.
 // v45: tabelas do Suporte e sugestões (Ticket, TicketMensagem, TicketAnexo) —
 // só tabelas novas, o recurso nasce desligado.
-export const CHAVE_MANUTENCAO = "manutencao.v45";
+// v46: tabelas de Metas e supermetas (Meta, Recompensa) — só tabelas novas.
+export const CHAVE_MANUTENCAO = "manutencao.v46";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

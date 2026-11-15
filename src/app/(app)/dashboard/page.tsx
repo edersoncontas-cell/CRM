@@ -1,3 +1,4 @@
+import { metaAnualDoAno } from "@/lib/metas-cadastro";
 import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia, formatCurrency, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { criarCategorizadorColunas, ehFunilAberto, chaveMotivoPerda } from "@/lib/pipeline";
@@ -121,7 +122,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     mapaDaAreaOuPadrao(),
   ]);
 
-  const { metaAnualVendas: META_ANUAL_VENDAS, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
+  const { metaAnualVendas: metaAnualParametros, metaVisitasSemana, metaNegociosSemana } = await lerParametros();
+  // Metas ligado e meta anual do ano em tela cadastrada lá: ela vale (senão, Parâmetros).
+  const META_ANUAL_VENDAS = (await metaAnualDoAno(anoSel, metaAnualParametros)).valor;
   const ritmo = await calcularRitmoMetas(hoje).catch(() => null);
   const resumo = resumoVendas(vendasFaturadas, anoSel, META_ANUAL_VENDAS);
   const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
