@@ -1,33 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus, GraduationCap } from "lucide-react";
+import { renderMarkdown } from "@/lib/cerebro-markdown";
+import { Send, Paperclip, X, Loader2, Brain, User, Wrench, ShieldAlert, Plus, GraduationCap, Mic, Square } from "lucide-react";
+import { useGravadorVoz } from "@/components/useGravadorVoz";
+import { formatarTempo } from "@/lib/voz-regra";
 
 type Msg = { role: "user" | "assistant"; content: string; arquivos?: string[] };
 type FerramentaAtiva = { name: string; label: string; status: "start" | "done" };
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function renderMarkdown(text: string): string {
-  if (!text) return "";
-  return escapeHtml(text)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^### (.+)$/gm, "<h3 class='text-sm font-bold text-white mt-3 mb-1'>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2 class='text-sm font-bold text-white mt-3 mb-1'>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1 class='text-base font-bold text-white mt-3 mb-1'>$1</h1>")
-    .replace(/^---$/gm, "<hr class='border-zinc-700 my-2'/>")
-    .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
-    .replace(/^• (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
-    .replace(/^\d+\. (.+)$/gm, "<li class='ml-4 list-decimal'>$1</li>")
-    .replace(/`([^`]+)`/g, "<code class='bg-zinc-800 px-1 rounded text-xs font-mono text-yellow-300'>$1</code>")
-    .replace(/\n/g, "<br/>");
-}
 
 export function CerebroChat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -40,6 +20,9 @@ export function CerebroChat() {
   const [ferramentas, setFerramentas] = useState<FerramentaAtiva[]>([]);
   const [confirmacaoPendente, setConfirmacaoPendente] = useState<string | null>(null);
   const [modoTreinamento, setModoTreinamento] = useState(false);
+  // Voz: por padrão o que ele fala só PREENCHE a caixa (ele revisa e envia).
+  // "Enviar ao terminar de falar" é opt-in e fica lembrado neste aparelho.
+  const [autoEnviarVoz, setAutoEnviarVoz] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -65,6 +48,16 @@ export function CerebroChat() {
     const el = containerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [carregandoSessao]);
+
+  useEffect(() => {
+    try { setAutoEnviarVoz(localStorage.getItem("cerebro.voz.autoenviar") === "1"); } catch { /* sem storage: fica desligado */ }
+  }, []);
+  function alternarAutoEnviarVoz() {
+    setAutoEnviarVoz((v) => {
+      try { localStorage.setItem("cerebro.voz.autoenviar", v ? "0" : "1"); } catch { /* ignora */ }
+      return !v;
+    });
+  }
 
   async function novaConversa() {
     if (carregando) return;
@@ -208,6 +201,22 @@ export function CerebroChat() {
     }
   }, [input, arquivos, scrollBottom, sessionId, modoTreinamento]);
 
+  const voz = useGravadorVoz((texto) => {
+    if (autoEnviarVoz) { void enviar(texto); return; }
+    setInput((atual) => (atual.trim() ? `${atual.trim()} ${texto}` : texto));
+    inputRef.current?.focus();
+  });
+  const ocupadoVoz = voz.estado !== "parado";
+
+  // A caixa cresce com o texto (até o teto do max-h-32): o comando falado fica
+  // inteiro à vista para ele revisar antes de enviar.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, [input]);
+
   return (
     <div
       // Altura TRAVADA na tela: a página não cresce com a conversa — só a área
@@ -347,6 +356,20 @@ export function CerebroChat() {
           ))}
         </div>
       )}
+      {(ocupadoVoz || voz.erro) && (
+        <div className="px-4 py-2 border-t border-zinc-800 text-xs flex items-center justify-between gap-2" role="status">
+          {voz.erro ? (
+            <>
+              <span className="text-red-300">{voz.erro}</span>
+              <button onClick={voz.limparErro} className="shrink-0 text-zinc-500 hover:text-zinc-300" aria-label="Fechar aviso"><X size={12} /></button>
+            </>
+          ) : voz.estado === "gravando" ? (
+            <span className="text-red-300">Ouvindo… {formatarTempo(voz.segundos)} — toque no quadrado para terminar</span>
+          ) : (
+            <span className="text-zinc-400">Transcrevendo o que você falou…</span>
+          )}
+        </div>
+      )}
       <div className="border-t border-zinc-800 p-3 flex items-end gap-2">
         <input ref={fileRef} type="file" multiple className="hidden"
           accept="application/pdf,image/*,text/*,.txt,.html,.md,.csv,.vcf,.json,.doc,.docx,.xls,.xlsx"
@@ -355,12 +378,21 @@ export function CerebroChat() {
         <button onClick={() => fileRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition" title="Anexar arquivo">
           <Paperclip size={18} />
         </button>
+        <button
+          onClick={() => void voz.alternar()}
+          disabled={carregando || carregandoSessao || !sessionId || voz.estado === "transcrevendo"}
+          className={`shrink-0 rounded-xl p-2.5 transition disabled:opacity-40 ${voz.estado === "gravando" ? "bg-red-500/20 text-red-300 animate-pulse" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"}`}
+          title={voz.estado === "gravando" ? "Parar e enviar o comando" : "Falar um comando"}
+          aria-label={voz.estado === "gravando" ? "Parar a gravação" : "Falar um comando por voz"}
+        >
+          {voz.estado === "transcrevendo" ? <Loader2 size={18} className="animate-spin" /> : voz.estado === "gravando" ? <Square size={18} /> : <Mic size={18} />}
+        </button>
         <textarea
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
-          placeholder={carregandoSessao ? "Carregando conversa…" : "Pergunte qualquer coisa, peça análises, crie, edite, exclua…"}
+          placeholder={carregandoSessao ? "Carregando conversa…" : "Pergunte ou peça algo…"}
           disabled={carregando || carregandoSessao || !sessionId}
           rows={1}
           className="flex-1 resize-none bg-transparent py-2 text-sm text-white outline-none placeholder:text-zinc-600 max-h-32"
@@ -374,6 +406,10 @@ export function CerebroChat() {
           {carregando ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
         </button>
       </div>
+      <label className="px-4 pb-2 flex items-center gap-2 text-[11px] text-zinc-500 cursor-pointer select-none">
+        <input type="checkbox" checked={autoEnviarVoz} onChange={alternarAutoEnviarVoz} className="accent-[#BFDE4D]" />
+        Enviar sozinho quando eu terminar de falar
+      </label>
     </div>
   );
 }

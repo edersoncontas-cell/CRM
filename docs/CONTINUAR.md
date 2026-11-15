@@ -4,6 +4,25 @@
 Este arquivo é o ponto de partida de uma sessão nova. Cole o conteúdo dele (ou
 mande ler este caminho) e continue de onde parou.
 
+**15/11 — Agente: Fase 1 (relatório sob demanda + comando por voz).**
+O chat do agente (`CerebroChat`) existia mas **nenhuma tela o montava**: agora
+está em `/cerebro`, logo abaixo do grafo (se foi retirado de propósito antes,
+é só tirar o `<CerebroChat />` de `src/app/(app)/cerebro/page.tsx`).
+Relatório: ferramenta `gerar_relatorio` do agente + rota `GET /api/relatorios`
+(`tipo` = vendas | visitas | funil | parados | sem_resposta; `formato` = pdf |
+xlsx; `periodo` ou `de`/`ate`). Só leitura, não envia nada, não gasta IA.
+Vendas usa o mesmo critério da meta (`status ganha` + `faturadoEm`), sempre em
+horário de Brasília. Voz: microfone no chat → `/api/cerebro/transcrever`
+(Groq; sem `GROQ_API_KEY` a tela diz que falta a chave). Por padrão a fala só
+PREENCHE a caixa; "Enviar sozinho quando eu terminar de falar" é opt-in por
+aparelho. Código: `lib/relatorio-pedido-regra.ts` (regras), `relatorio-pedido.ts`
+(consulta), `relatorio-pedido-arquivo.ts` (PDF/xlsx), `voz-regra.ts`,
+`cerebro-markdown.ts` (só o link `/api/relatorios?…` vira link no chat).
+**Não conferido:** Groq e Anthropic reais (sem rede aqui: usei transcrição e
+resposta simuladas), microfone no Safari/iPhone, relatório com dados de
+produção. **Fica para as próximas fases:** e-mail, usuários/papéis, agente do
+gerente, memória e rotinas proativas, API externa (ver `docs/DESENHO-ADERENCIA.md`).
+
 **05/11 — Suporte e sugestões (Etapa 1 do desenho de aderência), nasce DESLIGADO.**
 Ligar: Configurações → Suporte e sugestões (`recurso.suporte` = "ligado"; só a
 palavra exata liga). Botão flutuante em todas as telas, Ctrl+V cola print

@@ -80,7 +80,10 @@ ${foto || "(indisponível)"}
 
 ## Suas ferramentas
 Leitura: buscar_cliente, detalhes_cliente, historico_cliente, leitura_orientador, listar_negociacoes, agenda,
-buscar_maquina, estoque_usadas, metricas_funil, ritmo_metas, alertas_abertos, conversas_aguardando.
+buscar_maquina, estoque_usadas, metricas_funil, ritmo_metas, alertas_abertos, conversas_aguardando, gerar_relatorio.
+gerar_relatorio monta PDF ou planilha (vendas, visitas, funil, parados, sem_resposta) e devolve um campo link. Quando o
+vendedor pedir relatório, chame a ferramenta (planilha = formato xlsx; sem dizer, PDF), diga os números do resumo e
+entregue o link exatamente como veio, em markdown: [Baixar o relatório](/api/relatorios?...). Nunca invente link.
 Escrita: criar_cliente, atualizar_cliente, atualizar_resumo_cliente, importar_contatos, criar_negociacao,
 mover_negociacao (pelo TÍTULO da coluna), marcar_ganha, marcar_perdida (com código do motivo), criar_tarefa,
 adicionar_visita.

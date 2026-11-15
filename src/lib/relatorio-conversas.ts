@@ -8,6 +8,7 @@
 // gerado quantas vezes quiser sem gastar IA de novo.
 
 import { jsPDF } from "jspdf";
+import { limparParaPdf } from "@/lib/pdf-texto";
 import { db } from "@/lib/db";
 import { resumirConversaIA } from "@/lib/ai";
 import { cadastroPodeDarONome } from "@/lib/conversa-identidade";
@@ -172,11 +173,6 @@ export async function prepararResumos(f: FiltroRelatorio, orcamentoMs = 40_000):
   }
   return { total: convs.length, pendentes: semResumo.length - feitos };
 }
-
-// As fontes padrão do PDF (Helvetica/WinAnsi) têm acentos do português mas
-// não têm emoji — remove antes de escrever, senão vira lixo no PDF.
-const limparParaPdf = (s: string) =>
-  s.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, "").replace(/\*\*/g, "").replace(/\r/g, "");
 
 export function gerarPdfRelatorio(linhas: LinhaRelatorio[], periodo: { de: Date; ate: Date }): Buffer {
   const doc = new jsPDF({ unit: "mm", format: "a4" });

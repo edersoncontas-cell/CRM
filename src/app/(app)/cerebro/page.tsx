@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { garantirManutencaoSeNecessario } from "@/lib/manutencao";
 import { CerebroGrafo, type NoGrafo } from "@/components/CerebroGrafo";
+import { CerebroChat } from "@/components/CerebroChat";
 import { PainelRelatorio, PainelRadar, PainelMemoria } from "@/components/CentralCerebro";
 import { SESSOES } from "@/lib/cerebro/sessoes";
 import { lerRelatorios } from "@/lib/cerebro/relatorio-diario";
@@ -95,6 +96,12 @@ export default async function CerebroPage() {
 
       <div className="mb-5">
         <CerebroGrafo nos={nos} />
+      </div>
+
+      {/* O agente: pergunta, pede relatório em PDF/planilha, cria e edita — por
+          texto ou por voz (microfone). Só trabalha quando há chave de IA. */}
+      <div className="mb-5" id="agente">
+        <CerebroChat />
       </div>
 
       {/* Os três cards têm a MESMA altura, a do mais alto da linha.

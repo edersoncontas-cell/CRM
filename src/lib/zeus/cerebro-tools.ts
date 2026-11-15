@@ -783,8 +783,44 @@ const alertasAbertos: CerebroTool = {
   },
 };
 
+const gerarRelatorio: CerebroTool = {
+  def: {
+    name: "gerar_relatorio",
+    description: "Gera um relatório em PDF ou planilha (xlsx) e devolve o LINK para baixar, mais o resumo com os números. Tipos: vendas (vendas faturadas no período), visitas (no período), funil (negociações abertas por etapa, retrato de agora), parados (negociações abertas sem contato há N dias), sem_resposta (clientes aguardando resposta). Período só vale para vendas e visitas. É só leitura: não envia nada a ninguém. Na resposta, copie o campo `link` exatamente como veio, como link markdown, e fale o resumo com os números.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: { type: "string", enum: ["vendas", "visitas", "funil", "parados", "sem_resposta"] },
+        formato: { type: "string", enum: ["pdf", "xlsx"], description: "pdf (padrão) ou xlsx (planilha)" },
+        periodo: { type: "string", enum: ["hoje", "semana", "mes", "mes_passado", "trimestre", "ano", "ultimos_30_dias"], description: "Padrão: mes. Só para vendas e visitas." },
+        de: { type: "string", description: "Início do intervalo, AAAA-MM-DD (use junto com 'ate'; vence 'periodo')" },
+        ate: { type: "string", description: "Fim do intervalo, AAAA-MM-DD, inclusive" },
+        dias: { type: "number", description: "Só para 'parados': dias sem contato (padrão 10)" },
+      },
+      required: ["tipo"],
+    },
+  },
+  async executar(input) {
+    const { validarPedido, linkDoPedido } = await import("@/lib/relatorio-pedido-regra");
+    const v = validarPedido(input);
+    if (!v.ok) return { erro: v.erro };
+    const { montarRelatorio } = await import("@/lib/relatorio-pedido");
+    const r = await montarRelatorio(v.valor);
+    return {
+      titulo: r.titulo,
+      periodo: r.subtitulo,
+      resumo: r.resumo,
+      totalDeLinhas: r.linhas.length,
+      primeirasLinhas: { colunas: r.colunas, linhas: r.linhas.slice(0, 5) },
+      aviso: r.aviso,
+      link: linkDoPedido(v.valor, input),
+      formato: v.valor.formato,
+    };
+  },
+};
+
 export const CEREBRO_TOOLS: CerebroTool[] = [
-  historicoCliente, leituraOrientador, ritmoMetas, alertasAbertos,
+  historicoCliente, leituraOrientador, ritmoMetas, alertasAbertos, gerarRelatorio,
   buscarCliente, detalhesCliente, listarNegociacoes, agenda, buscarMaquina, estoqueUsadas, metricasFunil, conversasAguardando,
   criarCliente, atualizarCliente, atualizarResumoCliente, atualizarEstiloFala, importarContatos, criarNegociacao, moverNegociacao, marcarGanha, marcarPerdida,
   criarTarefa, adicionarVisita, enviarResposta, excluirCliente, excluirNegociacao,
@@ -801,6 +837,7 @@ export function rotuloFerramenta(nome: string, input: Record<string, unknown>): 
     leitura_orientador: "Consultando a leitura do Orientador…",
     ritmo_metas: "Calculando o ritmo da meta…",
     alertas_abertos: "Consultando a central de alertas…",
+    gerar_relatorio: "Montando o relatório…",
     detalhes_cliente: "Consultando ficha do cliente…",
     listar_negociacoes: "Consultando negociações…",
     agenda: "Consultando agenda…",
