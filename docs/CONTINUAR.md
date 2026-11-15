@@ -4,6 +4,16 @@
 Este arquivo é o ponto de partida de uma sessão nova. Cole o conteúdo dele (ou
 mande ler este caminho) e continue de onde parou.
 
+**15/11 — Dashboard "Meu mês" (Etapa 4).** Atrás de `recurso.metas` (o mesmo
+liga/desliga das Metas): ligado, bloco no Dashboard com o anel da meta do mês,
+falta, dias e ritmo, supermeta, últimas 5 vendas, últimas 5 prospecções e
+negócios abertos com o próximo passo (parados primeiro). Sem meta do mês cadastrada
+usa a meta anual de Parâmetros ÷ 12 e avisa. Regras em `lib/meu-mes-regra.ts`,
+tela em `components/MeuMes.tsx`. Sem tabela nova. No celular o bloco começa pouco
+abaixo da dobra (vem depois do letreiro e da motivação); se ele quiser no topo,
+é mover uma linha em `dashboard/page.tsx`. Próxima sem login: Jornada do lead
+(Etapa 5, Opus).
+
 **15/11 — Metas e supermetas (Etapa 3), nasce DESLIGADO.** Ligar: Configurações
 → Metas e supermetas (`recurso.metas` = "ligado"). Tela `/metas`: progresso de
 máquinas, faturamento, visitas ou negociações por período (mensal a anual), com

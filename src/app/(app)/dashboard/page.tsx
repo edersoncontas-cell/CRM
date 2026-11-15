@@ -1,4 +1,6 @@
-import { metaAnualDoAno } from "@/lib/metas-cadastro";
+import { metaAnualDoAno, metaDoMes, metasRecursoLigado } from "@/lib/metas-cadastro";
+import { MeuMes } from "@/components/MeuMes";
+import { montarMeuMes, type DadosMeuMes } from "@/lib/meu-mes-regra";
 import { db } from "@/lib/db";
 import { diasDesde, saudacaoBrasilia, formatCurrency, diaSemanaBrasilia, inicioDoDiaBrasilia } from "@/lib/utils";
 import { criarCategorizadorColunas, ehFunilAberto, chaveMotivoPerda } from "@/lib/pipeline";
@@ -128,6 +130,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const ritmo = await calcularRitmoMetas(hoje).catch(() => null);
   const resumo = resumoVendas(vendasFaturadas, anoSel, META_ANUAL_VENDAS);
   const categorizarColunaPorTitulo = criarCategorizadorColunas(colunasFunil);
+
+  // "Meu mês" (Etapa 4): só com o recurso de Metas ligado. Reaproveita o que a
+  // página já carregou; a única consulta nova é a meta do mês, com queda segura.
+  const comMeuMes = await metasRecursoLigado();
+  let meuMes: DadosMeuMes | null = null;
+  let meuMesErro = false;
+  if (comMeuMes) {
+    try {
+      meuMes = montarMeuMes({
+        agora: hoje,
+        meta: await metaDoMes(hoje, metaAnualParametros),
+        vendas: vendasFaturadas.map((v) => ({ id: v.id, clienteId: v.clienteId, clienteNome: v.clienteNome, marca: v.marca, modelo: v.modelo, valor: v.valor, faturadoEm: v.faturadoEm })),
+        negociacoes: negociacoes
+          .filter((n) => ehFunilAberto(categorizarColunaPorTitulo(n.estagio)))
+          .map((n) => ({
+            id: n.id, clienteId: n.clienteId, clienteNome: n.cliente.nome, estagio: n.estagio, valor: n.valor,
+            marca: n.marca, maquinaModelo: n.maquinaModelo, proximaAcao: n.proximaAcao, ultimoContato: n.ultimoContato, criadoEm: n.criadoEm,
+          })),
+      });
+    } catch (e) {
+      console.error("[dashboard] meu mês", e);
+      meuMesErro = true;
+    }
+  }
 
   const novosNegociosSemana = negociosCriadosSemana.filter((n) =>
     ehFunilAberto(categorizarColunaPorTitulo(n.estagio))
@@ -317,6 +343,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* Voltou ao app num dia novo: a motivação e a saudação de ontem não ficam na tela. */}
       <RecarregarNoDiaNovo dia={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(hoje)} />
       <FraseMotivacional />
+
+      {comMeuMes && <MeuMes dados={meuMes} erro={meuMesErro} semContato30={total30DiasSemContato} />}
 
 
       {/* ── Linha 1: anéis + faturamento + termômetro comercial ── */}

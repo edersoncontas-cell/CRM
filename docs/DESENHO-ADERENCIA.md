@@ -270,6 +270,22 @@ negativo é recusada com a razão.
 
 ## 7. Etapa 4 — Dashboard do vendedor
 
+> **CONSTRUÍDA em 15/11**, atrás do mesmo recurso das Metas (`recurso.metas`:
+> ligado, o Dashboard ganha o bloco "Meu mês"; desligado, fica como era). Onde
+> ficou diferente do desenho abaixo:
+> - **Posição:** logo abaixo da motivação do dia (a ordem que ele já tinha), não
+>   acima do letreiro de preços. No celular o bloco começa pouco abaixo da dobra.
+> - **Meta do mês:** a meta mensal de máquinas cadastrada em Metas; sem ela, a meta
+>   anual de Parâmetros ÷ 12 para cima, com o aviso "meta estimada" e o link.
+> - **Prospecções:** só negociações novas (cliente novo ficou de fora: importar
+>   contatos em lote encheria a lista).
+> - **Próximo passo:** o texto de `proximaAcao` da negociação; sem ele, o bloco diz
+>   "Sem próximo passo definido". Não chama IA (o NextBestAction continua só na ficha).
+> - **Parado** = 10 dias ou mais sem contato (conta da criação se nunca houve
+>   contato); os parados vêm primeiro.
+> - **Alertas:** só o atalho para a Central e a contagem "30+ dias sem contato".
+> - Reaproveita as consultas que o Dashboard já fazia; a única nova é a meta do mês.
+
 Sem tabela nova. Um bloco **"Meu mês"** no topo do dashboard que já existe
 (619 linhas, cheio de painéis), pensado primeiro para 390 px:
 1. Anel da meta: "você está em X%", **falta N** (máquinas ou R$), supermeta

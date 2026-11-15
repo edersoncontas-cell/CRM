@@ -9,6 +9,7 @@ import {
   type Indicador, type MetaValidada, type ProgressoMeta,
 } from "@/lib/metas-regra";
 import { diaBR, meiaNoiteBR } from "@/lib/fuso-brasilia";
+import { escolherMetaDoMes, type MetaDoMes } from "@/lib/meu-mes-regra";
 
 /** O recurso está ligado? Banco fora do ar ou erro = desligado. Memoizado por requisição. */
 export const metasRecursoLigado = cache(async (): Promise<boolean> => {
@@ -144,4 +145,21 @@ export async function metaAnualDoAno(ano: number, fallbackParametros: number): P
 
 export function anoDeHoje(agora: Date = new Date()): number {
   return diaBR(agora).a;
+}
+
+/** Meta do mês (máquinas) para o bloco "Meu mês". Recurso desligado, tabela ausente
+ *  ou banco fora do ar = a meta anual de Parâmetros dividida por 12. Nunca derruba. */
+export async function metaDoMes(agora: Date, metaAnualParametros: number): Promise<MetaDoMes> {
+  const padrao = escolherMetaDoMes([], agora, metaAnualParametros);
+  try {
+    if (!(await metasRecursoLigado())) return padrao;
+    const metas = await db.meta.findMany({
+      where: { periodo: "mensal", indicador: "maquinas_faturadas", inicio: { lte: agora }, fim: { gt: agora } },
+      select: { inicio: true, fim: true, meta: true, supermeta: true, criadoEm: true },
+      take: 20,
+    });
+    return escolherMetaDoMes(metas, agora, metaAnualParametros);
+  } catch {
+    return padrao;
+  }
 }

@@ -30,8 +30,8 @@ export function MetasLigarCard({ ligado }: { ligado: boolean }) {
           <h2 className="flex items-center gap-2 font-bold"><Target size={18} /> Metas e supermetas</h2>
           <p className="mt-1 text-sm text-slate-600">
             Metas por período (mensal a anual) de máquinas, faturamento, visitas ou negociações, com supermeta e
-            recompensa. Ligado, a meta anual cadastrada lá passa a valer no Dashboard e no Zeus. Desligar volta ao
-            número de Parâmetros e não apaga nada.
+            recompensa. Ligado, a meta anual cadastrada lá passa a valer no Dashboard e no Zeus, e o Dashboard ganha
+            o bloco “Meu mês” no topo. Desligar volta ao número de Parâmetros, tira o bloco e não apaga nada.
           </p>
           {estado && <Link href="/metas" className="mt-1 inline-block text-sm font-semibold underline">Ver metas</Link>}
           {erro && <p role="alert" className="mt-2 text-sm text-red-700">{erro}</p>}
