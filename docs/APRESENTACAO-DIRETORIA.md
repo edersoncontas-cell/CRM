@@ -191,8 +191,9 @@ esfriando, clientes 30+ dias sem contato e visitas realizadas por semana.
 **Precisa ser construído** (entra na implantação):
 
 - **Tempo até a primeira resposta** ao cliente. Hoje não é calculado.
-- **Quantas negociações a IA abriu sozinha, e quanto isso soma em reais.** O dado já é
-  gravado, mas nenhuma tela mostra.
+- **Quantas conversas viraram negociação com a leitura da IA, e quanto isso soma em reais.**
+  Desde a v46 a IA não abre negociação sozinha: o vendedor aperta "Transformar em
+  oportunidade" na conversa e o que o Orientador leu vai junto. A tela Piloto conta as duas.
 - **Quantas conversas de venda viraram negociação.** Hoje não é calculado; é o critério 3
   do piloto (seção 10).
 

@@ -234,12 +234,20 @@ export async function calcularNumerosPiloto(dias: number, agora: Date = new Date
   semNegociacao.sort(maisRecente);
   const listaFora = fora.map(item).sort(maisRecente);
 
-  // ── Negociações que a IA abriu sozinha ──
-  // O registro é a auditoria do pipeline do ZEUS (lib/zeus/pipeline.ts): a
-  // negociação em si não guarda quem a criou. O Cérebro também cria, mas a
-  // pedido dele — isso não é "a IA abriu sozinha" e não entra.
+  // ── Negociações que saíram da conversa do WhatsApp ──
+  // O registro é a auditoria: a negociação em si não guarda quem a criou.
+  // Duas fontes, as duas "a conversa virou funil com a leitura da IA":
+  //  - origem "zeus": as que a IA abriu sozinha (até a v46);
+  //  - "usuario" com extra.daConversa: as que ele transformou em oportunidade
+  //    pelo botão na conversa (criarNegociacaoCompleta), levando o que o
+  //    Orientador leu. Sem esta, o número ficaria zerado para sempre.
+  // O Cérebro também cria, mas a pedido dele no chat — não entra.
   const registros = await db.auditLog.findMany({
-    where: { acao: "negociacao_criada", origem: "zeus", criadoEm: { gte: inicio, lte: fim } },
+    where: {
+      acao: "negociacao_criada",
+      criadoEm: { gte: inicio, lte: fim },
+      AND: [{ OR: [{ origem: "zeus" }, { origem: "usuario", extra: { contains: '"daConversa":true' } }] }],
+    },
     select: { entidadeId: true, criadoEm: true },
     orderBy: { criadoEm: "desc" },
   });

@@ -682,6 +682,12 @@ export async function aplicarMigracoes(): Promise<void> {
     // v34: observação da negociação (braço da escavadeira, Inscrição Estadual).
     await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "observacao" TEXT`);
 
+    // v46: a conversa vira oportunidade por botão (não mais sozinha). O que o
+    // Orientador leu fica guardado mesmo sem negociação aberta, e vai junto
+    // quando o vendedor transforma a conversa em oportunidade.
+    await db.$executeRawUnsafe(`ALTER TABLE "Negociacao" ADD COLUMN IF NOT EXISTS "resumoConversa" TEXT`);
+    await db.$executeRawUnsafe(`ALTER TABLE "OrientadorAnalise" ADD COLUMN IF NOT EXISTS "fatos" JSONB`);
+
     // ── Catálogo Dynapac atualizado (v30) ──────────────────────────────────
     // Os rolos de solo passam a usar o nome curto da fábrica (CA6500 D →
     // CA65 D). Renomear em vez de recriar preserva ficha técnica, notas,

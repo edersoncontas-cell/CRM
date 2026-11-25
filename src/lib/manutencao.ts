@@ -105,7 +105,11 @@ import { garantirFichasVerificadas } from "@/lib/fichas-verificadas";
 // v45: tabela UsoTela — o Relatório de uso (quanto cada tela é aberta, de que
 // aparelho, em que hora). E a parada da fila de envio (v44) passa a rodar UMA
 // vez só: sem isso, esta chave nova cancelaria a fila do Marketing de novo.
-export const CHAVE_MANUTENCAO = "manutencao.v45";
+//
+// v46: Negociacao.resumoConversa e OrientadorAnalise.fatos — a IA não abre mais
+// negociação sozinha; o vendedor transforma a conversa em oportunidade por um
+// botão, e o que o Orientador leu vai junto.
+export const CHAVE_MANUTENCAO = "manutencao.v46";
 
 export type EtapaManutencao = { etapa: string; ok: boolean; erro?: string };
 

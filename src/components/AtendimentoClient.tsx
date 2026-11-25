@@ -6,6 +6,7 @@
 // posicionamento fixo (nada de margens negativas), então nunca "desenquadra".
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { apagarMensagemAction } from "@/lib/apagar-mensagem-actions";
 import { excluirConversasAction } from "@/lib/excluir-conversas-actions";
 import { useRouter } from "next/navigation";
@@ -27,8 +28,11 @@ import {
   executarPedidoOrientadorAction,
   descartarPedidoOrientadorAction,
   negociacoesDoFunilAction,
+  oportunidadeDaConversaAction,
   type ContextoConversa, type RespostaPronta,
 } from "@/lib/atendimento-actions";
+import { excluirNegociacao } from "@/lib/actions";
+import { FormNovaNegociacao } from "@/components/FormNovaNegociacao";
 import { cn, formatCurrency } from "@/lib/utils";
 import { situacaoRecebimento } from "@/lib/recebimento-regra";
 import { maquinaDaNegociacao, pagamentoDaNegociacao, entradaDaNegociacao } from "@/lib/negociacao-verificada";
@@ -280,6 +284,13 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
   const [painelAberto, setPainelAberto] = useState(false);
   const [contexto, setContexto] = useState<ContextoConversa | null>(null);
   const [carregandoContexto, setCarregandoContexto] = useState(false);
+  // "Transformar em oportunidade": o rascunho que o servidor montou com o que
+  // o Orientador guardou (preso à conversa em que foi aberto), o "lendo…" do
+  // botão e o erro, que fica escrito no card em vez de sumir.
+  const [oportunidade, setOportunidade] = useState<(Extract<Awaited<ReturnType<typeof oportunidadeDaConversaAction>>, { ok: true }> & { conversaId: string }) | null>(null);
+  const [abrindoOportunidade, setAbrindoOportunidade] = useState(false);
+  const [erroNegociacao, setErroNegociacao] = useState<{ conversaId: string; texto: string } | null>(null);
+  const [excluindoNeg, setExcluindoNeg] = useState<string | null>(null);
   // Contato marcado como "Não é cliente" no cadastro: o painel mostra só o
   // resumo da conversa — ver lib/cliente-status.ts.
   const naoCliente = soResumo(contexto?.cliente?.status);
@@ -598,6 +609,40 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
 
   const sel = useMemo(() => conversas.find((c) => c.id === selId) ?? null, [conversas, selId]);
   const selAtual = sel ? curr(sel) : null;
+
+  async function transformarEmOportunidade() {
+    if (!selId || abrindoOportunidade) return;
+    const conversaId = selId;
+    setAbrindoOportunidade(true);
+    setErroNegociacao(null);
+    try {
+      const r = await oportunidadeDaConversaAction(conversaId);
+      if (r.ok) setOportunidade({ ...r, conversaId });
+      else setErroNegociacao({ conversaId, texto: r.erro });
+    } catch (e) {
+      console.error("[atendimento] transformar em oportunidade:", e);
+      setErroNegociacao({ conversaId, texto: "Não deu para abrir a oportunidade (sem conexão com o CRM?). Tente de novo." });
+    } finally {
+      setAbrindoOportunidade(false);
+    }
+  }
+
+  async function excluirNegociacaoDaConversa(n: { id: string; maquina: string | null }) {
+    if (!selId) return;
+    const conversaId = selId;
+    if (!confirm(`Excluir esta negociação${n.maquina ? ` (${n.maquina})` : ""} do funil?\n\nEla sai de vez — não conta como venda perdida. A conversa continua aqui.`)) return;
+    setExcluindoNeg(n.id);
+    setErroNegociacao(null);
+    try {
+      await excluirNegociacao(n.id);
+      setContexto((c) => c ? { ...c, negociacoes: c.negociacoes.filter((x) => x.id !== n.id) } : c);
+    } catch (e) {
+      console.error("[atendimento] excluir negociação:", e);
+      setErroNegociacao({ conversaId, texto: "Não deu para excluir a negociação. Ela continua no funil — tente de novo." });
+    } finally {
+      setExcluindoNeg(null);
+    }
+  }
 
   const carregarContexto = useCallback(async (id: string) => {
     setCarregandoContexto(true);
@@ -1216,7 +1261,19 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
                 <div>
                   <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-400">Negociação</div>
                   {contexto.negociacoes.length === 0 ? (
-                    <p className="text-xs text-brand-400">Nenhuma negociação aberta. Quando houver sinal de compra o ZEUS abre uma automaticamente.</p>
+                    /* A IA não abre mais negociação sozinha: é ele que decide,
+                       e o que o Orientador já leu vai junto para o funil. */
+                    <div className="space-y-2 rounded-xl bg-white/[0.04] p-3 text-xs">
+                      <p className="text-brand-300">Nenhuma negociação aberta. Quando a conversa virar venda, transforme-a em oportunidade: o que o Orientador já guardou (máquina, valor, pagamento, resumo, combinados e pendências) vai junto, e você confere antes de salvar.</p>
+                      <button
+                        type="button"
+                        onClick={transformarEmOportunidade}
+                        disabled={abrindoOportunidade}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-agro-400 px-3 py-2 text-xs font-bold text-black disabled:opacity-60"
+                      >
+                        {abrindoOportunidade ? <><Loader2 size={13} className="animate-spin" /> Lendo o que o Orientador guardou…</> : <><Plus size={13} /> Transformar em oportunidade</>}
+                      </button>
+                    </div>
                   ) : contexto.negociacoes.map((n) => (
                     <div key={n.id} className="mb-2 space-y-1 rounded-xl bg-white/[0.04] p-3 text-xs">
                       <ItemVerificado rotulo="Máquina" valor={maquinaDaNegociacao(n.marca, n.maquina)} falta="modelo ainda não definido" />
@@ -1225,8 +1282,21 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
                       <ItemVerificado rotulo="Pagamento" valor={pagamentoDaNegociacao(n.tipoPagamento, n.condicaoPagamento)} falta="à vista, financiado, consórcio ou parcelado pela casa — ainda não definido" />
                       <ItemVerificado rotulo="Obs" valor={n.observacao?.trim() || null} falta="braço da escavadeira e I.E. ainda não informados" />
                       {n.concorrente && <div className="flex gap-1.5 text-red-300"><span className="w-3 shrink-0 text-center">▼</span><span>Concorrente na mesa: {n.concorrente}</span></div>}
+                      <div className="flex justify-end border-t border-white/5 pt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => excluirNegociacaoDaConversa(n)}
+                          disabled={excluindoNeg === n.id}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                        >
+                          {excluindoNeg === n.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Excluir do funil
+                        </button>
+                      </div>
                     </div>
                   ))}
+                  {erroNegociacao && erroNegociacao.conversaId === selId && (
+                    <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-2 text-[11px] text-red-300"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> {erroNegociacao.texto}</p>
+                  )}
                 </div>
 
                 {/* Leitura do Orientador — coach de vendas ao lado do vendedor.
@@ -1452,6 +1522,25 @@ export function AtendimentoClient({ conversas, conexao, recebimento, convInicial
           onAtualizar={async () => setRespostas(await listarRespostasProntasAction().catch(() => []))}
         />
       )}
+      {/* Portal no <body>: dentro da tela de conversa o formulário ficava preso
+          ao contêiner dela e, no celular, a barra do topo cobria o título. */}
+      {oportunidade && oportunidade.conversaId === selId && typeof document !== "undefined" && createPortal(
+        <FormNovaNegociacao
+          titulo="Transformar em oportunidade"
+          textoBotao="Criar oportunidade"
+          clienteIdFixo={oportunidade.clienteId}
+          clienteNomeFixo={oportunidade.temLeitura ? oportunidade.clienteNome : `${oportunidade.clienteNome} · o Orientador ainda não leu esta conversa`}
+          colunas={oportunidade.colunas}
+          estagioInicial={oportunidade.estagioInicial}
+          maquinasProprias={oportunidade.maquinasProprias}
+          valoresIniciais={oportunidade.valores}
+          conversaId={oportunidade.conversaId}
+          onFechar={() => setOportunidade(null)}
+          onSucesso={() => { const id = oportunidade.conversaId; setTimeout(() => carregarContexto(id), 300); }}
+        />,
+        document.body,
+      )}
+
       {vincularConv && (
         <VincularContatoModal conv={vincularConv} onClose={() => setVincularConv(null)}
           onVinculado={(clienteId) => { patchConv(vincularConv, { clienteId }); setVincularConv(null); if (selId) setTimeout(() => carregarContexto(selId), 800); }} />

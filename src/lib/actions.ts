@@ -22,6 +22,7 @@ import { descreverConexao } from "@/lib/whatsapp-vigia-regra";
 import { registrarAudit } from "./audit";
 import { mesAnoAtualBrasilia, inicioDoDiaBrasilia } from "./utils";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
+import { resumoConversaDoForm } from "@/lib/oportunidade-da-conversa";
 import { soResumo, STATUS_NAO_CLIENTE } from "@/lib/cliente-status";
 import { telefoneRecusado, telefoneParaGravar, motivoTelefoneRecusado, ehTelefoneReal } from "@/lib/telefone-valido";
 import { excluirClienteDefinitivo } from "@/lib/contatos-bloqueados";
@@ -865,9 +866,14 @@ export async function moverNegociacao(id: string, estagio: string, motivoPerda?:
 }
 
 export async function excluirNegociacao(id: string) {
-  await db.negociacao.delete({ where: { id } });
+  const neg = await db.negociacao.delete({ where: { id }, select: { clienteId: true } });
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
+  // Negociações e a conversa também mostram o card: sem isto, a cópia sem
+  // sinal e o painel da conversa continuavam com o card excluído.
+  revalidatePath("/negociacoes");
+  revalidatePath("/atendimento");
+  revalidatePath(`/clientes/${neg.clienteId}`);
 }
 
 export async function marcarPerdida(id: string, motivo: string) {
@@ -1885,8 +1891,9 @@ export async function registrarVisitaPorVoz(
   // 2) Se uma próxima visita/data futura for citada no relato, agenda também.
   await registrarVisitaAgenda(clienteId, extracao.dataVisita);
 
-  // 3) Alimenta a negociação aberta (ou cria uma nova, mesma regra do pipeline do WhatsApp).
-  const negResult = await alimentarNegociacao(clienteId, extracao);
+  // 3) Alimenta a negociação aberta (ou cria uma nova: é o relato do próprio
+  //    vendedor — a conversa do WhatsApp é que não cria mais sozinha).
+  const negResult = await alimentarNegociacao(clienteId, extracao, { podeCriar: true });
 
   // 4) Atualiza o resumo do cliente incrementalmente.
   const novaLinha = `[${new Date().toLocaleDateString("pt-BR")}] (visita em campo) ${extracao.resumo || texto}`;
@@ -2242,6 +2249,22 @@ export async function criarNegociacaoCompleta(formData: FormData) {
   const crdQtdRaw = String(formData.get("crdSaldoParcelasQtd") ?? "");
   const crdParcelaRaw = String(formData.get("crdParcelaValor") ?? "").replace(/[^0-9,.]/g, "").replace(",", ".");
 
+  // "Transformar em oportunidade" (botão na conversa do WhatsApp): o que o
+  // Orientador já tinha guardado da conversa vem junto. Mesmo caminho de
+  // criação de sempre — nada de cópia desta função para a conversa.
+  const resumoConversa = resumoConversaDoForm(formData.get("resumoConversa"));
+  const conversaId = String(formData.get("conversaId") ?? "").trim() || null;
+  const observacao = String(formData.get("observacao") ?? "").trim() || null;
+  if (conversaId) {
+    // Toque duplo no botão (ou rede lenta e ele apertou de novo): a segunda
+    // vez acha a primeira em vez de pôr dois cards iguais no funil.
+    const recente = await db.negociacao.findFirst({
+      where: { clienteId, status: "aberta", resumoConversa: { not: null }, criadoEm: { gte: new Date(Date.now() - 2 * 60 * 1000) } },
+      select: { id: true },
+    });
+    if (recente) return { ok: true, id: recente.id };
+  }
+
   // Id vindo de fora só no modo sem sinal: a negociação nasce com o id gerado
   // no aparelho, e subir duas vezes acha a primeira em vez de duplicar.
   const idInformado = String(formData.get("id") ?? "").trim();
@@ -2249,6 +2272,8 @@ export async function criarNegociacaoCompleta(formData: FormData) {
     data: {
       ...(ID_VALIDO.test(idInformado) ? { id: idInformado } : {}),
       clienteId,
+      ...(resumoConversa ? { resumoConversa } : {}),
+      ...(observacao ? { observacao } : {}),
       marca: String(formData.get("marca") ?? "") || null,
       maquinaModelo: String(formData.get("maquinaModelo") ?? "") || null,
       valor,
@@ -2284,6 +2309,19 @@ export async function criarNegociacaoCompleta(formData: FormData) {
     revalidatePath("/dashboard");
   }
   if (isFaturadoEstagio) await usadaDaTrocaParaEstoque(criada.id).catch((e) => console.error("[usada-troca] estoque:", e));
+
+  if (conversaId) {
+    // extra.daConversa: é por ele que a tela Piloto conta as conversas que
+    // viraram oportunidade (lib/piloto.ts).
+    await registrarAudit({
+      acao: "negociacao_criada", origem: "usuario",
+      descricao: `Conversa do WhatsApp transformada em oportunidade${criada.maquinaModelo ? ` (${criada.maquinaModelo})` : ""}.`,
+      entidade: "Negociacao", entidadeId: criada.id, clienteId,
+      extra: { daConversa: true, conversaId, comResumo: !!resumoConversa },
+    }).catch(() => {});
+    revalidatePath("/atendimento");
+    revalidatePath(`/clientes/${clienteId}`);
+  }
 
   revalidatePath("/negociacoes");
   revalidatePath("/pipeline");
@@ -2356,6 +2394,10 @@ export async function editarNegociacaoCompleta(id: string, formData: FormData) {
       concorrenteMencionado: String(formData.get("concorrenteMencionado") ?? "") || null,
       proximaAcao: String(formData.get("proximaAcao") ?? "") || null,
       dataVisita: dataVisitaRaw ? new Date(dataVisitaRaw + ":00-03:00") : null,
+      // Só quando o formulário mostrou o campo: os outros lugares que editam
+      // por aqui não têm esses campos e não podem apagá-los.
+      ...(formData.has("resumoConversa") ? { resumoConversa: resumoConversaDoForm(formData.get("resumoConversa")) } : {}),
+      ...(formData.has("observacao") ? { observacao: String(formData.get("observacao") ?? "").trim() || null } : {}),
       estagio,
       ultimoContato: new Date(),
       ...usada,
@@ -2626,8 +2668,9 @@ export async function analisarLoteOrientadorAction(conversaIds: string[]): Promi
   return { feitas, erros };
 }
 
-// (✓/✗ do Orientador foram removidos: a negociação entra no funil sozinha —
-// ver lib/zeus/regra-negociacao.ts — e sai/edita pelo próprio funil.)
+// (✓/✗ do Orientador foram removidos. A conversa vira negociação pelo botão
+// "Transformar em oportunidade" na conversa — oportunidadeDaConversaAction em
+// atendimento-actions.ts — e sai/edita pelo próprio funil.)
 
 // Análise completa de um cliente (drill-down do painel + badge compacto em
 // Atendimento/Cadastro do cliente).

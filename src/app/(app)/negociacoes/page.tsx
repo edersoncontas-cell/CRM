@@ -82,7 +82,10 @@ export default async function NegociacoesPage({
     valor: n.valor,
     termometro: n.termometro,
     concorrente: n.concorrenteMencionado,
-    condicaoPagamento: n.condicaoPagamento,
+    // Vai para o "Condição de pagamento" do Editar. O Orientador grava em
+    // tipoPagamento e LIMPA condicaoPagamento (orientador-fatos.ts); lendo só
+    // este, o Editar mostrava "—" e, ao salvar, apagava o pagamento.
+    condicaoPagamento: n.tipoPagamento || n.condicaoPagamento,
     dataVisita: n.dataVisita ? n.dataVisita.toISOString() : null,
     proximaAcao: n.proximaAcao,
     marca: n.marca,
@@ -105,6 +108,8 @@ export default async function NegociacoesPage({
     usadaEstado: n.usadaEstado,
     usadaValor: n.usadaValor,
     usadaObs: n.usadaObs,
+    resumoConversa: n.resumoConversa,
+    observacao: n.observacao,
   }));
 
   const colunas = colunasFunil.map((c) => ({

@@ -171,6 +171,11 @@ model OrientadorAnalise {
   // Zera a cada releitura completa da conversa. Existe para a deriva do estado
   // nunca passar de LIMITE_INCREMENTAIS passos sem correção.
   incrementaisSeguidas    Int      @default(0)
+  // Máquina, valor, pagamento, entrada e observação que o Orientador leu na
+  // conversa (FatosNegociacao). Guardados aqui porque a IA não abre mais
+  // negociação sozinha: sem negociação aberta não havia onde pôr, e o botão
+  // "Transformar em oportunidade" precisa deles para levar tudo junto.
+  fatos                   Json?
   atualizadoEm            DateTime @updatedAt
 }
 
@@ -217,6 +222,10 @@ model Negociacao {
   // Detalhes que mudam a proposta e não cabem nos outros campos: tamanho do
   // braço quando é escavadeira, e se a venda é com Inscrição Estadual (I.E.).
   observacao            String?
+  // O que a conversa do WhatsApp já tinha quando o vendedor a transformou em
+  // oportunidade (botão na conversa): resumo, combinados, pendências,
+  // objeções e o que ele contou ao Orientador. Nulo nas que nasceram de outro jeito.
+  resumoConversa        String?
   // Campos financiamento
   bancoFinanciamento    String?
   entradaValor          Float?

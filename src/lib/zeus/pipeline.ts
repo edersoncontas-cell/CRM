@@ -7,8 +7,8 @@
 
 import { db } from "@/lib/db";
 import { analisarConversaIA, classificarConversaIA, type ExtracaoConversa } from "@/lib/ai";
-import { ESTAGIO_INICIAL, ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
-import { papelDaColuna } from "@/lib/pipeline";
+import { ESTAGIOS_PRE_VISITA } from "@/lib/pipeline";
+import { colunaInicialDaOportunidade } from "@/lib/oportunidade-da-conversa";
 import { telefoneParaGravar } from "@/lib/telefone-valido";
 import { deveDescartarContato } from "@/lib/filtro-contatos";
 import { deveAbrirNegociacao } from "@/lib/zeus/regra-negociacao";
@@ -70,10 +70,17 @@ function ajusteTermometro(sentimento: string | null): number {
   return 0;
 }
 
-// Alimenta a negociação aberta do cliente (ou cria uma nova quando a conversa
-// já levantou máquina + pagamento/visita — ver regra-negociacao.ts), incluindo
-// o ajuste do termômetro conforme o sentimento detectado.
-export { deveAbrirNegociacao };
+// Alimenta a negociação ABERTA do cliente, incluindo o ajuste do termômetro
+// conforme o sentimento detectado.
+//
+// Criar negociação nova (regra máquina + pagamento ou visita, ver
+// regra-negociacao.ts) só com `podeCriar`:
+//  - CONVERSA DO WHATSAPP: false. A IA abria negociação sozinha e o funil
+//    enchia de card que o vendedor não pediu, sem o conteúdo da conversa.
+//    Agora quem abre é ele, pelo botão "Transformar em oportunidade" na
+//    conversa (lib/oportunidade-da-conversa.ts), e o que a IA leu vai junto.
+//  - RELATO DE VISITA (voz e visitas do dia): true. Ali é o próprio vendedor
+//    contando o que fechou na visita — continua como era.
 
 // Marca pelo catálogo próprio (modelo citado) — evita card "sem marca".
 async function marcaDoModelo(modelo: string | null): Promise<string | null> {
@@ -84,7 +91,8 @@ async function marcaDoModelo(modelo: string | null): Promise<string | null> {
 
 export async function alimentarNegociacao(
   clienteId: string,
-  ex: ExtracaoConversa
+  ex: ExtracaoConversa,
+  opts: { podeCriar: boolean },
 ): Promise<{ id: string; criada: boolean } | null> {
   const aberta = await db.negociacao.findFirst({
     where: { clienteId, status: "aberta" },
@@ -97,9 +105,8 @@ export async function alimentarNegociacao(
   // "em negociação" recebe contato novo; a que tem "visita" + "pendente"
   // recebe quem marcou visita.
   const colunas = await db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { titulo: true, papel: true } });
-  const abertasCol = colunas.filter((c) => papelDaColuna(c) === "em_negociacao");
-  const colInicial = abertasCol[0]?.titulo ?? ESTAGIO_INICIAL;
-  const colVisita = abertasCol.find((c) => /visita/i.test(c.titulo) && /pend/i.test(c.titulo))?.titulo ?? abertasCol[1]?.titulo ?? colInicial;
+  const colInicial = colunaInicialDaOportunidade(colunas, false);
+  const colVisita = colunaInicialDaOportunidade(colunas, true);
 
   if (aberta) {
     const estagio =
@@ -133,7 +140,7 @@ export async function alimentarNegociacao(
     return { id: aberta.id, criada: false };
   }
 
-  if (deveAbrirNegociacao(ex)) {
+  if (opts.podeCriar && deveAbrirNegociacao(ex)) {
     const concorrenteTexto = ex.concorrente
       ? ex.valorConcorrente ? `${ex.concorrente} (R$ ${Math.round(ex.valorConcorrente).toLocaleString("pt-BR")})` : ex.concorrente
       : null;
@@ -331,7 +338,8 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
       if (!extracao.visitaConfirmada) extracao.dataVisita = null;
 
       await vincularMunicipio(clienteId, extracao.municipio);
-      const negResult = await alimentarNegociacao(clienteId, extracao);
+      // podeCriar: false — conversa do WhatsApp nunca abre negociação sozinha.
+      const negResult = await alimentarNegociacao(clienteId, extracao, { podeCriar: false });
       await registrarVisitaAgenda(clienteId, extracao.dataVisita);
 
       // Não repete a mesma linha (a heurística devolve "pagamento: avista; visita
@@ -363,17 +371,7 @@ export async function processarMensagem(mensagemId: string): Promise<void> {
           extra: { dataVisita: extracao.dataVisita.toISOString(), maquina: extracao.maquina },
         });
       }
-      if (negResult?.criada) {
-        await registrarAudit({
-          acao: "negociacao_criada",
-          origem: "zeus",
-          descricao: `Negociação aberta automaticamente para ${clienteNome ?? "cliente"} a partir de uma conversa de WhatsApp.`,
-          entidade: "Negociacao",
-          entidadeId: negResult.id,
-          clienteId,
-          extra: { maquina: extracao.maquina, valor: extracao.valor },
-        });
-      } else if (negResult) {
+      if (negResult) {
         await registrarAudit({
           acao: "negociacao_atualizada",
           origem: "zeus",

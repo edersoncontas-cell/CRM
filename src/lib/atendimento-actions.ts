@@ -12,6 +12,8 @@ import { registrarAudit } from "@/lib/audit";
 import { montarContextoAgenda } from "@/lib/zeus/agenda-contexto";
 import { lerNotas, acrescentarNota, removerNota, LIMITE_ENTRADA, type NotaVendedor } from "@/lib/orientador-notas";
 import { lerPedidos, escolherAlvo, type PedidoOrientador } from "@/lib/orientador-pedidos";
+import { lerFatosGuardados, fatosComNotas, montarResumoConversa, colunaInicialDaOportunidade } from "@/lib/oportunidade-da-conversa";
+import type { ValoresNegociacao } from "@/components/FormNovaNegociacao";
 
 export type ContextoConversa = {
   cliente: {
@@ -111,6 +113,81 @@ export async function contextoConversaAction(conversationId: string): Promise<Co
     estiloAprendido: !!estilo,
     sugestaoVisita: agenda?.sugestao?.texto ?? null,
   };
+}
+
+// "Transformar em oportunidade": monta o formulário de negociação já
+// preenchido com o que o Orientador guardou desta conversa (máquina, valor,
+// pagamento, entrada, observação, próxima ação, visita marcada) e o texto da
+// conversa (resumo, combinados, pendências, objeções, notas do vendedor).
+// SÓ LÊ — quem grava é criarNegociacaoCompleta, quando ele confere e salva.
+export async function oportunidadeDaConversaAction(conversationId: string): Promise<
+  | {
+      ok: true;
+      clienteId: string;
+      clienteNome: string;
+      colunas: { id: string; titulo: string; papel: string | null }[];
+      estagioInicial: string;
+      maquinasProprias: { marca: string; modelo: string }[];
+      valores: ValoresNegociacao;
+      // false = o Orientador ainda não leu esta conversa; o formulário abre
+      // quase vazio, e a tela diz por quê.
+      temLeitura: boolean;
+    }
+  | { ok: false; erro: string; negociacaoId?: string }
+> {
+  try {
+    const conv = await db.whatsAppConversation.findUnique({ where: { id: conversationId }, select: { clienteId: true, isGroup: true } });
+    if (!conv) return { ok: false, erro: "Conversa não encontrada." };
+    if (conv.isGroup) return { ok: false, erro: "Conversa de grupo não vira oportunidade." };
+    if (!conv.clienteId) return { ok: false, erro: "Ligue a conversa a um cliente primeiro (⋮ → Vincular a uma negociação)." };
+    const clienteId = conv.clienteId;
+
+    const [cliente, analise, aberta, colunas, maquinasProprias, proximaVisita] = await Promise.all([
+      db.cliente.findUnique({ where: { id: clienteId }, select: { nome: true } }),
+      db.orientadorAnalise.findUnique({ where: { clienteId } }),
+      db.negociacao.findFirst({ where: { clienteId, status: "aberta" }, select: { id: true } }),
+      db.colunaFunil.findMany({ orderBy: { ordem: "asc" }, select: { id: true, titulo: true, papel: true } }),
+      db.maquina.findMany({ where: { proprio: true }, select: { marca: true, modelo: true }, orderBy: [{ marca: "asc" }, { modelo: "asc" }] }),
+      db.visita.findFirst({ where: { clienteId, data: { gte: new Date() } }, orderBy: { data: "asc" }, select: { data: true } }),
+    ]);
+    if (!cliente) return { ok: false, erro: "Cliente não encontrado." };
+    if (aberta) return { ok: false, erro: "Este cliente já tem uma negociação aberta no funil.", negociacaoId: aberta.id };
+
+    const notas = lerNotas(analise?.notaVendedor);
+    const fatos = fatosComNotas(lerFatosGuardados(analise?.fatos), notas);
+    // Modelo sem marca: a marca sai do catálogo próprio (evita card "sem marca").
+    const marca = fatos.marca
+      ?? (fatos.maquinaModelo ? maquinasProprias.find((m) => m.modelo.toLowerCase() === fatos.maquinaModelo!.toLowerCase())?.marca ?? null : null);
+
+    return {
+      ok: true,
+      clienteId,
+      clienteNome: cliente.nome,
+      colunas: colunas.filter((c) => papelDaColuna(c) !== "perdida"),
+      estagioInicial: colunaInicialDaOportunidade(colunas, !!proximaVisita),
+      maquinasProprias,
+      temLeitura: !!analise,
+      valores: {
+        marca,
+        maquinaModelo: fatos.maquinaModelo,
+        valor: fatos.valor,
+        tipoPagamento: fatos.condicaoPagamento,
+        entradaValor: fatos.entradaValor,
+        entradaPercentual: fatos.entradaPercentual,
+        proximaAcao: analise?.proximaAcao?.trim() || null,
+        dataVisita: proximaVisita?.data.toISOString() ?? null,
+        observacao: fatos.observacao,
+        resumoConversa: montarResumoConversa(analise ? {
+          resumoNegociacao: analise.resumoNegociacao, perfilComprador: analise.perfilComprador,
+          combinados: analise.combinados ?? [], pendencias: analise.pendencias ?? [],
+          objecoes: analise.objecoes ?? [], atualizadoEm: analise.atualizadoEm,
+        } : null, notas),
+      },
+    };
+  } catch (e) {
+    console.error("[oportunidadeDaConversa]", e);
+    return { ok: false, erro: "Não deu para ler o que o Orientador guardou desta conversa. Tente de novo." };
+  }
 }
 
 // "Marcar como respondido": assunto concluído, sem pendência — o cliente

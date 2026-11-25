@@ -39,6 +39,12 @@ export type ValoresNegociacao = {
   usadaEstado?: string | null;
   usadaValor?: number | null;
   usadaObs?: string | null;
+  // Braço da escavadeira / I.E. O campo só aparece quando a chave vem (mesmo
+  // null): os formulários que não a passam não podem apagar o que está gravado.
+  observacao?: string | null;
+  // O que veio da conversa do WhatsApp ("Transformar em oportunidade"). Mesma
+  // regra: só aparece — e só é gravado — quando a chave vem.
+  resumoConversa?: string | null;
 };
 
 const ESTADOS_USADA = [
@@ -128,6 +134,8 @@ export function FormNovaNegociacao({
   onSucesso,
   negociacaoId,
   valoresIniciais,
+  conversaId,
+  textoBotao,
 }: {
   titulo?: string;
   clienteIdFixo?: string;
@@ -141,6 +149,10 @@ export function FormNovaNegociacao({
   onSucesso?: (info?: { estagio: string; excluida?: boolean }) => void;
   negociacaoId?: string;
   valoresIniciais?: ValoresNegociacao;
+  // Criada a partir de uma conversa do WhatsApp: vai junto para a auditoria
+  // e para a trava contra toque duplo (criarNegociacaoCompleta).
+  conversaId?: string;
+  textoBotao?: string;
 }) {
   const vi = valoresIniciais;
   const [isPending, startTransition] = useTransition();
@@ -250,7 +262,13 @@ export function FormNovaNegociacao({
     if (!negociacaoId) return;
     if (!confirm(`Excluir negociação de ${clienteNomeFixo ?? "este cliente"}?`)) return;
     startTransition(async () => {
-      await excluirNegociacao(negociacaoId);
+      try {
+        await excluirNegociacao(negociacaoId);
+      } catch (e) {
+        console.error("[negociacao] excluir:", e);
+        setErro("Não deu para excluir a negociação. Ela continua no funil — tente de novo.");
+        return;
+      }
       onSucesso?.({ estagio, excluida: true });
       onFechar();
     });
@@ -487,6 +505,29 @@ export function FormNovaNegociacao({
             <input value={proximaAcao} onChange={(e) => setProximaAcao(e.target.value)} placeholder="Ex: Ligar terça para follow-up" className={inputCls} />
           </div>
 
+          {vi && "observacao" in vi && (
+            <div>
+              <label className={labelCls}>Observação (braço da escavadeira, I.E.)</label>
+              <input name="observacao" defaultValue={vi.observacao ?? ""} placeholder="Ex: braço longo · com I.E." className={inputCls} />
+            </div>
+          )}
+
+          {vi && "resumoConversa" in vi && (
+            <div>
+              <label className={labelCls}>Da conversa do WhatsApp</label>
+              <textarea
+                name="resumoConversa"
+                defaultValue={vi.resumoConversa ?? ""}
+                rows={7}
+                maxLength={4000}
+                placeholder="O Orientador ainda não guardou nada desta conversa. Escreva aqui o que importa, se quiser."
+                className={`${inputCls} resize-y text-[13px] leading-relaxed`}
+              />
+              <p className="mt-1 text-[11px] text-slate-400">Resumo, combinados, pendências e o que você contou ao Orientador. Pode editar.</p>
+            </div>
+          )}
+          {conversaId && <input type="hidden" name="conversaId" value={conversaId} />}
+
           <div>
             <label className={labelCls}>Interesse futuro — retomar em</label>
             <button type="button" onClick={() => setPickerAberto("interesse")} className={botaoDataCls}>
@@ -502,7 +543,7 @@ export function FormNovaNegociacao({
               Cancelar
             </button>
             <button disabled={isPending} className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-agro-400 hover:bg-slate-800 transition-colors disabled:opacity-50">
-              {isPending ? "Salvando..." : negociacaoId ? "Salvar Alterações" : "Criar Negociação"}
+              {isPending ? "Salvando..." : negociacaoId ? "Salvar Alterações" : textoBotao ?? "Criar Negociação"}
             </button>
           </div>
 
@@ -511,7 +552,7 @@ export function FormNovaNegociacao({
               type="button"
               onClick={excluir}
               disabled={isPending}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all"
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
             >
               <Trash2 size={13} /> Excluir negociação
             </button>

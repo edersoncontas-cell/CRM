@@ -27,6 +27,7 @@ import { PERSONA, ESTAGIOS, PERFIS, OBJECOES_VALIDAS, montarPromptOrientador, mo
 import { validadorDaArea, municipioDaArea } from "@/lib/area-atuacao";
 import { normalizarFatos, mudancasDaNegociacao, marcarVisitaNoRoteiro, FATOS_VAZIOS, type FatosNegociacao } from "@/lib/orientador-fatos";
 import { textoParaPrompt } from "@/lib/orientador-notas";
+import { lerFatosGuardados, somarFatos } from "@/lib/oportunidade-da-conversa";
 import { normalizarPedidos, guardarPedidos, type PedidoOrientador } from "@/lib/orientador-pedidos";
 import { recortarHistorico, MAX_MENSAGENS, JANELA_HISTORICO } from "@/lib/zeus/historico-janela";
 import { soResumo, montarPromptResumoContato, limparResumo, analiseSoResumo } from "@/lib/zeus/orientador-resumo";
@@ -181,8 +182,10 @@ async function lerNotaVendedor(clienteId: string): Promise<string | null> {
  * mudava, e o card seguia dizendo "modelo ainda não definido".
  *
  * Agora quem lê as duas fontes é o Orientador, e é aqui que o que ele leu vira
- * dado. Nunca cria negociação — abrir negociação continua sendo decisão da
- * regra do pipeline; aqui só se completa a que já existe.
+ * dado. Nunca cria negociação — abrir negociação é decisão do VENDEDOR, pelo
+ * botão "Transformar em oportunidade" na conversa; aqui só se completa a que
+ * já existe. Sem negociação aberta, os fatos ficam guardados na própria
+ * análise (OrientadorAnalise.fatos) e vão junto quando ele apertar o botão.
  */
 /**
  * Grava na ficha da negociação o que foi lido DIRETO da caixa de contexto,
@@ -208,6 +211,19 @@ async function aplicarFatos(clienteId: string, fatos: FatosNegociacao, temNota: 
         where: { id: clienteId, NOT: { municipioId: muni.id } },
         data: { municipioId: muni.id },
       });
+    }
+
+    // Guarda o que foi lido na análise, somado ao que já estava lá (leitura
+    // que não falou de pagamento não apaga o pagamento anterior). Falhar aqui
+    // não impede de completar a negociação aberta logo abaixo.
+    try {
+      const guardada = await db.orientadorAnalise.findUnique({ where: { clienteId }, select: { fatos: true } });
+      if (guardada) {
+        const somados = somarFatos(lerFatosGuardados(guardada.fatos), fatos);
+        await db.orientadorAnalise.update({ where: { clienteId }, data: { fatos: somados as unknown as Prisma.InputJsonValue } });
+      }
+    } catch (e) {
+      console.error("[orientador] não deu para guardar os fatos lidos de", clienteId, e);
     }
 
     const aberta = await db.negociacao.findFirst({
@@ -625,7 +641,7 @@ async function montarIncremental(clienteId: string, mensagensNovas: string): Pro
       coachingVazio: coachingEstaVazio(coachingAnterior),
     })) return null;
 
-    const [neg, cli] = await Promise.all([
+    const [negAberta, cli] = await Promise.all([
       db.negociacao.findFirst({
         where: { clienteId, status: "aberta" },
         orderBy: { atualizadoEm: "desc" },
@@ -636,6 +652,15 @@ async function montarIncremental(clienteId: string, mensagensNovas: string): Pro
     ]);
 
     const a = anterior!;
+    // Sem negociação aberta (a IA não abre mais sozinha), o estado parte do que
+    // o Orientador já tinha lido e guardado — senão cada passo incremental
+    // começaria sem máquina nem pagamento.
+    const guardados = lerFatosGuardados(a.fatos);
+    const neg = negAberta ?? {
+      marca: guardados.marca, maquinaModelo: guardados.maquinaModelo, valor: guardados.valor,
+      tipoPagamento: guardados.condicaoPagamento, entradaValor: guardados.entradaValor,
+      entradaPercentual: guardados.entradaPercentual, observacao: guardados.observacao,
+    };
     const coaching = coachingAnterior;
     const visitaFeita = coaching.roteiro.find((e) => /visita/i.test(e.etapa))?.status === "feito" ? true : null;
 

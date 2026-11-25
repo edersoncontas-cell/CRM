@@ -9,7 +9,7 @@ import {
 import {
   moverNegociacao,
   criarColunaFunil, excluirColunaFunil, renomearColunaFunil, definirPapelColunaFunil,
-  definirFaturadoEm,
+  definirFaturadoEm, excluirNegociacao,
 } from "@/lib/actions";
 import {
   criarCategorizadorColunas, papelDaColuna, probabilidadeDaColuna, valorPonderado, corDaColuna, ehFunilAberto,
@@ -60,6 +60,9 @@ interface CardData {
   usadaEstado: string | null;
   usadaValor: number | null;
   usadaObs: string | null;
+  // O que veio da conversa do WhatsApp ("Transformar em oportunidade").
+  resumoConversa: string | null;
+  observacao: string | null;
 }
 
 type Cliente = { id: string; nome: string };
@@ -119,6 +122,21 @@ export function FunilNegociacoes({
   );
 
   useEffect(() => setCards(cardsIniciais), [cardsIniciais]);
+
+  // Excluir pelo botão do card: some na hora; se o servidor falhar, o card
+  // volta e a tela DIZ que não excluiu.
+  async function excluirCard(c: CardData) {
+    if (!confirm(`Excluir a negociação de ${c.cliente}${c.maquina ? ` (${c.maquina})` : ""}?\n\nEla sai do funil de vez — não conta como venda perdida. Para registrar perda, use os 3 pontinhos → Venda perdida.`)) return;
+    const antes = cards;
+    setCards((cs) => cs.filter((x) => x.id !== c.id));
+    try {
+      await excluirNegociacao(c.id);
+    } catch (e) {
+      console.error("[funil] excluir:", e);
+      setCards(antes);
+      alert("Não deu para excluir a negociação. Ela continua no funil — tente de novo.");
+    }
+  }
   useEffect(() => setColunas(colunasIniciais), [colunasIniciais]);
 
   // KPIs
@@ -288,6 +306,7 @@ export function FunilNegociacoes({
                   total={totalCol}
                   periodoRotulo={periodoRotulo}
                   onEditar={setEditando}
+                  onExcluirCard={excluirCard}
                   onPapel={async (novoPapel, prob) => {
                     const r = await definirPapelColunaFunil(col.id, novoPapel, prob);
                     if (!r.ok) { alert(r.erro ?? "Não foi possível alterar."); return; }
@@ -348,6 +367,9 @@ export function FunilNegociacoes({
             usadaEstado: editando.usadaEstado,
             usadaValor: editando.usadaValor,
             usadaObs: editando.usadaObs,
+            observacao: editando.observacao,
+            // Só as que vieram de uma conversa mostram o bloco.
+            ...(editando.resumoConversa ? { resumoConversa: editando.resumoConversa } : {}),
           }}
           onFechar={() => setEditando(null)}
         />
@@ -605,13 +627,14 @@ function KpiCard({ icone, rotulo, valor, sub, cor }: { icone: React.ReactNode; r
 
 // ── Coluna do funil ──────────────────────────────────────────────────────
 function ColunaFunilView({
-  coluna, cards, total, periodoRotulo, onEditar, onPerder, onRenomear, onExcluir, onNovaAntiga, onPapel,
+  coluna, cards, total, periodoRotulo, onEditar, onExcluirCard, onPerder, onRenomear, onExcluir, onNovaAntiga, onPapel,
 }: {
   coluna: ColunaFunil;
   cards: CardData[];
   total: number;
   periodoRotulo: string;
   onEditar: (c: CardData) => void;
+  onExcluirCard: (c: CardData) => void;
   onPerder: (c: CardData) => void;
   onRenomear: (titulo: string) => Promise<void>;
   onExcluir: () => Promise<void>;
@@ -778,6 +801,7 @@ function ColunaFunilView({
             card={c}
             cor={corDaColuna(coluna)}
             onEditar={() => onEditar(c)}
+            onExcluir={() => onExcluirCard(c)}
             /* Só negociação ABERTA pode virar perdida. Máquina já faturada não
                se "perde" — desfazer faturamento é outra conversa, e oferecer
                aqui só daria chance de zerar uma venda real por engano. */
@@ -800,7 +824,7 @@ function ColunaFunilView({
 }
 
 // ── Card de negociação ───────────────────────────────────────────────────
-function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: CardData; cor?: string; arrastando?: boolean; onEditar?: () => void; onPerder?: () => void }) {
+function NegCardView({ card, cor, arrastando, onEditar, onExcluir, onPerder }: { card: CardData; cor?: string; arrastando?: boolean; onEditar?: () => void; onExcluir?: () => void; onPerder?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
   const [menu, setMenu] = useState(false);
 
@@ -938,6 +962,19 @@ function NegCardView({ card, cor, arrastando, onEditar, onPerder }: { card: Card
           >
             <FileText size={11} /> Proposta
           </Link>
+          {/* Excluir à vista (antes só dentro de "Editar"). Diferente de
+              "Venda perdida": some do funil de vez e não entra nos números. */}
+          {onExcluir && (
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={onExcluir}
+              title="Excluir esta negociação do funil"
+              className="flex flex-1 items-center justify-center gap-1 border-l border-[var(--funil-card-borda)] text-xs font-medium text-[var(--funil-card-texto2)] hover:text-red-500 transition-colors"
+            >
+              <Trash2 size={11} /> Excluir
+            </button>
+          )}
         </div>
       )}
     </div>

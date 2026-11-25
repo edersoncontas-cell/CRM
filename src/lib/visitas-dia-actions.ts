@@ -148,7 +148,7 @@ export async function registrarVisitaDoDiaAction(
       const extracao = await analisarConversaIA(texto);
       saida.resumo = extracao.resumo || undefined;
 
-      const neg = await alimentarNegociacao(visita.clienteId, extracao).catch((e) => {
+      const neg = await alimentarNegociacao(visita.clienteId, extracao, { podeCriar: true }).catch((e) => {
         console.error("[visitas-do-dia] alimentar negociação:", e);
         return null;
       });

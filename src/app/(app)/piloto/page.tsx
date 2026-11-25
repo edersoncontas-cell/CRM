@@ -102,8 +102,8 @@ function Conteudo({ n }: { n: NumerosPiloto }) {
             <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">A frase da reunião</div>
             {n.ia.total > 0 ? (
               <p className="mt-1 text-base leading-snug text-slate-800 sm:text-lg">
-                Nos últimos {n.dias} dias, o CRM abriu <b>{n.ia.total} negociaç{n.ia.total === 1 ? "ão" : "ões"} sozinho</b>, a partir
-                da conversa{n.ia.somaValor > 0 ? <>, somando <b>{formatCurrency(n.ia.somaValor)}</b> no funil</> : null}.
+                Nos últimos {n.dias} dias, <b>{n.ia.total} conversa{n.ia.total === 1 ? "" : "s"} do WhatsApp {n.ia.total === 1 ? "virou" : "viraram"} negociação</b> com
+                a leitura da IA{n.ia.somaValor > 0 ? <>, somando <b>{formatCurrency(n.ia.somaValor)}</b> no funil</> : null}.
                 {n.ia.semValor > 0 && (
                   <span className="block text-xs text-slate-500">
                     {n.ia.semValor} delas ainda sem valor: a soma cresce quando o valor é preenchido.
@@ -112,8 +112,8 @@ function Conteudo({ n }: { n: NumerosPiloto }) {
               </p>
             ) : (
               <p className="mt-1 text-sm leading-snug text-slate-600">
-                Nos últimos {n.dias} dias, o CRM ainda não abriu negociação sozinho. Ele abre quando a conversa do WhatsApp já fala de
-                máquina e de forma de pagamento ou de visita.
+                Nos últimos {n.dias} dias, nenhuma conversa do WhatsApp virou negociação. Ela vira quando você aperta
+                “Transformar em oportunidade” na conversa, e o que a IA leu vai junto.
               </p>
             )}
             <p className="mt-2 text-xs text-slate-500">O custo mensal para completar a frase está na proposta (seção 5.2), não no CRM.</p>
@@ -292,13 +292,13 @@ function CardIA({ n }: { n: NumerosPiloto }) {
   return (
     <Card>
       <div className="flex items-center gap-2 font-semibold text-slate-700">
-        <Sparkles size={18} className="text-brand-600" /> Negociações abertas pela IA
+        <Sparkles size={18} className="text-brand-600" /> Negociações que saíram da conversa
       </div>
 
       {ia.total === 0 ? (
         <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Nenhuma nos últimos {n.dias} dias. A IA abre sozinha quando a conversa já fala de máquina e de forma de pagamento ou de visita
-          e o cliente ainda não tem negociação aberta.
+          Nenhuma nos últimos {n.dias} dias. A conversa vira negociação quando você aperta “Transformar em oportunidade” no painel
+          da conversa — a IA não abre mais sozinha.
         </p>
       ) : (
         <>
@@ -332,7 +332,7 @@ function CardIA({ n }: { n: NumerosPiloto }) {
       )}
 
       <Regra>
-        <p>Conta a negociação que o CRM abriu sozinho ao ler a conversa do WhatsApp, no período. A que você pediu ao Cérebro não entra: foi pedido seu.</p>
+        <p>Conta a negociação que saiu da conversa do WhatsApp no período: a que você transformou em oportunidade pelo botão na conversa e, antes dele, a que o CRM abria sozinho. A que você pediu ao Cérebro não entra.</p>
         <p>O valor é o de hoje: se você corrigiu depois, vale o corrigido. “Apagadas depois” são as que você excluiu do funil.</p>
       </Regra>
     </Card>

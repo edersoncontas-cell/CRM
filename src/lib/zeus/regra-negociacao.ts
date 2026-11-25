@@ -1,5 +1,10 @@
-// Regra de abertura automática de negociação a partir da conversa do
-// WhatsApp (v3). Módulo PURO, sem banco nem IA, para ser testável.
+// Regra de abertura automática de negociação (v3). Módulo PURO, sem banco nem
+// IA, para ser testável.
+//
+// HOJE SÓ VALE PARA O RELATO DE VISITA do vendedor (voz e visitas do dia). A
+// conversa do WhatsApp NÃO abre negociação sozinha desde a v46: ele não gostou
+// do que a IA punha no funil, e agora transforma a conversa em oportunidade
+// por um botão (lib/oportunidade-da-conversa.ts). Ver alimentarNegociacao.
 //
 // Antes bastava intenção + algo concreto (até um valor solto) — o funil
 // enchia de card sem máquina. Agora a IA da conversa só "confirma" que é
@@ -9,8 +14,6 @@
 //   2) mais um dado concreto: condição de pagamento (à vista, financiado,
 //      consórcio…) OU visita já agendada.
 // Suporte/assunto sem relação nunca abre; só curiosidade sem visita também não.
-// Não existe mais etapa de confirmar/descartar no Orientador: o card nasce
-// direto no funil — para tirar, é no próprio funil.
 
 export type SinaisNegociacao = {
   intencao: "comprar" | "cotar" | "curiosidade" | "suporte" | "outro";
